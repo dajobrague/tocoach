@@ -1,0 +1,35 @@
+<svg width="1200" height="400" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0369a1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1200" height="400" fill="url(#bg-gradient)"/>
+  
+  <!-- Decorative elements -->
+  <circle cx="100" cy="100" r="60" fill="white" fill-opacity="0.1"/>
+  <circle cx="1100" cy="300" r="80" fill="white" fill-opacity="0.1"/>
+  <circle cx="200" cy="350" r="40" fill="white" fill-opacity="0.15"/>
+  
+  <!-- Main content -->
+  <g transform="translate(600, 200)">
+    <!-- Logo icon -->
+    <circle cx="-150" cy="0" r="30" fill="white"/>
+    <path d="M-165 -10L-150 5L-135 -10" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M-150 -25V5" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Title -->
+    <text x="-100" y="10" fill="white" font-family="system-ui, sans-serif" font-size="48" font-weight="700" text-anchor="start">TopCoach</text>
+    
+    <!-- Subtitle -->
+    <text x="-100" y="40" fill="white" font-family="system-ui, sans-serif" font-size="20" font-weight="400" text-anchor="start" opacity="0.9">
+      Professional Personal Training Platform
+    </text>
+  </g>
+  
+  <!-- Bottom decoration -->
+  <path d="M0 350 Q300 320 600 350 T1200 350 V400 H0 Z" fill="white" fill-opacity="0.1"/>
+</svg>
