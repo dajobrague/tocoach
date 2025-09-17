@@ -2,13 +2,11 @@
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.suggest.autoImports": true,
   "typescript.updateImportsOnFileMove.enabled": "always",
-
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit",
     "source.organizeImports": "explicit"
   },
-
   "eslint.validate": [
     "javascript",
     "javascriptreact",
@@ -16,11 +14,9 @@
     "typescriptreact"
   ],
   "eslint.run": "onSave",
-
   "files.associations": {
     "*.css": "tailwindcss"
   },
-
   "tailwindCSS.includeLanguages": {
     "typescript": "javascript",
     "typescriptreact": "javascript"
@@ -28,12 +24,10 @@
   "tailwindCSS.experimental.classRegex": [
     ["tv\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
   ],
-
   "emmet.includeLanguages": {
     "typescript": "html",
     "typescriptreact": "html"
   },
-
   "files.exclude": {
     "**/.git": true,
     "**/.DS_Store": true,
@@ -41,14 +35,12 @@
     "**/.next": true,
     "**/coverage": true
   },
-
   "search.exclude": {
     "node_modules": true,
     ".next": true,
     "coverage": true,
     "*.log": true
   },
-
   "json.schemas": [
     {
       "fileMatch": ["**/public/brands/*/theme.json"],

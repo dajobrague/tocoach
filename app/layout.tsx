@@ -9,6 +9,7 @@ import { siteConfig } from "@/config/site";
 import { fontSans } from "@/config/fonts";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -52,26 +53,28 @@ export default function RootLayout({
           fontSans.variable
         )}
       >
-        <Providers themeProps={{ attribute: "class", defaultTheme: "dark" }}>
-          <div className="relative flex flex-col h-screen">
-            <Navbar />
-            <main className="container mx-auto max-w-7xl pt-16 px-6 flex-grow">
-              {children}
-            </main>
-            <footer className="w-full flex items-center justify-center py-3">
-              <Link
-                isExternal
-                className="flex items-center gap-1 text-current"
-                href="https://heroui.com?utm_source=next-app-template"
-                title="heroui.com homepage"
-              >
-                <span className="text-default-600">Powered by</span>
-                <p className="text-primary">HeroUI</p>
-              </Link>
-            </footer>
-          </div>
-          <ServiceWorkerRegistration />
-        </Providers>
+        <ThemeProvider>
+          <Providers themeProps={{ attribute: "class", defaultTheme: "light" }}>
+            <div className="mobile-frame">
+              <div className="safe-area-top relative flex flex-col min-h-screen">
+                <Navbar />
+                <main className="flex-grow px-4 pt-16 pb-4">{children}</main>
+                <footer className="safe-area-bottom w-full flex items-center justify-center py-3 text-secondary">
+                  <Link
+                    isExternal
+                    className="flex items-center gap-1 text-current opacity-60 hover:opacity-100 transition-opacity"
+                    href="https://heroui.com?utm_source=next-app-template"
+                    title="heroui.com homepage"
+                  >
+                    <span className="text-xs">Powered by</span>
+                    <p className="text-xs font-medium">HeroUI</p>
+                  </Link>
+                </footer>
+              </div>
+            </div>
+            <ServiceWorkerRegistration />
+          </Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

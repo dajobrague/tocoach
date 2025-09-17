@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "name": "Zen Coach",
+    "version": "1.0.0",
+    "description": "Calm wellness theme with mindful green and earth tones"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Inter, system-ui, sans-serif",
+      "weight": 500
+    },
+    "body": {
+      "family": "Inter, system-ui, sans-serif",
+      "weight": 400
+    }
+  },
+  "colors": {
+    "brand": "#059669",
+    "accent": "#047857",
+    "text": {
+      "primary": "#1f2937",
+      "secondary": "#6b7280"
+    },
+    "surface": {
+      "1": "#f9fafb",
+      "2": "#f3f4f6"
+    },
+    "border": "#d1d5db",
+    "fill": "#e5e7eb"
+  },
+  "radius": {
+    "sm": 12,
+    "md": 16,
+    "lg": 20,
+    "xl": 24
+  },
+  "shadow": {
+    "e1": "0 1px 3px rgba(5, 150, 105, 0.06)",
+    "e2": "0 6px 12px rgba(5, 150, 105, 0.10)"
+  },
+  "semantic": {
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "error": "#f87171"
+  },
+  "assets": {
+    "logo": "/brands/zen-coach/logo.svg",
+    "banner": "/brands/zen-coach/banner.svg"
+  }
+}
