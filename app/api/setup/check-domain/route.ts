@@ -1,12 +1,7 @@
 // Domain availability checking API
 import { getTrainerSession } from '@/lib/auth/session';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from '@/lib/clients/supabase-api';
 import { NextRequest, NextResponse } from 'next/server';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 function validateDomainFormat(domain: string): boolean {
     // For localhost development, allow .localhost domains
@@ -29,6 +24,7 @@ function generateDomainSuggestions(baseDomain: string): string[] {
 }
 
 export async function POST(request: NextRequest) {
+    const supabase = createSupabaseClient();
     try {
         // Check authentication
         const session = await getTrainerSession();

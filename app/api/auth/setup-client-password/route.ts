@@ -1,12 +1,7 @@
 // Set up password for client (first time)
 import { setClientSessionCookie, updateClientLastLogin } from '@/lib/auth/client-session';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from '@/lib/clients/supabase-api';
 import { NextRequest, NextResponse } from 'next/server';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // Password validation
 function validatePassword(password: string): { valid: boolean; error?: string } {
@@ -23,6 +18,7 @@ function validatePassword(password: string): { valid: boolean; error?: string } 
 }
 
 export async function POST(request: NextRequest) {
+    const supabase = createSupabaseClient();
     try {
         const { clientId, password, confirmPassword, tenantHost } = await request.json();
 

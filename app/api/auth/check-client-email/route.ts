@@ -1,13 +1,9 @@
 // Check if client email exists and whether password is set
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from '@/lib/clients/supabase-api';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function POST(request: NextRequest) {
+    const supabase = createSupabaseClient();
     try {
         const { email, tenantHost } = await request.json();
 

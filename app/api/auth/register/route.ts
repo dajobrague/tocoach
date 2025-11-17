@@ -4,16 +4,11 @@ import {
     validateInvitationCode
 } from '@/lib/auth/invitation';
 import { setSessionCookie } from '@/lib/auth/session';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from '@/lib/clients/supabase-api';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Use anon key for all operations
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function POST(request: NextRequest) {
+    const supabase = createSupabaseClient();
     try {
         const body = await request.json();
         const {
