@@ -16,12 +16,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Accept build arguments
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ARG ENCRYPTION_KEY
-ARG JWT_SECRET
-ARG NEXT_PUBLIC_APP_DOMAIN
+# Accept build arguments with default placeholders
+ARG NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder_key
+ARG ENCRYPTION_KEY=placeholder_encryption_key_32chars_min
+ARG JWT_SECRET=placeholder_jwt_secret
+ARG NEXT_PUBLIC_APP_DOMAIN=placeholder.railway.app
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
