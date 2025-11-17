@@ -9,10 +9,13 @@ export async function GET(request: NextRequest) {
     console.log('[Session API v3] ROUTE HANDLER CALLED');
     console.log('=================================================');
     try {
+        // Debug cookies from multiple sources
         const cookies = request.cookies.getAll();
-        console.log('[Session API v3] Cookies received:', 
+        const cookieHeader = request.headers.get('cookie');
+        console.log('[Session API v3] Cookies from request.cookies.getAll():', 
             cookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length }))
         );
+        console.log('[Session API v3] Cookie header:', cookieHeader);
         
         console.log('[Session API v3] About to call getTrainerSession()');
         const session = await getTrainerSession();
