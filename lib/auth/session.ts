@@ -150,10 +150,19 @@ export async function setSessionCookie(
         .sign(JWT_SECRET);
 
     // In production, set domain to allow sharing across subdomains
-    // In development, DON'T set domain (localhost is special and doesn't work with domain attribute)
-    const cookieOptionsWithDomain = process.env.NODE_ENV === 'production'
-        ? { ...COOKIE_OPTIONS, domain: '.topcoach.app' } // Allow all subdomains
-        : COOKIE_OPTIONS; // No domain restriction in dev
+    // Extract base domain from NEXT_PUBLIC_APP_DOMAIN or use no domain restriction
+    let cookieOptionsWithDomain = COOKIE_OPTIONS;
+    
+    if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_DOMAIN) {
+        // Extract the base domain (e.g., "railway.app" from "xxx.railway.app")
+        const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
+        const parts = appDomain.split('.');
+        if (parts.length >= 2) {
+            // Get last two parts (domain.tld)
+            const baseDomain = `.${parts.slice(-2).join('.')}`;
+            cookieOptionsWithDomain = { ...COOKIE_OPTIONS, domain: baseDomain };
+        }
+    }
 
     response.cookies.set(COOKIE_NAME, token, cookieOptionsWithDomain);
     console.log('[Trainer Session] Cookie set:', {
