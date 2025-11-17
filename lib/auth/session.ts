@@ -149,19 +149,27 @@ export async function setSessionCookie(
         .setExpirationTime(exp)
         .sign(JWT_SECRET);
 
-    // In production, set domain to allow sharing across subdomains
-    // Extract base domain from NEXT_PUBLIC_APP_DOMAIN or use no domain restriction
+    // In production with custom domain, set domain to allow sharing across subdomains
+    // For Railway/Vercel domains, DON'T set domain (cookies don't work across their infrastructure)
     let cookieOptionsWithDomain: any = COOKIE_OPTIONS;
     
     if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_DOMAIN) {
-        // Extract the base domain (e.g., "railway.app" from "xxx.railway.app")
         const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
-        const parts = appDomain.split('.');
-        if (parts.length >= 2) {
-            // Get last two parts (domain.tld)
-            const baseDomain = `.${parts.slice(-2).join('.')}`;
-            cookieOptionsWithDomain = { ...COOKIE_OPTIONS, domain: baseDomain };
+        
+        // Only set domain for custom domains (not Railway, Vercel, etc.)
+        const isCustomDomain = !appDomain.includes('railway.app') && 
+                               !appDomain.includes('vercel.app') &&
+                               !appDomain.includes('netlify.app');
+        
+        if (isCustomDomain) {
+            const parts = appDomain.split('.');
+            if (parts.length >= 2) {
+                // Get last two parts (domain.tld) for custom domains
+                const baseDomain = `.${parts.slice(-2).join('.')}`;
+                cookieOptionsWithDomain = { ...COOKIE_OPTIONS, domain: baseDomain };
+            }
         }
+        // For Railway/Vercel/etc, don't set domain - use default (current host only)
     }
 
     response.cookies.set(COOKIE_NAME, token, cookieOptionsWithDomain);
