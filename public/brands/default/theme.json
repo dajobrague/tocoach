@@ -6,11 +6,11 @@
   },
   "fonts": {
     "heading": {
-      "family": "Inter, system-ui, sans-serif",
+      "family": "Poppins, system-ui, sans-serif",
       "weight": 600
     },
     "body": {
-      "family": "Inter, system-ui, sans-serif",
+      "family": "Poppins, system-ui, sans-serif",
       "weight": 400
     }
   },
@@ -35,8 +35,8 @@
     "xl": 16
   },
   "shadow": {
-    "e1": "0 1px 2px rgba(0, 0, 0, 0.05)",
-    "e2": "0 4px 6px rgba(0, 0, 0, 0.07)"
+    "e1": "0 1px 2px rgba(0, 0, 0, 0.02)",
+    "e2": "0 2px 4px rgba(0, 0, 0, 0.03)"
   },
   "semantic": {
     "success": "#22c55e",

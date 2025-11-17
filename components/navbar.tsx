@@ -1,33 +1,37 @@
-import {
-  Navbar as HeroUINavbar,
-  NavbarContent,
-  NavbarMenu,
-  NavbarMenuToggle,
-  NavbarBrand,
-  NavbarItem,
-  NavbarMenuItem,
-} from "@heroui/navbar";
+"use client";
+
 import { Button } from "@heroui/button";
+import { Input } from "@heroui/input";
 import { Kbd } from "@heroui/kbd";
 import { Link } from "@heroui/link";
-import { Input } from "@heroui/input";
+import {
+  Navbar as HeroUINavbar,
+  NavbarBrand,
+  NavbarContent,
+  NavbarItem,
+  NavbarMenu,
+  NavbarMenuItem,
+  NavbarMenuToggle,
+} from "@heroui/navbar";
 import { link as linkStyles } from "@heroui/theme";
-import NextLink from "next/link";
 import clsx from "clsx";
+import NextLink from "next/link";
 
-import { siteConfig } from "@/config/site";
-import { ThemeSwitch } from "@/components/theme-switch";
-import { BrandSwitcher, useBrandAssets } from "@/components/theme-provider";
+import { BrandLogo } from "@/components/brand-logo";
 import { GithubIcon, HeartFilledIcon, SearchIcon } from "@/components/icons";
+import { SimpleBrandSwitcher } from "@/components/simple-brand-switcher";
+import { useIsDefaultTenant, useTenant } from "@/components/tenant-provider";
+import { siteConfig } from "@/config/site";
 
 export const Navbar = () => {
-  const { logo } = useBrandAssets();
+  const tenant = useTenant();
+  const isDefaultTenant = useIsDefaultTenant();
   const searchInput = (
     <Input
       aria-label="Search"
       classNames={{
         inputWrapper: "bg-default-100",
-        input: "text-sm",
+        input: "text-sm font-body",
       }}
       endContent={
         <Kbd className="hidden lg:inline-block" keys={["command"]}>
@@ -48,7 +52,7 @@ export const Navbar = () => {
       <NavbarContent className="basis-1/5 sm:basis-full" justify="start">
         <NavbarBrand as="li" className="gap-3 max-w-fit">
           <NextLink className="flex justify-start items-center gap-2" href="/">
-            <img alt="Brand Logo" className="h-8 w-auto" src={logo} />
+            <BrandLogo />
           </NextLink>
         </NavbarBrand>
         <ul className="hidden lg:flex gap-4 justify-start ml-2">
@@ -73,10 +77,11 @@ export const Navbar = () => {
         className="hidden sm:flex basis-1/5 sm:basis-full"
         justify="end"
       >
-        <NavbarItem className="hidden sm:flex gap-2">
-          <BrandSwitcher />
-          <ThemeSwitch />
-        </NavbarItem>
+        {isDefaultTenant && (
+          <NavbarItem className="hidden sm:flex gap-2">
+            <SimpleBrandSwitcher />
+          </NavbarItem>
+        )}
         <NavbarItem className="hidden lg:flex">{searchInput}</NavbarItem>
         <NavbarItem className="hidden md:flex">
           <Button
@@ -96,7 +101,6 @@ export const Navbar = () => {
         <Link isExternal aria-label="Github" href={siteConfig.links.github}>
           <GithubIcon className="text-default-500" />
         </Link>
-        <ThemeSwitch />
         <NavbarMenuToggle />
       </NavbarContent>
 

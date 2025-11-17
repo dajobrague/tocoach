@@ -35,46 +35,11 @@
   --shadow-e2: 0 4px 6px rgba(0, 0, 0, 0.07);
 }
 
-/* Mobile-first responsive frame */
+/* Responsive frame - same design for all screen sizes */
 .mobile-frame {
   width: 100%;
   min-height: 100vh;
   background: var(--color-surface-1);
-}
-
-/* Desktop: Show mobile frame centered */
-@media (min-width: 768px) {
-  .mobile-frame {
-    width: 390px;
-    min-height: 844px;
-    max-height: 90vh;
-    margin: 2rem auto;
-    border-radius: 24px;
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.05),
-      0 20px 40px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    position: relative;
-  }
-
-  .mobile-frame::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 150px;
-    height: 30px;
-    background: #000;
-    border-radius: 0 0 16px 16px;
-    z-index: 10;
-  }
-
-  /* Desktop background */
-  body {
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-    min-height: 100vh;
-  }
 }
 
 /* Safe area support for mobile */
@@ -102,69 +67,9 @@ select {
   min-width: 44px;
 }
 
-/* Custom utility classes using theme variables */
-.bg-brand {
-  background-color: var(--color-brand);
-}
-.bg-accent {
-  background-color: var(--color-accent);
-}
-.bg-surface-1 {
-  background-color: var(--color-surface-1);
-}
-.bg-surface-2 {
-  background-color: var(--color-surface-2);
-}
-.bg-fill {
-  background-color: var(--color-fill);
-}
-
-.text-primary {
+/* Theme debugging - shows current CSS variable values */
+.debug-theme {
+  background: var(--color-brand);
   color: var(--color-text-primary);
-}
-.text-secondary {
-  color: var(--color-text-secondary);
-}
-.text-brand {
-  color: var(--color-brand);
-}
-.text-accent {
-  color: var(--color-accent);
-}
-
-.border-theme {
-  border-color: var(--color-border);
-}
-.border-brand {
-  border-color: var(--color-brand);
-}
-
-.shadow-e1 {
-  box-shadow: var(--shadow-e1);
-}
-.shadow-e2 {
-  box-shadow: var(--shadow-e2);
-}
-
-.rounded-theme-sm {
-  border-radius: var(--radius-sm);
-}
-.rounded-theme-md {
-  border-radius: var(--radius-md);
-}
-.rounded-theme-lg {
-  border-radius: var(--radius-lg);
-}
-.rounded-theme-xl {
-  border-radius: var(--radius-xl);
-}
-
-.font-heading {
-  font-family: var(--font-heading);
-  font-weight: var(--font-weight-heading);
-}
-
-.font-body {
-  font-family: var(--font-body);
-  font-weight: var(--font-weight-body);
+  border: 1px solid var(--color-border);
 }

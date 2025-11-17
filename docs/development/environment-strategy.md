@@ -1,5 +1,8 @@
 # Environment & Secrets Strategy
 
+**Last Updated:** October 3, 2025  
+**Note:** Airtable integration removed - now 100% Supabase. Remove any `AIRTABLE_*` variables from your environment.
+
 This document defines how environment variables, secrets, and configuration are managed across different environments.
 
 ## Environment Overview
@@ -34,7 +37,7 @@ This document defines how environment variables, secrets, and configuration are 
 
 - **Public variables**: `NEXT_PUBLIC_*` (accessible in browser)
 - **Server-only variables**: No prefix (server-side only)
-- **Service prefixes**: `SUPABASE_*`, `AIRTABLE_*`, `STRIPE_*`, `REDIS_*`
+- **Service prefixes**: `SUPABASE_*`, `STRIPE_*`, `REDIS_*`
 
 ### Variable Categories
 
@@ -55,23 +58,19 @@ NEXT_PUBLIC_DEBUG_MODE=false
 #### Database & Authentication (Supabase)
 
 ```bash
-# Server-side only
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-SUPABASE_SERVICE_ROLE_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-
-# Public (for client-side auth)
+# Public (for client-side auth and server with RLS)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+
+# Service role (rarely needed - only for admin operations)
+SUPABASE_SERVICE_ROLE_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+
+# Note: Use anon key with RLS for security - service role bypasses RLS
 ```
 
 #### External Services
 
 ```bash
-# Airtable (server-side only)
-AIRTABLE_API_KEY=keyXXXXXXXXXXXXXX
-AIRTABLE_BASE_TEMPLATE=appXXXXXXXXXXXXXX
-
 # Stripe (server-side only)
 STRIPE_SECRET_KEY=sk_test_XXXXXXXXXXXXXXXXXXXXXXXX
 STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXXXXXXXXXXXXXXXXXX

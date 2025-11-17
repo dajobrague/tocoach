@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../Downloads/centered-sign-up-with-top-logo"
+		},
+		{
+			"path": "../../../Downloads/messaging-application"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.css": "tailwindcss"
+		},
+		"emmet.includeLanguages": {
+			"typescript": "html",
+			"typescriptreact": "html"
+		}
+	}
+}
