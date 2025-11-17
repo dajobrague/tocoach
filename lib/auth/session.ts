@@ -151,7 +151,7 @@ export async function setSessionCookie(
 
     // In production, set domain to allow sharing across subdomains
     // Extract base domain from NEXT_PUBLIC_APP_DOMAIN or use no domain restriction
-    let cookieOptionsWithDomain = COOKIE_OPTIONS;
+    let cookieOptionsWithDomain: any = COOKIE_OPTIONS;
     
     if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_DOMAIN) {
         // Extract the base domain (e.g., "railway.app" from "xxx.railway.app")
