@@ -1,181 +1,277 @@
-import { verifyClientSessionFromRequest } from "@/lib/auth/client-session";
+import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-// Normalize host function (duplicated to avoid Edge Runtime issues)
-function normalizeHost(host: string | null): string {
-    const safeHost = host || "localhost";
-    return safeHost!.toLowerCase().split(':')[0]!.trim();
+import { verifyClientSessionFromRequest } from "@/lib/auth/client-session";
+
+// Supabase client for tenant validation
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// Cache for tenant slugs validation (60 second TTL)
+const tenantCache = new Map<string, { exists: boolean; expires: number }>();
+const CACHE_TTL = 60 * 1000; // 60 seconds
+
+/**
+ * Extract slug from pathname if it matches the pattern /[slug]/...
+ * Returns null if no slug pattern detected
+ */
+function extractSlugFromPath(pathname: string): string | null {
+  // Match pattern: /[slug]/something or /[slug]
+  // But exclude /trainer, /api, /brands, etc.
+  const match = pathname.match(/^\/([^\/]+)(?:\/|$)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const firstSegment = match[1];
+
+  // Exclude known trainer/admin routes and system files
+  const excludedRoutes = [
+    "trainer",
+    "api",
+    "_next",
+    "brands",
+    "about",
+    "blog",
+    "docs",
+    "pricing",
+    "404", // Exclude 404 page to prevent redirect loops
+    "500", // Exclude error pages
+    "favicon.ico",
+    "manifest.json",
+    "robots.txt",
+    "sitemap.xml",
+  ];
+
+  if (excludedRoutes.includes(firstSegment)) {
+    return null;
+  }
+
+  return firstSegment;
 }
 
-// Get main domain from environment or use default
-function getMainDomain(): string {
-    return process.env.NEXT_PUBLIC_APP_DOMAIN || "localhost";
-}
+/**
+ * Validate if a slug exists in the tenants table
+ */
+async function validateTenantSlug(slug: string): Promise<boolean> {
+  const cached = tenantCache.get(slug);
 
-// Check if host is the main domain (no subdomain prefix)
-function isMainDomainHost(normalizedHost: string): boolean {
-    const mainDomain = getMainDomain();
-    
-    // Always allow localhost as main domain for development
-    if (normalizedHost === "localhost") {
-        return true;
-    }
-    
-    // Check if it's exactly the main domain (no subdomain)
-    return normalizedHost === mainDomain;
+  if (cached && cached.expires > Date.now()) {
+    return cached.exists;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("slug")
+      .eq("host", slug) // Database field is 'host' but contains slug values
+      .eq("status", "active")
+      .single();
+
+    const exists = !error && !!data;
+
+    // Cache result
+    tenantCache.set(slug, {
+      exists,
+      expires: Date.now() + CACHE_TTL,
+    });
+
+    return exists;
+  } catch (error) {
+    console.error("[Middleware] Error validating tenant slug:", error);
+
+    return false;
+  }
 }
 
 export async function middleware(request: NextRequest) {
-    const url = request.nextUrl;
-    const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const url = request.nextUrl;
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const pathname = url.pathname;
 
-    // Extract and normalize host
-    const hostHeader = request.headers.get("host");
-    const normalizedHost = normalizeHost(hostHeader);
-    const pathname = url.pathname;
+  // Extract slug from pathname
+  const slug = extractSlugFromPath(pathname);
 
-    // Debug: Log ALL requests including API
-    if (pathname.includes('/api/auth/session')) {
-        console.log('[Middleware:DEBUG] /api/auth/session request detected - THIS SHOULD NOT HAPPEN!');
+  // =============================================================================
+  // CLIENT SECTION - Slug-based routes (/[slug]/...)
+  // =============================================================================
+  if (slug) {
+    // Validate that the slug exists in the database
+    const isValidTenant = await validateTenantSlug(slug);
+
+    if (!isValidTenant) {
+      console.warn(`[Middleware:CLIENT] Invalid tenant slug: ${slug}`);
+
+      return NextResponse.rewrite(new URL("/404", request.url));
     }
 
-    // Determine if this is main domain (trainers) or subdomain (clients)
-    const isMainDomain = isMainDomainHost(normalizedHost);
-    const isSubdomain = !isMainDomain;
+    // Extract the rest of the path after the slug
+    const pathAfterSlug = pathname.substring(slug.length + 1) || "/";
 
-    // =============================================================================
-    // TRAINER SECTION - Main Domain (localhost or Vercel-assigned domain)
-    // =============================================================================
-    if (isMainDomain) {
-        // Block client-only routes on main domain - redirect to trainer equivalents
-        if (pathname === '/login') {
-            console.log(`[Middleware:TRAINER] Redirecting /login → /trainer/login`);
-            return NextResponse.redirect(new URL('/trainer/login', request.url));
+    // Define route types
+    const isPublicRoute =
+      pathAfterSlug === "/login" ||
+      pathAfterSlug === "/forgot-password" ||
+      pathAfterSlug === "/reset-password";
+
+    const isProtectedRoute =
+      pathAfterSlug === "/" ||
+      pathAfterSlug === "/dashboard" ||
+      pathAfterSlug === "/programs" ||
+      pathAfterSlug === "/calendar" ||
+      pathAfterSlug === "/profile" ||
+      pathAfterSlug === "/nutricion" ||
+      pathAfterSlug === "/ejercicio" ||
+      pathAfterSlug === "/mas";
+
+    // Handle protected routes
+    if (isProtectedRoute) {
+      const session = await verifyClientSessionFromRequest(request);
+
+      // Root path - redirect based on auth status
+      if (pathAfterSlug === "/") {
+        if (session && session.tenant_slug === slug) {
+          const dashboardUrl = new URL(`/${slug}/dashboard`, request.url);
+          const response = NextResponse.rewrite(dashboardUrl);
+
+          response.headers.set("x-tenant-slug", slug);
+          response.headers.set("x-correlation-id", correlationId);
+          response.headers.set("x-pathname", pathname);
+
+          console.log(
+            `[Middleware:CLIENT] ${request.method} ${pathname} → /${slug}/dashboard (authenticated)`,
+            {
+              slug,
+              correlationId,
+            }
+          );
+
+          return response;
+        } else {
+          const loginUrl = new URL(`/${slug}/login`, request.url);
+          const response = NextResponse.rewrite(loginUrl);
+
+          response.headers.set("x-tenant-slug", slug);
+          response.headers.set("x-correlation-id", correlationId);
+          response.headers.set("x-pathname", pathname);
+
+          console.log(
+            `[Middleware:CLIENT] ${request.method} ${pathname} → /${slug}/login (guest)`,
+            {
+              slug,
+              correlationId,
+            }
+          );
+
+          return response;
         }
+      }
 
-        const clientOnlyRoutes = ['/dashboard', '/programs', '/calendar', '/profile', '/forgot-password', '/reset-password'];
-        if (clientOnlyRoutes.includes(pathname)) {
-            console.warn(`[Middleware:TRAINER] Blocked client-only route on main domain: ${pathname}`);
-            return NextResponse.rewrite(new URL('/404', request.url));
-        }
+      // Other protected routes - require authentication
+      if (!session) {
+        const loginUrl = new URL(`/${slug}/login`, request.url);
 
-        const response = NextResponse.next();
-        response.headers.set("x-correlation-id", correlationId);
-        response.headers.set("x-tenant-host", ""); // Empty for trainer domain
-        response.headers.set("x-brand-slug", "default");
-        response.headers.set("x-pathname", pathname);
+        loginUrl.searchParams.set("redirect", pathAfterSlug);
 
-        console.log(`[Middleware:TRAINER] ${request.method} ${pathname}`, {
-            host: normalizedHost,
+        console.log(
+          `[Middleware:CLIENT] ${request.method} ${pathname} → redirect to /${slug}/login (no session)`,
+          {
+            slug,
             correlationId,
-        });
+          }
+        );
 
-        // Just pass through - trainer auth is handled by components
-        return response;
+        return NextResponse.redirect(loginUrl);
+      }
+
+      // Verify tenant matches
+      if (session.tenant_slug !== slug) {
+        console.warn(
+          `[Middleware:CLIENT] Tenant mismatch: ${session.tenant_slug} vs ${slug}`
+        );
+        const loginUrl = new URL(`/${slug}/login`, request.url);
+
+        return NextResponse.redirect(loginUrl);
+      }
     }
 
-    // =============================================================================
-    // CLIENT SECTION - Subdomains (trainer-slug.yourapp.vercel.app or trainer-slug.localhost)
-    // =============================================================================
-    if (isSubdomain) {
-        // Define route types
-        const isPublicRoute = pathname === "/login" ||
-            pathname === "/forgot-password" ||
-            pathname === "/reset-password";
+    // All client routes get tenant headers
+    const response = NextResponse.next();
 
-        const isProtectedRoute = pathname === "/" ||
-            pathname === "/dashboard" ||
-            pathname === "/programs" ||
-            pathname === "/calendar" ||
-            pathname === "/profile";
+    response.headers.set("x-tenant-slug", slug);
+    response.headers.set("x-brand-slug", "default");
+    response.headers.set("x-correlation-id", correlationId);
+    response.headers.set("x-pathname", pathname);
 
-        // Handle protected routes
-        if (isProtectedRoute) {
-            const session = await verifyClientSessionFromRequest(request);
+    console.log(`[Middleware:CLIENT] ${request.method} ${pathname}`, {
+      slug,
+      isPublic: isPublicRoute,
+      isProtected: isProtectedRoute,
+      correlationId,
+    });
 
-            // Root path - redirect based on auth status
-            if (pathname === "/") {
-                if (session && session.tenant_host === normalizedHost) {
-                    const dashboardUrl = new URL("/dashboard", request.url);
-                    const response = NextResponse.rewrite(dashboardUrl);
-                    response.headers.set("x-tenant-host", normalizedHost);
-                    response.headers.set("x-correlation-id", correlationId);
-                    response.headers.set("x-pathname", pathname);
+    return response;
+  }
 
-                    console.log(`[Middleware:CLIENT] ${request.method} ${pathname} → /dashboard (authenticated)`, {
-                        host: normalizedHost,
-                        correlationId,
-                    });
+  // =============================================================================
+  // TRAINER SECTION - Main Domain Routes (no slug detected)
+  // =============================================================================
 
-                    return response;
-                } else {
-                    const loginUrl = new URL("/login", request.url);
-                    const response = NextResponse.rewrite(loginUrl);
-                    response.headers.set("x-tenant-host", normalizedHost);
-                    response.headers.set("x-correlation-id", correlationId);
-                    response.headers.set("x-pathname", pathname);
+  // Block client-only routes on main domain without slug
+  const clientOnlyRoutes = [
+    "/dashboard",
+    "/programs",
+    "/calendar",
+    "/profile",
+    "/forgot-password",
+    "/reset-password",
+    "/login",
+  ];
 
-                    console.log(`[Middleware:CLIENT] ${request.method} ${pathname} → /login (guest)`, {
-                        host: normalizedHost,
-                        correlationId,
-                    });
+  if (clientOnlyRoutes.includes(pathname)) {
+    console.warn(
+      `[Middleware:TRAINER] Blocked client-only route without tenant slug: ${pathname}`
+    );
 
-                    return response;
-                }
-            }
+    return NextResponse.rewrite(new URL("/404", request.url));
+  }
 
-            // Other protected routes - require authentication
-            if (!session) {
-                const loginUrl = new URL("/login", request.url);
-                loginUrl.searchParams.set("redirect", pathname);
+  const response = NextResponse.next();
 
-                console.log(`[Middleware:CLIENT] ${request.method} ${pathname} → redirect to /login (no session)`, {
-                    host: normalizedHost,
-                    correlationId,
-                });
+  response.headers.set("x-correlation-id", correlationId);
+  response.headers.set("x-tenant-slug", ""); // Empty for trainer domain
+  response.headers.set("x-brand-slug", "default");
+  response.headers.set("x-pathname", pathname);
 
-                return NextResponse.redirect(loginUrl);
-            }
+  console.log(`[Middleware:TRAINER] ${request.method} ${pathname}`, {
+    correlationId,
+  });
 
-            // Verify tenant matches
-            if (session.tenant_host !== normalizedHost) {
-                console.warn(`[Middleware:CLIENT] Tenant mismatch: ${session.tenant_host} vs ${normalizedHost}`);
-                const loginUrl = new URL("/login", request.url);
-                return NextResponse.redirect(loginUrl);
-            }
-        }
-
-        // All client routes get tenant headers
-        const response = NextResponse.next();
-        response.headers.set("x-tenant-host", normalizedHost);
-        response.headers.set("x-brand-slug", "default");
-        response.headers.set("x-correlation-id", correlationId);
-        response.headers.set("x-pathname", pathname);
-
-        console.log(`[Middleware:CLIENT] ${request.method} ${pathname}`, {
-            host: normalizedHost,
-            isPublic: isPublicRoute,
-            isProtected: isProtectedRoute,
-            correlationId,
-        });
-
-        return response;
-    }
-
-    // Fallback (should not reach here)
-    return NextResponse.next();
+  // Just pass through - trainer auth is handled by components
+  return response;
 }
 
 export const config = {
-    matcher: [
-        /*
-         * Match all request paths except for the ones starting with:
-         * - api (API routes)
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * - brands (brand assets and CSS routes)
-         */
-        "/((?!api|_next/static|_next/image|favicon.ico|brands).*)",
-    ],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - brands (brand assets and CSS routes)
+     * - manifest.json (PWA manifest)
+     * - robots.txt, sitemap.xml (SEO files)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico|brands|manifest.json|robots.txt|sitemap.xml).*)",
+  ],
 };

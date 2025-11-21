@@ -19,8 +19,18 @@ import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
 // Function to check if the current route should not have a navbar
 function isNoNavbarRoute(pathname: string): boolean {
   // Trainer pages should not have the public navbar (they have their own navigation)
-  const trainerRoutes = ['/trainer/login', '/trainer/register', '/trainer/forgot-password', '/trainer/reset-password', '/trainer/dashboard'];
-  return trainerRoutes.some(route => pathname.startsWith(route)) || pathname === '/';
+  const trainerRoutes = [
+    "/trainer/login",
+    "/trainer/register",
+    "/trainer/forgot-password",
+    "/trainer/reset-password",
+    "/trainer/dashboard",
+  ];
+
+  return (
+    trainerRoutes.some((route) => pathname.startsWith(route)) ||
+    pathname === "/"
+  );
 }
 
 export const metadata: Metadata = {
@@ -56,81 +66,106 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Get tenant context from domain or fallback to legacy brand slug
+  // Get tenant context from slug or fallback to legacy brand slug
   const headersList = await headers();
-  const tenantHost = headersList.get("x-tenant-host") || "";
+  const tenantSlug = headersList.get("x-tenant-slug") || "";
   const correlationId = headersList.get("x-correlation-id") || "unknown";
 
   // Get current pathname to check if navbar should be hidden
   const pathname = headersList.get("x-pathname") || "";
   const hideNavbar = isNoNavbarRoute(pathname);
 
-  // Check if this is a client subdomain route (no navbar needed)
-  const isClientRoute = Boolean(tenantHost);
+  // Check if this is a client slug route (no navbar needed)
+  const isClientRoute = Boolean(tenantSlug);
 
   let themeSlug = "default";
   let useDatabaseTheme = false;
   let tenantInfo: ClientTenantInfo | null = null;
   let isMaintenanceMode = false;
 
-  // Try domain-based tenant resolution first
-  if (tenantHost) {
+  // Try slug-based tenant resolution first
+  if (tenantSlug) {
     try {
-      const tenantContext = await loadTenantContext(tenantHost);
+      const tenantContext = await loadTenantContext(tenantSlug);
+
       if (tenantContext) {
         if (tenantContext.status === "active") {
           themeSlug = tenantContext.theme_slug;
           useDatabaseTheme = true;
           tenantInfo = toClientSafe(tenantContext);
-          console.log(`[Layout] Using tenant theme: ${themeSlug} for host: ${tenantHost}`, { correlationId });
+          console.log(
+            `[Layout] Using tenant theme: ${themeSlug} for slug: ${tenantSlug}`,
+            { correlationId }
+          );
         } else if (tenantContext.status === "inactive") {
           // Maintenance mode - still load theme for branding but show maintenance screen
           themeSlug = tenantContext.theme_slug;
           useDatabaseTheme = true;
           tenantInfo = toClientSafe(tenantContext);
           isMaintenanceMode = true;
-          console.warn(`[Layout] Tenant ${tenantHost} is inactive - maintenance mode`, { correlationId });
+          console.warn(
+            `[Layout] Tenant ${tenantSlug} is inactive - maintenance mode`,
+            { correlationId }
+          );
         }
       } else {
-        console.warn(`[Layout] No tenant found for host: ${tenantHost}, using default theme`, { correlationId });
+        console.warn(
+          `[Layout] No tenant found for slug: ${tenantSlug}, using default theme`,
+          { correlationId }
+        );
       }
     } catch (error) {
-      console.error(`[Layout] Tenant resolution failed for host: ${tenantHost}`, {
-        error: error instanceof Error ? error.message : "Unknown error",
-        correlationId
-      });
+      console.error(
+        `[Layout] Tenant resolution failed for slug: ${tenantSlug}`,
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          correlationId,
+        }
+      );
     }
   }
 
   // Fallback to legacy brand slug from query param/route
   if (themeSlug === "default" && !useDatabaseTheme) {
     const legacyBrandSlug = headersList.get("x-brand-slug");
+
     if (legacyBrandSlug) {
       themeSlug = legacyBrandSlug;
-      console.log(`[Layout] Using legacy brand slug: ${themeSlug}`, { correlationId });
+      console.log(`[Layout] Using legacy brand slug: ${themeSlug}`, {
+        correlationId,
+      });
     }
   }
 
   // Choose CSS URL based on source
   let brandCSSUrl: string;
+
   if (useDatabaseTheme) {
-    brandCSSUrl = `/brands/db/${tenantHost}/styles.css`;
+    brandCSSUrl = `/brands/db/${tenantSlug}/styles.css`;
   } else {
     // Validate theme exists and get safe theme slug for file-based themes
-    const safeThemeSlug = await getSafeThemeSlug(themeSlug, { host: tenantHost, correlationId });
+    const safeThemeSlug = await getSafeThemeSlug(themeSlug, {
+      host: tenantSlug,
+      correlationId,
+    });
+
     brandCSSUrl = `/brands/${safeThemeSlug}/styles.css`;
   }
 
   return (
     <html suppressHydrationWarning lang="en">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com" rel="preconnect" />
+        <link
+          crossOrigin="anonymous"
+          href="https://fonts.gstatic.com"
+          rel="preconnect"
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Playfair+Display:wght@400;500;600;700&family=Lato:wght@300;400;700&family=Roboto+Slab:wght@400;700&family=Open+Sans:wght@300;400;600;700&display=swap"
           rel="stylesheet"
         />
-        <link rel="stylesheet" href={brandCSSUrl} />
+        <link href={brandCSSUrl} rel="stylesheet" />
       </head>
       <body
         className={clsx(
@@ -138,20 +173,28 @@ export default async function RootLayout({
           fontSans.variable
         )}
       >
-        <Providers themeProps={{ attribute: "class", defaultTheme: "light", forcedTheme: "light" }}>
+        <Providers
+          themeProps={{
+            attribute: "class",
+            defaultTheme: "light",
+            forcedTheme: "light",
+          }}
+        >
           <TenantProvider tenant={tenantInfo}>
             {isMaintenanceMode ? (
               <MaintenanceScreen
+                maintenanceReason={tenantInfo?.maintenance_reason || ""}
+                maintenanceUntil={tenantInfo?.maintenance_until || ""}
+                tenantName={
+                  tenantInfo?.theme_json?.meta?.name ||
+                  tenantInfo?.slug ||
+                  "TopCoach"
+                }
                 tenantSlug={tenantInfo?.slug || "default"}
-                tenantName={tenantInfo?.theme_json?.meta?.name || tenantInfo?.slug || "TopCoach"}
-                maintenanceReason={tenantInfo?.maintenance_reason || ''}
-                maintenanceUntil={tenantInfo?.maintenance_until || ''}
               />
             ) : hideNavbar || isClientRoute ? (
               // Auth pages or client subdomain pages without navbar - full page layout
-              <div className="min-h-screen w-full">
-                {children}
-              </div>
+              <div className="min-h-screen w-full">{children}</div>
             ) : (
               // Regular trainer pages with navbar
               <div className="mobile-frame">

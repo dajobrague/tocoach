@@ -2,7 +2,9 @@
 
 ## Overview
 
-A complete client authentication system has been implemented with subdomain-based routing, branded login pages, and a mobile-first dashboard with bottom tab navigation.
+A complete client authentication system has been implemented with **slug-based routing** (updated November 2024), branded login pages, and a mobile-first dashboard with bottom tab navigation.
+
+**Architecture Change:** Migrated from subdomain-based routing to slug-based URLs (e.g., `topcoach.app/ironfit/login` instead of `ironfit.topcoach.app/login`).
 
 ## What Was Built
 
@@ -12,8 +14,9 @@ A complete client authentication system has been implemented with subdomain-base
 
 - Separate JWT-based sessions for clients (`client-session` cookie)
 - Functions: `getClientSession()`, `setClientSessionCookie()`, `clearClientSession()`
-- Tenant host validation to ensure clients only access their trainer's subdomain
+- Tenant slug validation to ensure clients only access their trainer's slug
 - 30-day session expiry
+- Session contains `tenant_slug` instead of `tenant_host`
 
 #### API Routes
 
@@ -21,24 +24,29 @@ A complete client authentication system has been implemented with subdomain-base
 - **`/api/auth/client-logout`** - Clears client session
 - **`/api/auth/reset-password`** - Sends password reset emails (prevents email enumeration)
 
-### 2. Client Pages (app/(client)/)
+### 2. Client Pages (app/[slug]/)
+
+All client pages now live under the `[slug]` dynamic route segment.
 
 #### Login Flow
 
-- **`/login`** - Branded login page with trainer's logo and theme
-- **`/forgot-password`** - Password reset request page
-- **`/reset-password`** - Password reset form (handles Supabase reset tokens)
+- **`/[slug]/login`** - Branded login page with trainer's logo and theme
+- **`/[slug]/forgot-password`** - Password reset request page
+- **`/[slug]/reset-password`** - Password reset form (handles Supabase reset tokens)
 
 #### Authenticated Pages
 
-- **`/dashboard`** - Welcome screen with client name, stats cards, empty states
-- **`/programs`** - Training programs (placeholder)
-- **`/calendar`** - Scheduled workouts (placeholder)
-- **`/profile`** - Client profile with logout functionality
+- **`/[slug]/dashboard`** - Welcome screen with client name, stats cards, empty states
+- **`/[slug]/programs`** - Training programs (placeholder)
+- **`/[slug]/calendar`** - Scheduled workouts (placeholder)
+- **`/[slug]/profile`** - Client profile with logout functionality
+- **`/[slug]/nutricion`** - Nutrition content
+- **`/[slug]/ejercicio`** - Workout exercises
+- **`/[slug]/mas`** - More options
 
 #### Root Handler
 
-- **`/`** - Automatically redirects to `/dashboard` (authenticated) or `/login` (guest)
+- **`/[slug]/`** - Automatically redirects to `/[slug]/dashboard` (authenticated) or `/[slug]/login` (guest)
 
 ### 3. UI Components
 
@@ -56,26 +64,31 @@ A complete client authentication system has been implemented with subdomain-base
 
 The middleware now handles:
 
-- **Main domain** (`localhost`) - Trainer routes, no changes
-- **Subdomains** - Client routes with authentication checks
-- **Root path** (`/`) - Rewrites to `/dashboard` or `/login` based on session
-- **Protected routes** - Redirects to `/login` if no session
-- **Tenant validation** - Ensures session tenant_host matches current subdomain
+- **Slug extraction** - Parses first path segment as tenant slug
+- **Slug validation** - Validates slug exists in database before allowing access
+- **Trainer routes** (`/trainer/*`) - No slug validation, separate auth
+- **Client routes** (`/[slug]/*`) - Slug-based authentication checks
+- **Root path** (`/[slug]/`) - Rewrites to `/[slug]/dashboard` or `/[slug]/login` based on session
+- **Protected routes** - Redirects to `/[slug]/login` if no session
+- **Tenant validation** - Ensures session `tenant_slug` matches URL slug
 
 ## Architecture Decisions
 
 ### Separate Sessions
 
-- Trainers: `trainer-session` cookie (main domain)
-- Clients: `client-session` cookie (subdomains)
-- Prevents cross-contamination and security issues
+- Trainers: `trainer-session` cookie (main domain, `/trainer/*` routes)
+- Clients: `client-session` cookie (main domain, `/[slug]/*` routes)
+- Different route patterns prevent cross-contamination
 
-### Subdomain Routing
+### Slug-Based Routing
 
 ```
-localhost           → Trainer pages (login, register, dashboard)
-trainer.localhost   → Client pages (login, dashboard, etc.)
+localhost:3000/trainer/login       → Trainer pages
+localhost:3000/ironfit/login       → Client pages (IronFit trainer)
+localhost:3000/crossfit/dashboard  → Client pages (CrossFit trainer)
 ```
+
+All client routes include the tenant slug as the first path segment.
 
 ### Mobile-First Design
 
@@ -108,34 +121,37 @@ trainer.localhost   → Client pages (login, dashboard, etc.)
 # Should NOT affect client routes
 ```
 
-#### 2. Subdomain Without Session
+#### 2. Slug Route Without Session
 
 ```bash
-# Visit http://test.localhost:3000
-# Should automatically redirect to branded login page
+# Visit http://localhost:3000/ironfit
+# Should automatically redirect to branded login page at /ironfit/login
 # Should show trainer's logo and theme
 ```
 
 #### 3. Client Login
 
 ```bash
+# Visit http://localhost:3000/ironfit/login
 # Enter client credentials
-# Should authenticate and redirect to /dashboard
+# Should authenticate and redirect to /ironfit/dashboard
 # Should show client's name and welcome message
+# All navigation should maintain /ironfit prefix
 ```
 
 #### 4. Wrong Tenant
 
 ```bash
-# Login as client on wrong subdomain
-# Should fail with "You do not have access" error
+# Login as client for 'ironfit' tenant
+# Try to access /crossfit/dashboard
+# Should redirect to /crossfit/login (session tenant mismatch)
 ```
 
 #### 5. Protected Routes
 
 ```bash
-# Visit http://test.localhost:3000/dashboard (no session)
-# Should redirect to /login
+# Visit http://localhost:3000/ironfit/dashboard (no session)
+# Should redirect to /ironfit/login
 ```
 
 #### 6. Bottom Navigation
@@ -163,37 +179,43 @@ trainer.localhost   → Client pages (login, dashboard, etc.)
 # Check email for reset link
 ```
 
-### Testing with Multiple Subdomains
+### Testing with Multiple Slugs
 
-To test locally with subdomains:
+To test locally with multiple tenants:
 
-1. **Edit `/etc/hosts`:**
+1. **Create tenants in Supabase:**
+
+```sql
+-- Note: 'host' field now contains slug values
+INSERT INTO tenants (host, slug, theme_slug, theme_json, status) VALUES
+('ironfit', 'ironfit', 'ironfit', '{ ... theme json ... }', 'active'),
+('crossfit', 'crossfit', 'crossfit', '{ ... theme json ... }', 'active');
+```
+
+2. **Create clients:**
+
+```sql
+-- First create client in clients table, then:
+-- The tenant field should match the slug
+INSERT INTO clients (id, email, name, last_name, password, status, tenant) VALUES
+('user-uuid', 'client@ironfit.com', 'John', 'Doe', 'password123', 'Activo', 'ironfit');
+```
+
+3. **Access different tenants:**
 
 ```bash
-127.0.0.1 test1.localhost
-127.0.0.1 test2.localhost
-```
+# IronFit clients
+http://localhost:3000/ironfit/login
 
-2. **Create tenants in Supabase:**
-
-```sql
-INSERT INTO tenants (host, slug, theme_slug, theme_json, status) VALUES
-('test1.localhost', 'test1', 'test1', '{ ... theme json ... }', 'active');
-```
-
-3. **Create clients:**
-
-```sql
--- First create Supabase Auth user, then:
-INSERT INTO client_profiles (id, tenant_host, email, full_name, status) VALUES
-('user-uuid', 'test1.localhost', 'client@test.com', 'John Doe', 'active');
+# CrossFit clients
+http://localhost:3000/crossfit/login
 ```
 
 ## File Structure
 
 ```
 app/
-  (client)/                    # Client route group
+  [slug]/                      # Client dynamic route segment
     layout.tsx                 # Simple wrapper layout
     page.tsx                   # Root redirect handler
     login/page.tsx            # Branded login page
@@ -201,6 +223,9 @@ app/
     programs/page.tsx         # Programs placeholder
     calendar/page.tsx         # Calendar placeholder
     profile/page.tsx          # Profile page
+    nutricion/page.tsx        # Nutrition content
+    ejercicio/page.tsx        # Workout exercises
+    mas/page.tsx              # More options
     forgot-password/page.tsx  # Password reset request
     reset-password/page.tsx   # Password reset form
   api/
@@ -234,10 +259,11 @@ JWT_SECRET=your-jwt-secret
 ## Security Features
 
 1. **JWT Sessions** - Secure, httpOnly cookies
-2. **Tenant Isolation** - Sessions tied to specific tenant_host
-3. **RLS Policies** - Supabase enforces row-level security
-4. **Password Reset** - Prevents email enumeration
-5. **Separate Sessions** - Trainer and client sessions don't interfere
+2. **Tenant Isolation** - Sessions tied to specific tenant_slug
+3. **Slug Validation** - Middleware validates tenant exists before allowing access
+4. **RLS Policies** - Supabase enforces row-level security
+5. **Password Reset** - Prevents email enumeration
+6. **Separate Sessions** - Trainer and client sessions don't interfere
 
 ## Next Steps
 
@@ -258,7 +284,7 @@ JWT_SECRET=your-jwt-secret
 
 ## Known Limitations
 
-1. **Subdomain setup** - Requires manual subdomain creation or DNS management
+1. **Database field naming** - The `host` field in `tenants` table stores slug values (conceptual naming mismatch)
 2. **Email configuration** - Supabase email templates need customization
 3. **Placeholder pages** - Programs, Calendar need full implementation
 4. **Profile editing** - Currently read-only
@@ -267,9 +293,9 @@ JWT_SECRET=your-jwt-secret
 
 ### Login fails
 
-- Check client exists in `client_profiles` table
-- Verify `tenant_host` matches subdomain
-- Check client `status` is 'active'
+- Check client exists in `clients` table
+- Verify `tenant` field matches the slug in URL
+- Check client `status` is 'Activo' or 'Onboarding Completado'
 
 ### Theme not loading
 
@@ -279,9 +305,10 @@ JWT_SECRET=your-jwt-secret
 
 ### Middleware not routing correctly
 
-- Check `x-tenant-host` header is set
-- Verify subdomain is not 'localhost'
-- Check browser console for middleware logs
+- Check `x-tenant-slug` header is set
+- Verify slug is extracted from URL path correctly
+- Check terminal for middleware logs
+- Ensure tenant exists in database with matching `host` field
 
 ### Session not persisting
 

@@ -2,44 +2,47 @@
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function LogoutButton() {
-    const router = useRouter();
-    const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isLoading, setIsLoading] = useState(false);
 
-    const handleLogout = async () => {
-        setIsLoading(true);
+  // Extract slug from pathname (e.g., /ironfit/dashboard -> ironfit)
+  const slug = pathname.split("/")[1] || "";
 
-        try {
-            const response = await fetch("/api/auth/client-logout", {
-                method: "POST",
-            });
+  const handleLogout = async () => {
+    setIsLoading(true);
 
-            if (response.ok) {
-                router.push("/login");
-                router.refresh();
-            }
-        } catch (error) {
-            console.error("Logout error:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    try {
+      const response = await fetch("/api/auth/client-logout", {
+        method: "POST",
+      });
 
-    return (
-        <Button
-            onClick={handleLogout}
-            variant="flat"
-            color="danger"
-            startContent={<Icon icon="solar:logout-bold" />}
-            className="w-full justify-start font-body"
-            isLoading={isLoading}
-            disabled={isLoading}
-        >
-            Cerrar Sesión
-        </Button>
-    );
+      if (response.ok) {
+        router.push(`/${slug}/login`);
+        router.refresh();
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Button
+      className="w-full justify-start font-body"
+      color="danger"
+      disabled={isLoading}
+      isLoading={isLoading}
+      startContent={<Icon icon="solar:logout-bold" />}
+      variant="flat"
+      onClick={handleLogout}
+    >
+      Cerrar Sesión
+    </Button>
+  );
 }
-
