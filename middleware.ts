@@ -34,6 +34,10 @@ function extractSlugFromPath(pathname: string): string | null {
 
   const firstSegment = match[1];
 
+  if (!firstSegment) {
+    return null;
+  }
+
   // Exclude known trainer/admin routes and system files
   const excludedRoutes = [
     "trainer",

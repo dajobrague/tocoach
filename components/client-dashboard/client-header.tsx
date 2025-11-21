@@ -9,13 +9,13 @@ import { NotificationsDropdown } from "./notifications-dropdown";
 
 interface ClientHeaderProps {
   firstName: string;
-  logoUrl?: string;
+  logoUrl?: string | undefined;
   trainerName: string;
-  clientProfilePicture?: string;
+  clientProfilePicture?: string | undefined;
   clientId: string;
   tenantSlug: string;
-  currentStreak?: number;
-  showStreak?: boolean;
+  currentStreak?: number | undefined;
+  showStreak?: boolean | undefined;
 }
 
 export function ClientHeader({

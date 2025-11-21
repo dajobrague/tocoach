@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify session matches requested client
-    if (session.client_id !== parseInt(clientId)) {
+    if (session.client_id !== clientId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

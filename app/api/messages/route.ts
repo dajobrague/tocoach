@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify session matches requested client
-    if (session.client_id !== parseInt(clientId)) {
+    if (session.client_id !== clientId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify session matches requested client
-    if (session.client_id !== parseInt(clientId)) {
+    if (session.client_id !== clientId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       .from("messages")
       .insert({
         tenant_slug: tenantSlug,
-        client_id: parseInt(clientId),
+        client_id: clientId,
         sender_type: "client",
         sender_id: clientId,
         sender_name: session.full_name || "Client",

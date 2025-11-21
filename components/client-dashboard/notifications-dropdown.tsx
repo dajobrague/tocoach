@@ -243,7 +243,8 @@ export function NotificationsDropdown({
           >
             <Spinner color="primary" size="md" />
           </DropdownItem>
-        ) : notifications.length === 0 ? (
+        ) : null}
+        {!isLoading && notifications.length === 0 ? (
           <DropdownItem key="empty" isReadOnly className="cursor-default">
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Icon
@@ -255,61 +256,64 @@ export function NotificationsDropdown({
               </p>
             </div>
           </DropdownItem>
-        ) : (
-          notifications.map((notification) => (
-            <DropdownItem
-              key={notification.id}
-              className={`py-3 px-4 ${
-                !notification.read_at ? "bg-primary/5" : ""
-              }`}
-              classNames={{
-                base: "data-[hover=true]:bg-content2",
-              }}
-              onPress={() => handleNotificationClick(notification)}
-            >
-              <div className="flex gap-3">
-                <div className="flex-shrink-0">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      !notification.read_at ? "bg-primary/20" : "bg-content2"
-                    }`}
-                  >
-                    <Icon
-                      className={`text-xl ${
-                        !notification.read_at
-                          ? "text-primary"
-                          : "text-foreground/60"
-                      }`}
-                      icon={notification.icon}
-                    />
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p
-                      className={`text-sm font-semibold font-heading ${
-                        !notification.read_at
-                          ? "text-foreground"
-                          : "text-foreground/70"
+        ) : null}
+        {!isLoading && notifications.length > 0 ? (
+          <DropdownSection classNames={{ base: "p-0" }}>
+            {notifications.map((notification) => (
+              <DropdownItem
+                key={notification.id}
+                className={`py-3 px-4 ${
+                  !notification.read_at ? "bg-primary/5" : ""
+                }`}
+                classNames={{
+                  base: "data-[hover=true]:bg-content2",
+                }}
+                onPress={() => handleNotificationClick(notification)}
+              >
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        !notification.read_at ? "bg-primary/20" : "bg-content2"
                       }`}
                     >
-                      {notification.title}
-                    </p>
-                    {!notification.read_at && (
-                      <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
-                    )}
+                      <Icon
+                        className={`text-xl ${
+                          !notification.read_at
+                            ? "text-primary"
+                            : "text-foreground/60"
+                        }`}
+                        icon={notification.icon}
+                      />
+                    </div>
                   </div>
-                  <p className="text-xs text-foreground/60 font-body mb-1 line-clamp-2">
-                    {notification.message}
-                  </p>
-                  <p className="text-xs text-foreground/50 font-body">
-                    {formatTimeAgo(notification.created_at)}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p
+                        className={`text-sm font-semibold font-heading ${
+                          !notification.read_at
+                            ? "text-foreground"
+                            : "text-foreground/70"
+                        }`}
+                      >
+                        {notification.title}
+                      </p>
+                      {!notification.read_at && (
+                        <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                      )}
+                    </div>
+                    <p className="text-xs text-foreground/60 font-body mb-1 line-clamp-2">
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-foreground/50 font-body">
+                      {formatTimeAgo(notification.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </DropdownItem>
-          ))
-        )}
+              </DropdownItem>
+            ))}
+          </DropdownSection>
+        ) : null}
       </DropdownMenu>
     </Dropdown>
   );
