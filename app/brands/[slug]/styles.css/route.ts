@@ -1,5 +1,8 @@
 // Server-side CSS generation for brand themes
-import { generateHeroUIColorScale, hexToHeroUIHSL } from "@/lib/theme/color-utils";
+import {
+  generateHeroUIColorScale,
+  hexToHeroUIHSL,
+} from "@/lib/theme/color-utils";
 import type { ThemeConfig } from "@/lib/theme/schema";
 import { defaultTheme, validateTheme } from "@/lib/theme/schema";
 import { readFile } from "fs/promises";
@@ -17,13 +20,22 @@ function isValidBrandSlug(slug: string): slug is BrandSlug {
 // Load theme from file system
 async function loadThemeFromFile(brandSlug: BrandSlug): Promise<ThemeConfig> {
   try {
-    const themePath = join(process.cwd(), "public", "brands", brandSlug, "theme.json");
+    const themePath = join(
+      process.cwd(),
+      "public",
+      "brands",
+      brandSlug,
+      "theme.json"
+    );
     const themeData = await readFile(themePath, "utf-8");
     const rawData = JSON.parse(themeData);
 
     const validation = validateTheme(rawData, brandSlug);
     if (!validation.success) {
-      console.warn(`[CSS Gen] Theme validation failed for ${brandSlug}:`, validation.errors);
+      console.warn(
+        `[CSS Gen] Theme validation failed for ${brandSlug}:`,
+        validation.errors
+      );
       return defaultTheme;
     }
 
@@ -277,11 +289,14 @@ export async function GET(
         "Cache-Control": isDev
           ? "no-store"
           : "public, max-age=3600, stale-while-revalidate=86400",
-        "Vary": "Accept-Encoding",
+        Vary: "Accept-Encoding",
       },
     });
   } catch (error) {
-    console.error(`[CSS Gen] Error generating CSS for brand ${brandSlug}:`, error);
+    console.error(
+      `[CSS Gen] Error generating CSS for brand ${brandSlug}:`,
+      error
+    );
 
     // Fallback to default theme CSS
     const defaultCSS = generateThemeCSS(defaultTheme);

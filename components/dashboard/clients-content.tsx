@@ -1,495 +1,584 @@
 "use client";
 
-import { Avatar, Button, Card, CardBody, Chip, Input, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow } from "@heroui/react";
+import {
+  Avatar,
+  Button,
+  Card,
+  CardBody,
+  Chip,
+  Input,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useState } from "react";
+
 import AddClientModal from "./add-client-modal";
 
-type ClientSubPage = 'all' | 'plans';
-type StatusFilter = 'all' | 'Activo' | 'Onboarding Completado' | 'Programación Inicial Pendiente';
+type StatusFilter =
+  | "all"
+  | "Activo"
+  | "Onboarding Completado"
+  | "Programación Inicial Pendiente";
 
 interface Client {
-    id: string;
-    name: string;
-    firstName: string;
-    lastName: string;
-    nickName?: string;
-    email: string;
-    phone?: string;
-    status: string;
-    profileImage?: string;
-    lastLogin?: string;
-    joinedDate: string;
-    occupation?: string;
-    dob?: string;
-    location: {
-        city?: string;
-        state?: string;
-        country?: string;
-        zip?: string;
-    };
-    nationalId?: string;
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  nickName?: string;
+  email: string;
+  phone?: string;
+  status: string;
+  profileImage?: string;
+  lastLogin?: string;
+  joinedDate: string;
+  occupation?: string;
+  dob?: string;
+  location: {
+    city?: string;
+    state?: string;
+    country?: string;
+    zip?: string;
+  };
+  nationalId?: string;
 }
 
 interface ClientsStats {
-    total: number;
-    active: number;
-    newThisWeek: number;
-    pendingCheckins: number;
+  total: number;
+  active: number;
+  newThisWeek: number;
+  pendingCheckins: number;
 }
 
 export default function ClientsContent() {
-    const [clients, setClients] = useState<Client[]>([]);
-    const [filteredClients, setFilteredClients] = useState<Client[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [activeSubPage, setActiveSubPage] = useState<ClientSubPage>('all');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [stats, setStats] = useState<ClientsStats>({
-        total: 0,
-        active: 0,
-        newThisWeek: 0,
-        pendingCheckins: 0
-    });
+  const [clients, setClients] = useState<Client[]>([]);
+  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [stats, setStats] = useState<ClientsStats>({
+    total: 0,
+    active: 0,
+    newThisWeek: 0,
+    pendingCheckins: 0,
+  });
 
-    const fetchClients = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            console.log('[ClientsContent] Fetching clients...');
+  const fetchClients = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      console.log("[ClientsContent] Fetching clients...");
 
-            // First, test the connection
-            const testResponse = await fetch('/api/clients/test');
-            const testData = await testResponse.json();
-            console.log('[ClientsContent] Test response:', testData);
+      // First, test the connection
+      const testResponse = await fetch("/api/clients/test");
+      const testData = await testResponse.json();
 
-            if (!testData.success) {
-                console.error('[ClientsContent] Test failed:', testData);
-                alert(`Error de conexión: ${testData.error}\nDetalles: ${testData.details || 'N/A'}`);
-                return;
-            }
+      console.log("[ClientsContent] Test response:", testData);
 
-            console.log('[ClientsContent] Test successful, total clients:', testData.totalClients);
+      if (!testData.success) {
+        console.error("[ClientsContent] Test failed:", testData);
+        alert(
+          `Error de conexión: ${testData.error}\nDetalles: ${testData.details || "N/A"}`
+        );
 
-            // If test is successful, use the test data directly for now
-            if (testData.clients && testData.clients.length > 0) {
-                // Transform the data to match our interface
-                const transformedClients = testData.clients.map((client: any) => ({
-                    id: client.id,
-                    name: `${client.name} ${client.last_name}`,
-                    firstName: client.name,
-                    lastName: client.last_name,
-                    nickName: client.nick_name,
-                    email: client.email,
-                    phone: client.phone,
-                    status: client.status,
-                    profileImage: client.profile_picture_url,
-                    joinedDate: client.sign_up_date,
-                    occupation: client.occupation,
-                    dob: client.dob,
-                    location: {
-                        city: client.city,
-                        state: client.state,
-                        country: client.country,
-                        zip: client.zip
-                    },
-                    nationalId: client.national_id,
-                    lastLogin: null
-                }));
+        return;
+      }
 
-                console.log('[ClientsContent] Transformed clients:', transformedClients);
+      console.log(
+        "[ClientsContent] Test successful, total clients:",
+        testData.totalClients
+      );
 
-                // Store all clients
-                setClients(transformedClients);
+      // If test is successful, use the test data directly for now
+      if (testData.clients && testData.clients.length > 0) {
+        // Transform the data to match our interface
+        const transformedClients = testData.clients.map((client: any) => ({
+          id: client.id,
+          name: `${client.name} ${client.last_name}`,
+          firstName: client.name,
+          lastName: client.last_name,
+          nickName: client.nick_name,
+          email: client.email,
+          phone: client.phone,
+          status: client.status,
+          profileImage: client.profile_picture_url,
+          joinedDate: client.sign_up_date,
+          occupation: client.occupation,
+          dob: client.dob,
+          location: {
+            city: client.city,
+            state: client.state,
+            country: client.country,
+            zip: client.zip,
+          },
+          nationalId: client.national_id,
+          lastLogin: null,
+        }));
 
-                // Apply filters and search
-                applyFiltersAndSearch(transformedClients);
+        console.log(
+          "[ClientsContent] Transformed clients:",
+          transformedClients
+        );
 
-                // Calculate stats
-                const now = new Date();
-                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        // Store all clients
+        setClients(transformedClients);
 
-                setStats({
-                    total: transformedClients.length,
-                    active: transformedClients.filter((c: Client) => c.status === 'Activo').length,
-                    newThisWeek: transformedClients.filter((c: Client) =>
-                        new Date(c.joinedDate) >= weekAgo
-                    ).length,
-                    pendingCheckins: transformedClients.filter((c: Client) => c.status === 'Programación Inicial Pendiente').length
-                });
+        // Apply filters and search
+        applyFiltersAndSearch(transformedClients);
 
-                console.log('[ClientsContent] Stats calculated:', {
-                    total: transformedClients.length,
-                    active: transformedClients.filter((c: Client) => c.status === 'Activo').length,
-                });
-            } else {
-                console.log('[ClientsContent] No clients found in test response');
-                setClients([]);
-                setFilteredClients([]);
-            }
-        } catch (error) {
-            console.error('[ClientsContent] Error fetching clients:', error);
-            alert(`Error al cargar clientes: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    // Function to apply sub-page, status filter and search
-    const applyFiltersAndSearch = useCallback((clientsToFilter: Client[]) => {
-        let filtered = [...clientsToFilter];
-
-        // Apply sub-page filter (main view)
-        if (activeSubPage !== 'all') {
-            switch (activeSubPage) {
-                case 'plans':
-                    filtered = filtered.filter(c => c.status === 'Onboarding Completado');
-                    break;
-            }
-        }
-
-        // Apply status filter (secondary filter in the table section)
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(c => c.status === statusFilter);
-        }
-
-        // Apply search filter
-        if (searchQuery.trim()) {
-            const searchLower = searchQuery.toLowerCase().trim();
-            filtered = filtered.filter(client =>
-                client.name.toLowerCase().includes(searchLower) ||
-                client.email.toLowerCase().includes(searchLower) ||
-                client.nickName?.toLowerCase().includes(searchLower) ||
-                client.occupation?.toLowerCase().includes(searchLower)
-            );
-        }
-
-        console.log('[ClientsContent] Filtered clients:', filtered.length, 'from', clientsToFilter.length);
-        setFilteredClients(filtered);
-    }, [activeSubPage, statusFilter, searchQuery]);
-
-    useEffect(() => {
-        fetchClients();
-    }, [fetchClients]);
-
-    // Re-apply filters when sub-page, status filter or search changes
-    useEffect(() => {
-        if (clients.length > 0) {
-            applyFiltersAndSearch(clients);
-        }
-    }, [activeSubPage, statusFilter, searchQuery, clients, applyFiltersAndSearch]);
-
-    const getStatusColor = (status: string): "success" | "primary" | "warning" | "default" | "secondary" | "danger" => {
-        switch (status) {
-            case 'Activo':
-                return 'success';  // Verde brillante
-            case 'Onboarding Completado':
-                return 'secondary'; // Morado/Rosa - más distintivo
-            case 'Programación Inicial Pendiente':
-                return 'warning';   // Amarillo/Naranja
-            default:
-                return 'default';   // Gris
-        }
-    };
-
-    const getStatusLabel = (status: string) => {
-        // Return status as-is since it's already in Spanish
-        return status;
-    };
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-    };
-
-    const getLastLoginText = (lastLogin?: string) => {
-        if (!lastLogin) return 'Nunca';
-
+        // Calculate stats
         const now = new Date();
-        const loginDate = new Date(lastLogin);
-        const diffMs = now.getTime() - loginDate.getTime();
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        if (diffDays === 0) return 'Hoy';
-        if (diffDays === 1) return 'Ayer';
-        if (diffDays < 7) return `Hace ${diffDays} días`;
-        return formatDate(lastLogin);
-    };
+        setStats({
+          total: transformedClients.length,
+          active: transformedClients.filter(
+            (c: Client) => c.status === "Activo"
+          ).length,
+          newThisWeek: transformedClients.filter(
+            (c: Client) => new Date(c.joinedDate) >= weekAgo
+          ).length,
+          pendingCheckins: transformedClients.filter(
+            (c: Client) => c.status === "Programación Inicial Pendiente"
+          ).length,
+        });
 
-    return (
-        <div className="flex flex-col h-full">
-            {/* Sub-Header with Sub-Pages */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
-                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between py-4">
-                        {/* Sub-Page Tabs */}
-                        <div className="flex gap-2">
-                            <Button
-                                variant={activeSubPage === 'all' ? 'solid' : 'light'}
-                                color={activeSubPage === 'all' ? 'primary' : 'default'}
-                                size="sm"
-                                className={activeSubPage !== 'all' ? 'text-gray-600 hover:text-gray-900' : ''}
-                                onPress={() => {
-                                    setActiveSubPage('all');
-                                    setStatusFilter('all'); // Reset status filter when changing sub-page
-                                }}
-                            >
-                                Todos
-                            </Button>
-                            <Button
-                                variant={activeSubPage === 'plans' ? 'solid' : 'light'}
-                                color={activeSubPage === 'plans' ? 'primary' : 'default'}
-                                size="sm"
-                                className={activeSubPage !== 'plans' ? 'text-gray-600 hover:text-gray-900' : ''}
-                                onPress={() => {
-                                    setActiveSubPage('plans');
-                                    setStatusFilter('all');
-                                }}
-                            >
-                                Planes
-                            </Button>
-                        </div>
+        console.log("[ClientsContent] Stats calculated:", {
+          total: transformedClients.length,
+          active: transformedClients.filter(
+            (c: Client) => c.status === "Activo"
+          ).length,
+        });
+      } else {
+        console.log("[ClientsContent] No clients found in test response");
+        setClients([]);
+        setFilteredClients([]);
+      }
+    } catch (error) {
+      console.error("[ClientsContent] Error fetching clients:", error);
+      alert(
+        `Error al cargar clientes: ${error instanceof Error ? error.message : "Error desconocido"}`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-                        {/* Add Button */}
-                        <Button
-                            color="primary"
-                            startContent={<Icon icon="solar:user-plus-bold" width={18} />}
-                            size="sm"
-                            onPress={() => setIsAddModalOpen(true)}
-                        >
-                            Añadir Cliente
-                        </Button>
+  // Function to apply status filter and search
+  const applyFiltersAndSearch = useCallback(
+    (clientsToFilter: Client[]) => {
+      let filtered = [...clientsToFilter];
+
+      // Apply status filter
+      if (statusFilter !== "all") {
+        filtered = filtered.filter((c) => c.status === statusFilter);
+      }
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        const searchLower = searchQuery.toLowerCase().trim();
+
+        filtered = filtered.filter(
+          (client) =>
+            client.name.toLowerCase().includes(searchLower) ||
+            client.email.toLowerCase().includes(searchLower) ||
+            client.nickName?.toLowerCase().includes(searchLower) ||
+            client.occupation?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      console.log(
+        "[ClientsContent] Filtered clients:",
+        filtered.length,
+        "from",
+        clientsToFilter.length
+      );
+      setFilteredClients(filtered);
+    },
+    [statusFilter, searchQuery]
+  );
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  // Re-apply filters when status filter or search changes
+  useEffect(() => {
+    if (clients.length > 0) {
+      applyFiltersAndSearch(clients);
+    }
+  }, [statusFilter, searchQuery, clients, applyFiltersAndSearch]);
+
+  const getStatusColor = (
+    status: string
+  ): "success" | "primary" | "warning" | "default" | "secondary" | "danger" => {
+    switch (status) {
+      case "Activo":
+        return "success"; // Verde brillante
+      case "Onboarding Completado":
+        return "secondary"; // Morado/Rosa - más distintivo
+      case "Programación Inicial Pendiente":
+        return "warning"; // Amarillo/Naranja
+      default:
+        return "default"; // Gris
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    // Return status as-is since it's already in Spanish
+    return status;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    return date.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const getLastLoginText = (lastLogin?: string) => {
+    if (!lastLogin) return "Nunca";
+
+    const now = new Date();
+    const loginDate = new Date(lastLogin);
+    const diffMs = now.getTime() - loginDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "Hoy";
+    if (diffDays === 1) return "Ayer";
+    if (diffDays < 7) return `Hace ${diffDays} días`;
+
+    return formatDate(lastLogin);
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
+          <div className="flex flex-col gap-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-blue-50 p-3 rounded-xl">
+                      <Icon
+                        className="text-blue-600 text-2xl"
+                        icon="solar:users-group-rounded-bold"
+                      />
                     </div>
-                </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stats.total}
+                      </p>
+                      <p className="text-xs text-gray-600">Total Clientes</p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-green-50 p-3 rounded-xl">
+                      <Icon
+                        className="text-green-600 text-2xl"
+                        icon="solar:check-circle-bold"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stats.active}
+                      </p>
+                      <p className="text-xs text-gray-600">Activos</p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-purple-50 p-3 rounded-xl">
+                      <Icon
+                        className="text-purple-600 text-2xl"
+                        icon="solar:star-bold"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stats.newThisWeek}
+                      </p>
+                      <p className="text-xs text-gray-600">Nuevos (7 días)</p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-orange-50 p-3 rounded-xl">
+                      <Icon
+                        className="text-orange-600 text-2xl"
+                        icon="solar:clipboard-check-bold"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stats.pendingCheckins}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Programación Pendiente
+                      </p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto">
-                <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-                    <div className="flex flex-col gap-6">
-
-                        {/* Stats Cards */}
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <CardBody className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-blue-50 p-3 rounded-xl">
-                                            <Icon icon="solar:users-group-rounded-bold" className="text-blue-600 text-2xl" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                                            <p className="text-xs text-gray-600">Total Clientes</p>
-                                        </div>
-                                    </div>
-                                </CardBody>
-                            </Card>
-
-                            <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <CardBody className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-green-50 p-3 rounded-xl">
-                                            <Icon icon="solar:check-circle-bold" className="text-green-600 text-2xl" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
-                                            <p className="text-xs text-gray-600">Activos</p>
-                                        </div>
-                                    </div>
-                                </CardBody>
-                            </Card>
-
-                            <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <CardBody className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-purple-50 p-3 rounded-xl">
-                                            <Icon icon="solar:star-bold" className="text-purple-600 text-2xl" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-gray-900">{stats.newThisWeek}</p>
-                                            <p className="text-xs text-gray-600">Nuevos (7 días)</p>
-                                        </div>
-                                    </div>
-                                </CardBody>
-                            </Card>
-
-                            <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <CardBody className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-orange-50 p-3 rounded-xl">
-                                            <Icon icon="solar:clipboard-check-bold" className="text-orange-600 text-2xl" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-gray-900">{stats.pendingCheckins}</p>
-                                            <p className="text-xs text-gray-600">Programación Pendiente</p>
-                                        </div>
-                                    </div>
-                                </CardBody>
-                            </Card>
-                        </div>
-
-
-                        {/* Search and Status Filters */}
-                        <Card className="bg-white border border-gray-200 shadow-sm">
-                            <CardBody className="p-4">
-                                <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-                                    {/* Search Bar - 50% */}
-                                    <div className="w-full sm:w-1/2">
-                                        <Input
-                                            placeholder="Buscar cliente por nombre, email o ocupación..."
-                                            value={searchQuery}
-                                            onValueChange={setSearchQuery}
-                                            startContent={<Icon icon="solar:magnifer-linear" className="text-gray-400" width={20} />}
-                                            isClearable
-                                            onClear={() => setSearchQuery('')}
-                                            classNames={{
-                                                input: "text-sm",
-                                                inputWrapper: "border border-gray-200"
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* Status Filters - 50% */}
-                                    <div className="w-full sm:w-1/2 flex gap-2 flex-wrap items-center justify-end">
-                                        <span className="text-sm text-gray-600 font-medium">Estado:</span>
-                                        <Button
-                                            variant={statusFilter === 'all' ? 'solid' : 'flat'}
-                                            color={statusFilter === 'all' ? 'primary' : 'default'}
-                                            size="sm"
-                                            className={statusFilter !== 'all' ? 'bg-gray-100' : ''}
-                                            onPress={() => setStatusFilter('all')}
-                                        >
-                                            Todos
-                                        </Button>
-                                        <Button
-                                            variant={statusFilter === 'Activo' ? 'solid' : 'flat'}
-                                            color={statusFilter === 'Activo' ? 'success' : 'default'}
-                                            size="sm"
-                                            className={statusFilter !== 'Activo' ? 'bg-gray-100' : ''}
-                                            onPress={() => setStatusFilter('Activo')}
-                                        >
-                                            Activo
-                                        </Button>
-                                        <Button
-                                            variant={statusFilter === 'Onboarding Completado' ? 'solid' : 'flat'}
-                                            color={statusFilter === 'Onboarding Completado' ? 'secondary' : 'default'}
-                                            size="sm"
-                                            className={statusFilter !== 'Onboarding Completado' ? 'bg-gray-100' : ''}
-                                            onPress={() => setStatusFilter('Onboarding Completado')}
-                                        >
-                                            Onboarding
-                                        </Button>
-                                        <Button
-                                            variant={statusFilter === 'Programación Inicial Pendiente' ? 'solid' : 'flat'}
-                                            color={statusFilter === 'Programación Inicial Pendiente' ? 'warning' : 'default'}
-                                            size="sm"
-                                            className={statusFilter !== 'Programación Inicial Pendiente' ? 'bg-gray-100' : ''}
-                                            onPress={() => setStatusFilter('Programación Inicial Pendiente')}
-                                        >
-                                            Pendiente
-                                        </Button>
-                                    </div>
-                                </div>
-                            </CardBody>
-                        </Card>
-
-                        {/* Clients Table */}
-                        <Card className="bg-white border border-gray-200 shadow-sm">
-                            <CardBody className="p-0">
-                                {isLoading ? (
-                                    <div className="flex items-center justify-center h-64">
-                                        <Spinner size="lg" color="primary" />
-                                    </div>
-                                ) : filteredClients.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-64">
-                                        <div className="bg-gray-100 p-4 rounded-full mb-4">
-                                            <Icon icon="solar:users-group-rounded-linear" className="text-gray-400 text-5xl" />
-                                        </div>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay clientes</h3>
-                                        <p className="text-gray-500 text-sm">Añade tu primer cliente para empezar</p>
-                                    </div>
-                                ) : (
-                                    <Table
-                                        aria-label="Tabla de clientes"
-                                        classNames={{
-                                            wrapper: "shadow-none",
-                                            th: "bg-gray-50 text-gray-700 font-semibold text-xs uppercase",
-                                            td: "py-4"
-                                        }}
-                                    >
-                                        <TableHeader>
-                                            <TableColumn>CLIENTE</TableColumn>
-                                            <TableColumn>ÚLTIMO ACCESO</TableColumn>
-                                            <TableColumn>FECHA INICIO</TableColumn>
-                                            <TableColumn>ESTADO</TableColumn>
-                                            <TableColumn>ACCIONES</TableColumn>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredClients.map((client) => (
-                                                <TableRow key={client.id}>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-3">
-                                                            <Avatar
-                                                                {...(client.profileImage ? { src: client.profileImage } : {})}
-                                                                name={client.name}
-                                                                size="md"
-                                                                color="primary"
-                                                                radius="lg"
-                                                                isBordered={false}
-                                                                showFallback
-                                                            />
-                                                            <div>
-                                                                <p className="font-semibold text-gray-900">{client.name}</p>
-                                                                <p className="text-sm text-gray-500">{client.email}</p>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <span className="text-sm text-gray-600">{getLastLoginText(client.lastLogin)}</span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <span className="text-sm text-gray-600">{formatDate(client.joinedDate)}</span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Chip
-                                                            color={getStatusColor(client.status)}
-                                                            variant="solid"
-                                                            size="sm"
-                                                        >
-                                                            {getStatusLabel(client.status)}
-                                                        </Chip>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Button
-                                                            color="primary"
-                                                            variant="solid"
-                                                            size="sm"
-                                                            startContent={<Icon icon="solar:eye-bold" width={18} />}
-                                                            onPress={() => window.location.href = `/trainer/dashboard/clients/${client.id}`}
-                                                        >
-                                                            Ver Perfil
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardBody>
-                        </Card>
+            {/* Search, Status Filters and Add Button */}
+            <Card className="bg-white border border-gray-200 shadow-sm">
+              <CardBody className="p-4">
+                <div className="flex flex-col gap-4">
+                  {/* Top Row: Search Bar and Add Button */}
+                  <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+                    {/* Search Bar */}
+                    <div className="flex-1">
+                      <Input
+                        isClearable
+                        classNames={{
+                          input: "text-sm",
+                          inputWrapper: "border border-gray-200",
+                        }}
+                        placeholder="Buscar cliente por nombre, email o ocupación..."
+                        startContent={
+                          <Icon
+                            className="text-gray-400"
+                            icon="solar:magnifer-linear"
+                            width={20}
+                          />
+                        }
+                        value={searchQuery}
+                        onClear={() => setSearchQuery("")}
+                        onValueChange={setSearchQuery}
+                      />
                     </div>
-                </div>
-            </div>
 
-            {/* Add Client Modal */}
-            <AddClientModal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                onSuccess={() => {
-                    // Refresh clients list after adding a new client
-                    fetchClients();
-                }}
-            />
+                    {/* Add Button */}
+                    <Button
+                      className="sm:w-auto w-full"
+                      color="primary"
+                      size="md"
+                      startContent={
+                        <Icon icon="solar:user-plus-bold" width={18} />
+                      }
+                      onPress={() => setIsAddModalOpen(true)}
+                    >
+                      Añadir Cliente
+                    </Button>
+                  </div>
+
+                  {/* Bottom Row: Status Filters */}
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <span className="text-sm text-gray-600 font-medium">
+                      Estado:
+                    </span>
+                    <Button
+                      className={statusFilter !== "all" ? "bg-gray-100" : ""}
+                      color={statusFilter === "all" ? "primary" : "default"}
+                      size="sm"
+                      variant={statusFilter === "all" ? "solid" : "flat"}
+                      onPress={() => setStatusFilter("all")}
+                    >
+                      Todos
+                    </Button>
+                    <Button
+                      className={statusFilter !== "Activo" ? "bg-gray-100" : ""}
+                      color={statusFilter === "Activo" ? "success" : "default"}
+                      size="sm"
+                      variant={statusFilter === "Activo" ? "solid" : "flat"}
+                      onPress={() => setStatusFilter("Activo")}
+                    >
+                      Activo
+                    </Button>
+                    <Button
+                      className={
+                        statusFilter !== "Onboarding Completado"
+                          ? "bg-gray-100"
+                          : ""
+                      }
+                      color={
+                        statusFilter === "Onboarding Completado"
+                          ? "secondary"
+                          : "default"
+                      }
+                      size="sm"
+                      variant={
+                        statusFilter === "Onboarding Completado"
+                          ? "solid"
+                          : "flat"
+                      }
+                      onPress={() => setStatusFilter("Onboarding Completado")}
+                    >
+                      Onboarding
+                    </Button>
+                    <Button
+                      className={
+                        statusFilter !== "Programación Inicial Pendiente"
+                          ? "bg-gray-100"
+                          : ""
+                      }
+                      color={
+                        statusFilter === "Programación Inicial Pendiente"
+                          ? "warning"
+                          : "default"
+                      }
+                      size="sm"
+                      variant={
+                        statusFilter === "Programación Inicial Pendiente"
+                          ? "solid"
+                          : "flat"
+                      }
+                      onPress={() =>
+                        setStatusFilter("Programación Inicial Pendiente")
+                      }
+                    >
+                      Pendiente
+                    </Button>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+
+            {/* Clients Table */}
+            <Card className="bg-white border border-gray-200 shadow-sm">
+              <CardBody className="p-0">
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Spinner color="primary" size="lg" />
+                  </div>
+                ) : filteredClients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64">
+                    <div className="bg-gray-100 p-4 rounded-full mb-4">
+                      <Icon
+                        className="text-gray-400 text-5xl"
+                        icon="solar:users-group-rounded-linear"
+                      />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      No hay clientes
+                    </h3>
+                    <p className="text-gray-500 text-sm">
+                      Añade tu primer cliente para empezar
+                    </p>
+                  </div>
+                ) : (
+                  <Table
+                    aria-label="Tabla de clientes"
+                    classNames={{
+                      wrapper: "shadow-none",
+                      th: "bg-gray-50 text-gray-700 font-semibold text-xs uppercase",
+                      td: "py-4",
+                    }}
+                  >
+                    <TableHeader>
+                      <TableColumn>CLIENTE</TableColumn>
+                      <TableColumn>ÚLTIMO ACCESO</TableColumn>
+                      <TableColumn>FECHA INICIO</TableColumn>
+                      <TableColumn>ESTADO</TableColumn>
+                      <TableColumn>ACCIONES</TableColumn>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredClients.map((client) => (
+                        <TableRow key={client.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Avatar
+                                {...(client.profileImage
+                                  ? { src: client.profileImage }
+                                  : {})}
+                                showFallback
+                                color="primary"
+                                isBordered={false}
+                                name={client.name}
+                                radius="lg"
+                                size="md"
+                              />
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  {client.name}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {client.email}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">
+                              {getLastLoginText(client.lastLogin)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">
+                              {formatDate(client.joinedDate)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              color={getStatusColor(client.status)}
+                              size="sm"
+                              variant="solid"
+                            >
+                              {getStatusLabel(client.status)}
+                            </Chip>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              color="primary"
+                              size="sm"
+                              startContent={
+                                <Icon icon="solar:eye-bold" width={18} />
+                              }
+                              variant="solid"
+                              onPress={() =>
+                                (window.location.href = `/trainer/dashboard/clients/${client.id}`)
+                              }
+                            >
+                              Ver Perfil
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardBody>
+            </Card>
+          </div>
         </div>
-    );
-}
+      </div>
 
+      {/* Add Client Modal */}
+      <AddClientModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={() => {
+          // Refresh clients list after adding a new client
+          fetchClients();
+        }}
+      />
+    </div>
+  );
+}

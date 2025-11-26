@@ -1,12 +1,17 @@
 "use client";
 
-import { Button, Card, CardBody, Tabs, Tab } from "@heroui/react";
+import { Button, Card, CardBody, Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { CheckinModal } from "@/components/client-dashboard/checkin-modal";
+import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
+import {
+  isDailyHabitsSubmittedToday,
+  shouldShowWeeklyCheckIn,
+} from "@/lib/forms/client-helpers";
+import { FormResponse } from "@/lib/forms/types";
 
 interface DashboardContentProps {
   firstName: string;
@@ -27,11 +32,134 @@ export function DashboardContent({
 }: DashboardContentProps) {
   // State
   const [waterIntake, setWaterIntake] = useState(0);
-  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [showDailyFormModal, setShowDailyFormModal] = useState(false);
+  const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
 
+  // Form submission tracking
+  const [weeklyResponses, setWeeklyResponses] = useState<FormResponse[]>([]);
+  const [dailyResponses, setDailyResponses] = useState<FormResponse[]>([]);
+  const [isLoadingForms, setIsLoadingForms] = useState(true);
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
+
+  // Check form submission status
+  useEffect(() => {
+    async function checkFormStatus() {
+      setIsLoadingForms(true);
+      try {
+        // Fetch recent weekly responses (last 2 weeks)
+        const weeklyRes = await fetch(
+          `/api/forms/responses/${clientId}?form_type=checkins&start_date=${getDateDaysAgo(14)}`
+        );
+        const weeklyData = await weeklyRes.json();
+
+        if (weeklyData.success) {
+          setWeeklyResponses(weeklyData.responses || []);
+        }
+
+        // Fetch recent daily responses (last 7 days)
+        const dailyRes = await fetch(
+          `/api/forms/responses/${clientId}?form_type=habits&start_date=${getDateDaysAgo(7)}`
+        );
+        const dailyData = await dailyRes.json();
+
+        if (dailyData.success) {
+          setDailyResponses(dailyData.responses || []);
+        }
+      } catch (error) {
+        console.error("Error checking form status:", error);
+      } finally {
+        setIsLoadingForms(false);
+      }
+    }
+
+    checkFormStatus();
+  }, [clientId]);
+
+  // Fetch metrics data for charts based on selected period
+  useEffect(() => {
+    async function fetchMetricsData() {
+      setIsLoadingMetrics(true);
+      try {
+        const daysToFetch = getDaysForPeriod(selectedPeriod);
+        const startDate = getDateDaysAgo(daysToFetch);
+
+        // Fetch weekly responses for weight data
+        const weeklyRes = await fetch(
+          `/api/forms/responses/${clientId}?form_type=checkins&start_date=${startDate}`
+        );
+        const weeklyData = await weeklyRes.json();
+
+        if (weeklyData.success) {
+          setWeeklyResponses(weeklyData.responses || []);
+        }
+
+        // Fetch daily responses for sleep, calories, steps
+        const dailyRes = await fetch(
+          `/api/forms/responses/${clientId}?form_type=habits&start_date=${startDate}`
+        );
+        const dailyData = await dailyRes.json();
+
+        if (dailyData.success) {
+          setDailyResponses(dailyData.responses || []);
+        }
+      } catch (error) {
+        console.error("Error fetching metrics:", error);
+      } finally {
+        setIsLoadingMetrics(false);
+      }
+    }
+
+    fetchMetricsData();
+  }, [clientId, selectedPeriod]);
+
+  // Helper to get date X days ago
+  const getDateDaysAgo = (days: number): string => {
+    const date = new Date();
+
+    date.setDate(date.getDate() - days);
+
+    return date.toISOString().split("T")[0] || "";
+  };
+
+  // Helper to get days needed for a period
+  const getDaysForPeriod = (period: string): number => {
+    const daysMap: Record<string, number> = {
+      "7d": 7,
+      "30d": 30,
+      "3m": 90,
+      "6m": 180,
+      "12m": 365,
+    };
+
+    return daysMap[period] ?? 7;
+  };
+
+  // Calculate form display states
+  const showWeeklyBanner =
+    !isLoadingForms && shouldShowWeeklyCheckIn(weeklyResponses);
+  const showDailyButton =
+    !isLoadingForms && !isDailyHabitsSubmittedToday(dailyResponses);
+  const isDailyCompleted =
+    !isLoadingForms && isDailyHabitsSubmittedToday(dailyResponses);
+
+  // Auto-hide completed message after 5 seconds
+  const [showCompletedMessage, setShowCompletedMessage] = useState(false);
+
+  useEffect(() => {
+    if (isDailyCompleted) {
+      setShowCompletedMessage(true);
+      const timer = setTimeout(() => {
+        setShowCompletedMessage(false);
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+
+    return undefined;
+  }, [isDailyCompleted]);
+
   const waterGoal = 3;
-  const currentStreak = 12;
 
   // Helper functions for data generation
   const getDataPointsCount = (period: string): number => {
@@ -115,42 +243,142 @@ export function DashboardContent({
   };
 
   const generateWeightData = (points: number, period: string) => {
-    const baseWeight = 78.5;
-    const targetWeight = 77.0;
-    const decrement = (baseWeight - targetWeight) / points;
+    // Create date range for the period
+    const data: { date: string; weight: number }[] = [];
 
-    return Array.from({ length: points }, (_, i) => ({
-      date: formatDateForPeriod(i, points, period),
-      weight: +(baseWeight - decrement * i).toFixed(1),
-    }));
-  };
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, period);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
 
-  // Seeded random function for consistent SSR/Client rendering
-  const seededRandom = (seed: number): number => {
-    const x = Math.sin(seed) * 10000;
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
 
-    return x - Math.floor(x);
+      // Find response for this date or closest earlier date
+      const response = weeklyResponses.find((r) => {
+        const responseDate = new Date(r.response_date);
+
+        return responseDate.toISOString().split("T")[0] === targetDateStr;
+      });
+
+      // Extract weight from response (assuming question id is 'weight' or 'peso')
+      let weight = 0;
+
+      if (response && response.answers) {
+        weight = Number(response.answers.weight || response.answers.peso || 0);
+      }
+
+      data.push({ date: dateLabel, weight });
+    }
+
+    // Fill missing values with last known value or 0
+    let lastKnownWeight = 0;
+
+    for (let i = data.length - 1; i >= 0; i--) {
+      const item = data[i];
+
+      if (item && item.weight > 0) {
+        lastKnownWeight = item.weight;
+      } else if (item) {
+        item.weight = lastKnownWeight;
+      }
+    }
+
+    return data;
   };
 
   const generateSleepData = (points: number, period: string) => {
-    return Array.from({ length: points }, (_, i) => ({
-      date: formatDateForPeriod(i, points, period),
-      hours: +(5.5 + seededRandom(i + 100) * 2.5).toFixed(1), // Deterministic between 5.5 and 8 hours
-    }));
+    const data: { date: string; hours: number }[] = [];
+
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, period);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
+
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      // Find daily response for this date
+      const response = dailyResponses.find((r) => {
+        return r.response_date === targetDateStr;
+      });
+
+      // Extract sleep hours (assuming question id is 'sleep' or 'sueno' or 'horas_sueno')
+      let hours = 0;
+
+      if (response && response.answers) {
+        hours = Number(
+          response.answers.sleep ||
+            response.answers.sueno ||
+            response.answers.horas_sueno ||
+            0
+        );
+      }
+
+      data.push({ date: dateLabel, hours });
+    }
+
+    return data;
   };
 
   const generateCalorieData = (points: number, period: string) => {
-    return Array.from({ length: points }, (_, i) => ({
-      date: formatDateForPeriod(i, points, period),
-      calories: Math.floor(1800 + seededRandom(i + 200) * 600), // Deterministic between 1800 and 2400
-    }));
+    const data: { date: string; calories: number }[] = [];
+
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, period);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
+
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      // Find daily response for this date
+      const response = dailyResponses.find((r) => {
+        return r.response_date === targetDateStr;
+      });
+
+      // Extract calories (assuming question id is 'calories' or 'calorias')
+      let calories = 0;
+
+      if (response && response.answers) {
+        calories = Number(
+          response.answers.calories || response.answers.calorias || 0
+        );
+      }
+
+      data.push({ date: dateLabel, calories });
+    }
+
+    return data;
   };
 
   const generateStepsData = (points: number, period: string) => {
-    return Array.from({ length: points }, (_, i) => ({
-      date: formatDateForPeriod(i, points, period),
-      steps: Math.floor(50 + seededRandom(i + 300) * 200), // Deterministic between 50 and 250
-    }));
+    const data: { date: string; steps: number }[] = [];
+
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, period);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
+
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      // Find daily response for this date
+      const response = dailyResponses.find((r) => {
+        return r.response_date === targetDateStr;
+      });
+
+      // Extract steps (assuming question id is 'steps' or 'pasos')
+      let steps = 126; // default
+
+      if (response && response.answers) {
+        steps = response.answers.steps || response.answers.pasos || 126;
+      }
+
+      data.push({ date: dateLabel, steps });
+    }
+
+    return data;
   };
 
   // Dynamic data based on selected period
@@ -202,40 +430,130 @@ export function DashboardContent({
           <ClientHeader
             clientId={clientId}
             clientProfilePicture={clientProfilePicture}
-            currentStreak={currentStreak}
             firstName={firstName}
             logoUrl={logoUrl}
-            showStreak={true}
             tenantSlug={tenantSlug}
             trainerName={trainerName}
+            onOpenDailyForm={() => setShowDailyFormModal(true)}
+            onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
           />
 
-          {/* Daily Habits Section - Full Width */}
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
-              Registro Diario
-            </h2>
-            <button
-              className="bg-primary cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
-              onClick={() => setShowCheckInModal(true)}
-            >
-              <div className="max-w-lg mx-auto flex items-center justify-between">
-                <span className="text-white text-xl font-medium">
-                  Registra tu día de hoy
-                </span>
-                <Icon
-                  className="text-white text-3xl"
-                  icon="solar:alt-arrow-right-bold"
-                />
-              </div>
-            </button>
-          </div>
+          {/* Weekly Check-in Banner - Shows on Mondays or when pending */}
+          {showWeeklyBanner && (
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
+                Seguimiento Semanal
+              </h2>
+              <button
+                className="bg-warning cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
+                onClick={() => setShowWeeklyFormModal(true)}
+              >
+                <div className="max-w-lg mx-auto flex items-center justify-between">
+                  <span className="text-white text-xl font-medium">
+                    Completa tu check-in semanal
+                  </span>
+                  <Icon
+                    className="text-white text-3xl"
+                    icon="solar:alt-arrow-right-bold"
+                  />
+                </div>
+              </button>
+            </div>
+          )}
 
-          {/* Check-in Modal */}
-          <CheckinModal
-            isOpen={showCheckInModal}
-            onClose={() => setShowCheckInModal(false)}
+          {/* Daily Habits Section - Only shows if not completed today */}
+          {showDailyButton && (
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
+                Registro Diario
+              </h2>
+              <button
+                className="bg-primary cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
+                onClick={() => setShowDailyFormModal(true)}
+              >
+                <div className="max-w-lg mx-auto flex items-center justify-between">
+                  <span className="text-white text-xl font-medium">
+                    Registra tu día de hoy
+                  </span>
+                  <Icon
+                    className="text-white text-3xl"
+                    icon="solar:alt-arrow-right-bold"
+                  />
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Completed Daily Habits indicator - auto-hides after 5 seconds */}
+          {showCompletedMessage && (
+            <div className="mb-4 px-4">
+              <Card className="bg-success/10 border border-success/20">
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    <Icon
+                      className="text-success"
+                      icon="solar:check-circle-bold"
+                      width={24}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-success">
+                        ¡Registro de hoy completado!
+                      </p>
+                      <p className="text-xs text-success/70">
+                        Vuelve mañana para registrar tu nuevo día
+                      </p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
+          )}
+
+          {/* Weekly Check-in Modal */}
+          <DynamicFormModal
+            clientId={clientId}
+            formType="checkins"
+            isOpen={showWeeklyFormModal}
+            onClose={() => setShowWeeklyFormModal(false)}
+            onSuccess={async () => {
+              // Refresh form responses to update charts
+              const daysToFetch = getDaysForPeriod(selectedPeriod);
+              const startDate = getDateDaysAgo(daysToFetch);
+
+              const weeklyRes = await fetch(
+                `/api/forms/responses/${clientId}?form_type=checkins&start_date=${startDate}`
+              );
+              const weeklyData = await weeklyRes.json();
+
+              if (weeklyData.success) {
+                setWeeklyResponses(weeklyData.responses || []);
+              }
+            }}
           />
+
+          {/* Daily Habits Modal */}
+          <DynamicFormModal
+            clientId={clientId}
+            formType="habits"
+            isOpen={showDailyFormModal}
+            onClose={() => setShowDailyFormModal(false)}
+            onSuccess={async () => {
+              // Refresh form responses to update charts
+              const daysToFetch = getDaysForPeriod(selectedPeriod);
+              const startDate = getDateDaysAgo(daysToFetch);
+
+              const dailyRes = await fetch(
+                `/api/forms/responses/${clientId}?form_type=habits&start_date=${startDate}`
+              );
+              const dailyData = await dailyRes.json();
+
+              if (dailyData.success) {
+                setDailyResponses(dailyData.responses || []);
+              }
+            }}
+          />
+
+          {/* OLD Check-in Modal - removed, now using DynamicFormModal */}
 
           {/* Progress Section */}
           <div className="px-4 space-y-4">
@@ -279,19 +597,25 @@ export function DashboardContent({
                   </div>
                 </div>
                 <p className="text-5xl font-bold mb-1 text-foreground">
-                  {weightHistory[weightHistory.length - 1]?.weight}
+                  {weightHistory[weightHistory.length - 1]?.weight || 0}
                 </p>
                 <p className="text-sm text-foreground/70 mb-4">kg hoy</p>
                 <div className="flex items-end justify-between gap-2 h-24">
                   {weightHistory.map((day, index) => {
-                    const minWeight = Math.min(
-                      ...weightHistory.map((d) => d.weight)
-                    );
+                    const minWeight =
+                      Math.min(
+                        ...weightHistory
+                          .map((d) => d.weight)
+                          .filter((w) => w > 0)
+                      ) || 0;
                     const maxWeight = Math.max(
                       ...weightHistory.map((d) => d.weight)
                     );
                     const range = maxWeight - minWeight || 1;
-                    const height = ((day.weight - minWeight) / range) * 70 + 30;
+                    const height =
+                      day.weight > 0
+                        ? ((day.weight - minWeight) / range) * 70 + 30
+                        : 0;
                     const isToday = index === weightHistory.length - 1;
 
                     return (
@@ -318,67 +642,71 @@ export function DashboardContent({
               </CardBody>
             </Card>
 
-            {/* Water Tracker - Full Width */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                    CONTADOR DE AGUA
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      isIconOnly
-                      className="rounded-full"
-                      size="sm"
-                      variant="flat"
-                      onPress={handleWaterDecrement}
-                    >
-                      <Icon
-                        className="text-base"
-                        icon="solar:minus-circle-bold"
-                      />
-                    </Button>
-                    <Button
-                      isIconOnly
-                      className="rounded-full"
-                      size="sm"
-                      variant="flat"
-                      onPress={handleWaterIncrement}
-                    >
-                      <Icon
-                        className="text-base"
-                        icon="solar:add-circle-bold"
-                      />
-                    </Button>
-                    <div className="bg-primary p-1.5 rounded-full">
-                      <Icon
-                        className="text-white text-base"
-                        icon="solar:bottle-bold"
-                      />
+            {/* Water Tracker - Hidden for now */}
+            {false && (
+              <Card>
+                <CardBody className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-foreground/70 tracking-wide">
+                      CONTADOR DE AGUA
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        isIconOnly
+                        className="rounded-full"
+                        size="sm"
+                        variant="flat"
+                        onPress={handleWaterDecrement}
+                      >
+                        <Icon
+                          className="text-base"
+                          icon="solar:minus-circle-bold"
+                        />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        className="rounded-full"
+                        size="sm"
+                        variant="flat"
+                        onPress={handleWaterIncrement}
+                      >
+                        <Icon
+                          className="text-base"
+                          icon="solar:add-circle-bold"
+                        />
+                      </Button>
+                      <div className="bg-primary p-1.5 rounded-full">
+                        <Icon
+                          className="text-white text-base"
+                          icon="solar:bottle-bold"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-                <p className="text-5xl font-bold mb-1 text-foreground">
-                  <span className="tabular-nums">{waterIntake.toFixed(2)}</span>
-                </p>
-                <p className="text-sm text-foreground/70 mb-4">
-                  L de {waterGoal} L
-                </p>
-                <div className="relative h-3 bg-default-100 rounded-full overflow-hidden">
-                  <div
-                    className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-primary to-primary-400 rounded-full transition-all duration-500"
-                    style={{ width: `${waterPercentage}%` }}
-                  />
-                </div>
-                <div className="flex justify-between mt-2">
-                  <span className="text-xs text-foreground/50">0%</span>
-                  <span className="text-xs text-foreground/70 font-semibold">
-                    {waterPercentage.toFixed(0)}%
-                  </span>
-                  <span className="text-xs text-foreground/50">100%</span>
-                </div>
-              </CardBody>
-            </Card>
+                  <p className="text-5xl font-bold mb-1 text-foreground">
+                    <span className="tabular-nums">
+                      {waterIntake.toFixed(2)}
+                    </span>
+                  </p>
+                  <p className="text-sm text-foreground/70 mb-4">
+                    L de {waterGoal} L
+                  </p>
+                  <div className="relative h-3 bg-default-100 rounded-full overflow-hidden">
+                    <div
+                      className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-primary to-primary-400 rounded-full transition-all duration-500"
+                      style={{ width: `${waterPercentage}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    <span className="text-xs text-foreground/50">0%</span>
+                    <span className="text-xs text-foreground/70 font-semibold">
+                      {waterPercentage.toFixed(0)}%
+                    </span>
+                    <span className="text-xs text-foreground/50">100%</span>
+                  </div>
+                </CardBody>
+              </Card>
+            )}
 
             {/* Sleep Tracker - Full Width */}
             <Card>
@@ -395,7 +723,7 @@ export function DashboardContent({
                   </div>
                 </div>
                 <p className="text-5xl font-bold mb-1 text-foreground">
-                  {sleepHistory[sleepHistory.length - 1]?.hours}
+                  {sleepHistory[sleepHistory.length - 1]?.hours || 0}
                 </p>
                 <p className="text-sm text-foreground/70 mb-4">Horas anoche</p>
                 <div className="flex items-end justify-between gap-2 h-24">
@@ -443,14 +771,13 @@ export function DashboardContent({
                   </div>
                 </div>
                 <p className="text-5xl font-bold mb-1 text-foreground">
-                  {calorieHistory[calorieHistory.length - 1]?.calories}
+                  {calorieHistory[calorieHistory.length - 1]?.calories || 0}
                 </p>
                 <p className="text-sm text-foreground/70 mb-4">Hoy</p>
                 <div className="flex items-end justify-between gap-2 h-24">
                   {calorieHistory.map((day, index) => {
-                    const maxCals = Math.max(
-                      ...calorieHistory.map((d) => d.calories)
-                    );
+                    const maxCals =
+                      Math.max(...calorieHistory.map((d) => d.calories)) || 1;
                     const height = (day.calories / maxCals) * 100;
                     const isToday = index === calorieHistory.length - 1;
 

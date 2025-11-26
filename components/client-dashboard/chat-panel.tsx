@@ -109,8 +109,15 @@ export function ChatPanel({
       loadMessages();
       // Focus input
       setTimeout(() => inputRef.current?.focus(), 300);
+
+      // Auto-refresh messages every 10 seconds when chat is open
+      const interval = setInterval(loadMessages, 10000);
+
+      return () => clearInterval(interval);
     }
-  }, [isOpen]);
+
+    return undefined;
+  }, [isOpen, clientId, tenantSlug]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -158,7 +165,7 @@ export function ChatPanel({
 
       {/* Chat Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-full md:w-96 bg-background z-50 shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${
+        className={`fixed top-0 right-0 h-[calc(100vh-4rem)] w-full md:w-96 bg-background z-50 shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -232,16 +239,18 @@ export function ChatPanel({
         </div>
 
         {/* Input Area */}
-        <div className="px-4 py-3 border-t border-divider bg-content1">
-          <div className="flex items-end gap-2">
+        <div className="px-4 py-3 border-t-2 border-divider bg-content1 shadow-lg">
+          <div className="flex items-center gap-2">
             <Input
               ref={inputRef}
               className="flex-1"
               classNames={{
-                input: "font-body",
+                input: "font-body text-base",
+                inputWrapper: "h-12 bg-content2",
               }}
               disabled={isSending}
               placeholder="Escribe un mensaje..."
+              size="lg"
               value={newMessage}
               variant="bordered"
               onKeyPress={handleKeyPress}
@@ -252,11 +261,15 @@ export function ChatPanel({
               color="primary"
               isDisabled={!newMessage.trim() || isSending}
               isLoading={isSending}
+              size="lg"
               onPress={handleSendMessage}
             >
               <Icon className="text-xl" icon="solar:plain-2-bold" />
             </Button>
           </div>
+          <p className="text-xs text-foreground/50 mt-2 text-center">
+            Presiona Enter para enviar
+          </p>
         </div>
       </div>
     </>

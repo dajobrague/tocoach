@@ -1,36 +1,47 @@
 // Server-side CSS generation from database theme_json
 import { loadTenantContext } from "@/lib/tenant/loader";
-import { generateHeroUIColorScale, hexToHeroUIHSL } from "@/lib/theme/color-utils";
+import {
+  generateHeroUIColorScale,
+  hexToHeroUIHSL,
+} from "@/lib/theme/color-utils";
 import type { ThemeConfig } from "@/lib/theme/schema";
 import { defaultTheme, validateTheme } from "@/lib/theme/schema";
 import { NextRequest, NextResponse } from "next/server";
 
 // Load theme from database
 async function loadThemeFromDatabase(host: string): Promise<ThemeConfig> {
-    try {
-        const tenantContext = await loadTenantContext(host);
+  try {
+    const tenantContext = await loadTenantContext(host);
 
-        if (!tenantContext || tenantContext.status !== "active") {
-            console.warn(`[CSS Gen DB] No active tenant for host: ${host}, using default theme`);
-            return defaultTheme;
-        }
-
-        const validation = validateTheme(tenantContext.theme_json, tenantContext.theme_slug);
-        if (!validation.success) {
-            console.warn(`[CSS Gen DB] Theme validation failed for ${host}:`, validation.errors);
-            return defaultTheme;
-        }
-
-        return validation.data;
-    } catch (error) {
-        console.error(`[CSS Gen DB] Failed to load theme for host ${host}:`, error);
-        return defaultTheme;
+    if (!tenantContext || tenantContext.status !== "active") {
+      console.warn(
+        `[CSS Gen DB] No active tenant for host: ${host}, using default theme`
+      );
+      return defaultTheme;
     }
+
+    const validation = validateTheme(
+      tenantContext.theme_json,
+      tenantContext.theme_slug
+    );
+    if (!validation.success) {
+      console.warn(
+        `[CSS Gen DB] Theme validation failed for ${host}:`,
+        validation.errors
+      );
+      return defaultTheme;
+    }
+
+    return validation.data;
+  } catch (error) {
+    console.error(`[CSS Gen DB] Failed to load theme for host ${host}:`, error);
+    return defaultTheme;
+  }
 }
 
 // Generate complete CSS for a theme (same as file-based version)
 function generateThemeCSS(theme: ThemeConfig): string {
-    const css = `
+  const css = `
 /* Generated theme CSS for ${theme.meta.name} */
 :root {
   /* Custom theme variables */
@@ -246,42 +257,42 @@ body {
 }
 `;
 
-    return css.trim();
+  return css.trim();
 }
 
 export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ slug: string }> }
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-    const { slug: host } = await params;
+  const { slug: host } = await params;
 
-    try {
-        // Load theme configuration from database
-        const theme = await loadThemeFromDatabase(host);
+  try {
+    // Load theme configuration from database
+    const theme = await loadThemeFromDatabase(host);
 
-        // Generate CSS
-        const css = generateThemeCSS(theme);
+    // Generate CSS
+    const css = generateThemeCSS(theme);
 
-        const isDev = process.env.NODE_ENV !== "production";
-        return new NextResponse(css, {
-            headers: {
-                "Content-Type": "text/css",
-                "Cache-Control": isDev
-                    ? "no-store"
-                    : "public, max-age=3600, stale-while-revalidate=86400",
-                "Vary": "Accept-Encoding",
-            },
-        });
-    } catch (error) {
-        console.error(`[CSS Gen DB] Error generating CSS for host ${host}:`, error);
+    const isDev = process.env.NODE_ENV !== "production";
+    return new NextResponse(css, {
+      headers: {
+        "Content-Type": "text/css",
+        "Cache-Control": isDev
+          ? "no-store"
+          : "public, max-age=3600, stale-while-revalidate=86400",
+        Vary: "Accept-Encoding",
+      },
+    });
+  } catch (error) {
+    console.error(`[CSS Gen DB] Error generating CSS for host ${host}:`, error);
 
-        // Fallback to default theme CSS
-        const defaultCSS = generateThemeCSS(defaultTheme);
-        return new NextResponse(defaultCSS, {
-            headers: {
-                "Content-Type": "text/css",
-                "Cache-Control": "public, max-age=300", // Shorter cache for fallback
-            },
-        });
-    }
+    // Fallback to default theme CSS
+    const defaultCSS = generateThemeCSS(defaultTheme);
+    return new NextResponse(defaultCSS, {
+      headers: {
+        "Content-Type": "text/css",
+        "Cache-Control": "public, max-age=300", // Shorter cache for fallback
+      },
+    });
+  }
 }

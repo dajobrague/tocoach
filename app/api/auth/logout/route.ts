@@ -1,24 +1,25 @@
 // Trainer logout API
-import { clearTrainerSession } from '@/lib/auth/session';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+
+import { clearTrainerSession } from "@/lib/auth/session";
 
 export async function POST(request: NextRequest) {
-    try {
-        // Clear the session cookie
-        await clearTrainerSession();
+  try {
+    // Clear the session cookie
+    await clearTrainerSession();
 
-        console.log('[Logout] Trainer session cleared');
+    console.log("[Logout] Trainer session cleared");
 
-        return NextResponse.json(
-            { success: true, message: 'Sesión cerrada correctamente' },
-            { status: 200 }
-        );
+    return NextResponse.json(
+      { success: true, message: "Sesión cerrada correctamente" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("[Logout] Error clearing session:", error);
 
-    } catch (error) {
-        console.error('[Logout] Error clearing session:', error);
-        return NextResponse.json(
-            { error: 'Error al cerrar sesión' },
-            { status: 500 }
-        );
-    }
+    return NextResponse.json(
+      { error: "Error al cerrar sesión" },
+      { status: 500 }
+    );
+  }
 }

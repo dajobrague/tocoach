@@ -28,11 +28,15 @@ interface Notification {
 interface NotificationsDropdownProps {
   clientId: string;
   tenantSlug: string;
+  onOpenWeeklyForm?: () => void;
+  onOpenDailyForm?: () => void;
 }
 
 export function NotificationsDropdown({
   clientId,
   tenantSlug,
+  onOpenWeeklyForm,
+  onOpenDailyForm,
 }: NotificationsDropdownProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -116,6 +120,22 @@ export function NotificationsDropdown({
     // Mark as read
     if (!notification.read_at) {
       markAsRead(notification.id);
+    }
+
+    // Check if it's a form notification (metadata contains form_type)
+    const notif = notification as any;
+
+    if (notif.metadata?.action === "open_form") {
+      const formType = notif.metadata?.form_type;
+
+      if (formType === "checkins" && onOpenWeeklyForm) {
+        onOpenWeeklyForm();
+      } else if (formType === "habits" && onOpenDailyForm) {
+        onOpenDailyForm();
+      }
+      setIsOpen(false);
+
+      return;
     }
 
     // Navigate if link exists
@@ -262,9 +282,7 @@ export function NotificationsDropdown({
             {notifications.map((notification) => (
               <DropdownItem
                 key={notification.id}
-                className={`py-3 px-4 ${
-                  !notification.read_at ? "bg-primary/5" : ""
-                }`}
+                className="py-3 px-4"
                 classNames={{
                   base: "data-[hover=true]:bg-content2",
                 }}

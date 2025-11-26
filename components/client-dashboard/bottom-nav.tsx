@@ -23,14 +23,15 @@ export function ClientBottomNav() {
     },
     {
       href: `/${slug}/nutricion`,
-      icon: "solar:leaf-bold",
+      icon: "fluent:food-20-filled",
       label: "Nutrición",
     },
-    {
-      href: `/${slug}/calendar`,
-      icon: "solar:calendar-bold",
-      label: "Calendario",
-    },
+    // Hidden temporarily - will be finished later
+    // {
+    //   href: `/${slug}/calendar`,
+    //   icon: "solar:calendar-bold",
+    //   label: "Calendario",
+    // },
     {
       href: `/${slug}/mas`,
       icon: "solar:menu-dots-bold",

@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 
@@ -29,17 +29,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify session matches requested client
-    if (session.client_id !== clientId) {
+    // Verify session matches requested client (compare as strings)
+    if (session.client_id.toString() !== clientId.toString()) {
+      console.error("[Messages GET] Client ID mismatch:", {
+        sessionClientId: session.client_id,
+        requestedClientId: clientId,
+        sessionClientIdType: typeof session.client_id,
+        requestedClientIdType: typeof clientId,
+      });
+
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Fetch messages
+    // Get the actual tenant host from the slug
+    // tenant_slug in messages table stores the host (e.g., brachod7197.localhost), not the slug
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("slug", tenantSlug)
+      .single();
+
+    if (tenantError || !tenant) {
+      console.error("[Messages GET] Tenant not found for slug:", tenantSlug);
+
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Fetch messages using the actual tenant host
     const { data: messages, error } = await supabase
       .from("messages")
       .select("*")
       .eq("client_id", clientId)
-      .eq("tenant_slug", tenantSlug)
+      .eq("tenant_slug", tenant.host)
       .order("created_at", { ascending: true })
       .limit(limit);
 
@@ -82,16 +103,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify session matches requested client
-    if (session.client_id !== clientId) {
+    // Verify session matches requested client (compare as strings)
+    if (session.client_id.toString() !== clientId.toString()) {
+      console.error("[Messages POST] Client ID mismatch:", {
+        sessionClientId: session.client_id,
+        requestedClientId: clientId,
+      });
+
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Insert message
+    // Get the actual tenant host from the slug
+    // tenant_slug in messages table stores the host (e.g., brachod7197.localhost), not the slug
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("slug", tenantSlug)
+      .single();
+
+    if (tenantError || !tenant) {
+      console.error("[Messages POST] Tenant not found for slug:", tenantSlug);
+
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Insert message using the actual tenant host
     const { data: newMessage, error } = await supabase
       .from("messages")
       .insert({
-        tenant_slug: tenantSlug,
+        tenant_slug: tenant.host,
         client_id: clientId,
         sender_type: "client",
         sender_id: clientId,

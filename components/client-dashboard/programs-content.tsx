@@ -32,7 +32,6 @@ export function ProgramsContent({
             clientProfilePicture={clientProfilePicture}
             firstName={firstName}
             logoUrl={logoUrl}
-            showStreak={false}
             tenantSlug={tenantSlug}
             trainerName={trainerName}
           />

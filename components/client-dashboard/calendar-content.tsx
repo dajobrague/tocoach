@@ -1,17 +1,17 @@
 "use client";
 
 import {
+  Button,
   Card,
   CardBody,
-  Button,
   Chip,
   Modal,
+  ModalBody,
   ModalContent,
   ModalHeader,
-  ModalBody,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
@@ -229,7 +229,6 @@ export function CalendarContent({
             clientProfilePicture={clientProfilePicture}
             firstName={firstName}
             logoUrl={logoUrl}
-            showStreak={false}
             tenantSlug={tenantSlug}
             trainerName={trainerName}
           />
