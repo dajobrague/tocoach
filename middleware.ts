@@ -48,6 +48,8 @@ function extractSlugFromPath(pathname: string): string | null {
     "blog",
     "docs",
     "pricing",
+    "icons", // Static icons directory
+    "sw.js", // Service worker
     "404", // Exclude 404 page to prevent redirect loops
     "500", // Exclude error pages
     "favicon.ico",
@@ -276,6 +278,6 @@ export const config = {
      * - manifest.json (PWA manifest)
      * - robots.txt, sitemap.xml (SEO files)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|brands|manifest.json|robots.txt|sitemap.xml).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|brands|manifest.json|robots.txt|sitemap.xml|icons|sw.js).*)",
   ],
 };

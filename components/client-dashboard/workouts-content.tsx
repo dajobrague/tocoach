@@ -141,7 +141,7 @@ export function WorkoutsContent({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/clients/${clientId}/programs`);
+      const response = await fetch("/api/client/programs");
       const data = await response.json();
 
       if (data.success) {
