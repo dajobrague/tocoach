@@ -5,17 +5,22 @@ export interface MockClient {
   name: string;
   firstName: string;
   lastName: string;
+  nickName?: string;
   email: string;
   avatar?: string;
-  status: "Activo" | "Onboarding Completado" | "Programación Inicial Pendiente";
+  status: string;
   joinedDate: string;
-  age: number;
+  age: number | null;
   occupation: string;
   goals: string[];
   phone?: string;
+  dob?: string;
+  nationalId?: string;
   location?: {
     city?: string;
+    state?: string;
     country?: string;
+    zip?: string;
   };
 }
 
