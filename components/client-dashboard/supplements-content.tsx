@@ -46,9 +46,7 @@ export function SupplementsContent({
   const fetchAssignments = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `/api/supplements/assignments?client_id=${clientId}`
-      );
+      const response = await fetch("/api/client/supplements");
       const result = await response.json();
 
       if (result.success) {
