@@ -68,7 +68,7 @@ export function NutritionContent({
     const fetchNutritionPlan = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/nutrition/plans/${clientId}`);
+        const response = await fetch("/api/client/nutrition");
         const result = await response.json();
 
         if (result.success && result.data && result.data.length > 0) {
