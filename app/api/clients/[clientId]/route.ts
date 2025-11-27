@@ -38,23 +38,26 @@ export async function PUT(
     }
 
     // Update client data
-    const { data: updatedClient, error: updateError } = await supabase
-      .from("clients")
-      .update({
-        name: body.firstName,
-        last_name: body.lastName,
-        nick_name: body.nickName || null,
-        email: body.email,
-        phone: body.phone || null,
-        occupation: body.occupation || null,
-        dob: body.dob || null,
-        city: body.city || null,
-        state: body.state || null,
-        country: body.country || null,
-        zip: body.zip || null,
-        national_id: body.nationalId || null,
-        status: body.status || "Activo",
-      })
+    const updateData = {
+      name: body.firstName,
+      last_name: body.lastName,
+      nick_name: body.nickName || null,
+      email: body.email,
+      phone: body.phone || null,
+      occupation: body.occupation || null,
+      dob: body.dob || null,
+      city: body.city || null,
+      state: body.state || null,
+      country: body.country || null,
+      zip: body.zip || null,
+      national_id: body.nationalId || null,
+      status: body.status || "Activo",
+    };
+
+    const { data: updatedClient, error: updateError } = await (
+      supabase.from("clients") as any
+    )
+      .update(updateData)
       .eq("id", clientId)
       .select()
       .single();

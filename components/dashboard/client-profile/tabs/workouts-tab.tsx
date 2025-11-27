@@ -31,6 +31,42 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeProgram = programs.find((p) => p.status === "active");
+
+  // Helper function to get status display properties
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case "active":
+        return {
+          label: "Activo",
+          color: "success" as const,
+          className: "text-white font-semibold",
+        };
+      case "completed":
+        return {
+          label: "Completado",
+          color: "default" as const,
+          className: "text-gray-700 font-semibold",
+        };
+      case "paused":
+        return {
+          label: "Pausado",
+          color: "warning" as const,
+          className: "text-white font-semibold",
+        };
+      case "cancelled":
+        return {
+          label: "Cancelado",
+          color: "danger" as const,
+          className: "text-white font-semibold",
+        };
+      default:
+        return {
+          label: "Activo",
+          color: "success" as const,
+          className: "text-white font-semibold",
+        };
+    }
+  };
   const [isAddExerciseModalOpen, setIsAddExerciseModalOpen] = useState(false);
   const [isEditExerciseModalOpen, setIsEditExerciseModalOpen] = useState(false);
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
@@ -66,6 +102,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     startDate: "",
     sessionsPerWeek: "",
     notes: "",
+    status: "active",
   });
   const [sessionForm, setSessionForm] = useState({
     name: "",
@@ -77,7 +114,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/clients/${clientId}/programs`);
+      // Only fetch active programs for the client profile view
+      const response = await fetch(
+        `/api/clients/${clientId}/programs?status=active`
+      );
       const data = await response.json();
 
       if (data.success) {
@@ -188,6 +228,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       startDate: activeProgram.assignedDate,
       sessionsPerWeek: activeProgram.sessionsPerWeek.toString(),
       notes: "",
+      status: activeProgram.status || "active",
     });
     setSelectedProgramId(activeProgram.programId);
     setIsEditProgramModalOpen(true);
@@ -203,6 +244,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       startDate: "",
       sessionsPerWeek: "",
       notes: "",
+      status: "active",
     });
   };
 
@@ -603,13 +645,13 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   </Chip>
                   <Chip
                     classNames={{
-                      content: "text-white font-semibold",
+                      content: getStatusConfig(activeProgram.status).className,
                     }}
-                    color="success"
+                    color={getStatusConfig(activeProgram.status).color}
                     size="sm"
                     variant="solid"
                   >
-                    Activo
+                    {getStatusConfig(activeProgram.status).label}
                   </Chip>
                 </div>
                 <p className="text-sm text-gray-600">
@@ -1771,6 +1813,77 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     }
                   />
                 </div>
+              </div>
+
+              {/* Estado del Programa */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Icon
+                    className="text-blue-600"
+                    icon="solar:shield-check-bold"
+                    width={18}
+                  />
+                  Estado del Programa
+                </h4>
+                <Select
+                  isRequired
+                  label="Estado"
+                  placeholder="Seleccionar estado"
+                  selectedKeys={programForm.status ? [programForm.status] : []}
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:flag-linear"
+                      width={18}
+                    />
+                  }
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as string;
+
+                    setProgramForm({ ...programForm, status: value });
+                  }}
+                >
+                  <SelectItem
+                    key="active"
+                    startContent={
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                      </div>
+                    }
+                  >
+                    Activo
+                  </SelectItem>
+                  <SelectItem
+                    key="paused"
+                    startContent={
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                      </div>
+                    }
+                  >
+                    Pausado
+                  </SelectItem>
+                  <SelectItem
+                    key="completed"
+                    startContent={
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-500" />
+                      </div>
+                    }
+                  >
+                    Completado
+                  </SelectItem>
+                  <SelectItem
+                    key="cancelled"
+                    startContent={
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                      </div>
+                    }
+                  >
+                    Cancelado
+                  </SelectItem>
+                </Select>
               </div>
 
               {/* Notas */}

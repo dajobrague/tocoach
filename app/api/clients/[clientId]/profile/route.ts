@@ -23,12 +23,12 @@ export async function GET(
 
     // Fetch client from the clients table
     // The 'tenant' column in clients table stores the trainer UUID
-    const { data: client, error: clientError } = await supabase
+    const { data: client, error: clientError } = (await supabase
       .from("clients")
       .select("*")
       .eq("id", clientId)
       .eq("tenant", session.trainer_id)
-      .single();
+      .single()) as { data: any; error: any };
 
     console.log("[Client Profile API] Client query result:", {
       found: !!client,

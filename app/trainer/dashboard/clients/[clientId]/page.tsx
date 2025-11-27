@@ -104,17 +104,17 @@ export default function ClientProfilePage() {
           clientData={{
             firstName: client.firstName,
             lastName: client.lastName,
-            nickName: client.nickName,
+            nickName: client.nickName || "",
             email: client.email,
-            phone: client.phone,
-            occupation: client.occupation,
-            dob: client.dob,
-            city: client.location?.city,
-            state: client.location?.state,
-            country: client.location?.country,
-            zip: client.location?.zip,
-            nationalId: client.nationalId,
-            status: client.status,
+            phone: client.phone || "",
+            occupation: client.occupation || "",
+            dob: client.dob || "",
+            city: client.location?.city || "",
+            state: client.location?.state || "",
+            country: client.location?.country || "",
+            zip: client.location?.zip || "",
+            nationalId: client.nationalId || "",
+            status: client.status || "",
           }}
           clientId={clientId}
           isOpen={isEditModalOpen}

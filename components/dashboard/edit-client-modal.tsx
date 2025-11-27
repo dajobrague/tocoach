@@ -92,7 +92,7 @@ export default function EditClientModal({
     const countryObj = countries.getNames("es", { select: "official" });
 
     return Object.entries(countryObj)
-      .map(([code, name]) => ({ code, name }))
+      .map(([code, name]) => ({ code, name: name as string }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, []);
 
@@ -321,13 +321,9 @@ export default function EditClientModal({
                     handleChange("country", value || "");
                   }}
                 >
-                  {countryList.map(
-                    (country: { code: string; name: string }) => (
-                      <SelectItem key={country.name} value={country.name}>
-                        {country.name}
-                      </SelectItem>
-                    )
-                  )}
+                  {countryList.map((country) => (
+                    <SelectItem key={country.name}>{country.name}</SelectItem>
+                  ))}
                 </Select>
                 <Input
                   label="Estado/Provincia"
@@ -367,9 +363,7 @@ export default function EditClientModal({
                 }}
               >
                 {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
+                  <SelectItem key={option.value}>{option.label}</SelectItem>
                 ))}
               </Select>
             </div>

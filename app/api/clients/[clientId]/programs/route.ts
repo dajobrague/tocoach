@@ -30,20 +30,31 @@ export async function GET(
     const { clientId } = await params;
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // 'cardio' or 'strength' or null for all
+    const status = searchParams.get("status"); // 'active', 'paused', 'completed', 'cancelled' or null for all
 
     console.log(
       "[Programs API] Fetching programs for client:",
       clientId,
       "category:",
-      category
+      category,
+      "status:",
+      status
     );
 
-    // Fetch client programs first
-    const { data: clientPrograms, error: programsError } = await supabase
+    // Fetch client programs first with optional status filter
+    let clientProgramsQuery = supabase
       .from("client_programs")
       .select("*")
       .eq("client_id", clientId)
       .eq("trainer_id", session.trainer_id);
+
+    // Filter by status if provided
+    if (status) {
+      clientProgramsQuery = clientProgramsQuery.eq("status", status);
+    }
+
+    const { data: clientPrograms, error: programsError } =
+      await clientProgramsQuery;
 
     if (programsError) {
       console.error(
