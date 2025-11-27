@@ -33,26 +33,52 @@ function isNoNavbarRoute(pathname: string): boolean {
   );
 }
 
-export const metadata: Metadata = {
-  title: {
-    default: siteConfig.name,
-    template: `%s - ${siteConfig.name}`,
-  },
-  description: siteConfig.description,
-  manifest: "/manifest.json",
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/icons/icon-192x192.png",
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: siteConfig.name,
-  },
-  other: {
-    "mobile-web-app-capable": "yes",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const tenantSlug = headersList.get("x-tenant-slug") || "";
+  const pathname = headersList.get("x-pathname") || "";
+
+  let pageTitle = siteConfig.name;
+
+  // Check if it's a trainer route
+  if (pathname.startsWith("/trainer")) {
+    pageTitle = "TopCoach Trainer Dashboard";
+  }
+  // Check if it's a client route with tenant
+  else if (tenantSlug) {
+    try {
+      const tenantContext = await loadTenantContext(tenantSlug);
+
+      if (tenantContext) {
+        const tenantName =
+          tenantContext.theme_json?.meta?.name || tenantContext.slug;
+
+        pageTitle = `${tenantName} - TopCoach App`;
+      }
+    } catch (error) {
+      // Fallback to slug if tenant load fails
+      pageTitle = `${tenantSlug} - TopCoach App`;
+    }
+  }
+
+  return {
+    title: pageTitle,
+    description: siteConfig.description,
+    manifest: "/manifest.json",
+    icons: {
+      icon: "/favicon.ico",
+      apple: "/icons/icon-192x192.png",
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: pageTitle,
+    },
+    other: {
+      "mobile-web-app-capable": "yes",
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [
