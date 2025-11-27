@@ -369,10 +369,10 @@ export function DashboardContent({
       });
 
       // Extract steps (assuming question id is 'steps' or 'pasos')
-      let steps = 126; // default
+      let steps = 0; // default to 0 if no data
 
       if (response && response.answers) {
-        steps = response.answers.steps || response.answers.pasos || 126;
+        steps = response.answers.steps || response.answers.pasos || 0;
       }
 
       data.push({ date: dateLabel, steps });
@@ -406,7 +406,7 @@ export function DashboardContent({
     return generateStepsData(points, selectedPeriod);
   }, [selectedPeriod]);
 
-  const todaySteps = stepsHistory[stepsHistory.length - 1]?.steps || 65;
+  const todaySteps = stepsHistory[stepsHistory.length - 1]?.steps || 0;
 
   const handleWaterIncrement = () => {
     if (waterIntake < waterGoal) {
