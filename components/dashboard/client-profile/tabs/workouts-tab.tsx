@@ -214,6 +214,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       startDate: "",
       sessionsPerWeek: "",
       notes: "",
+      status: "active",
     });
   };
 
