@@ -560,9 +560,6 @@ function InventoryPickerModal({
                           <h4 className="font-bold text-gray-900 mb-1 truncate">
                             {item.name}
                           </h4>
-                          <p className="text-xs text-gray-500 mb-1">
-                            {item.quantity} {item.unit}
-                          </p>
                           {item.description && (
                             <p className="text-xs text-gray-400 line-clamp-2">
                               {item.description}
@@ -678,13 +675,21 @@ function AssignmentDetailsModal({
                       {supplement.name}
                     </h4>
                     {supplement.description && (
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-gray-600 mb-2">
                         {supplement.description}
                       </p>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      Contenido: {supplement.quantity} {supplement.unit}
-                    </p>
+                    {supplement.product_url && (
+                      <a
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        href={supplement.product_url}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        <Icon icon="solar:link-linear" width={14} />
+                        Ver producto
+                      </a>
+                    )}
                   </div>
                 </div>
               </CardBody>

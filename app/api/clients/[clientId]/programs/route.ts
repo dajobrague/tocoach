@@ -118,6 +118,26 @@ export async function GET(
     // Create a map of programs by ID for easy lookup
     const programsMap = new Map((programs || []).map((p) => [p.id, p]));
 
+    // Clean up orphaned client_programs (where program doesn't exist or doesn't match category)
+    const orphanedClientPrograms = clientPrograms.filter(
+      (cp) => !programsMap.has(cp.program_id)
+    );
+
+    if (orphanedClientPrograms.length > 0) {
+      console.log(
+        "[Programs API] Found",
+        orphanedClientPrograms.length,
+        "orphaned client_programs, cleaning up..."
+      );
+
+      // Delete orphaned client_programs
+      const orphanedIds = orphanedClientPrograms.map((cp) => cp.id);
+
+      await supabase.from("client_programs").delete().in("id", orphanedIds);
+
+      console.log("[Programs API] Cleaned up orphaned client_programs");
+    }
+
     // For each program, fetch sessions and exercises
     const workoutPrograms: WorkoutProgram[] = [];
 
@@ -290,6 +310,7 @@ export async function POST(
       notes,
       category,
       goal,
+      templateId, // NEW: Optional template ID to clone from
     } = body;
 
     console.log("[Programs API] Creating program for client:", clientId, body);
@@ -308,45 +329,168 @@ export async function POST(
       );
     }
 
-    // First, create the program template
-    const metadata: any = {
-      type,
-      sessions_per_week: parseInt(sessionsPerWeek),
-    };
+    let program: any;
 
-    // Add category and category-specific fields
-    if (category) {
-      metadata.category = category;
-    }
+    // If templateId is provided, clone the template
+    if (templateId) {
+      console.log("[Programs API] Cloning from template:", templateId);
 
-    if (category === "cardio") {
-      if (goal) metadata.goal = goal;
+      // Fetch the template
+      const { data: template, error: templateError } = await supabase
+        .from("programs")
+        .select("*")
+        .eq("id", templateId)
+        .eq("trainer_id", session.trainer_id)
+        .eq("is_template", true)
+        .single();
+
+      if (templateError || !template) {
+        console.error("[Programs API] Template not found:", templateError);
+
+        return NextResponse.json(
+          { success: false, error: "Plantilla no encontrada" },
+          { status: 404 }
+        );
+      }
+
+      // Create the program from template
+      const { data: newProgram, error: programError } = await supabase
+        .from("programs")
+        .insert({
+          tenant_host: tenant.host,
+          trainer_id: session.trainer_id,
+          name,
+          description: notes || template.description,
+          is_template: false,
+          is_published: false,
+          metadata: template.metadata, // Use template metadata
+        })
+        .select()
+        .single();
+
+      if (programError || !newProgram) {
+        console.error(
+          "[Programs API] Error creating program from template:",
+          programError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al crear programa desde plantilla" },
+          { status: 500 }
+        );
+      }
+
+      program = newProgram;
+
+      // Clone sessions and exercises from template
+      const { data: templateSessions } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("program_id", templateId)
+        .order("session_order", { ascending: true });
+
+      if (templateSessions && templateSessions.length > 0) {
+        for (const templateSession of templateSessions) {
+          // Create new session
+          const { data: newSession, error: sessionError } = await supabase
+            .from("sessions")
+            .insert({
+              tenant_host: tenant.host,
+              program_id: program.id,
+              trainer_id: session.trainer_id,
+              name: templateSession.name,
+              description: templateSession.description,
+              session_order: templateSession.session_order,
+              duration_minutes: templateSession.duration_minutes,
+              session_type: templateSession.session_type,
+              intensity_level: templateSession.intensity_level,
+              equipment_needed: templateSession.equipment_needed,
+              notes: templateSession.notes,
+              metadata: templateSession.metadata,
+            })
+            .select()
+            .single();
+
+          if (sessionError || !newSession) {
+            console.error(
+              "[Programs API] Error cloning session:",
+              sessionError
+            );
+            continue;
+          }
+
+          // Clone exercises for this session
+          const { data: templateExercises } = await supabase
+            .from("session_exercises")
+            .select("*")
+            .eq("session_id", templateSession.id)
+            .order("exercise_order", { ascending: true });
+
+          if (templateExercises && templateExercises.length > 0) {
+            const exercisesToInsert = templateExercises.map((ex) => ({
+              tenant_host: tenant.host,
+              session_id: newSession.id,
+              exercise_id: ex.exercise_id,
+              exercise_order: ex.exercise_order,
+              sets: ex.sets,
+              reps: ex.reps,
+              duration_seconds: ex.duration_seconds,
+              rest_seconds: ex.rest_seconds,
+              weight_kg: ex.weight_kg,
+              distance_meters: ex.distance_meters,
+              notes: ex.notes,
+              metadata: ex.metadata,
+            }));
+
+            await supabase.from("session_exercises").insert(exercisesToInsert);
+          }
+        }
+      }
+
+      console.log("[Programs API] Program cloned from template successfully");
     } else {
-      // For strength programs, division is required
-      if (division) metadata.division = division;
-    }
+      // Create a new program from scratch (existing behavior)
+      const metadata: any = {
+        type,
+        sessions_per_week: parseInt(sessionsPerWeek),
+      };
 
-    const { data: program, error: programError } = await supabase
-      .from("programs")
-      .insert({
-        tenant_host: tenant.host,
-        trainer_id: session.trainer_id,
-        name,
-        description: notes || null,
-        is_template: false,
-        is_published: false,
-        metadata,
-      })
-      .select()
-      .single();
+      // Add category and category-specific fields
+      if (category) {
+        metadata.category = category;
+      }
 
-    if (programError || !program) {
-      console.error("[Programs API] Error creating program:", programError);
+      if (category === "cardio") {
+        if (goal) metadata.goal = goal;
+      } else {
+        // For strength programs, division is required
+        if (division) metadata.division = division;
+      }
 
-      return NextResponse.json(
-        { success: false, error: "Error al crear programa" },
-        { status: 500 }
-      );
+      const { data: newProgram, error: programError } = await supabase
+        .from("programs")
+        .insert({
+          tenant_host: tenant.host,
+          trainer_id: session.trainer_id,
+          name,
+          description: notes || null,
+          is_template: false,
+          is_published: false,
+          metadata,
+        })
+        .select()
+        .single();
+
+      if (programError || !newProgram) {
+        console.error("[Programs API] Error creating program:", programError);
+
+        return NextResponse.json(
+          { success: false, error: "Error al crear programa" },
+          { status: 500 }
+        );
+      }
+
+      program = newProgram;
     }
 
     console.log("[Programs API] Program created:", program.id);
@@ -356,7 +500,7 @@ export async function POST(
       .from("client_programs")
       .insert({
         tenant_host: tenant.host,
-        client_id: clientId,
+        client_id: parseInt(clientId), // Convert string to integer
         program_id: program.id,
         trainer_id: session.trainer_id,
         start_date: startDate,
@@ -499,6 +643,157 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       programId: program.id,
+    });
+  } catch (error) {
+    console.error("[Programs API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Delete a program and all associated data
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    // Authenticate trainer
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { clientId } = await params;
+    const { searchParams } = new URL(request.url);
+    const programId = searchParams.get("programId");
+
+    if (!programId) {
+      return NextResponse.json(
+        { success: false, error: "Program ID requerido" },
+        { status: 400 }
+      );
+    }
+
+    console.log(
+      "[Programs API] Deleting program:",
+      programId,
+      "for client:",
+      clientId
+    );
+
+    // 1. Get all sessions for this program
+    const { data: sessions } = await supabase
+      .from("sessions")
+      .select("id")
+      .eq("program_id", programId);
+
+    if (sessions && sessions.length > 0) {
+      const sessionIds = sessions.map((s) => s.id);
+
+      // 2. Delete session_exercises for all sessions
+      const { error: exercisesError } = await supabase
+        .from("session_exercises")
+        .delete()
+        .in("session_id", sessionIds);
+
+      if (exercisesError) {
+        console.error(
+          "[Programs API] Error deleting session exercises:",
+          exercisesError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al eliminar ejercicios" },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        "[Programs API] Deleted exercises for",
+        sessionIds.length,
+        "sessions"
+      );
+
+      // 3. Delete scheduled_sessions
+      const { error: scheduledError } = await supabase
+        .from("scheduled_sessions")
+        .delete()
+        .in("session_id", sessionIds);
+
+      if (scheduledError) {
+        console.error(
+          "[Programs API] Error deleting scheduled sessions:",
+          scheduledError
+        );
+        // Continue anyway, this is not critical
+      }
+    }
+
+    // 4. Delete all sessions
+    const { error: sessionsError } = await supabase
+      .from("sessions")
+      .delete()
+      .eq("program_id", programId);
+
+    if (sessionsError) {
+      console.error("[Programs API] Error deleting sessions:", sessionsError);
+
+      return NextResponse.json(
+        { success: false, error: "Error al eliminar sesiones" },
+        { status: 500 }
+      );
+    }
+
+    // 5. Delete client_programs association
+    const { error: clientProgramError } = await supabase
+      .from("client_programs")
+      .delete()
+      .eq("program_id", programId)
+      .eq("client_id", clientId)
+      .eq("trainer_id", session.trainer_id);
+
+    if (clientProgramError) {
+      console.error(
+        "[Programs API] Error deleting client_program:",
+        clientProgramError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al desasignar programa" },
+        { status: 500 }
+      );
+    }
+
+    // 6. Finally, delete the program itself
+    const { error: programError } = await supabase
+      .from("programs")
+      .delete()
+      .eq("id", programId)
+      .eq("trainer_id", session.trainer_id);
+
+    if (programError) {
+      console.error("[Programs API] Error deleting program:", programError);
+
+      return NextResponse.json(
+        { success: false, error: "Error al eliminar programa" },
+        { status: 500 }
+      );
+    }
+
+    console.log("[Programs API] Program deleted successfully:", programId);
+
+    return NextResponse.json({
+      success: true,
+      message: "Programa eliminado correctamente",
     });
   } catch (error) {
     console.error("[Programs API] Unexpected error:", error);

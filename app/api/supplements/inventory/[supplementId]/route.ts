@@ -97,7 +97,15 @@ export async function PATCH(
 
     const { supplementId } = params;
     const body = await request.json();
-    const { name, description, quantity, unit, images, is_archived } = body;
+    const {
+      name,
+      description,
+      quantity,
+      unit,
+      product_url,
+      images,
+      is_archived,
+    } = body;
 
     console.log(
       "[Supplement Inventory API] Updating supplement:",
@@ -132,8 +140,10 @@ export async function PATCH(
 
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (quantity !== undefined) updateData.quantity = parseFloat(quantity);
-    if (unit !== undefined) updateData.unit = unit;
+    if (quantity !== undefined)
+      updateData.quantity = quantity ? parseFloat(quantity) : null;
+    if (unit !== undefined) updateData.unit = unit || null;
+    if (product_url !== undefined) updateData.product_url = product_url || null;
     if (images !== undefined) updateData.images = images;
     if (is_archived !== undefined) updateData.is_archived = is_archived;
 

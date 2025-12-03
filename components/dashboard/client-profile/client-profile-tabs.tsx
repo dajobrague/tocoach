@@ -8,6 +8,7 @@ import { useState } from "react";
 import CardioTab from "./tabs/cardio-tab";
 import FormsTab from "./tabs/forms-tab";
 // import GalleryTab from "./tabs/gallery-tab"; // Hidden temporarily
+import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
 import SupplementsTab from "./tabs/supplements-tab";
 import WorkoutsTab from "./tabs/workouts-tab";
@@ -52,6 +53,15 @@ export default function ClientProfileTabs({
                 <div className="flex items-center gap-2">
                   <Icon icon="solar:heart-pulse-bold" width={20} />
                   <span className="font-medium">Cardio</span>
+                </div>
+              }
+            />
+            <Tab
+              key="neat"
+              title={
+                <div className="flex items-center gap-2">
+                  <Icon icon="solar:walking-bold" width={20} />
+                  <span className="font-medium">NEAT</span>
                 </div>
               }
             />
@@ -111,6 +121,7 @@ export default function ClientProfileTabs({
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
           {selectedTab === "workouts" && <WorkoutsTab clientId={clientId} />}
           {selectedTab === "cardio" && <CardioTab clientId={clientId} />}
+          {selectedTab === "neat" && <NeatTab clientId={clientId} />}
           {selectedTab === "nutrition" && <NutritionTab clientId={clientId} />}
           {selectedTab === "supplements" && (
             <SupplementsTab clientId={clientId} />

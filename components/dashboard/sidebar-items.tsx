@@ -29,6 +29,18 @@ const dashboardSidebarItems: SidebarItem[] = [
     title: "Inventario de Suplementos",
   },
   {
+    key: "templates",
+    href: "/trainer/dashboard/templates",
+    icon: "solar:folder-with-files-linear",
+    title: "Plantillas de Programas",
+  },
+  {
+    key: "exercise-library",
+    href: "/trainer/dashboard/exercise-library",
+    icon: "solar:dumbbell-linear",
+    title: "Biblioteca de Ejercicios",
+  },
+  {
     key: "messaging",
     href: "/trainer/dashboard/messaging",
     icon: "solar:chat-round-dots-linear",

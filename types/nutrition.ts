@@ -4,12 +4,13 @@
 export interface NutritionPlan {
   id: string;
   tenant_host: string;
-  client_id: string;
+  client_id: string | null; // Nullable for templates
   trainer_id: string;
   name: string;
   start_date: string; // ISO date string
   status: "active" | "completed" | "paused" | "cancelled";
   notes?: string;
+  is_template: boolean; // Whether this is a reusable template
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +21,14 @@ export interface NutritionDay {
   tenant_host: string;
   day_label: string;
   day_order: number;
+  // Day-level macros (can be manually set or calculated from meals)
+  protein: number; // grams
+  carbs: number; // grams
+  fats: number; // grams
+  calories: number; // kcal
+  // Weekdays this nutrition day applies to (0=Sunday, 1=Monday, ..., 6=Saturday)
+  // Can have multiple values for days that repeat multiple times per week
+  weekdays: number[];
   created_at: string;
   updated_at: string;
 }
@@ -70,13 +79,31 @@ export interface NutritionPlanWithDays extends NutritionPlan {
   days: NutritionDayWithMeals[];
 }
 
+// Template-specific types
+export interface NutritionTemplate extends NutritionPlan {
+  is_template: true;
+  client_id: null;
+  dayCount?: number;
+  mealCount?: number;
+}
+
+export interface CreateFromTemplateRequest {
+  templateId: string;
+  client_id: string;
+  name: string;
+  start_date?: string;
+  notes?: string;
+}
+
 // API request types
 export interface CreateNutritionPlanRequest {
-  client_id: string;
+  client_id?: string; // Optional when creating template
   name: string;
   start_date?: string;
   status?: "active" | "completed" | "paused" | "cancelled";
   notes?: string;
+  is_template?: boolean;
+  templateId?: string; // For creating from template
 }
 
 export interface UpdateNutritionPlanRequest {
@@ -90,11 +117,17 @@ export interface CreateNutritionDayRequest {
   nutrition_plan_id: string;
   day_label: string;
   day_order?: number;
+  weekdays?: number[];
 }
 
 export interface UpdateNutritionDayRequest {
   day_label?: string;
   day_order?: number;
+  protein?: number;
+  carbs?: number;
+  fats?: number;
+  calories?: number;
+  weekdays?: number[];
 }
 
 export interface CreateNutritionMealRequest {

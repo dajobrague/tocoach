@@ -269,9 +269,6 @@ export default function InventoryContent() {
                         </Button>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {item.quantity} {item.unit}
-                    </p>
                   </div>
                 </div>
 
@@ -280,6 +277,19 @@ export default function InventoryContent() {
                   <p className="text-sm text-gray-600 line-clamp-2 mb-3">
                     {item.description}
                   </p>
+                )}
+
+                {/* Product URL */}
+                {item.product_url && (
+                  <a
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mb-3"
+                    href={item.product_url}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    <Icon icon="solar:link-linear" width={16} />
+                    Ver producto
+                  </a>
                 )}
 
                 {/* Image Gallery Preview */}

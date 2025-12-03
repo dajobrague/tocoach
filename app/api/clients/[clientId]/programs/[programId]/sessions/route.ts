@@ -23,7 +23,7 @@ export async function POST(
 
     const { clientId, programId } = await params;
     const body = await request.json();
-    const { name, dayOfWeek } = body;
+    const { name, daysOfWeek } = body;
 
     console.log(
       "[Sessions API] Creating session for program:",
@@ -79,7 +79,7 @@ export async function POST(
         session_order: nextOrder,
         session_type: sessionType,
         metadata: {
-          day_of_week: dayOfWeek,
+          days_of_week: daysOfWeek,
         },
       })
       .select()
@@ -139,7 +139,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, dayOfWeek } = body;
+    const { name, daysOfWeek } = body;
 
     console.log("[Sessions API] Updating session:", sessionId, body);
 
@@ -149,7 +149,7 @@ export async function PUT(
       .update({
         name,
         metadata: {
-          day_of_week: dayOfWeek,
+          days_of_week: daysOfWeek,
         },
         updated_at: new Date().toISOString(),
       })

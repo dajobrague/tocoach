@@ -4,7 +4,6 @@ import {
   Avatar,
   Badge,
   Button,
-  Chip,
   Dropdown,
   DropdownItem,
   DropdownMenu,
@@ -91,12 +90,13 @@ export default function TopNavigation({
         {items.map((item) => (
           <NavbarItem
             key={item.key}
-            className="relative"
+            className="relative group"
             isActive={activeSection === item.key}
           >
             <Button
               className={`
-                                h-10 px-4 font-medium transition-all relative
+                                h-9 px-3 font-medium transition-all duration-300 ease-in-out relative overflow-hidden
+                                group-hover:px-4
                                 ${
                                   activeSection === item.key
                                     ? "bg-blue-50 text-blue-600"
@@ -105,11 +105,14 @@ export default function TopNavigation({
                             `}
               startContent={
                 <Icon
-                  className={
-                    activeSection === item.key
-                      ? "text-blue-600"
-                      : "text-gray-500"
-                  }
+                  className={`
+                    transition-all duration-300 ease-in-out flex-shrink-0
+                    ${
+                      activeSection === item.key
+                        ? "text-blue-600"
+                        : "text-gray-500 group-hover:text-blue-600"
+                    }
+                  `}
                   icon={item.icon || ""}
                   width={20}
                 />
@@ -117,7 +120,15 @@ export default function TopNavigation({
               variant="light"
               onPress={() => handleItemClick(item.key)}
             >
-              <span className="hidden md:inline">{item.title}</span>
+              <span
+                className={`
+                  text-sm whitespace-nowrap transition-all duration-300 ease-in-out
+                  overflow-hidden max-w-0 opacity-0
+                  group-hover:max-w-[200px] group-hover:opacity-100 group-hover:ml-2
+                `}
+              >
+                {item.title}
+              </span>
               {item.endContent && (
                 <span className="absolute -top-1 -right-1">
                   {item.endContent}
@@ -130,121 +141,6 @@ export default function TopNavigation({
 
       {/* User Menu */}
       <NavbarContent justify="end">
-        {/* Notifications */}
-        <NavbarItem className="hidden sm:flex">
-          <Dropdown placement="bottom-end">
-            <DropdownTrigger>
-              <Button
-                isIconOnly
-                className="text-gray-600 hover:text-blue-600"
-                variant="light"
-              >
-                <Badge color="primary" content="3" size="sm">
-                  <Icon icon="solar:bell-linear" width={22} />
-                </Badge>
-              </Button>
-            </DropdownTrigger>
-            <DropdownMenu
-              aria-label="Notifications"
-              classNames={{
-                base: "w-80",
-              }}
-              variant="flat"
-            >
-              <DropdownItem
-                key="header"
-                isReadOnly
-                className="h-12 gap-2"
-                textValue="Notifications header"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <p className="font-semibold text-gray-900">Notificaciones</p>
-                  <Chip color="primary" size="sm" variant="flat">
-                    3 nuevas
-                  </Chip>
-                </div>
-              </DropdownItem>
-              <DropdownItem
-                key="notification1"
-                className="h-auto py-3"
-                startContent={
-                  <div className="bg-blue-50 p-2 rounded-lg flex-shrink-0">
-                    <Icon
-                      className="text-blue-600 text-lg"
-                      icon="solar:user-plus-bold"
-                    />
-                  </div>
-                }
-              >
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold text-gray-900">
-                    Nuevo cliente registrado
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Juan Pérez se ha unido a tu plataforma
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">Hace 5 minutos</p>
-                </div>
-              </DropdownItem>
-              <DropdownItem
-                key="notification2"
-                className="h-auto py-3"
-                startContent={
-                  <div className="bg-green-50 p-2 rounded-lg flex-shrink-0">
-                    <Icon
-                      className="text-green-600 text-lg"
-                      icon="solar:check-circle-bold"
-                    />
-                  </div>
-                }
-              >
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold text-gray-900">
-                    Sesión completada
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    María García completó su entrenamiento
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">Hace 1 hora</p>
-                </div>
-              </DropdownItem>
-              <DropdownItem
-                key="notification3"
-                className="h-auto py-3"
-                startContent={
-                  <div className="bg-purple-50 p-2 rounded-lg flex-shrink-0">
-                    <Icon
-                      className="text-purple-600 text-lg"
-                      icon="solar:calendar-mark-bold"
-                    />
-                  </div>
-                }
-              >
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold text-gray-900">
-                    Próxima sesión
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Tienes una sesión con Carlos López en 2 horas
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">Hace 2 horas</p>
-                </div>
-              </DropdownItem>
-              <DropdownItem
-                key="view-all"
-                className="h-10"
-                textValue="Ver todas"
-              >
-                <div className="flex items-center justify-center w-full">
-                  <p className="text-sm font-medium text-blue-600">
-                    Ver todas las notificaciones
-                  </p>
-                </div>
-              </DropdownItem>
-            </DropdownMenu>
-          </Dropdown>
-        </NavbarItem>
-
         {/* User Dropdown */}
         <NavbarItem>
           <Dropdown placement="bottom-end">
@@ -366,30 +262,6 @@ export default function TopNavigation({
             </Button>
           </NavbarMenuItem>
         ))}
-
-        {/* Mobile notifications */}
-        <NavbarMenuItem>
-          <div className="w-full">
-            <Button
-              className="w-full justify-start h-12 px-4 font-medium text-gray-700"
-              endContent={
-                <Chip color="primary" size="sm" variant="flat">
-                  3 nuevas
-                </Chip>
-              }
-              startContent={
-                <Icon
-                  className="text-gray-500"
-                  icon="solar:bell-linear"
-                  width={22}
-                />
-              }
-              variant="light"
-            >
-              Notificaciones
-            </Button>
-          </div>
-        </NavbarMenuItem>
       </NavbarMenu>
     </Navbar>
   );

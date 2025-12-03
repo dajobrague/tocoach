@@ -97,14 +97,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, quantity, unit, images } = body;
+    const { name, description, quantity, unit, product_url, images } = body;
 
     console.log("[Supplement Inventory API] Creating supplement:", body);
 
     // Validate required fields
-    if (!name || !unit || quantity === undefined) {
+    if (!name) {
       return NextResponse.json(
-        { success: false, error: "Campos requeridos: name, unit, quantity" },
+        { success: false, error: "Campos requeridos: name" },
         { status: 400 }
       );
     }
@@ -139,8 +139,9 @@ export async function POST(request: NextRequest) {
         trainer_id: session.trainer_id,
         name,
         description: description || null,
-        quantity: parseFloat(quantity),
-        unit,
+        quantity: quantity ? parseFloat(quantity) : null,
+        unit: unit || null,
+        product_url: product_url || null,
         images: images || [],
         is_archived: false,
       })

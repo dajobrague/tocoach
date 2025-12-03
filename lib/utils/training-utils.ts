@@ -168,9 +168,16 @@ export function transformToWorkoutProgram(
         }
       });
 
+    // Handle both single day (backward compatibility) and array of days
+    const dayOfWeek = session.metadata?.days_of_week
+      ? session.metadata.days_of_week
+      : session.metadata?.day_of_week
+        ? [formatDayOfWeek(session.metadata.day_of_week)]
+        : ["Lun"];
+
     return {
       id: session.id,
-      dayOfWeek: formatDayOfWeek(session.metadata?.day_of_week),
+      dayOfWeek,
       name: session.name,
       completed: isCompleted,
       exercises,

@@ -6,8 +6,9 @@ export interface SupplementInventoryItem {
   trainer_id: string;
   name: string;
   description: string | null;
-  quantity: number;
-  unit: string;
+  quantity: number | null;
+  unit: string | null;
+  product_url: string | null;
   images: string[];
   is_archived: boolean;
   created_at: string;
@@ -39,8 +40,9 @@ export type SupplementStatus = "active" | "paused" | "discontinued";
 export interface CreateSupplementInventoryInput {
   name: string;
   description?: string;
-  quantity: number;
-  unit: string;
+  quantity?: number;
+  unit?: string;
+  product_url?: string;
   images?: string[];
 }
 
@@ -49,6 +51,7 @@ export interface UpdateSupplementInventoryInput {
   description?: string;
   quantity?: number;
   unit?: string;
+  product_url?: string;
   images?: string[];
   is_archived?: boolean;
 }

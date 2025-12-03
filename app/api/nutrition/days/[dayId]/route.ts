@@ -23,7 +23,8 @@ export async function PATCH(
 
     const { dayId } = await params;
     const body = await request.json();
-    const { day_label, day_order } = body;
+    const { day_label, day_order, protein, carbs, fats, calories, weekdays } =
+      body;
 
     console.log("[Nutrition Days API] Updating day:", dayId, body);
 
@@ -68,6 +69,11 @@ export async function PATCH(
 
     if (day_label !== undefined) updateData.day_label = day_label;
     if (day_order !== undefined) updateData.day_order = day_order;
+    if (protein !== undefined) updateData.protein = protein;
+    if (carbs !== undefined) updateData.carbs = carbs;
+    if (fats !== undefined) updateData.fats = fats;
+    if (calories !== undefined) updateData.calories = calories;
+    if (weekdays !== undefined) updateData.weekdays = weekdays;
 
     const { data: day, error: updateError } = await supabase
       .from("nutrition_days")

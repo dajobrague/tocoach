@@ -7,9 +7,11 @@ import React from "react";
 
 import AnalyticsContent from "@/components/dashboard/analytics-content";
 import ClientsContent from "@/components/dashboard/clients-content";
+import ExerciseLibraryContent from "@/components/dashboard/exercise-library-content";
 import InventoryContent from "@/components/dashboard/inventory-content";
 import MessagingContent from "@/components/dashboard/messaging-content";
 import dashboardSidebarItems from "@/components/dashboard/sidebar-items";
+import TemplatesContent from "@/components/dashboard/templates-content";
 import TopNavigation from "@/components/dashboard/top-navigation";
 
 interface TrainerSession {
@@ -164,6 +166,10 @@ export default function TrainerDashboard() {
         return <ClientsContent />;
       case "inventory":
         return <InventoryContent />;
+      case "templates":
+        return <TemplatesContent />;
+      case "exercise-library":
+        return <ExerciseLibraryContent />;
       case "messaging":
         return <MessagingContent />;
       default:

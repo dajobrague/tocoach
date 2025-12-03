@@ -3,10 +3,16 @@
 import type { WorkoutProgram } from "@/types/training";
 
 import {
+  Autocomplete,
+  AutocompleteItem,
   Button,
   Card,
   CardBody,
   Chip,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
   Input,
   Modal,
   ModalBody,
@@ -22,6 +28,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
+
 interface WorkoutsTabProps {
   clientId: string;
 }
@@ -30,7 +38,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const activeProgram = programs.find((p) => p.status === "active");
+  const activePrograms = programs.filter((p) => p.status === "active");
+  const activeProgram = activePrograms[0]; // For backwards compatibility with existing code
 
   // Helper function to get status display properties
   const getStatusConfig = (status: string) => {
@@ -73,6 +82,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   const [isEditProgramModalOpen, setIsEditProgramModalOpen] = useState(false);
   const [isAddSessionModalOpen, setIsAddSessionModalOpen] = useState(false);
   const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
+  const [isSaveAsTemplateModalOpen, setIsSaveAsTemplateModalOpen] =
+    useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
@@ -94,7 +105,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     rest: "",
     trainingSystem: "",
     videoUrl: "",
+    exerciseId: "", // Store selected library exercise ID
   });
+  const [libraryExercises, setLibraryExercises] = useState<any[]>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [programForm, setProgramForm] = useState({
     name: "",
     division: "",
@@ -103,10 +117,13 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     sessionsPerWeek: "",
     notes: "",
     status: "active",
+    templateId: "", // NEW: for template selection
   });
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [sessionForm, setSessionForm] = useState({
     name: "",
-    dayOfWeek: "",
+    daysOfWeek: [] as string[],
   });
 
   // Fetch programs from API
@@ -114,20 +131,20 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // Only fetch active programs for the client profile view
+      // Only fetch active strength programs for the client profile view
       const response = await fetch(
-        `/api/clients/${clientId}/programs?status=active`
+        `/api/clients/${clientId}/programs?category=strength&status=active`
       );
       const data = await response.json();
 
       if (data.success) {
         setPrograms(data.programs || []);
       } else {
-        setError(data.error || "Error al cargar programas");
+        setError(data.error || "Error al cargar programas de entrenamiento");
       }
     } catch (err) {
       console.error("[WorkoutsTab] Error fetching programs:", err);
-      setError("Error al cargar programas");
+      setError("Error al cargar programas de entrenamiento");
     } finally {
       setIsLoading(false);
     }
@@ -147,9 +164,46 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     });
   };
 
-  const handleOpenAddExercise = (sessionId: string) => {
+  const handleOpenAddExercise = async (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setIsAddExerciseModalOpen(true);
+
+    // Fetch library exercises (strength category only for workouts)
+    setIsLoadingLibrary(true);
+    try {
+      const response = await fetch(
+        "/api/exercises?category=strength&limit=100"
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setLibraryExercises(result.exercises || []);
+      }
+    } catch (error) {
+      console.error("Error fetching library exercises:", error);
+    } finally {
+      setIsLoadingLibrary(false);
+    }
+  };
+
+  const handleSelectLibraryExercise = (exerciseId: string) => {
+    const exercise = libraryExercises.find((ex) => ex.id === exerciseId);
+
+    if (exercise) {
+      // Auto-fill form with exercise defaults
+      setExerciseForm({
+        name: exercise.name,
+        sets: exercise.default_sets?.toString() || "",
+        reps: exercise.default_reps || "",
+        tempo: exercise.default_tempo || "",
+        rest: exercise.default_rest_seconds
+          ? `${exercise.default_rest_seconds}s`
+          : "",
+        trainingSystem: exercise.default_training_system || "",
+        videoUrl: exercise.video_url || "",
+        exerciseId: exercise.id,
+      });
+    }
   };
 
   const handleCloseAddExercise = () => {
@@ -163,7 +217,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       rest: "",
       trainingSystem: "",
       videoUrl: "",
+      exerciseId: "",
     });
+    setLibraryExercises([]);
   };
 
   const handleSaveExercise = async () => {
@@ -171,12 +227,18 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
 
     setIsSaving(true);
     try {
+      // Include exerciseId if selected from library
+      const payload = {
+        ...exerciseForm,
+        exerciseId: exerciseForm.exerciseId || undefined, // Send exerciseId if available
+      };
+
       const response = await fetch(
         `/api/clients/${clientId}/programs/${selectedProgramId}/sessions/${selectedSessionId}/exercises`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(exerciseForm),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -201,8 +263,24 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     }
   };
 
-  const handleOpenAddProgram = () => {
+  const handleOpenAddProgram = async () => {
     setIsAddProgramModalOpen(true);
+    // Fetch templates for strength programs
+    setIsLoadingTemplates(true);
+    try {
+      const response = await fetch(
+        "/api/templates?type=programs&category=strength"
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setTemplates(result.templates || []);
+      }
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
   };
 
   const handleCloseAddProgram = () => {
@@ -215,23 +293,26 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       sessionsPerWeek: "",
       notes: "",
       status: "active",
+      templateId: "",
     });
   };
 
-  const handleOpenEditProgram = () => {
-    if (!activeProgram) return;
+  const handleOpenEditProgram = (program?: any) => {
+    const programToEdit = program || activeProgram;
+
+    if (!programToEdit) return;
 
     // Populate form with current program data
     setProgramForm({
-      name: activeProgram.name,
-      division: activeProgram.division,
-      type: activeProgram.type,
-      startDate: activeProgram.assignedDate,
-      sessionsPerWeek: activeProgram.sessionsPerWeek.toString(),
+      name: programToEdit.name,
+      division: programToEdit.division,
+      type: programToEdit.type,
+      startDate: programToEdit.assignedDate,
+      sessionsPerWeek: programToEdit.sessionsPerWeek.toString(),
       notes: "",
-      status: activeProgram.status || "active",
+      status: programToEdit.status || "active",
     });
-    setSelectedProgramId(activeProgram.programId);
+    setSelectedProgramId(programToEdit.programId);
     setIsEditProgramModalOpen(true);
   };
 
@@ -282,6 +363,48 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     }
   };
 
+  const handleDeleteProgram = async (
+    programId: string,
+    programName: string
+  ) => {
+    const confirmed = confirm(
+      `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
+        "Esto eliminará permanentemente:\n" +
+        "• Todas las sesiones del programa\n" +
+        "• Todos los ejercicios asignados\n" +
+        "• El historial de entrenamientos completados\n\n" +
+        "Esta acción no se puede deshacer."
+    );
+
+    if (!confirmed) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/programs?programId=${programId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh programs to show updated list
+        await fetchPrograms();
+      } else {
+        alert(
+          "Error al eliminar programa: " + (data.error || "Error desconocido")
+        );
+      }
+    } catch (err) {
+      console.error("[WorkoutsTab] Error deleting program:", err);
+      alert("Error al eliminar programa");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveProgram = async () => {
     setIsSaving(true);
     try {
@@ -320,7 +443,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setSelectedProgramId(null);
     setSessionForm({
       name: "",
-      dayOfWeek: "",
+      daysOfWeek: [],
     });
   };
 
@@ -360,20 +483,27 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   };
 
   const handleEditSession = (sessionId: string) => {
-    if (!activeProgram) return;
+    // Find the program that contains this session
+    const program = activePrograms.find((p: any) =>
+      p.sessions.some((s: any) => s.id === sessionId)
+    );
+
+    if (!program) return;
 
     // Find the session to edit
-    const session = activeProgram.sessions.find((s) => s.id === sessionId);
+    const session = program.sessions.find((s: any) => s.id === sessionId);
 
     if (!session) return;
 
     // Populate form with session data
     setSessionForm({
       name: session.name,
-      dayOfWeek: session.dayOfWeek,
+      daysOfWeek: Array.isArray(session.dayOfWeek)
+        ? session.dayOfWeek
+        : [session.dayOfWeek],
     });
     setSelectedSessionId(sessionId);
-    setSelectedProgramId(activeProgram.programId);
+    setSelectedProgramId(program.programId);
     setIsEditSessionModalOpen(true);
   };
 
@@ -383,7 +513,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setSelectedProgramId(null);
     setSessionForm({
       name: "",
-      dayOfWeek: "",
+      daysOfWeek: [],
     });
   };
 
@@ -460,7 +590,12 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   };
 
   const handleEditExercise = (sessionId: string, exercise: any) => {
-    if (!activeProgram) return;
+    // Find the program that contains this session
+    const program = activePrograms.find((p: any) =>
+      p.sessions.some((s: any) => s.id === sessionId)
+    );
+
+    if (!program) return;
 
     // Populate form with exercise data
     setExerciseForm({
@@ -474,7 +609,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     });
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
-    setSelectedProgramId(activeProgram.programId);
+    setSelectedProgramId(program.programId);
     setIsEditExerciseModalOpen(true);
   };
 
@@ -627,331 +762,202 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         </Card>
       )}
 
-      {/* Active Program */}
-      {!isLoading && !error && activeProgram && (
-        <Card className="bg-white border border-gray-200 shadow-sm">
-          <CardBody className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {activeProgram.name}
-                  </h3>
-                  <Chip
-                    className="bg-blue-100 text-blue-700 border border-blue-200 font-semibold"
-                    size="sm"
-                    variant="flat"
-                  >
-                    {activeProgram.type}
-                  </Chip>
-                  <Chip
-                    classNames={{
-                      content: getStatusConfig(activeProgram.status).className,
-                    }}
-                    color={getStatusConfig(activeProgram.status).color}
-                    size="sm"
-                    variant="solid"
-                  >
-                    {getStatusConfig(activeProgram.status).label}
-                  </Chip>
+      {/* Active Programs */}
+      {!isLoading && !error && activePrograms.length > 0 && (
+        <div className="space-y-4">
+          {activePrograms.map((program) => (
+            <Card
+              key={program.id}
+              className="bg-white border border-gray-200 shadow-sm"
+            >
+              <CardBody className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {program.name}
+                      </h3>
+                      <Chip
+                        className="bg-blue-100 text-blue-700 border border-blue-200 font-semibold"
+                        size="sm"
+                        variant="flat"
+                      >
+                        {program.type}
+                      </Chip>
+                      <Chip
+                        classNames={{
+                          content: getStatusConfig(program.status).className,
+                        }}
+                        color={getStatusConfig(program.status).color}
+                        size="sm"
+                        variant="solid"
+                      >
+                        {getStatusConfig(program.status).label}
+                      </Chip>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Iniciado el {formatDate(program.assignedDate)}
+                    </p>
+                  </div>
+                  <Dropdown>
+                    <DropdownTrigger>
+                      <Button isIconOnly size="sm" variant="light">
+                        <Icon icon="solar:menu-dots-bold" width={20} />
+                      </Button>
+                    </DropdownTrigger>
+                    <DropdownMenu aria-label="Acciones del programa">
+                      <DropdownItem
+                        key="template"
+                        startContent={
+                          <Icon
+                            icon="solar:folder-with-files-linear"
+                            width={18}
+                          />
+                        }
+                        onPress={() => setIsSaveAsTemplateModalOpen(true)}
+                      >
+                        Guardar como Plantilla
+                      </DropdownItem>
+                      <DropdownItem
+                        key="edit"
+                        startContent={
+                          <Icon icon="solar:pen-linear" width={18} />
+                        }
+                        onPress={() => handleOpenEditProgram(program)}
+                      >
+                        Editar
+                      </DropdownItem>
+                      <DropdownItem
+                        key="delete"
+                        className="text-danger"
+                        color="danger"
+                        startContent={
+                          <Icon
+                            icon="solar:trash-bin-trash-linear"
+                            width={18}
+                          />
+                        }
+                        onPress={() =>
+                          handleDeleteProgram(program.programId, program.name)
+                        }
+                      >
+                        Eliminar
+                      </DropdownItem>
+                    </DropdownMenu>
+                  </Dropdown>
                 </div>
-                <p className="text-sm text-gray-600">
-                  Iniciado el {formatDate(activeProgram.assignedDate)}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                startContent={<Icon icon="solar:pen-linear" width={18} />}
-                variant="bordered"
-                onPress={handleOpenEditProgram}
-              >
-                Editar
-              </Button>
-            </div>
 
-            {/* Program Info */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">División</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {activeProgram.division}
-                </p>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Semana Actual</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {activeProgram.currentWeek}
-                </p>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Frecuencia</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {activeProgram.sessionsPerWeek}x por semana
-                </p>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">
-                  Última Modificación
-                </p>
-                <p className="text-sm font-semibold text-gray-900">
-                  {formatDate(activeProgram.lastModified)}
-                </p>
-              </div>
-            </div>
-
-            {/* Progress */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-700">
-                  Progreso General
-                </p>
-                <p className="text-sm font-bold text-blue-600">
-                  {activeProgram.progress}%
-                </p>
-              </div>
-              <Progress
-                className="max-w-full"
-                color="primary"
-                size="md"
-                value={activeProgram.progress}
-              />
-            </div>
-
-            {/* Sessions - Accordion */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Icon
-                    className="text-blue-600 flex-shrink-0"
-                    icon="solar:calendar-bold"
-                    width={18}
+                {/* Progress */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-gray-700">
+                      Progreso General
+                    </p>
+                    <p className="text-sm font-bold text-blue-600">
+                      {program.progress}%
+                    </p>
+                  </div>
+                  <Progress
+                    className="max-w-full"
+                    color="primary"
+                    size="md"
+                    value={program.progress}
                   />
-                  <h4 className="text-sm font-semibold text-gray-700">
-                    Sesiones del Programa
-                  </h4>
                 </div>
-                <Button
-                  className="text-white font-semibold"
-                  color="primary"
-                  size="sm"
-                  startContent={
-                    <Icon icon="solar:add-circle-bold" width={16} />
-                  }
-                  onPress={() => handleOpenAddSession(activeProgram.programId)}
-                >
-                  Añadir Sesión
-                </Button>
-              </div>
 
-              <div className="space-y-3">
-                {activeProgram.sessions.map((session) => (
-                  <details
-                    key={session.id}
-                    className="group"
-                    open={expandedSessions.has(session.id)}
-                  >
-                    <summary
-                      className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        toggleSession(session.id);
-                      }}
+                {/* Sessions - Accordion */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Icon
+                        className="text-blue-600 flex-shrink-0"
+                        icon="solar:calendar-bold"
+                        width={18}
+                      />
+                      <h4 className="text-sm font-semibold text-gray-700">
+                        Sesiones del Programa
+                      </h4>
+                    </div>
+                    <Button
+                      className="text-white font-semibold"
+                      color="primary"
+                      size="sm"
+                      startContent={
+                        <Icon icon="solar:add-circle-bold" width={16} />
+                      }
+                      onPress={() => handleOpenAddSession(program.programId)}
                     >
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="bg-blue-50 p-2 rounded-lg">
-                          <Icon
-                            className="text-blue-600"
-                            icon="solar:dumbbell-bold"
-                            width={20}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-bold text-gray-900">
-                              {session.name}
-                            </p>
-                            <span className="text-xs font-medium text-gray-500">
-                              • {session.dayOfWeek}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            {session.exercises.length} ejercicios
-                          </p>
-                        </div>
-                        <div
-                          className="flex items-center gap-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button
-                            className="text-white font-semibold"
-                            color="primary"
-                            size="sm"
-                            startContent={
-                              <Icon icon="solar:add-circle-bold" width={16} />
-                            }
-                            onPress={() => {
-                              setSelectedProgramId(activeProgram.programId);
-                              handleOpenAddExercise(session.id);
-                            }}
-                          >
-                            Añadir Ejercicio
-                          </Button>
-                          <Button
-                            isIconOnly
-                            size="sm"
-                            variant="flat"
-                            onPress={(e: any) => {
-                              e?.preventDefault?.();
-                              handleEditSession(session.id);
-                            }}
-                          >
-                            <Icon
-                              className="text-gray-600"
-                              icon="solar:pen-linear"
-                              width={18}
-                            />
-                          </Button>
-                          <Button
-                            isIconOnly
-                            size="sm"
-                            variant="flat"
-                            onPress={(e: any) => {
-                              e?.preventDefault?.();
-                              handleDeleteSession(session.id);
-                            }}
-                          >
-                            <Icon
-                              className="text-gray-600"
-                              icon="solar:trash-bin-trash-linear"
-                              width={18}
-                            />
-                          </Button>
-                          <Icon
-                            className="text-gray-400 group-open:rotate-180 transition-transform"
-                            icon="solar:alt-arrow-down-linear"
-                            width={20}
-                          />
-                        </div>
-                      </div>
-                    </summary>
+                      Añadir Sesión
+                    </Button>
+                  </div>
 
-                    <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                      {session.exercises.map((exercise) => (
-                        <div
-                          key={exercise.order}
-                          className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow"
+                  <div className="space-y-3">
+                    {program.sessions.map((session) => (
+                      <details
+                        key={session.id}
+                        className="group"
+                        open={expandedSessions.has(session.id)}
+                      >
+                        <summary
+                          className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleSession(session.id);
+                          }}
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex items-start gap-3 flex-1">
-                              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-bold text-white">
-                                  {exercise.order}
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className="bg-blue-50 p-2 rounded-lg">
+                              <Icon
+                                className="text-blue-600"
+                                icon="solar:dumbbell-bold"
+                                width={20}
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-bold text-gray-900">
+                                  {session.name}
+                                </p>
+                                <span className="text-xs font-medium text-gray-500">
+                                  •{" "}
+                                  {Array.isArray(session.dayOfWeek)
+                                    ? session.dayOfWeek.join(", ")
+                                    : session.dayOfWeek}
                                 </span>
                               </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <p className="text-sm font-bold text-gray-900">
-                                    {exercise.name}
-                                  </p>
-                                  {exercise.videoUrl && (
-                                    <Button
-                                      isIconOnly
-                                      as="a"
-                                      className="h-6 w-6 min-w-6"
-                                      href={exercise.videoUrl}
-                                      size="sm"
-                                      target="_blank"
-                                      variant="flat"
-                                    >
-                                      <Icon
-                                        className="text-blue-600"
-                                        icon="solar:play-circle-bold"
-                                        width={16}
-                                      />
-                                    </Button>
-                                  )}
-                                </div>
-
-                                {/* Exercise Details */}
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                  <div className="flex items-center gap-1.5">
-                                    <Icon
-                                      className="text-gray-400 flex-shrink-0"
-                                      icon="solar:copy-bold"
-                                      width={14}
-                                    />
-                                    <span className="text-xs text-gray-600">
-                                      <span className="font-semibold text-gray-900">
-                                        {exercise.sets}
-                                      </span>{" "}
-                                      series
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Icon
-                                      className="text-gray-400 flex-shrink-0"
-                                      icon="solar:hashtag-bold"
-                                      width={14}
-                                    />
-                                    <span className="text-xs text-gray-600">
-                                      <span className="font-semibold text-gray-900">
-                                        {exercise.reps}
-                                      </span>{" "}
-                                      reps
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Icon
-                                      className="text-blue-500 flex-shrink-0"
-                                      icon="solar:graph-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className="text-xs text-gray-700 font-medium truncate"
-                                      title={exercise.trainingSystem}
-                                    >
-                                      {exercise.trainingSystem}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Icon
-                                      className="text-purple-500 flex-shrink-0"
-                                      icon="solar:speedometer-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className="text-xs text-gray-700 truncate"
-                                      title={exercise.tempo}
-                                    >
-                                      {exercise.tempo}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Icon
-                                      className="text-orange-500 flex-shrink-0"
-                                      icon="solar:clock-circle-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className="text-xs text-gray-700 truncate"
-                                      title={exercise.rest}
-                                    >
-                                      {exercise.rest}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
+                              <p className="text-sm text-gray-600">
+                                {session.exercises.length} ejercicios
+                              </p>
                             </div>
-
-                            {/* Actions */}
-                            <div className="flex flex-col gap-1">
+                            <div
+                              className="flex items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                className="text-white font-semibold"
+                                color="primary"
+                                size="sm"
+                                startContent={
+                                  <Icon
+                                    icon="solar:add-circle-bold"
+                                    width={16}
+                                  />
+                                }
+                                onPress={() => {
+                                  setSelectedProgramId(program.programId);
+                                  handleOpenAddExercise(session.id);
+                                }}
+                              >
+                                Añadir Ejercicio
+                              </Button>
                               <Button
                                 isIconOnly
                                 size="sm"
                                 variant="flat"
-                                onPress={() =>
-                                  handleEditExercise(session.id, exercise)
-                                }
+                                onPress={(e: any) => {
+                                  e?.preventDefault?.();
+                                  handleEditSession(session.id);
+                                }}
                               >
                                 <Icon
                                   className="text-gray-600"
@@ -963,9 +969,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                                 isIconOnly
                                 size="sm"
                                 variant="flat"
-                                onPress={() =>
-                                  handleDeleteExercise(session.id, exercise)
-                                }
+                                onPress={(e: any) => {
+                                  e?.preventDefault?.();
+                                  handleDeleteSession(session.id);
+                                }}
                               >
                                 <Icon
                                   className="text-gray-600"
@@ -973,21 +980,170 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                                   width={18}
                                 />
                               </Button>
+                              <Icon
+                                className="text-gray-400 group-open:rotate-180 transition-transform"
+                                icon="solar:alt-arrow-down-linear"
+                                width={20}
+                              />
                             </div>
                           </div>
+                        </summary>
+
+                        <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                          {session.exercises.map((exercise) => (
+                            <div
+                              key={exercise.order}
+                              className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-sm font-bold text-white">
+                                      {exercise.order}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <p className="text-sm font-bold text-gray-900">
+                                        {exercise.name}
+                                      </p>
+                                      {exercise.videoUrl && (
+                                        <Button
+                                          isIconOnly
+                                          as="a"
+                                          className="h-6 w-6 min-w-6"
+                                          href={exercise.videoUrl}
+                                          size="sm"
+                                          target="_blank"
+                                          variant="flat"
+                                        >
+                                          <Icon
+                                            className="text-blue-600"
+                                            icon="solar:play-circle-bold"
+                                            width={16}
+                                          />
+                                        </Button>
+                                      )}
+                                    </div>
+
+                                    {/* Exercise Details */}
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <Icon
+                                          className="text-gray-400 flex-shrink-0"
+                                          icon="solar:copy-bold"
+                                          width={14}
+                                        />
+                                        <span className="text-xs text-gray-600">
+                                          <span className="font-semibold text-gray-900">
+                                            {exercise.sets}
+                                          </span>{" "}
+                                          series
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Icon
+                                          className="text-gray-400 flex-shrink-0"
+                                          icon="solar:hashtag-bold"
+                                          width={14}
+                                        />
+                                        <span className="text-xs text-gray-600">
+                                          <span className="font-semibold text-gray-900">
+                                            {exercise.reps}
+                                          </span>{" "}
+                                          reps
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Icon
+                                          className="text-blue-500 flex-shrink-0"
+                                          icon="solar:graph-bold"
+                                          width={14}
+                                        />
+                                        <span
+                                          className="text-xs text-gray-700 font-medium truncate"
+                                          title={exercise.trainingSystem}
+                                        >
+                                          {exercise.trainingSystem}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Icon
+                                          className="text-purple-500 flex-shrink-0"
+                                          icon="solar:speedometer-bold"
+                                          width={14}
+                                        />
+                                        <span
+                                          className="text-xs text-gray-700 truncate"
+                                          title={exercise.tempo}
+                                        >
+                                          {exercise.tempo}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Icon
+                                          className="text-orange-500 flex-shrink-0"
+                                          icon="solar:clock-circle-bold"
+                                          width={14}
+                                        />
+                                        <span
+                                          className="text-xs text-gray-700 truncate"
+                                          title={exercise.rest}
+                                        >
+                                          {exercise.rest}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex flex-col gap-1">
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="flat"
+                                    onPress={() =>
+                                      handleEditExercise(session.id, exercise)
+                                    }
+                                  >
+                                    <Icon
+                                      className="text-gray-600"
+                                      icon="solar:pen-linear"
+                                      width={18}
+                                    />
+                                  </Button>
+                                  <Button
+                                    isIconOnly
+                                    size="sm"
+                                    variant="flat"
+                                    onPress={() =>
+                                      handleDeleteExercise(session.id, exercise)
+                                    }
+                                  >
+                                    <Icon
+                                      className="text-gray-600"
+                                      icon="solar:trash-bin-trash-linear"
+                                      width={18}
+                                    />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          ))}
+        </div>
       )}
 
       {/* No Active Program State */}
-      {!isLoading && !error && !activeProgram && (
+      {!isLoading && !error && activePrograms.length === 0 && (
         <Card className="bg-white border border-gray-200 shadow-sm">
           <CardBody className="p-12">
             <div className="flex flex-col items-center justify-center text-center">
@@ -1050,6 +1206,85 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
           </ModalHeader>
           <ModalBody>
             <div className="flex flex-col gap-6">
+              {/* Exercise Library Selection */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Icon
+                    className="text-blue-600"
+                    icon="solar:folder-with-files-linear"
+                    width={18}
+                  />
+                  Biblioteca de Ejercicios (Opcional)
+                </h4>
+                <Autocomplete
+                  classNames={{
+                    base: "w-full",
+                  }}
+                  defaultItems={libraryExercises}
+                  inputProps={{
+                    classNames: {
+                      inputWrapper: "h-12",
+                    },
+                  }}
+                  isLoading={isLoadingLibrary}
+                  label="Buscar ejercicio en tu biblioteca"
+                  placeholder="Escribe para buscar..."
+                  selectedKey={exerciseForm.exerciseId || null}
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:book-linear"
+                      width={20}
+                    />
+                  }
+                  onSelectionChange={(key) => {
+                    if (key) {
+                      handleSelectLibraryExercise(key as string);
+                    }
+                  }}
+                >
+                  {(exercise: any) => (
+                    <AutocompleteItem
+                      key={exercise.id}
+                      startContent={
+                        exercise.image_url ? (
+                          <img
+                            alt={exercise.name}
+                            className="w-10 h-10 rounded-md object-cover"
+                            src={exercise.image_url}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-blue-100 flex items-center justify-center">
+                            <Icon
+                              className="text-blue-600"
+                              icon="solar:dumbbell-bold"
+                              width={20}
+                            />
+                          </div>
+                        )
+                      }
+                      textValue={exercise.name}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold">
+                          {exercise.name}
+                        </span>
+                        {exercise.default_sets && exercise.default_reps && (
+                          <span className="text-xs text-gray-500">
+                            {exercise.default_sets} series ×{" "}
+                            {exercise.default_reps} reps
+                          </span>
+                        )}
+                      </div>
+                    </AutocompleteItem>
+                  )}
+                </Autocomplete>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selecciona un ejercicio de tu biblioteca para auto-completar
+                  los campos, o completa manualmente para crear uno nuevo.
+                </p>
+              </div>
+
               {/* Información Básica */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -1480,6 +1715,81 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
           </ModalHeader>
           <ModalBody>
             <div className="flex flex-col gap-6">
+              {/* Use Template (Optional) */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Icon
+                    className="text-blue-600"
+                    icon="solar:folder-with-files-linear"
+                    width={18}
+                  />
+                  Usar Plantilla (Opcional)
+                </h4>
+                {isLoadingTemplates ? (
+                  <div className="flex items-center justify-center h-12 bg-gray-50 rounded-lg">
+                    <Spinner size="sm" />
+                    <span className="ml-2 text-sm text-gray-500">
+                      Cargando plantillas...
+                    </span>
+                  </div>
+                ) : templates.length > 0 ? (
+                  <Select
+                    label="Plantilla"
+                    placeholder="Selecciona una plantilla o crea desde cero"
+                    selectedKeys={
+                      programForm.templateId ? [programForm.templateId] : []
+                    }
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:folder-with-files-linear"
+                        width={18}
+                      />
+                    }
+                    onSelectionChange={(keys) => {
+                      const templateId = Array.from(keys)[0] as string;
+                      const selectedTemplate = templates.find(
+                        (t) => t.id === templateId
+                      );
+
+                      if (selectedTemplate) {
+                        setProgramForm({
+                          ...programForm,
+                          templateId,
+                          type: selectedTemplate.type,
+                          division: selectedTemplate.division || "",
+                          sessionsPerWeek:
+                            selectedTemplate.sessionsPerWeek?.toString() || "3",
+                        });
+                      } else {
+                        setProgramForm({
+                          ...programForm,
+                          templateId: "",
+                        });
+                      }
+                    }}
+                  >
+                    {templates.map((template) => (
+                      <SelectItem key={template.id}>
+                        {template.name} ({template.sessionCount} sesiones,{" "}
+                        {template.exerciseCount} ejercicios)
+                      </SelectItem>
+                    ))}
+                  </Select>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-20 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                    <Icon
+                      className="text-gray-300 mb-1"
+                      icon="solar:folder-with-files-linear"
+                      width={24}
+                    />
+                    <p className="text-xs text-gray-500">
+                      No hay plantillas de fuerza disponibles
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Información Básica */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -2001,11 +2311,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   />
                   <Select
                     isRequired
-                    label="Día de la Semana"
-                    placeholder="Selecciona el día"
-                    selectedKeys={
-                      sessionForm.dayOfWeek ? [sessionForm.dayOfWeek] : []
-                    }
+                    label="Días de la Semana"
+                    placeholder="Selecciona uno o más días"
+                    selectedKeys={sessionForm.daysOfWeek}
+                    selectionMode="multiple"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -2014,9 +2323,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       />
                     }
                     onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
+                      const values = Array.from(keys) as string[];
 
-                      setSessionForm({ ...sessionForm, dayOfWeek: value });
+                      setSessionForm({ ...sessionForm, daysOfWeek: values });
                     }}
                   >
                     <SelectItem key="Lun">Lunes</SelectItem>
@@ -2044,8 +2353,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         Nota Importante
                       </p>
                       <p className="text-sm text-blue-700">
-                        Una vez creada la sesión, podrás añadir ejercicios
-                        específicos a esta sesión.
+                        Puedes asignar la sesión a múltiples días de la semana.
+                        Una vez creada, podrás añadir ejercicios específicos.
                       </p>
                     </div>
                   </div>
@@ -2138,11 +2447,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   />
                   <Select
                     isRequired
-                    label="Día de la Semana"
-                    placeholder="Selecciona el día"
-                    selectedKeys={
-                      sessionForm.dayOfWeek ? [sessionForm.dayOfWeek] : []
-                    }
+                    label="Días de la Semana"
+                    placeholder="Selecciona uno o más días"
+                    selectedKeys={sessionForm.daysOfWeek}
+                    selectionMode="multiple"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -2151,9 +2459,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       />
                     }
                     onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
+                      const values = Array.from(keys) as string[];
 
-                      setSessionForm({ ...sessionForm, dayOfWeek: value });
+                      setSessionForm({ ...sessionForm, daysOfWeek: values });
                     }}
                   >
                     <SelectItem key="Lun">Lunes</SelectItem>
@@ -2191,6 +2499,19 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Save as Template Modal */}
+      {activeProgram && (
+        <SaveAsTemplateModal
+          isOpen={isSaveAsTemplateModalOpen}
+          programId={activeProgram.programId}
+          programName={activeProgram.name}
+          onClose={() => setIsSaveAsTemplateModalOpen(false)}
+          onSuccess={() => {
+            setIsSaveAsTemplateModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

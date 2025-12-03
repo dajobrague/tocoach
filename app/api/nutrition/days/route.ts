@@ -3,6 +3,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
+// Helper function to auto-detect weekdays from Spanish day names
+function detectWeekdaysFromLabel(label: string): number[] {
+  const lowerLabel = label.toLowerCase();
+  const weekdayMap: { [key: string]: number } = {
+    domingo: 0,
+    lunes: 1,
+    martes: 2,
+    miércoles: 3,
+    miercoles: 3,
+    jueves: 4,
+    viernes: 5,
+    sábado: 6,
+    sabado: 6,
+  };
+
+  for (const [name, day] of Object.entries(weekdayMap)) {
+    if (lowerLabel.includes(name)) {
+      return [day];
+    }
+  }
+
+  return [];
+}
+
 // POST - Create a new nutrition day
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
@@ -19,7 +43,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { nutrition_plan_id, day_label, day_order } = body;
+    const {
+      nutrition_plan_id,
+      day_label,
+      day_order,
+      protein,
+      carbs,
+      fats,
+      calories,
+      weekdays,
+    } = body;
 
     console.log("[Nutrition Days API] Creating day:", body);
 
@@ -60,15 +93,29 @@ export async function POST(request: NextRequest) {
           : 0;
     }
 
+    // Auto-detect weekdays from day label (Spanish weekday names)
+    const autoDetectedWeekdays = detectWeekdaysFromLabel(day_label);
+    const weekdaysToUse =
+      weekdays !== undefined ? weekdays : autoDetectedWeekdays;
+
     // Create the nutrition day
+    const insertData: any = {
+      nutrition_plan_id,
+      tenant_host: plan.tenant_host,
+      day_label,
+      day_order: orderToUse,
+      weekdays: weekdaysToUse,
+    };
+
+    // Add macro fields if provided
+    if (protein !== undefined) insertData.protein = protein;
+    if (carbs !== undefined) insertData.carbs = carbs;
+    if (fats !== undefined) insertData.fats = fats;
+    if (calories !== undefined) insertData.calories = calories;
+
     const { data: day, error: dayError } = await supabase
       .from("nutrition_days")
-      .insert({
-        nutrition_plan_id,
-        tenant_host: plan.tenant_host,
-        day_label,
-        day_order: orderToUse,
-      })
+      .insert(insertData)
       .select()
       .single();
 

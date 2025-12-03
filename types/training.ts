@@ -101,6 +101,12 @@ export interface Exercise {
   instructions?: string[];
   tips?: string[];
   is_public: boolean;
+  // Default training parameters (auto-fill when adding to sessions)
+  default_sets?: number;
+  default_reps?: string;
+  default_tempo?: string;
+  default_rest_seconds?: number;
+  default_training_system?: string;
   metadata: {
     [key: string]: any;
   };
@@ -189,7 +195,7 @@ export interface WorkoutExercise {
 
 export interface WorkoutSession {
   id: string;
-  dayOfWeek: "Lun" | "Mar" | "Mie" | "Jue" | "Vie" | "Sab" | "Dom";
+  dayOfWeek: ("Lun" | "Mar" | "Mie" | "Jue" | "Vie" | "Sab" | "Dom")[];
   name: string;
   completed: boolean;
   exercises: WorkoutExercise[];
@@ -252,5 +258,72 @@ export interface CreateExerciseRequest {
 export interface ProgramsApiResponse {
   success: boolean;
   programs: WorkoutProgram[];
+  error?: string;
+}
+
+// Exercise Library API types
+
+export interface CreateExerciseLibraryRequest {
+  name: string;
+  description?: string;
+  category:
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
+  muscle_groups?: string[];
+  equipment?: string[];
+  difficulty_level?: "beginner" | "intermediate" | "advanced";
+  video_url?: string;
+  image_url?: string;
+  instructions?: string[];
+  tips?: string[];
+  // Default training parameters
+  default_sets?: number;
+  default_reps?: string;
+  default_tempo?: string;
+  default_rest_seconds?: number;
+  default_training_system?: string;
+}
+
+export interface UpdateExerciseLibraryRequest {
+  name?: string;
+  description?: string;
+  category?:
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
+  muscle_groups?: string[];
+  equipment?: string[];
+  difficulty_level?: "beginner" | "intermediate" | "advanced";
+  video_url?: string;
+  image_url?: string;
+  instructions?: string[];
+  tips?: string[];
+  // Default training parameters
+  default_sets?: number;
+  default_reps?: string;
+  default_tempo?: string;
+  default_rest_seconds?: number;
+  default_training_system?: string;
+}
+
+export interface ExerciseLibraryResponse {
+  success: boolean;
+  exercises: Exercise[];
+  total?: number;
+  page?: number;
+  limit?: number;
   error?: string;
 }

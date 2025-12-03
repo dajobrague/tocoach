@@ -33,9 +33,10 @@ export default function EditSupplementModal({
   const [formData, setFormData] = useState({
     name: supplement.name,
     description: supplement.description || "",
-    quantity: supplement.quantity.toString(),
-    unit: supplement.unit,
+    product_url: supplement.product_url || "",
   });
+  const [images, setImages] = useState<string[]>(supplement.images || []);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update form when supplement changes
@@ -43,14 +44,79 @@ export default function EditSupplementModal({
     setFormData({
       name: supplement.name,
       description: supplement.description || "",
-      quantity: supplement.quantity.toString(),
-      unit: supplement.unit,
+      product_url: supplement.product_url || "",
     });
+    setImages(supplement.images || []);
   }, [supplement]);
+
+  const handleImageUpload = async (file: File) => {
+    const formData = new FormData();
+
+    formData.append("image", file);
+    formData.append("supplement_id", supplement.id);
+
+    const response = await fetch("/api/supplements/upload-image", {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Error al subir imagen");
+    }
+
+    return result.imageUrl;
+  };
+
+  const handleFileSelect = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+
+    if (!files || files.length === 0) return;
+
+    if (images.length + files.length > 5) {
+      alert("Máximo 5 imágenes por producto");
+
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const imageUrl = await handleImageUpload(file);
+
+        setImages((prev) => [...prev, imageUrl]);
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      alert("Error al subir imagen. Por favor intenta de nuevo.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = async (imageUrl: string) => {
+    try {
+      await fetch("/api/supplements/upload-image", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl }),
+      });
+
+      setImages((prev) => prev.filter((img) => img !== imageUrl));
+    } catch (error) {
+      console.error("Error removing image:", error);
+      alert("Error al eliminar imagen");
+    }
+  };
 
   const handleSubmit = async () => {
     // Validate required fields
-    if (!formData.name || !formData.unit || !formData.quantity) {
+    if (!formData.name) {
       alert("Por favor completa todos los campos requeridos");
 
       return;
@@ -66,8 +132,7 @@ export default function EditSupplementModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...formData,
-            quantity: parseFloat(formData.quantity),
-            images: [],
+            images,
           }),
         }
       );
@@ -162,42 +227,95 @@ export default function EditSupplementModal({
                     setFormData({ ...formData, description: value })
                   }
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    isRequired
-                    label="Cantidad por Unidad"
-                    placeholder="Ej: 100, 1.5, 500..."
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:scale-linear"
-                        width={18}
-                      />
-                    }
-                    type="number"
-                    value={formData.quantity}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, quantity: value })
-                    }
-                  />
-                  <Input
-                    isRequired
-                    label="Unidad"
-                    placeholder="Ej: cápsulas, kg, ml..."
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:ruler-angular-linear"
-                        width={18}
-                      />
-                    }
-                    value={formData.unit}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, unit: value })
-                    }
-                  />
-                </div>
+                <Input
+                  label="URL del Producto"
+                  placeholder="https://ejemplo.com/producto"
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:link-linear"
+                      width={18}
+                    />
+                  }
+                  type="url"
+                  value={formData.product_url}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, product_url: value })
+                  }
+                />
               </div>
+            </div>
+
+            {/* Images Section */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Icon
+                  className="text-blue-600"
+                  icon="solar:gallery-linear"
+                  width={18}
+                />
+                Imágenes del Producto (Máximo 5)
+              </h4>
+
+              {/* Image Grid */}
+              {images.length > 0 && (
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {images.map((imageUrl, index) => (
+                    <div
+                      key={index}
+                      className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100"
+                    >
+                      <img
+                        alt={`Producto ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        src={imageUrl}
+                      />
+                      <Button
+                        isIconOnly
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        color="danger"
+                        size="sm"
+                        variant="solid"
+                        onPress={() => handleRemoveImage(imageUrl)}
+                      >
+                        <Icon icon="solar:trash-bin-minimalistic-bold" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload Button */}
+              {images.length < 5 && (
+                <label className="block">
+                  <input
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    type="file"
+                    onChange={handleFileSelect}
+                  />
+                  <Button
+                    as="span"
+                    className="w-full"
+                    color="default"
+                    isLoading={uploadingImage}
+                    startContent={
+                      !uploadingImage && (
+                        <Icon icon="solar:upload-linear" width={20} />
+                      )
+                    }
+                    variant="bordered"
+                  >
+                    {uploadingImage
+                      ? "Subiendo..."
+                      : images.length === 0
+                        ? "Subir Imágenes"
+                        : "Agregar Más Imágenes"}
+                  </Button>
+                </label>
+              )}
             </div>
 
             {/* Archive Status */}
