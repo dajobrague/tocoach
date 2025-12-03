@@ -349,6 +349,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       sessionsPerWeek: programToEdit.sessionsPerWeek.toString(),
       notes: "",
       status: programToEdit.status || "active",
+      templateId: "",
     });
     setSelectedProgramId(programToEdit.programId);
     setIsEditProgramModalOpen(true);
@@ -365,6 +366,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       sessionsPerWeek: "",
       notes: "",
       status: "active",
+      templateId: "",
     });
   };
 
@@ -651,6 +653,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       minHeartRate: exercise.heartRateZone?.min?.toString() || "",
       maxHeartRate: exercise.heartRateZone?.max?.toString() || "",
       notes: exercise.notes || "",
+      exerciseId: "",
     });
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
@@ -672,6 +675,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       minHeartRate: "",
       maxHeartRate: "",
       notes: "",
+      exerciseId: "",
     });
   };
 

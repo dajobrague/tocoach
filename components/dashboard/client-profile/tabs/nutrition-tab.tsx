@@ -74,7 +74,7 @@ const getWeekdayName = (day: number, short: boolean = false): string => {
   ];
   const shortNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-  return short ? shortNames[day] : names[day];
+  return short ? shortNames[day] || "Día" : names[day] || "Día desconocido";
 };
 
 // Helper to format weekdays array into a readable string

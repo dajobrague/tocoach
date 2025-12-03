@@ -288,7 +288,10 @@ export function WorkoutsContent({
       // Find matching sessions for this day from ALL active programs
       for (const activeProgram of activePrograms) {
         const matchingSession = activeProgram.sessions.find(
-          (s) => dayOfWeek && s.dayOfWeek.startsWith(dayOfWeek.substring(0, 3))
+          (s) =>
+            dayOfWeek &&
+            Array.isArray(s.dayOfWeek) &&
+            s.dayOfWeek.some((d) => d.startsWith(dayOfWeek.substring(0, 3)))
         );
 
         if (matchingSession) {

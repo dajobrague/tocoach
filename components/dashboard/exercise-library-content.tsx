@@ -457,8 +457,7 @@ export default function ExerciseLibraryContent() {
                       color="primary"
                       size="sm"
                       startContent={<Icon icon="solar:pen-linear" width={18} />}
-                      onPress={(e) => {
-                        e.stopPropagation();
+                      onPress={() => {
                         setEditingExercise(exercise);
                       }}
                     >
@@ -469,8 +468,7 @@ export default function ExerciseLibraryContent() {
                       color="danger"
                       size="sm"
                       variant="flat"
-                      onPress={(e) => {
-                        e.stopPropagation();
+                      onPress={() => {
                         handleDelete(exercise.id, exercise.name);
                       }}
                     >

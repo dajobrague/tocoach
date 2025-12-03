@@ -87,9 +87,12 @@ export default function EditSupplementModal({
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const imageUrl = await handleImageUpload(file);
 
-        setImages((prev) => [...prev, imageUrl]);
+        if (file) {
+          const imageUrl = await handleImageUpload(file);
+
+          setImages((prev) => [...prev, imageUrl]);
+        }
       }
     } catch (error) {
       console.error("Error uploading image:", error);

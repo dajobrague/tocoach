@@ -51,6 +51,8 @@ interface Session {
     reps?: string;
     duration_seconds?: number;
     distance_meters?: number;
+    rest_seconds?: number;
+    notes?: string;
     metadata?: any;
     exercises?: {
       name: string;
@@ -401,7 +403,7 @@ export default function TemplateDetailModal({
               ? {
                   ...day,
                   meals:
-                    day.meals?.map((m) =>
+                    day.meals?.map((m: any) =>
                       m.id === optimisticMeal.id
                         ? { ...result.data, ingredients: [] }
                         : m
@@ -418,7 +420,8 @@ export default function TemplateDetailModal({
               ? {
                   ...day,
                   meals:
-                    day.meals?.filter((m) => m.id !== optimisticMeal.id) || [],
+                    day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
+                    [],
                 }
               : day
           )
@@ -433,7 +436,8 @@ export default function TemplateDetailModal({
             ? {
                 ...day,
                 meals:
-                  day.meals?.filter((m) => m.id !== optimisticMeal.id) || [],
+                  day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
+                  [],
               }
             : day
         )
@@ -451,7 +455,7 @@ export default function TemplateDetailModal({
 
     setDays((prevDays) => {
       return prevDays.map((day) => {
-        const meal = day.meals?.find((m) => m.id === mealId);
+        const meal = day.meals?.find((m: any) => m.id === mealId);
 
         if (meal) {
           deletedMeal = meal;
@@ -459,7 +463,7 @@ export default function TemplateDetailModal({
 
           return {
             ...day,
-            meals: day.meals?.filter((m) => m.id !== mealId) || [],
+            meals: day.meals?.filter((m: any) => m.id !== mealId) || [],
           };
         }
 
@@ -519,7 +523,7 @@ export default function TemplateDetailModal({
       prevDays.map((day) => ({
         ...day,
         meals:
-          day.meals?.map((meal) =>
+          day.meals?.map((meal: any) =>
             meal.id === mealId
               ? {
                   ...meal,
@@ -556,12 +560,12 @@ export default function TemplateDetailModal({
           prevDays.map((day) => ({
             ...day,
             meals:
-              day.meals?.map((meal) =>
+              day.meals?.map((meal: any) =>
                 meal.id === mealId
                   ? {
                       ...meal,
                       ingredients:
-                        meal.ingredients?.map((i) =>
+                        meal.ingredients?.map((i: any) =>
                           i.id === optimisticIngredient.id ? result.data : i
                         ) || [],
                     }
@@ -575,13 +579,13 @@ export default function TemplateDetailModal({
           prevDays.map((day) => ({
             ...day,
             meals:
-              day.meals?.map((meal) =>
+              day.meals?.map((meal: any) =>
                 meal.id === mealId
                   ? {
                       ...meal,
                       ingredients:
                         meal.ingredients?.filter(
-                          (i) => i.id !== optimisticIngredient.id
+                          (i: any) => i.id !== optimisticIngredient.id
                         ) || [],
                     }
                   : meal
@@ -596,13 +600,13 @@ export default function TemplateDetailModal({
         prevDays.map((day) => ({
           ...day,
           meals:
-            day.meals?.map((meal) =>
+            day.meals?.map((meal: any) =>
               meal.id === mealId
                 ? {
                     ...meal,
                     ingredients:
                       meal.ingredients?.filter(
-                        (i) => i.id !== optimisticIngredient.id
+                        (i: any) => i.id !== optimisticIngredient.id
                       ) || [],
                   }
                 : meal
@@ -622,10 +626,10 @@ export default function TemplateDetailModal({
       prevDays.map((day) => ({
         ...day,
         meals:
-          day.meals?.map((meal) => ({
+          day.meals?.map((meal: any) => ({
             ...meal,
             ingredients:
-              meal.ingredients?.map((i) => {
+              meal.ingredients?.map((i: any) => {
                 if (i.id === ingredientId) {
                   oldIngredient = i;
 
@@ -656,10 +660,10 @@ export default function TemplateDetailModal({
             prevDays.map((day) => ({
               ...day,
               meals:
-                day.meals?.map((meal) => ({
+                day.meals?.map((meal: any) => ({
                   ...meal,
                   ingredients:
-                    meal.ingredients?.map((i) =>
+                    meal.ingredients?.map((i: any) =>
                       i.id === ingredientId ? oldIngredient : i
                     ) || [],
                 })) || [],
@@ -675,10 +679,10 @@ export default function TemplateDetailModal({
           prevDays.map((day) => ({
             ...day,
             meals:
-              day.meals?.map((meal) => ({
+              day.meals?.map((meal: any) => ({
                 ...meal,
                 ingredients:
-                  meal.ingredients?.map((i) =>
+                  meal.ingredients?.map((i: any) =>
                     i.id === ingredientId ? oldIngredient : i
                   ) || [],
               })) || [],
@@ -700,9 +704,9 @@ export default function TemplateDetailModal({
       prevDays.map((day) => ({
         ...day,
         meals:
-          day.meals?.map((meal) => {
+          day.meals?.map((meal: any) => {
             const ingredient = meal.ingredients?.find(
-              (i) => i.id === ingredientId
+              (i: any) => i.id === ingredientId
             );
 
             if (ingredient) {
@@ -712,7 +716,8 @@ export default function TemplateDetailModal({
               return {
                 ...meal,
                 ingredients:
-                  meal.ingredients?.filter((i) => i.id !== ingredientId) || [],
+                  meal.ingredients?.filter((i: any) => i.id !== ingredientId) ||
+                  [],
               };
             }
 
@@ -736,7 +741,7 @@ export default function TemplateDetailModal({
             prevDays.map((day) => ({
               ...day,
               meals:
-                day.meals?.map((meal) =>
+                day.meals?.map((meal: any) =>
                   meal.id === parentMealId
                     ? {
                         ...meal,
@@ -759,7 +764,7 @@ export default function TemplateDetailModal({
           prevDays.map((day) => ({
             ...day,
             meals:
-              day.meals?.map((meal) =>
+              day.meals?.map((meal: any) =>
                 meal.id === parentMealId
                   ? {
                       ...meal,
@@ -853,7 +858,7 @@ export default function TemplateDetailModal({
     let oldMeal: any = null;
 
     days.forEach((day) => {
-      const meal = day.meals?.find((m) => m.id === mealId);
+      const meal = day.meals?.find((m: any) => m.id === mealId);
 
       if (meal) oldMeal = meal;
     });
@@ -863,7 +868,7 @@ export default function TemplateDetailModal({
       prevDays.map((day) => ({
         ...day,
         meals:
-          day.meals?.map((meal) =>
+          day.meals?.map((meal: any) =>
             meal.id === mealId ? { ...meal, ...newMacros } : meal
           ) || [],
       }))
@@ -884,7 +889,7 @@ export default function TemplateDetailModal({
             prevDays.map((day) => ({
               ...day,
               meals:
-                day.meals?.map((meal) =>
+                day.meals?.map((meal: any) =>
                   meal.id === mealId ? oldMeal : meal
                 ) || [],
             }))
@@ -899,8 +904,9 @@ export default function TemplateDetailModal({
           prevDays.map((day) => ({
             ...day,
             meals:
-              day.meals?.map((meal) => (meal.id === mealId ? oldMeal : meal)) ||
-              [],
+              day.meals?.map((meal: any) =>
+                meal.id === mealId ? oldMeal : meal
+              ) || [],
           }))
         );
       }
@@ -1142,17 +1148,23 @@ export default function TemplateDetailModal({
             if (e.id === exerciseId) {
               oldExercise = e;
 
-              return {
+              const updatedExercise = {
                 ...e,
-                sets: parseInt(data.sets) || e.sets,
-                reps: data.reps || e.reps,
-                rest_seconds: parseInt(data.rest_seconds) || e.rest_seconds,
-                notes: data.notes || e.notes,
-                exercises: {
-                  ...e.exercises,
-                  name: data.name || e.exercises?.name,
-                },
+                ...(data.sets !== undefined && { sets: parseInt(data.sets) }),
+                ...(data.reps !== undefined && { reps: data.reps }),
+                ...(data.rest_seconds !== undefined && {
+                  rest_seconds: parseInt(data.rest_seconds),
+                }),
+                ...(data.notes !== undefined && { notes: data.notes }),
+                ...(e.exercises && {
+                  exercises: {
+                    ...e.exercises,
+                    name: data.name || e.exercises?.name || "",
+                  },
+                }),
               };
+
+              return updatedExercise;
             }
 
             return e;
@@ -1338,7 +1350,10 @@ export default function TemplateDetailModal({
                 label="Categoría"
                 selectedKeys={formData.category ? [formData.category] : []}
                 onSelectionChange={(keys) => {
-                  const category = Array.from(keys)[0] as string;
+                  const category = Array.from(keys)[0] as
+                    | "cardio"
+                    | "strength"
+                    | "nutrition";
 
                   setFormData({ ...formData, category });
                 }}
@@ -1684,27 +1699,32 @@ export default function TemplateDetailModal({
                                         <Input
                                           className="col-span-2"
                                           defaultValue={
-                                            exercise.exercises?.name
+                                            exercise.exercises?.name || ""
                                           }
                                           id={`name-${exercise.id}`}
                                           label="Nombre"
                                           size="sm"
                                         />
                                         <Input
-                                          defaultValue={exercise.sets?.toString()}
+                                          defaultValue={
+                                            exercise.sets?.toString() || ""
+                                          }
                                           id={`sets-${exercise.id}`}
                                           label="Series"
                                           size="sm"
                                           type="number"
                                         />
                                         <Input
-                                          defaultValue={exercise.reps}
+                                          defaultValue={exercise.reps || ""}
                                           id={`reps-${exercise.id}`}
                                           label="Repeticiones"
                                           size="sm"
                                         />
                                         <Input
-                                          defaultValue={exercise.rest_seconds?.toString()}
+                                          defaultValue={
+                                            exercise.rest_seconds?.toString() ||
+                                            ""
+                                          }
                                           id={`rest-${exercise.id}`}
                                           label="Descanso (seg)"
                                           size="sm"

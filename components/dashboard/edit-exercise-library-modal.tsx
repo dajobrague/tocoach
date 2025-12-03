@@ -130,7 +130,7 @@ export default function EditExerciseLibraryModal({
       const result = await uploadExerciseImage(file);
 
       if (result.success && result.url) {
-        setFormData((prev) => ({ ...prev, image_url: result.url }));
+        setFormData((prev) => ({ ...prev, image_url: result.url || "" }));
       } else {
         alert(result.error || "Error al subir imagen");
         setImagePreview(formData.image_url || null);

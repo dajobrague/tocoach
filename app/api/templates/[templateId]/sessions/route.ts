@@ -65,7 +65,7 @@ export async function POST(
       .limit(1);
 
     const nextOrder =
-      existingSessions && existingSessions.length > 0
+      existingSessions && existingSessions.length > 0 && existingSessions[0]
         ? (existingSessions[0].session_order || 0) + 1
         : 1;
 

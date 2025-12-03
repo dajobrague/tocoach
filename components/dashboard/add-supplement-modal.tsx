@@ -76,9 +76,12 @@ export default function AddSupplementModal({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const imageUrl = await handleImageUpload(file, tempId);
 
-        setImages((prev) => [...prev, imageUrl]);
+        if (file) {
+          const imageUrl = await handleImageUpload(file, tempId);
+
+          setImages((prev) => [...prev, imageUrl]);
+        }
       }
     } catch (error) {
       console.error("Error uploading image:", error);

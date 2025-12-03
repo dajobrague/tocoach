@@ -311,6 +311,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       sessionsPerWeek: programToEdit.sessionsPerWeek.toString(),
       notes: "",
       status: programToEdit.status || "active",
+      templateId: "",
     });
     setSelectedProgramId(programToEdit.programId);
     setIsEditProgramModalOpen(true);
@@ -327,6 +328,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       sessionsPerWeek: "",
       notes: "",
       status: "active",
+      templateId: "",
     });
   };
 
@@ -606,6 +608,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       rest: exercise.rest,
       trainingSystem: exercise.trainingSystem,
       videoUrl: exercise.videoUrl || "",
+      exerciseId: "",
     });
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
@@ -626,6 +629,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       rest: "",
       trainingSystem: "",
       videoUrl: "",
+      exerciseId: "",
     });
   };
 

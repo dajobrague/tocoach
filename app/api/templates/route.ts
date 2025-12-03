@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     // Process program templates with counts
     const programTemplatesWithCounts = await Promise.all(
-      programTemplates.map(async (template) => {
+      programTemplates.map(async (template: any) => {
         // Count sessions
         const { count: sessionCount } = await supabase
           .from("sessions")
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
         let exerciseCount = 0;
 
         if (sessions && sessions.length > 0) {
-          const sessionIds = sessions.map((s) => s.id);
+          const sessionIds = sessions.map((s: any) => s.id);
           const { count } = await supabase
             .from("session_exercises")
             .select("*", { count: "exact", head: true })
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
 
     // Process nutrition templates with counts
     const nutritionTemplatesWithCounts = await Promise.all(
-      nutritionTemplates.map(async (template) => {
+      nutritionTemplates.map(async (template: any) => {
         // Count days
         const { count: dayCount } = await supabase
           .from("nutrition_days")
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
         let mealCount = 0;
 
         if (days && days.length > 0) {
-          const dayIds = days.map((d) => d.id);
+          const dayIds = days.map((d: any) => d.id);
           const { count } = await supabase
             .from("nutrition_meals")
             .select("*", { count: "exact", head: true })
@@ -264,14 +264,14 @@ export async function POST(request: NextRequest) {
     const { data: template, error: templateError } = await supabase
       .from("programs")
       .insert({
-        tenant_host: tenant.host,
+        tenant_host: (tenant as any).host,
         trainer_id: session.trainer_id,
         name,
         description: description || null,
         is_template: true,
         is_published: false,
         metadata,
-      })
+      } as any)
       .select()
       .single();
 
@@ -284,19 +284,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[Templates API] Template created:", template.id);
+    console.log("[Templates API] Template created:", (template as any).id);
 
     return NextResponse.json({
       success: true,
       template: {
-        id: template.id,
-        name: template.name,
-        description: template.description,
-        type: template.metadata?.type,
-        category: template.metadata?.category,
-        division: template.metadata?.division,
-        goal: template.metadata?.goal,
-        sessionsPerWeek: template.metadata?.sessions_per_week,
+        id: (template as any).id,
+        name: (template as any).name,
+        description: (template as any).description,
+        type: (template as any).metadata?.type,
+        category: (template as any).metadata?.category,
+        division: (template as any).metadata?.division,
+        goal: (template as any).metadata?.goal,
+        sessionsPerWeek: (template as any).metadata?.sessions_per_week,
       },
     });
   } catch (error) {

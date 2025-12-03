@@ -133,7 +133,7 @@ export async function POST(
       .limit(1);
 
     const nextOrder =
-      existingExercises && existingExercises.length > 0
+      existingExercises && existingExercises.length > 0 && existingExercises[0]
         ? existingExercises[0].exercise_order + 1
         : 1;
 

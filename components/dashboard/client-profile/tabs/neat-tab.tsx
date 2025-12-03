@@ -32,7 +32,7 @@ const getWeekdayName = (day: number): string => {
     "Sábado",
   ];
 
-  return names[day];
+  return names[day] || "Día desconocido";
 };
 
 // Helper to get weekday icon

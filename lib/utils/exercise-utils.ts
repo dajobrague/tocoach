@@ -186,7 +186,7 @@ export function extractImagePathFromUrl(url: string): string | null {
     // Example URL: https://xxx.supabase.co/storage/v1/object/public/exercise-images/tenant/trainer/123456.jpg
     const parts = url.split("/exercise-images/");
 
-    if (parts.length === 2) {
+    if (parts.length === 2 && parts[1]) {
       return parts[1];
     }
 
@@ -237,11 +237,11 @@ export function parseRestTimeToSeconds(restString: string): number | null {
 
   let totalSeconds = 0;
 
-  if (minMatch) {
+  if (minMatch && minMatch[1]) {
     totalSeconds += parseInt(minMatch[1], 10) * 60;
   }
 
-  if (secMatch) {
+  if (secMatch && secMatch[1]) {
     totalSeconds += parseInt(secMatch[1], 10);
   }
 

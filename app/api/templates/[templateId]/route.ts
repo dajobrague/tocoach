@@ -56,7 +56,7 @@ export async function GET(
 
       // For each session, fetch exercises
       const sessionsWithExercises = await Promise.all(
-        (sessions || []).map(async (session) => {
+        (sessions || []).map(async (session: any) => {
           const { data: sessionExercises } = await supabase
             .from("session_exercises")
             .select("*, exercises(*)")
@@ -73,18 +73,18 @@ export async function GET(
       return NextResponse.json({
         success: true,
         template: {
-          id: programTemplate.id,
-          name: programTemplate.name,
-          description: programTemplate.description,
+          id: (programTemplate as any).id,
+          name: (programTemplate as any).name,
+          description: (programTemplate as any).description,
           templateType: "program",
-          type: programTemplate.metadata?.type,
-          category: programTemplate.metadata?.category,
-          division: programTemplate.metadata?.division,
-          goal: programTemplate.metadata?.goal,
-          sessionsPerWeek: programTemplate.metadata?.sessions_per_week,
+          type: (programTemplate as any).metadata?.type,
+          category: (programTemplate as any).metadata?.category,
+          division: (programTemplate as any).metadata?.division,
+          goal: (programTemplate as any).metadata?.goal,
+          sessionsPerWeek: (programTemplate as any).metadata?.sessions_per_week,
           sessions: sessionsWithExercises,
-          createdAt: programTemplate.created_at,
-          updatedAt: programTemplate.updated_at,
+          createdAt: (programTemplate as any).created_at,
+          updatedAt: (programTemplate as any).updated_at,
         },
       });
     }
@@ -117,7 +117,7 @@ export async function GET(
 
       // For each day, fetch meals and ingredients
       const daysWithMeals = await Promise.all(
-        (days || []).map(async (day) => {
+        (days || []).map(async (day: any) => {
           const { data: meals } = await supabase
             .from("nutrition_meals")
             .select("*")
@@ -125,7 +125,7 @@ export async function GET(
             .order("meal_order", { ascending: true });
 
           const mealsWithIngredients = await Promise.all(
-            (meals || []).map(async (meal) => {
+            (meals || []).map(async (meal: any) => {
               const { data: ingredients } = await supabase
                 .from("nutrition_ingredients")
                 .select("*")
@@ -149,14 +149,14 @@ export async function GET(
       return NextResponse.json({
         success: true,
         template: {
-          id: nutritionTemplate.id,
-          name: nutritionTemplate.name,
-          description: nutritionTemplate.notes,
+          id: (nutritionTemplate as any).id,
+          name: (nutritionTemplate as any).name,
+          description: (nutritionTemplate as any).notes,
           templateType: "nutrition",
           category: "nutrition",
           days: daysWithMeals,
-          createdAt: nutritionTemplate.created_at,
-          updatedAt: nutritionTemplate.updated_at,
+          createdAt: (nutritionTemplate as any).created_at,
+          updatedAt: (nutritionTemplate as any).updated_at,
         },
       });
     }
@@ -243,8 +243,9 @@ export async function PUT(
     }
 
     // Update template
-    const { data: updatedTemplate, error: updateError } = await supabase
-      .from("programs")
+    const { data: updatedTemplate, error: updateError } = await (
+      supabase.from("programs") as any
+    )
       .update({
         name,
         description: description || null,
