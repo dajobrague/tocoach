@@ -1,6 +1,6 @@
 "use client";
 
-import type { ClientNeatGoal } from "@/types";
+import type { ClientNeatCard } from "@/types";
 
 import {
   Badge,
@@ -8,8 +8,11 @@ import {
   Card,
   CardBody,
   Input,
-  Select,
-  SelectItem,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
   Spinner,
   Textarea,
 } from "@heroui/react";
@@ -21,7 +24,7 @@ interface NeatTabProps {
 }
 
 // Helper to get weekday name in Spanish
-const getWeekdayName = (day: number): string => {
+const getWeekdayName = (day: number, short: boolean = false): string => {
   const names = [
     "Domingo",
     "Lunes",
@@ -31,38 +34,43 @@ const getWeekdayName = (day: number): string => {
     "Viernes",
     "Sábado",
   ];
+  const shortNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-  return names[day] || "Día desconocido";
+  return short ? shortNames[day] || "Día" : names[day] || "Día desconocido";
 };
 
-// Helper to get weekday icon
-const getWeekdayIcon = (day: number): string => {
-  // All days use calendar icon
-  return "solar:calendar-bold";
+// Helper to format weekdays array into a readable string
+const formatWeekdays = (weekdays: number[]): string => {
+  if (!weekdays || weekdays.length === 0) return "Sin asignar";
+
+  const sorted = [...weekdays].sort((a, b) => a - b);
+
+  return sorted.map((day) => getWeekdayName(day, true)).join(", ");
 };
 
 export default function NeatTab({ clientId }: NeatTabProps) {
-  const [goals, setGoals] = useState<ClientNeatGoal[]>([]);
+  const [cards, setCards] = useState<ClientNeatCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingWeekday, setEditingWeekday] = useState<number | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<ClientNeatCard | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Form state for editing a specific weekday
-  const [goalForm, setGoalForm] = useState({
-    day_type: "active" as "active" | "break",
+  // Form state
+  const [cardForm, setCardForm] = useState({
+    label: "",
     steps_goal: "",
-    active_minutes_goal: "",
-    distance_goal_km: "",
     notes: "",
+    weekdays: [] as number[],
   });
 
-  // Fetch NEAT goals on mount
+  // Fetch NEAT cards on mount
   useEffect(() => {
-    fetchGoals();
+    fetchCards();
   }, [clientId]);
 
-  const fetchGoals = async () => {
+  const fetchCards = async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -71,65 +79,56 @@ export default function NeatTab({ clientId }: NeatTabProps) {
       const result = await response.json();
 
       if (result.success) {
-        setGoals(result.data || []);
+        setCards(result.data || []);
       } else {
-        setError(result.error || "Error al cargar objetivos NEAT");
+        setError(result.error || "Error al cargar tarjetas NEAT");
       }
     } catch (err) {
-      console.error("[NeatTab] Error fetching goals:", err);
-      setError("Error al cargar objetivos NEAT");
+      console.error("[NeatTab] Error fetching cards:", err);
+      setError("Error al cargar tarjetas NEAT");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Get goal for a specific weekday
-  const getGoalForWeekday = (weekday: number): ClientNeatGoal | null => {
-    return goals.find((g) => g.weekday === weekday) || null;
+  // Handle open add modal
+  const handleOpenAddModal = () => {
+    setCardForm({
+      label: "",
+      steps_goal: "",
+      notes: "",
+      weekdays: [],
+    });
+    setIsAddModalOpen(true);
   };
 
-  // Handle edit click
-  const handleEditWeekday = (weekday: number) => {
-    const existingGoal = getGoalForWeekday(weekday);
+  // Handle close add modal
+  const handleCloseAddModal = () => {
+    setIsAddModalOpen(false);
+    setCardForm({
+      label: "",
+      steps_goal: "",
+      notes: "",
+      weekdays: [],
+    });
+  };
 
-    if (existingGoal) {
-      setGoalForm({
-        day_type: existingGoal.day_type,
-        steps_goal: existingGoal.steps_goal?.toString() || "",
-        active_minutes_goal: existingGoal.active_minutes_goal?.toString() || "",
-        distance_goal_km: existingGoal.distance_goal_km?.toString() || "",
-        notes: existingGoal.notes || "",
-      });
-    } else {
-      // Default values for new goal
-      setGoalForm({
-        day_type: "active",
-        steps_goal: "",
-        active_minutes_goal: "",
-        distance_goal_km: "",
-        notes: "",
-      });
+  // Handle save new card
+  const handleSaveCard = async () => {
+    if (!cardForm.label.trim()) {
+      alert("El nombre del día es requerido");
+
+      return;
     }
 
-    setEditingWeekday(weekday);
-  };
-
-  // Handle save
-  const handleSave = async (weekday: number) => {
     setIsSaving(true);
 
     try {
       const payload = {
-        weekday,
-        day_type: goalForm.day_type,
-        steps_goal: goalForm.steps_goal ? parseInt(goalForm.steps_goal) : null,
-        active_minutes_goal: goalForm.active_minutes_goal
-          ? parseInt(goalForm.active_minutes_goal)
-          : null,
-        distance_goal_km: goalForm.distance_goal_km
-          ? parseFloat(goalForm.distance_goal_km)
-          : null,
-        notes: goalForm.notes || null,
+        label: cardForm.label,
+        steps_goal: cardForm.steps_goal ? parseInt(cardForm.steps_goal) : null,
+        notes: cardForm.notes || null,
+        weekdays: cardForm.weekdays.length > 0 ? cardForm.weekdays : [],
       };
 
       const response = await fetch(`/api/clients/${clientId}/neat`, {
@@ -141,60 +140,131 @@ export default function NeatTab({ clientId }: NeatTabProps) {
       const result = await response.json();
 
       if (result.success) {
-        // Refresh goals
-        await fetchGoals();
-        setEditingWeekday(null);
+        await fetchCards();
+        handleCloseAddModal();
       } else {
         alert(`Error al guardar: ${result.error || "Error desconocido"}`);
       }
     } catch (err) {
-      console.error("[NeatTab] Error saving goal:", err);
-      alert("Error al guardar objetivo NEAT");
+      console.error("[NeatTab] Error saving card:", err);
+      alert("Error al guardar tarjeta NEAT");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Handle delete
-  const handleDelete = async (weekday: number) => {
-    const goal = getGoalForWeekday(weekday);
+  // Handle open edit modal
+  const handleOpenEditModal = (card: ClientNeatCard) => {
+    setEditingCard(card);
+    setCardForm({
+      label: card.label,
+      steps_goal: card.steps_goal?.toString() || "",
+      notes: card.notes || "",
+      weekdays: card.weekdays || [],
+    });
+    setIsEditModalOpen(true);
+  };
 
-    if (!goal) return;
+  // Handle close edit modal
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingCard(null);
+    setCardForm({
+      label: "",
+      steps_goal: "",
+      notes: "",
+      weekdays: [],
+    });
+  };
 
+  // Handle update card
+  const handleUpdateCard = async () => {
+    if (!editingCard) return;
+
+    if (!cardForm.label.trim()) {
+      alert("El nombre del día es requerido");
+
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const payload = {
+        label: cardForm.label,
+        steps_goal: cardForm.steps_goal ? parseInt(cardForm.steps_goal) : null,
+        notes: cardForm.notes || null,
+        weekdays: cardForm.weekdays.length > 0 ? cardForm.weekdays : [],
+      };
+
+      const response = await fetch(
+        `/api/clients/${clientId}/neat/${editingCard.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        await fetchCards();
+        handleCloseEditModal();
+      } else {
+        alert(`Error al actualizar: ${result.error || "Error desconocido"}`);
+      }
+    } catch (err) {
+      console.error("[NeatTab] Error updating card:", err);
+      alert("Error al actualizar tarjeta NEAT");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle delete card
+  const handleDeleteCard = async (card: ClientNeatCard) => {
     if (
       !confirm(
-        `¿Estás seguro de eliminar los objetivos NEAT para ${getWeekdayName(weekday)}?`
+        `¿Estás seguro de eliminar "${card.label}"? Esta acción no se puede deshacer.`
       )
     )
       return;
 
     try {
-      const response = await fetch(`/api/clients/${clientId}/neat/${goal.id}`, {
+      const response = await fetch(`/api/clients/${clientId}/neat/${card.id}`, {
         method: "DELETE",
       });
 
       const result = await response.json();
 
       if (result.success) {
-        await fetchGoals();
+        await fetchCards();
       } else {
         alert(`Error al eliminar: ${result.error || "Error desconocido"}`);
       }
     } catch (err) {
-      console.error("[NeatTab] Error deleting goal:", err);
-      alert("Error al eliminar objetivo NEAT");
+      console.error("[NeatTab] Error deleting card:", err);
+      alert("Error al eliminar tarjeta NEAT");
     }
   };
 
-  // Handle cancel
-  const handleCancel = () => {
-    setEditingWeekday(null);
-    setGoalForm({
-      day_type: "active",
-      steps_goal: "",
-      active_minutes_goal: "",
-      distance_goal_km: "",
-      notes: "",
+  // Handle toggle weekday
+  const handleToggleWeekday = (dayNum: number) => {
+    setCardForm((prev) => {
+      const currentWeekdays = prev.weekdays || [];
+
+      if (currentWeekdays.includes(dayNum)) {
+        return {
+          ...prev,
+          weekdays: currentWeekdays.filter((d) => d !== dayNum),
+        };
+      } else {
+        return {
+          ...prev,
+          weekdays: [...currentWeekdays, dayNum].sort((a, b) => a - b),
+        };
+      }
     });
   };
 
@@ -221,7 +291,7 @@ export default function NeatTab({ clientId }: NeatTabProps) {
           className="mt-4"
           color="primary"
           variant="flat"
-          onPress={fetchGoals}
+          onPress={fetchCards}
         >
           Reintentar
         </Button>
@@ -236,9 +306,17 @@ export default function NeatTab({ clientId }: NeatTabProps) {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Objetivos NEAT</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Configura objetivos de actividad diaria por día de la semana
+            Configura objetivos de actividad diaria personalizados
           </p>
         </div>
+        <Button
+          className="text-white font-semibold"
+          color="primary"
+          startContent={<Icon icon="solar:add-circle-bold" width={20} />}
+          onPress={handleOpenAddModal}
+        >
+          Añadir Día NEAT
+        </Button>
       </div>
 
       {/* Info Card */}
@@ -255,295 +333,375 @@ export default function NeatTab({ clientId }: NeatTabProps) {
               <p className="text-blue-700">
                 NEAT (Non-Exercise Activity Thermogenesis) se refiere a la
                 energía gastada en actividades diarias que no son ejercicio
-                formal. Configura objetivos de pasos, minutos activos y
-                distancia para cada día de la semana.
+                formal. Configura objetivos de pasos personalizados para cada
+                tipo de día.
               </p>
             </div>
           </div>
         </CardBody>
       </Card>
 
-      {/* Weekday Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {[1, 2, 3, 4, 5, 6, 0].map((weekday) => {
-          const goal = getGoalForWeekday(weekday);
-          const isEditing = editingWeekday === weekday;
-          const isActive = goal?.day_type === "active";
-          const isBreak = goal?.day_type === "break";
-
-          return (
-            <Card
-              key={weekday}
-              className={`border-2 ${
-                isActive
-                  ? "border-green-300 bg-green-50"
-                  : isBreak
-                    ? "border-orange-300 bg-orange-50"
-                    : "border-gray-200 bg-white"
-              }`}
-            >
+      {/* Cards Grid or Empty State */}
+      {cards.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <Icon
+            className="text-gray-300 mb-4"
+            icon="solar:graph-up-linear"
+            width={64}
+          />
+          <p className="text-gray-500 text-lg mb-4">
+            No hay días NEAT configurados
+          </p>
+          <Button
+            className="text-white font-semibold"
+            color="primary"
+            startContent={<Icon icon="solar:add-circle-bold" width={20} />}
+            onPress={handleOpenAddModal}
+          >
+            Añadir Primer Día NEAT
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {cards.map((card) => (
+            <Card key={card.id} className="border-2 border-gray-200">
               <CardBody className="p-4">
                 {/* Card Header */}
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div
-                      className={`p-2 rounded-lg ${
-                        isActive
-                          ? "bg-green-100"
-                          : isBreak
-                            ? "bg-orange-100"
-                            : "bg-gray-100"
-                      }`}
-                    >
+                    <div className="p-2 rounded-lg bg-blue-100">
                       <Icon
-                        className={`${
-                          isActive
-                            ? "text-green-600"
-                            : isBreak
-                              ? "text-orange-600"
-                              : "text-gray-600"
-                        }`}
-                        icon={getWeekdayIcon(weekday)}
+                        className="text-blue-600"
+                        icon="solar:walking-bold"
                         width={20}
                       />
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900">
-                        {getWeekdayName(weekday)}
-                      </h3>
-                      {goal && (
+                      <h3 className="font-bold text-gray-900">{card.label}</h3>
+                      {card.weekdays && card.weekdays.length > 0 && (
                         <Badge
                           className="mt-1"
-                          color={isActive ? "success" : "warning"}
+                          color="primary"
                           size="sm"
                           variant="flat"
                         >
-                          {isActive ? "Día Activo" : "Día de Descanso"}
+                          {formatWeekdays(card.weekdays)}
                         </Badge>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {isEditing ? (
-                  /* Edit Mode */
-                  <div className="space-y-3">
-                    <Select
-                      label="Tipo de Día"
-                      selectedKeys={[goalForm.day_type]}
-                      size="sm"
-                      onSelectionChange={(keys) => {
-                        const value = Array.from(keys)[0] as "active" | "break";
-
-                        setGoalForm({ ...goalForm, day_type: value });
-                      }}
-                    >
-                      <SelectItem key="active">Día Activo</SelectItem>
-                      <SelectItem key="break">Día de Descanso</SelectItem>
-                    </Select>
-
-                    <Input
-                      endContent={
-                        <span className="text-xs text-gray-500">pasos</span>
-                      }
-                      label="Objetivo de Pasos"
-                      placeholder="10000"
-                      size="sm"
-                      type="number"
-                      value={goalForm.steps_goal}
-                      onValueChange={(value) =>
-                        setGoalForm({ ...goalForm, steps_goal: value })
-                      }
-                    />
-
-                    <Input
-                      endContent={
-                        <span className="text-xs text-gray-500">min</span>
-                      }
-                      label="Minutos Activos"
-                      placeholder="30"
-                      size="sm"
-                      type="number"
-                      value={goalForm.active_minutes_goal}
-                      onValueChange={(value) =>
-                        setGoalForm({
-                          ...goalForm,
-                          active_minutes_goal: value,
-                        })
-                      }
-                    />
-
-                    <Input
-                      endContent={
-                        <span className="text-xs text-gray-500">km</span>
-                      }
-                      label="Distancia"
-                      placeholder="5.0"
-                      size="sm"
-                      step="0.1"
-                      type="number"
-                      value={goalForm.distance_goal_km}
-                      onValueChange={(value) =>
-                        setGoalForm({ ...goalForm, distance_goal_km: value })
-                      }
-                    />
-
-                    <Textarea
-                      label="Notas"
-                      minRows={2}
-                      placeholder="Notas adicionales..."
-                      size="sm"
-                      value={goalForm.notes}
-                      onValueChange={(value) =>
-                        setGoalForm({ ...goalForm, notes: value })
-                      }
-                    />
-
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        className="flex-1 text-white font-semibold"
-                        color="primary"
-                        isDisabled={isSaving}
-                        isLoading={isSaving}
-                        size="sm"
-                        onPress={() => handleSave(weekday)}
-                      >
-                        Guardar
-                      </Button>
-                      <Button
-                        className="flex-1"
-                        isDisabled={isSaving}
-                        size="sm"
-                        variant="flat"
-                        onPress={handleCancel}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  /* View Mode */
-                  <div>
-                    {goal ? (
-                      <div className="space-y-3">
-                        {/* Goals Display */}
-                        {goal.steps_goal !== null && (
-                          <div className="flex items-center gap-2">
-                            <Icon
-                              className="text-blue-600 flex-shrink-0"
-                              icon="solar:walking-bold"
-                              width={18}
-                            />
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-600">Pasos</p>
-                              <p className="text-sm font-bold text-gray-900">
-                                {goal.steps_goal.toLocaleString()} pasos
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {goal.active_minutes_goal !== null && (
-                          <div className="flex items-center gap-2">
-                            <Icon
-                              className="text-purple-600 flex-shrink-0"
-                              icon="solar:clock-circle-bold"
-                              width={18}
-                            />
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-600">
-                                Minutos Activos
-                              </p>
-                              <p className="text-sm font-bold text-gray-900">
-                                {goal.active_minutes_goal} min
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {goal.distance_goal_km !== null && (
-                          <div className="flex items-center gap-2">
-                            <Icon
-                              className="text-green-600 flex-shrink-0"
-                              icon="solar:route-bold"
-                              width={18}
-                            />
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-600">Distancia</p>
-                              <p className="text-sm font-bold text-gray-900">
-                                {goal.distance_goal_km} km
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {goal.notes && (
-                          <div className="p-2 bg-blue-50 rounded-lg border border-blue-100 mt-2">
-                            <p className="text-xs text-blue-700">
-                              {goal.notes}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2 mt-4">
-                          <Button
-                            className="flex-1"
-                            size="sm"
-                            startContent={
-                              <Icon icon="solar:pen-linear" width={16} />
-                            }
-                            variant="flat"
-                            onPress={() => handleEditWeekday(weekday)}
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            isIconOnly
-                            color="danger"
-                            size="sm"
-                            variant="flat"
-                            onPress={() => handleDelete(weekday)}
-                          >
-                            <Icon
-                              icon="solar:trash-bin-trash-linear"
-                              width={16}
-                            />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Empty State */
-                      <div className="text-center py-6">
-                        <Icon
-                          className="text-gray-300 mx-auto mb-2"
-                          icon="solar:graph-up-linear"
-                          width={32}
-                        />
-                        <p className="text-sm text-gray-500 mb-3">
-                          Sin objetivos configurados
+                {/* Card Content */}
+                <div className="space-y-3">
+                  {/* Steps Goal */}
+                  {card.steps_goal !== null && (
+                    <div className="flex items-center gap-2">
+                      <Icon
+                        className="text-green-600 flex-shrink-0"
+                        icon="solar:target-bold"
+                        width={18}
+                      />
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-600">
+                          Objetivo de Pasos
                         </p>
-                        <Button
-                          className="text-white font-semibold"
-                          color="primary"
-                          size="sm"
-                          startContent={
-                            <Icon icon="solar:add-circle-bold" width={16} />
-                          }
-                          variant="flat"
-                          onPress={() => handleEditWeekday(weekday)}
-                        >
-                          Configurar
-                        </Button>
+                        <p className="text-sm font-bold text-gray-900">
+                          {card.steps_goal.toLocaleString()} pasos
+                        </p>
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {card.notes && (
+                    <div className="p-2 bg-blue-50 rounded-lg border border-blue-100">
+                      <p className="text-xs text-blue-700">{card.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Weekdays Display */}
+                  {card.weekdays && card.weekdays.length > 0 && (
+                    <div className="p-2 bg-purple-50 rounded-lg border border-purple-100">
+                      <div className="flex items-center gap-1">
+                        <Icon
+                          className="text-purple-600"
+                          icon="solar:calendar-bold"
+                          width={14}
+                        />
+                        <p className="text-xs text-purple-700 font-medium">
+                          {formatWeekdays(card.weekdays)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                    <Button
+                      className="flex-1"
+                      size="sm"
+                      startContent={<Icon icon="solar:pen-linear" width={16} />}
+                      variant="flat"
+                      onPress={() => handleOpenEditModal(card)}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      isIconOnly
+                      color="danger"
+                      size="sm"
+                      variant="flat"
+                      onPress={() => handleDeleteCard(card)}
+                    >
+                      <Icon icon="solar:trash-bin-trash-linear" width={16} />
+                    </Button>
                   </div>
-                )}
+                </div>
               </CardBody>
             </Card>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Modal */}
+      <Modal
+        classNames={{
+          header: "border-b border-gray-200",
+          footer: "border-t border-gray-200",
+          body: "py-6",
+        }}
+        isOpen={isAddModalOpen}
+        size="lg"
+        onClose={handleCloseAddModal}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-50 p-2 rounded-lg">
+                <Icon
+                  className="text-blue-600 text-xl"
+                  icon="solar:add-circle-bold"
+                />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Añadir Día NEAT
+                </h3>
+                <p className="text-sm text-gray-500 font-normal">
+                  Define objetivos de actividad diaria
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <div className="flex flex-col gap-4">
+              <Input
+                isRequired
+                label="Nombre del Día"
+                placeholder='Ej: "Día de entrenamiento", "Lunes", "Sesión de ciclismo"'
+                startContent={
+                  <Icon
+                    className="text-gray-400"
+                    icon="solar:tag-linear"
+                    width={18}
+                  />
+                }
+                value={cardForm.label}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, label: value })
+                }
+              />
+
+              <Input
+                endContent={
+                  <span className="text-xs text-gray-500">pasos</span>
+                }
+                label="Objetivo de Pasos (Opcional)"
+                placeholder="10000"
+                type="number"
+                value={cardForm.steps_goal}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, steps_goal: value })
+                }
+              />
+
+              <Textarea
+                label="Notas (Opcional)"
+                minRows={3}
+                placeholder="Notas adicionales..."
+                value={cardForm.notes}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, notes: value })
+                }
+              />
+
+              {/* Weekdays Selection */}
+              <div className="border-t pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  Días de la Semana (Opcional)
+                </p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Selecciona los días de la semana en que este objetivo aplica
+                </p>
+                <div className="grid grid-cols-7 gap-2">
+                  {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
+                    <button
+                      key={dayNum}
+                      className={`p-2 rounded-lg border-2 transition-all ${
+                        cardForm.weekdays.includes(dayNum)
+                          ? "bg-blue-500 border-blue-600 text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:border-blue-300"
+                      }`}
+                      type="button"
+                      onClick={() => handleToggleWeekday(dayNum)}
+                    >
+                      <div className="text-xs font-bold">
+                        {getWeekdayName(dayNum, true)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={handleCloseAddModal}>
+              Cancelar
+            </Button>
+            <Button
+              className="text-white font-semibold"
+              color="primary"
+              isDisabled={isSaving || !cardForm.label.trim()}
+              isLoading={isSaving}
+              startContent={
+                !isSaving && <Icon icon="solar:add-circle-bold" width={18} />
+              }
+              onPress={handleSaveCard}
+            >
+              {isSaving ? "Guardando..." : "Añadir Día"}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        classNames={{
+          header: "border-b border-gray-200",
+          footer: "border-t border-gray-200",
+          body: "py-6",
+        }}
+        isOpen={isEditModalOpen}
+        size="lg"
+        onClose={handleCloseEditModal}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-50 p-2 rounded-lg">
+                <Icon className="text-blue-600 text-xl" icon="solar:pen-bold" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Editar Día NEAT
+                </h3>
+                <p className="text-sm text-gray-500 font-normal">
+                  Actualiza los objetivos de actividad
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <div className="flex flex-col gap-4">
+              <Input
+                isRequired
+                label="Nombre del Día"
+                placeholder='Ej: "Día de entrenamiento", "Lunes", "Sesión de ciclismo"'
+                startContent={
+                  <Icon
+                    className="text-gray-400"
+                    icon="solar:tag-linear"
+                    width={18}
+                  />
+                }
+                value={cardForm.label}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, label: value })
+                }
+              />
+
+              <Input
+                endContent={
+                  <span className="text-xs text-gray-500">pasos</span>
+                }
+                label="Objetivo de Pasos (Opcional)"
+                placeholder="10000"
+                type="number"
+                value={cardForm.steps_goal}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, steps_goal: value })
+                }
+              />
+
+              <Textarea
+                label="Notas (Opcional)"
+                minRows={3}
+                placeholder="Notas adicionales..."
+                value={cardForm.notes}
+                onValueChange={(value) =>
+                  setCardForm({ ...cardForm, notes: value })
+                }
+              />
+
+              {/* Weekdays Selection */}
+              <div className="border-t pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  Días de la Semana (Opcional)
+                </p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Selecciona los días de la semana en que este objetivo aplica
+                </p>
+                <div className="grid grid-cols-7 gap-2">
+                  {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
+                    <button
+                      key={dayNum}
+                      className={`p-2 rounded-lg border-2 transition-all ${
+                        cardForm.weekdays.includes(dayNum)
+                          ? "bg-blue-500 border-blue-600 text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:border-blue-300"
+                      }`}
+                      type="button"
+                      onClick={() => handleToggleWeekday(dayNum)}
+                    >
+                      <div className="text-xs font-bold">
+                        {getWeekdayName(dayNum, true)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={handleCloseEditModal}>
+              Cancelar
+            </Button>
+            <Button
+              className="text-white font-semibold"
+              color="primary"
+              isDisabled={isSaving || !cardForm.label.trim()}
+              isLoading={isSaving}
+              startContent={
+                !isSaving && <Icon icon="solar:diskette-bold" width={18} />
+              }
+              onPress={handleUpdateCard}
+            >
+              {isSaving ? "Guardando..." : "Guardar Cambios"}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

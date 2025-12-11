@@ -41,14 +41,31 @@ export function DynamicFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
   const [existingResponseDate, setExistingResponseDate] = useState<string>("");
+  const [hasNeatCards, setHasNeatCards] = useState(true); // default to true to avoid flickering
 
   // Load form configuration and check for existing response
   useEffect(() => {
     if (isOpen) {
+      checkNeatCards();
       fetchFormConfig();
       checkExistingResponse();
     }
   }, [isOpen, clientId, formType]);
+
+  const checkNeatCards = async () => {
+    try {
+      const response = await fetch("/api/client/neat");
+      const data = await response.json();
+
+      if (data.success) {
+        setHasNeatCards((data.cards || []).length > 0);
+      }
+    } catch (error) {
+      console.error("Error checking NEAT cards:", error);
+      // Default to true on error to avoid hiding questions unnecessarily
+      setHasNeatCards(true);
+    }
+  };
 
   const checkExistingResponse = async () => {
     try {
@@ -85,9 +102,19 @@ export function DynamicFormModal({
 
       if (data.success && data.config) {
         // Filter to only enabled questions
-        const enabledQuestions = data.config.questions_config.filter(
+        let enabledQuestions = data.config.questions_config.filter(
           (q: QuestionConfig) => q.enabled
         );
+
+        // For habits form, filter out steps question if client has no NEAT cards
+        if (formType === "habits" && !hasNeatCards) {
+          enabledQuestions = enabledQuestions.filter(
+            (q: QuestionConfig) => q.id !== "steps" && q.id !== "pasos"
+          );
+          console.log(
+            "[DynamicFormModal] Filtered out steps question - no NEAT cards configured"
+          );
+        }
 
         setQuestions(enabledQuestions);
       } else {
@@ -235,7 +262,7 @@ export function DynamicFormModal({
                 <button
                   key={rating}
                   className={`p-3 rounded-lg transition-all ${
-                    value === rating
+                    value >= rating
                       ? "bg-yellow-400 scale-110"
                       : "bg-gray-100 hover:bg-gray-200"
                   } ${isViewMode ? "cursor-default" : "cursor-pointer"}`}

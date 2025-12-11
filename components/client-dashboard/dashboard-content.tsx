@@ -7,11 +7,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
+import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
 import {
   isDailyHabitsSubmittedToday,
   shouldShowWeeklyCheckIn,
 } from "@/lib/forms/client-helpers";
 import { FormResponse } from "@/lib/forms/types";
+import { ClientNeatCard } from "@/types";
 
 interface DashboardContentProps {
   firstName: string;
@@ -42,7 +44,11 @@ export function DashboardContent({
   const [isLoadingForms, setIsLoadingForms] = useState(true);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
 
-  // Check form submission status
+  // NEAT cards
+  const [neatCards, setNeatCards] = useState<ClientNeatCard[]>([]);
+  const [hasNeatCards, setHasNeatCards] = useState(false);
+
+  // Check form submission status and fetch NEAT cards
   useEffect(() => {
     async function checkFormStatus() {
       setIsLoadingForms(true);
@@ -65,6 +71,15 @@ export function DashboardContent({
 
         if (dailyData.success) {
           setDailyResponses(dailyData.responses || []);
+        }
+
+        // Fetch NEAT cards
+        const neatRes = await fetch("/api/client/neat");
+        const neatData = await neatRes.json();
+
+        if (neatData.success) {
+          setNeatCards(neatData.cards || []);
+          setHasNeatCards((neatData.cards || []).length > 0);
         }
       } catch (error) {
         console.error("Error checking form status:", error);
@@ -140,24 +155,6 @@ export function DashboardContent({
     !isLoadingForms && shouldShowWeeklyCheckIn(weeklyResponses);
   const showDailyButton =
     !isLoadingForms && !isDailyHabitsSubmittedToday(dailyResponses);
-  const isDailyCompleted =
-    !isLoadingForms && isDailyHabitsSubmittedToday(dailyResponses);
-
-  // Auto-hide completed message after 5 seconds
-  const [showCompletedMessage, setShowCompletedMessage] = useState(false);
-
-  useEffect(() => {
-    if (isDailyCompleted) {
-      setShowCompletedMessage(true);
-      const timer = setTimeout(() => {
-        setShowCompletedMessage(false);
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-
-    return undefined;
-  }, [isDailyCompleted]);
 
   const waterGoal = 3;
 
@@ -386,27 +383,46 @@ export function DashboardContent({
     const points = getDataPointsCount(selectedPeriod);
 
     return generateWeightData(points, selectedPeriod);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, weeklyResponses]);
 
   const sleepHistory = useMemo(() => {
     const points = getDataPointsCount(selectedPeriod);
 
     return generateSleepData(points, selectedPeriod);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, dailyResponses]);
 
   const calorieHistory = useMemo(() => {
     const points = getDataPointsCount(selectedPeriod);
 
     return generateCalorieData(points, selectedPeriod);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, dailyResponses]);
 
   const stepsHistory = useMemo(() => {
     const points = getDataPointsCount(selectedPeriod);
 
     return generateStepsData(points, selectedPeriod);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, dailyResponses]);
 
   const todaySteps = stepsHistory[stepsHistory.length - 1]?.steps || 0;
+
+  // Check if we should show NEAT chart (has cards and applicable today)
+  const shouldShowNeatChart = useMemo(() => {
+    if (!hasNeatCards || neatCards.length === 0) return false;
+
+    const today = new Date().getDay();
+    const applicableCards = neatCards.filter(
+      (card) =>
+        !card.weekdays ||
+        card.weekdays.length === 0 ||
+        card.weekdays.includes(today)
+    );
+    const totalGoal = applicableCards.reduce(
+      (sum, card) => sum + (card.steps_goal || 0),
+      0
+    );
+
+    return applicableCards.length > 0 && totalGoal > 0;
+  }, [hasNeatCards, neatCards]);
 
   const handleWaterIncrement = () => {
     if (waterIntake < waterGoal) {
@@ -481,31 +497,6 @@ export function DashboardContent({
                   />
                 </div>
               </button>
-            </div>
-          )}
-
-          {/* Completed Daily Habits indicator - auto-hides after 5 seconds */}
-          {showCompletedMessage && (
-            <div className="mb-4 px-4">
-              <Card className="bg-success/10 border border-success/20">
-                <CardBody className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Icon
-                      className="text-success"
-                      icon="solar:check-circle-bold"
-                      width={24}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-success">
-                        ¡Registro de hoy completado!
-                      </p>
-                      <p className="text-xs text-success/70">
-                        Vuelve mañana para registrar tu nuevo día
-                      </p>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
             </div>
           )}
 
@@ -805,55 +796,31 @@ export function DashboardContent({
               </CardBody>
             </Card>
 
-            {/* Steps Tracker */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                    PASOS
-                  </p>
-                  <div className="bg-success/10 p-1.5 rounded-full">
-                    <Icon
-                      className="text-success text-base"
-                      icon="solar:walking-bold"
-                    />
+            {/* NEAT Tracker - Only show if NEAT cards configured and applicable today */}
+            {shouldShowNeatChart && (
+              <Card>
+                <CardBody className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-foreground/70 tracking-wide">
+                      NEAT - ACTIVIDAD DIARIA
+                    </p>
+                    <div className="bg-success/10 p-1.5 rounded-full">
+                      <Icon
+                        className="text-success text-base"
+                        icon="solar:walking-bold"
+                      />
+                    </div>
                   </div>
-                </div>
-                <p className="text-5xl font-bold mb-1 text-foreground">
-                  {todaySteps}
-                </p>
-                <p className="text-sm text-foreground/70 mb-4">Hoy</p>
-                <div className="flex items-end justify-between gap-2 h-24">
-                  {stepsHistory.map((day, index) => {
-                    const maxSteps = Math.max(
-                      ...stepsHistory.map((d) => d.steps)
-                    );
-                    const height = (day.steps / maxSteps) * 100;
-                    const isToday = index === stepsHistory.length - 1;
 
-                    return (
-                      <div
-                        key={`steps-${index}`}
-                        className="flex-1 flex flex-col items-center gap-2"
-                      >
-                        <div
-                          className="w-full relative"
-                          style={{ height: "80px" }}
-                        >
-                          <div
-                            className={`absolute bottom-0 left-0 right-0 ${isToday ? "bg-success" : "bg-default-200"} rounded-t-lg transition-all`}
-                            style={{ height: `${height}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-foreground/60">
-                          {day.date}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
+                  {/* Radial Chart showing goal vs actual */}
+                  <NeatChartCard
+                    neatCards={neatCards}
+                    selectedPeriod={selectedPeriod}
+                    todaySteps={todaySteps}
+                  />
+                </CardBody>
+              </Card>
+            )}
           </div>
         </div>
       </div>

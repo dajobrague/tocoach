@@ -132,8 +132,8 @@ export async function PUT(
       updateData.muscle_groups = body.muscle_groups || [];
     if (body.equipment !== undefined)
       updateData.equipment = body.equipment || [];
-    if (body.difficulty_level !== undefined)
-      updateData.difficulty_level = body.difficulty_level || null;
+    if (body.movement_pattern !== undefined)
+      updateData.movement_pattern = body.movement_pattern || null;
     if (body.video_url !== undefined)
       updateData.video_url = body.video_url || null;
     if (body.image_url !== undefined)

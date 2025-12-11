@@ -5,11 +5,11 @@ import React from "react";
 
 // Force recompile v2
 
-import AnalyticsContent from "@/components/dashboard/analytics-content";
 import ClientsContent from "@/components/dashboard/clients-content";
 import ExerciseLibraryContent from "@/components/dashboard/exercise-library-content";
 import InventoryContent from "@/components/dashboard/inventory-content";
 import MessagingContent from "@/components/dashboard/messaging-content";
+import MetricasContent from "@/components/dashboard/metricas-content";
 import dashboardSidebarItems from "@/components/dashboard/sidebar-items";
 import TemplatesContent from "@/components/dashboard/templates-content";
 import TopNavigation from "@/components/dashboard/top-navigation";
@@ -29,10 +29,10 @@ export default function TrainerDashboard() {
   const [activeSection, setActiveSection] = React.useState(() => {
     // Try to get saved section from localStorage
     if (typeof window !== "undefined") {
-      return localStorage.getItem("activeSection") || "analytics";
+      return localStorage.getItem("activeSection") || "metricas";
     }
 
-    return "analytics";
+    return "metricas";
   });
 
   React.useEffect(() => {
@@ -107,13 +107,13 @@ export default function TrainerDashboard() {
       if (!session.onboarding_completed) {
         router.push("/trainer/dashboard/setup");
       } else {
-        // If onboarding is completed but setup is selected, reset to analytics
+        // If onboarding is completed but setup is selected, reset to metricas
         console.log(
-          "[Dashboard] Onboarding completed, resetting activeSection to analytics"
+          "[Dashboard] Onboarding completed, resetting activeSection to metricas"
         );
-        setActiveSection("analytics");
+        setActiveSection("metricas");
         if (typeof window !== "undefined") {
-          localStorage.setItem("activeSection", "analytics");
+          localStorage.setItem("activeSection", "metricas");
         }
       }
     }
@@ -148,8 +148,8 @@ export default function TrainerDashboard() {
 
   const renderContent = () => {
     switch (activeSection) {
-      case "analytics":
-        return <AnalyticsContent />;
+      case "metricas":
+        return <MetricasContent />;
       case "setup":
         // Navigation handled by useEffect
         return (
@@ -173,7 +173,7 @@ export default function TrainerDashboard() {
       case "messaging":
         return <MessagingContent />;
       default:
-        return <AnalyticsContent />;
+        return <MetricasContent />;
     }
   };
 

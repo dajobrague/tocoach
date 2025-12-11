@@ -11,7 +11,7 @@ export function formatExerciseForDisplay(exercise: Exercise) {
   return {
     ...exercise,
     categoryLabel: getCategoryLabel(exercise.category),
-    difficultyLabel: getDifficultyLabel(exercise.difficulty_level),
+    movementPattern: exercise.movement_pattern || "N/A",
     muscleGroupsText: exercise.muscle_groups?.join(", ") || "N/A",
     equipmentText: exercise.equipment?.join(", ") || "Ninguno",
     hasDefaults:

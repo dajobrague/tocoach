@@ -10,9 +10,9 @@ import {
   CardBody,
   Chip,
   Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
   DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
   Input,
   Modal,
   ModalBody,
@@ -33,6 +33,16 @@ import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
 interface WorkoutsTabProps {
   clientId: string;
 }
+
+// Helper functions for category translation
+const getCategoryLabel = (category: string) => {
+  const labels: Record<string, string> = {
+    strength: "Fuerza",
+    cardio: "Cardio",
+  };
+
+  return labels[category] || category;
+};
 
 export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
@@ -106,6 +116,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     trainingSystem: "",
     videoUrl: "",
     exerciseId: "", // Store selected library exercise ID
+    notes: "", // Exercise-specific notes
   });
   const [libraryExercises, setLibraryExercises] = useState<any[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
@@ -113,6 +124,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     name: "",
     division: "",
     type: "",
+    category: "strength", // Default to strength, can be changed
     startDate: "",
     sessionsPerWeek: "",
     notes: "",
@@ -131,9 +143,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // Only fetch active strength programs for the client profile view
+      // Fetch all active programs for the client (strength, cardio, etc.)
       const response = await fetch(
-        `/api/clients/${clientId}/programs?category=strength&status=active`
+        `/api/clients/${clientId}/programs?status=active`
       );
       const data = await response.json();
 
@@ -218,6 +230,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       trainingSystem: "",
       videoUrl: "",
       exerciseId: "",
+      notes: "",
     });
     setLibraryExercises([]);
   };
@@ -289,6 +302,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       name: "",
       division: "",
       type: "",
+      category: "strength",
       startDate: "",
       sessionsPerWeek: "",
       notes: "",
@@ -307,6 +321,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       name: programToEdit.name,
       division: programToEdit.division,
       type: programToEdit.type,
+      category: programToEdit.category || "strength", // Default to strength if not set
       startDate: programToEdit.assignedDate,
       sessionsPerWeek: programToEdit.sessionsPerWeek.toString(),
       notes: "",
@@ -324,6 +339,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       name: "",
       division: "",
       type: "",
+      category: "strength",
       startDate: "",
       sessionsPerWeek: "",
       notes: "",
@@ -609,6 +625,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       trainingSystem: exercise.trainingSystem,
       videoUrl: exercise.videoUrl || "",
       exerciseId: "",
+      notes: exercise.notes || "",
     });
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
@@ -630,6 +647,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       trainingSystem: "",
       videoUrl: "",
       exerciseId: "",
+      notes: "",
     });
   };
 
@@ -802,6 +820,20 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     <p className="text-sm text-gray-600">
                       Iniciado el {formatDate(program.assignedDate)}
                     </p>
+                    {program.notes && (
+                      <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-start gap-2">
+                          <Icon
+                            className="text-blue-600 mt-0.5 flex-shrink-0"
+                            icon="solar:notes-bold"
+                            width={16}
+                          />
+                          <p className="text-sm text-blue-900">
+                            {program.notes}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <Dropdown>
                     <DropdownTrigger>
@@ -1098,6 +1130,22 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                                         </span>
                                       </div>
                                     </div>
+
+                                    {/* Exercise Notes */}
+                                    {exercise.notes && (
+                                      <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                                        <div className="flex items-start gap-2">
+                                          <Icon
+                                            className="text-amber-600 flex-shrink-0 mt-0.5"
+                                            icon="solar:info-circle-bold"
+                                            width={14}
+                                          />
+                                          <p className="text-xs text-amber-900">
+                                            {exercise.notes}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1444,6 +1492,34 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   }
                 />
               </div>
+
+              {/* Notas del Ejercicio */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Icon
+                    className="text-blue-600"
+                    icon="solar:notes-bold"
+                    width={18}
+                  />
+                  Notas Personalizadas (Opcional)
+                </h4>
+                <Textarea
+                  label="Notas del ejercicio"
+                  minRows={2}
+                  placeholder="Ej: Enfocar en el rango de movimiento completo, mantener tensión constante..."
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:document-text-linear"
+                      width={18}
+                    />
+                  }
+                  value={exerciseForm.notes}
+                  onValueChange={(value) =>
+                    setExerciseForm({ ...exerciseForm, notes: value })
+                  }
+                />
+              </div>
             </div>
           </ModalBody>
           <ModalFooter>
@@ -1659,6 +1735,34 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   }
                 />
               </div>
+
+              {/* Notas del Ejercicio */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Icon
+                    className="text-blue-600"
+                    icon="solar:notes-bold"
+                    width={18}
+                  />
+                  Notas Personalizadas (Opcional)
+                </h4>
+                <Textarea
+                  label="Notas del ejercicio"
+                  minRows={2}
+                  placeholder="Ej: Enfocar en el rango de movimiento completo, mantener tensión constante..."
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:document-text-linear"
+                      width={18}
+                    />
+                  }
+                  value={exerciseForm.notes}
+                  onValueChange={(value) =>
+                    setExerciseForm({ ...exerciseForm, notes: value })
+                  }
+                />
+              </div>
             </div>
           </ModalBody>
           <ModalFooter>
@@ -1822,6 +1926,45 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     }
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                      isRequired
+                      label="Categoría del Programa"
+                      placeholder="Selecciona una categoría"
+                      selectedKeys={[programForm.category]}
+                      startContent={
+                        <Icon
+                          className="text-gray-400"
+                          icon="solar:widget-linear"
+                          width={18}
+                        />
+                      }
+                      onSelectionChange={(keys) => {
+                        const selected = Array.from(keys)[0] as string;
+
+                        setProgramForm({ ...programForm, category: selected });
+                      }}
+                    >
+                      <SelectItem key="strength">Fuerza</SelectItem>
+                      <SelectItem key="cardio">Cardio</SelectItem>
+                    </Select>
+                    <Input
+                      isRequired
+                      label="Tipo de Programa"
+                      placeholder="Ej: Fuerza, Hipertrofia, HIIT..."
+                      startContent={
+                        <Icon
+                          className="text-gray-400"
+                          icon="solar:tag-linear"
+                          width={18}
+                        />
+                      }
+                      value={programForm.type}
+                      onValueChange={(value) =>
+                        setProgramForm({ ...programForm, type: value })
+                      }
+                    />
+                  </div>
+                  {programForm.category === "strength" && (
                     <Input
                       isRequired
                       label="División de la Rutina"
@@ -1838,23 +1981,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         setProgramForm({ ...programForm, division: value })
                       }
                     />
-                    <Input
-                      isRequired
-                      label="Tipo de Programa"
-                      placeholder="Ej: Strength, Hypertrophy, HIIT..."
-                      startContent={
-                        <Icon
-                          className="text-gray-400"
-                          icon="solar:tag-linear"
-                          width={18}
-                        />
-                      }
-                      value={programForm.type}
-                      onValueChange={(value) =>
-                        setProgramForm({ ...programForm, type: value })
-                      }
-                    />
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -2045,6 +2172,45 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     }
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                      isRequired
+                      label="Categoría del Programa"
+                      placeholder="Selecciona una categoría"
+                      selectedKeys={[programForm.category]}
+                      startContent={
+                        <Icon
+                          className="text-gray-400"
+                          icon="solar:widget-linear"
+                          width={18}
+                        />
+                      }
+                      onSelectionChange={(keys) => {
+                        const selected = Array.from(keys)[0] as string;
+
+                        setProgramForm({ ...programForm, category: selected });
+                      }}
+                    >
+                      <SelectItem key="strength">Fuerza</SelectItem>
+                      <SelectItem key="cardio">Cardio</SelectItem>
+                    </Select>
+                    <Input
+                      isRequired
+                      label="Tipo de Programa"
+                      placeholder="Ej: Fuerza, Hipertrofia, HIIT..."
+                      startContent={
+                        <Icon
+                          className="text-gray-400"
+                          icon="solar:tag-linear"
+                          width={18}
+                        />
+                      }
+                      value={programForm.type}
+                      onValueChange={(value) =>
+                        setProgramForm({ ...programForm, type: value })
+                      }
+                    />
+                  </div>
+                  {programForm.category === "strength" && (
                     <Input
                       isRequired
                       label="División de la Rutina"
@@ -2061,23 +2227,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         setProgramForm({ ...programForm, division: value })
                       }
                     />
-                    <Input
-                      isRequired
-                      label="Tipo de Programa"
-                      placeholder="Ej: Strength, Hypertrophy, HIIT..."
-                      startContent={
-                        <Icon
-                          className="text-gray-400"
-                          icon="solar:tag-linear"
-                          width={18}
-                        />
-                      }
-                      value={programForm.type}
-                      onValueChange={(value) =>
-                        setProgramForm({ ...programForm, type: value })
-                      }
-                    />
-                  </div>
+                  )}
                 </div>
               </div>
 

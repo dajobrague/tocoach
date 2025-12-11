@@ -40,7 +40,7 @@ export default function AddExerciseLibraryModal({
     category: "",
     muscle_groups: [] as string[],
     equipment: [] as string[],
-    difficulty_level: "",
+    movement_pattern: "",
     video_url: "",
     image_url: "",
     instructions: [] as string[],
@@ -67,12 +67,6 @@ export default function AddExerciseLibraryModal({
     { key: "powerlifting", label: "Powerlifting" },
     { key: "bodyweight", label: "Peso Corporal" },
     { key: "other", label: "Otro" },
-  ];
-
-  const difficultyLevels = [
-    { key: "beginner", label: "Principiante" },
-    { key: "intermediate", label: "Intermedio" },
-    { key: "advanced", label: "Avanzado" },
   ];
 
   const handleImageSelect = async (
@@ -205,7 +199,7 @@ export default function AddExerciseLibraryModal({
       category: "",
       muscle_groups: [],
       equipment: [],
-      difficulty_level: "",
+      movement_pattern: "",
       video_url: "",
       image_url: "",
       instructions: [],
@@ -420,31 +414,21 @@ export default function AddExerciseLibraryModal({
                       setFormData({ ...formData, description: value })
                     }
                   />
-                  <Select
-                    label="Nivel de Dificultad"
-                    placeholder="Selecciona el nivel"
-                    selectedKeys={
-                      formData.difficulty_level
-                        ? [formData.difficulty_level]
-                        : []
-                    }
+                  <Input
+                    label="Patrón de movimiento (Opcional)"
+                    placeholder="Ej: Sentadilla, Bisagra de cadera, Empuje horizontal"
                     startContent={
                       <Icon
                         className="text-gray-400"
-                        icon="solar:graph-linear"
+                        icon="solar:target-linear"
                         width={18}
                       />
                     }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setFormData({ ...formData, difficulty_level: value });
-                    }}
-                  >
-                    {difficultyLevels.map((level) => (
-                      <SelectItem key={level.key}>{level.label}</SelectItem>
-                    ))}
-                  </Select>
+                    value={formData.movement_pattern}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, movement_pattern: value })
+                    }
+                  />
                 </div>
               </div>
             )}
@@ -550,11 +534,12 @@ export default function AddExerciseLibraryModal({
                     icon="solar:settings-bold"
                     width={18}
                   />
-                  Parámetros de Fuerza por Defecto
+                  Programación del ejercicio por defecto
                 </h4>
                 <p className="text-xs text-gray-500 mb-3">
-                  Estos valores se auto-completarán al añadir el ejercicio a una
-                  sesión
+                  Estos valores se autocompletarán, al añadir el ejercicio a un
+                  programa. Podrás modificarlos posteriormente según sea
+                  necesario.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -650,11 +635,12 @@ export default function AddExerciseLibraryModal({
                     icon="solar:settings-bold"
                     width={18}
                   />
-                  Parámetros de Cardio por Defecto
+                  Programación del ejercicio por defecto
                 </h4>
                 <p className="text-xs text-gray-500 mb-3">
-                  Define valores predeterminados para este ejercicio
-                  cardiovascular
+                  Estos valores se autocompletarán, al añadir el ejercicio a un
+                  programa. Podrás modificarlos posteriormente según sea
+                  necesario.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -935,9 +921,9 @@ export default function AddExerciseLibraryModal({
                             : "text-red-700"
                         }`}
                       >
-                        Los parámetros por defecto se auto-completarán cuando
-                        añadas este ejercicio a una sesión, pero podrás
-                        modificarlos según sea necesario.
+                        Los parámetros por defecto se autocompletarán, cuando
+                        añadas este ejercicio a un programa. Podrás modificarlos
+                        posteriormente según sea necesario.
                       </p>
                     </div>
                   </div>

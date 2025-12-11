@@ -5,10 +5,10 @@ import { type SidebarItem } from "./sidebar";
  */
 const dashboardSidebarItems: SidebarItem[] = [
   {
-    key: "analytics",
-    href: "/trainer/dashboard/analytics",
+    key: "metricas",
+    href: "/trainer/dashboard/metricas",
     icon: "solar:chart-line-duotone",
-    title: "Analytics",
+    title: "Métricas",
   },
   {
     key: "setup",

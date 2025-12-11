@@ -19,8 +19,8 @@ import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
 import {
-  validateExerciseLibraryForm,
   uploadExerciseImage,
+  validateExerciseLibraryForm,
 } from "@/lib/utils/exercise-utils";
 
 interface EditExerciseLibraryModalProps {
@@ -42,7 +42,7 @@ export default function EditExerciseLibraryModal({
     category: "",
     muscle_groups: [] as string[],
     equipment: [] as string[],
-    difficulty_level: "",
+    movement_pattern: "",
     video_url: "",
     image_url: "",
     instructions: [] as string[],
@@ -68,7 +68,7 @@ export default function EditExerciseLibraryModal({
         category: exercise.category || "",
         muscle_groups: exercise.muscle_groups || [],
         equipment: exercise.equipment || [],
-        difficulty_level: exercise.difficulty_level || "",
+        movement_pattern: exercise.movement_pattern || "",
         video_url: exercise.video_url || "",
         image_url: exercise.image_url || "",
         instructions: exercise.instructions || [],
@@ -93,12 +93,6 @@ export default function EditExerciseLibraryModal({
     { key: "powerlifting", label: "Powerlifting" },
     { key: "bodyweight", label: "Peso Corporal" },
     { key: "other", label: "Otro" },
-  ];
-
-  const difficultyLevels = [
-    { key: "beginner", label: "Principiante" },
-    { key: "intermediate", label: "Intermedio" },
-    { key: "advanced", label: "Avanzado" },
   ];
 
   const handleImageSelect = async (
@@ -317,31 +311,21 @@ export default function EditExerciseLibraryModal({
                       <SelectItem key={cat.key}>{cat.label}</SelectItem>
                     ))}
                   </Select>
-                  <Select
-                    label="Nivel de Dificultad"
-                    placeholder="Selecciona el nivel"
-                    selectedKeys={
-                      formData.difficulty_level
-                        ? [formData.difficulty_level]
-                        : []
-                    }
+                  <Input
+                    label="Patrón de movimiento (Opcional)"
+                    placeholder="Ej: Sentadilla, Bisagra de cadera, Empuje horizontal"
                     startContent={
                       <Icon
                         className="text-gray-400"
-                        icon="solar:graph-linear"
+                        icon="solar:target-linear"
                         width={18}
                       />
                     }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setFormData({ ...formData, difficulty_level: value });
-                    }}
-                  >
-                    {difficultyLevels.map((level) => (
-                      <SelectItem key={level.key}>{level.label}</SelectItem>
-                    ))}
-                  </Select>
+                    value={formData.movement_pattern}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, movement_pattern: value })
+                    }
+                  />
                 </div>
               </div>
             </div>
@@ -459,8 +443,13 @@ export default function EditExerciseLibraryModal({
                   icon="solar:settings-bold"
                   width={18}
                 />
-                Parámetros de Entrenamiento por Defecto
+                Programación del ejercicio por defecto
               </h4>
+              <p className="text-xs text-gray-500 mb-3">
+                Estos valores se autocompletarán, al añadir el ejercicio a un
+                programa. Podrás modificarlos posteriormente según sea
+                necesario.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Series"

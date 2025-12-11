@@ -3,12 +3,12 @@
 import type {
   ClientProgram,
   Program,
+  ScheduledSession,
   Session,
   SessionExercise,
+  WorkoutExercise,
   WorkoutProgram,
   WorkoutSession,
-  WorkoutExercise,
-  ScheduledSession,
 } from "@/types/training";
 
 /**
@@ -161,6 +161,7 @@ export function transformToWorkoutProgram(
             tempo: se.metadata?.tempo || "",
             rest: se.metadata?.rest_description || "",
             trainingSystem: se.metadata?.training_system || "",
+            notes: se.notes || undefined,
             videoUrl: se.exercise?.video_url,
             id: se.id,
             exercise_id: se.exercise_id,
@@ -190,6 +191,7 @@ export function transformToWorkoutProgram(
     programId: program.id,
     name: program.name,
     type: (program.metadata?.type as any) || "Strength",
+    category: program.metadata?.category || "strength",
     division: program.metadata?.division || "Full Body",
     currentWeek: calculateCurrentWeek(
       clientProgram.start_date,
@@ -200,6 +202,7 @@ export function transformToWorkoutProgram(
     lastModified: clientProgram.updated_at,
     progress: clientProgram.progress_percentage,
     status: clientProgram.status === "active" ? "active" : "completed",
+    notes: clientProgram.notes,
     sessions: workoutSessions,
   };
 }

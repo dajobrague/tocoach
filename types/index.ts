@@ -5,19 +5,18 @@ export type IconSvgProps = SVGProps<SVGSVGElement> & {
 };
 
 // =====================================================
-// NEAT (Non-Exercise Activity Thermogenesis) Goals
+// NEAT (Non-Exercise Activity Thermogenesis) Cards
 // =====================================================
 
-export interface ClientNeatGoal {
+export interface ClientNeatCard {
   id: string;
   client_id: string;
   tenant_host: string;
-  weekday: number; // 0-6 (0=Sunday, 1=Monday, ..., 6=Saturday)
-  day_type: "active" | "break";
+  label: string; // Free text name (e.g., "Día de entrenamiento", "Lunes", "Sesión de ciclismo")
+  card_order: number;
   steps_goal: number | null;
-  active_minutes_goal: number | null;
-  distance_goal_km: number | null;
   notes: string | null;
+  weekdays?: number[]; // Optional array [0,1,2,3,4,5,6]
   created_at: string;
   updated_at: string;
 }

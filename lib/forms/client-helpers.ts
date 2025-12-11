@@ -32,16 +32,17 @@ export function getWeekEndDate(date: Date = new Date()): Date {
  * Check if weekly check-in was submitted this week
  */
 export function isWeeklyCheckInDue(responses: FormResponse[]): boolean {
-  const weekStart = getWeekStartDate();
-  const weekEnd = getWeekEndDate();
+  const now = new Date();
+  const weekStart = getWeekStartDate(now);
 
-  // Check if there's a response from this week
+  // Check if there's a response from this week (Monday onwards)
   const thisWeekResponse = responses.find((r) => {
     const responseDate = new Date(r.response_date);
 
-    return responseDate >= weekStart && responseDate <= weekEnd;
+    return responseDate >= weekStart;
   });
 
+  // Return true if not submitted yet (show entire week until submitted)
   return !thisWeekResponse;
 }
 
@@ -93,15 +94,11 @@ export function isMonday(date: Date = new Date()): boolean {
 
 /**
  * Check if weekly form should be displayed
- * Shows on Monday OR if still pending and not expired
+ * Shows ONLY on Monday or Tuesday (grace period), and only if not submitted
  */
 export function shouldShowWeeklyCheckIn(responses: FormResponse[]): boolean {
-  const today = new Date();
-  const isWeeklyDue = isWeeklyCheckInDue(responses);
-  const isExpired = isFormExpired("checkins");
-
-  // Show if due and not expired
-  return isWeeklyDue && !isExpired;
+  // Simply check if it's due (which now includes Monday/Tuesday check)
+  return isWeeklyCheckInDue(responses);
 }
 
 /**

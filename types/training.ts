@@ -95,7 +95,7 @@ export interface Exercise {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
-  difficulty_level?: "beginner" | "intermediate" | "advanced";
+  movement_pattern?: string;
   video_url?: string;
   image_url?: string;
   instructions?: string[];
@@ -205,6 +205,7 @@ export interface WorkoutProgram {
   id: string;
   name: string;
   type: "Strength" | "HIIT" | "Functional" | "Hypertrophy" | string;
+  category?: "strength" | "cardio";
   division: string;
   currentWeek: string; // "Semana 20"
   sessionsPerWeek: number;
@@ -212,6 +213,7 @@ export interface WorkoutProgram {
   lastModified: string;
   progress: number;
   status: "active" | "completed";
+  notes?: string;
   sessions: WorkoutSession[];
   // Database IDs
   clientProgramId: string;
@@ -278,7 +280,7 @@ export interface CreateExerciseLibraryRequest {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
-  difficulty_level?: "beginner" | "intermediate" | "advanced";
+  movement_pattern?: string;
   video_url?: string;
   image_url?: string;
   instructions?: string[];
@@ -306,7 +308,7 @@ export interface UpdateExerciseLibraryRequest {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
-  difficulty_level?: "beginner" | "intermediate" | "advanced";
+  movement_pattern?: string;
   video_url?: string;
   image_url?: string;
   instructions?: string[];

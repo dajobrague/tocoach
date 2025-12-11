@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// GET - Fetch all NEAT goals for a client
+// GET - Fetch all NEAT cards for a client
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -23,30 +23,44 @@ export async function GET(
 
     const { clientId } = await params;
 
-    console.log("[NEAT API] Fetching NEAT goals for client:", clientId);
+    console.log("[NEAT API] Fetching NEAT cards for client:", clientId);
 
-    // Fetch NEAT goals for the client
-    const { data: goals, error } = await supabase
-      .from("client_neat_goals")
+    // Get tenant_host for the trainer
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    // Fetch NEAT cards for the client
+    const { data: cards, error } = await supabase
+      .from("client_neat_cards")
       .select("*")
       .eq("client_id", clientId)
-      .eq("tenant_host", session.tenant_host)
-      .order("weekday", { ascending: true });
+      .eq("tenant_host", tenant.host)
+      .order("card_order", { ascending: true });
 
     if (error) {
-      console.error("[NEAT API] Error fetching NEAT goals:", error);
+      console.error("[NEAT API] Error fetching NEAT cards:", error);
 
       return NextResponse.json(
-        { success: false, error: "Error al obtener objetivos NEAT" },
+        { success: false, error: "Error al obtener tarjetas NEAT" },
         { status: 500 }
       );
     }
 
-    console.log("[NEAT API] Found", goals?.length || 0, "NEAT goals");
+    console.log("[NEAT API] Found", cards?.length || 0, "NEAT cards");
 
     return NextResponse.json({
       success: true,
-      data: goals || [],
+      data: cards || [],
     });
   } catch (error) {
     console.error("[NEAT API] Unexpected error:", error);
@@ -58,7 +72,7 @@ export async function GET(
   }
 }
 
-// POST - Create or update NEAT goals for specific weekdays
+// POST - Create a new NEAT card
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -79,34 +93,31 @@ export async function POST(
     const { clientId } = await params;
     const body = await request.json();
 
-    console.log(
-      "[NEAT API] Creating/updating NEAT goals for client:",
-      clientId
-    );
+    console.log("[NEAT API] Creating NEAT card for client:", clientId);
+
+    // Get tenant_host for the trainer
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
 
     // Validate input
-    if (!body.weekday && body.weekday !== 0) {
+    if (!body.label || body.label.trim() === "") {
       return NextResponse.json(
-        { success: false, error: "weekday es requerido" },
+        { success: false, error: "label es requerido" },
         { status: 400 }
       );
     }
 
-    if (body.weekday < 0 || body.weekday > 6) {
-      return NextResponse.json(
-        { success: false, error: "weekday debe estar entre 0 y 6" },
-        { status: 400 }
-      );
-    }
-
-    if (body.day_type && !["active", "break"].includes(body.day_type)) {
-      return NextResponse.json(
-        { success: false, error: "day_type debe ser 'active' o 'break'" },
-        { status: 400 }
-      );
-    }
-
-    // Validate numeric goals (must be positive if provided)
+    // Validate steps_goal (must be positive if provided)
     if (
       body.steps_goal !== null &&
       body.steps_goal !== undefined &&
@@ -118,67 +129,52 @@ export async function POST(
       );
     }
 
-    if (
-      body.active_minutes_goal !== null &&
-      body.active_minutes_goal !== undefined &&
-      body.active_minutes_goal < 0
-    ) {
-      return NextResponse.json(
-        { success: false, error: "active_minutes_goal debe ser positivo" },
-        { status: 400 }
-      );
-    }
+    // Get current max card_order for this client
+    const { data: existingCards } = await supabase
+      .from("client_neat_cards")
+      .select("card_order")
+      .eq("client_id", clientId)
+      .eq("tenant_host", tenant.host)
+      .order("card_order", { ascending: false })
+      .limit(1);
 
-    if (
-      body.distance_goal_km !== null &&
-      body.distance_goal_km !== undefined &&
-      body.distance_goal_km < 0
-    ) {
-      return NextResponse.json(
-        { success: false, error: "distance_goal_km debe ser positivo" },
-        { status: 400 }
-      );
-    }
+    const nextOrder =
+      existingCards && existingCards.length > 0
+        ? existingCards[0].card_order + 1
+        : 0;
 
-    // Prepare data for upsert
-    const goalData = {
+    // Prepare data for insert
+    const cardData = {
       client_id: parseInt(clientId),
-      tenant_host: session.tenant_host,
-      weekday: body.weekday,
-      day_type: body.day_type || "active",
+      tenant_host: tenant.host,
+      label: body.label.trim(),
+      card_order: nextOrder,
       steps_goal: body.steps_goal !== undefined ? body.steps_goal : null,
-      active_minutes_goal:
-        body.active_minutes_goal !== undefined
-          ? body.active_minutes_goal
-          : null,
-      distance_goal_km:
-        body.distance_goal_km !== undefined ? body.distance_goal_km : null,
       notes: body.notes || null,
+      weekdays: body.weekdays || [],
     };
 
-    // Use upsert to create or update
-    const { data: goal, error } = await supabase
-      .from("client_neat_goals")
-      .upsert(goalData, {
-        onConflict: "client_id,tenant_host,weekday",
-      })
+    // Insert the card
+    const { data: card, error } = await supabase
+      .from("client_neat_cards")
+      .insert(cardData)
       .select()
       .single();
 
     if (error) {
-      console.error("[NEAT API] Error creating/updating NEAT goal:", error);
+      console.error("[NEAT API] Error creating NEAT card:", error);
 
       return NextResponse.json(
-        { success: false, error: "Error al guardar objetivo NEAT" },
+        { success: false, error: "Error al guardar tarjeta NEAT" },
         { status: 500 }
       );
     }
 
-    console.log("[NEAT API] Successfully created/updated NEAT goal");
+    console.log("[NEAT API] Successfully created NEAT card");
 
     return NextResponse.json({
       success: true,
-      data: goal,
+      data: card,
     });
   } catch (error) {
     console.error("[NEAT API] Unexpected error:", error);

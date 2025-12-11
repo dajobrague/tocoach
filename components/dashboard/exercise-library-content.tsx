@@ -21,11 +21,7 @@ import { useEffect, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
-import {
-  getCategoryLabel,
-  getDifficultyLabel,
-  formatRestTime,
-} from "@/lib/utils/exercise-utils";
+import { formatRestTime, getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 export default function ExerciseLibraryContent() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -326,13 +322,13 @@ export default function ExerciseLibraryContent() {
                         >
                           {getCategoryLabel(exercise.category)}
                         </Chip>
-                        {exercise.difficulty_level && (
+                        {exercise.movement_pattern && (
                           <Chip
                             className="bg-purple-100 text-purple-700 border border-purple-200"
                             size="sm"
                             variant="flat"
                           >
-                            {getDifficultyLabel(exercise.difficulty_level)}
+                            Patrón: {exercise.movement_pattern}
                           </Chip>
                         )}
                       </div>
@@ -727,13 +723,13 @@ export default function ExerciseLibraryContent() {
                     >
                       {getCategoryLabel(viewingExercise.category)}
                     </Chip>
-                    {viewingExercise.difficulty_level && (
+                    {viewingExercise.movement_pattern && (
                       <Chip
                         className="bg-purple-100 text-purple-700 border border-purple-200"
                         size="sm"
                         variant="flat"
                       >
-                        {getDifficultyLabel(viewingExercise.difficulty_level)}
+                        Patrón: {viewingExercise.movement_pattern}
                       </Chip>
                     )}
                   </div>
