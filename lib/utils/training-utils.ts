@@ -142,7 +142,7 @@ export function transformToWorkoutProgram(
             ...(se.metadata?.cardio_type
               ? { cardioType: se.metadata.cardio_type }
               : {}),
-            ...(se.notes ? { notes: se.notes } : {}),
+            notes: se.notes || undefined,
             ...(se.exercise?.video_url
               ? { videoUrl: se.exercise.video_url }
               : {}),

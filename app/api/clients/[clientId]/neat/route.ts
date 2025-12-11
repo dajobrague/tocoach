@@ -139,7 +139,7 @@ export async function POST(
       .limit(1);
 
     const nextOrder =
-      existingCards && existingCards.length > 0
+      existingCards && existingCards.length > 0 && existingCards[0]
         ? existingCards[0].card_order + 1
         : 0;
 

@@ -187,7 +187,7 @@ export interface WorkoutExercise {
     | "Elliptical"
     | "Stairmaster"
     | string;
-  notes?: string; // Trainer notes for the exercise
+  notes?: string | undefined; // Trainer notes for the exercise
   // Database IDs for updates
   id?: string;
   exercise_id?: string;
@@ -213,7 +213,7 @@ export interface WorkoutProgram {
   lastModified: string;
   progress: number;
   status: "active" | "completed";
-  notes?: string;
+  notes?: string | undefined;
   sessions: WorkoutSession[];
   // Database IDs
   clientProgramId: string;

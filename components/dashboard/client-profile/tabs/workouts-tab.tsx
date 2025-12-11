@@ -214,6 +214,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         trainingSystem: exercise.default_training_system || "",
         videoUrl: exercise.video_url || "",
         exerciseId: exercise.id,
+        notes: "",
       });
     }
   };
