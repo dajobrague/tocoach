@@ -1,10 +1,6 @@
 // Trainer registration API
 import { NextRequest, NextResponse } from "next/server";
 
-import {
-  markInvitationCodeUsed,
-  validateInvitationCode,
-} from "@/lib/auth/invitation";
 import { setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
@@ -13,10 +9,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { invitationCode, email, password, fullName } = body;
+    const { email, password, fullName } = body;
 
     // Validate required fields
-    if (!invitationCode || !email || !password || !fullName) {
+    if (!email || !password || !fullName) {
       return NextResponse.json(
         { error: "Todos los campos son obligatorios" },
         { status: 400 }
@@ -50,38 +46,33 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now().toString().slice(-4);
     const tempTenantHost = `${emailPrefix}${timestamp}.localhost`;
 
-    // Validate invitation code
-    let invitation;
-
-    try {
-      invitation = await validateInvitationCode(invitationCode);
-    } catch (error) {
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error ? error.message : "Invalid invitation code",
-        },
-        { status: 400 }
-      );
-    }
-
     // Create Supabase user using signUp
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
       password,
-      // Skip email verification for MVP
+      options: {
+        data: {
+          full_name: fullName.trim(),
+        },
+      },
     });
 
     if (authError || !authUser.user) {
       console.error("[Registration] Auth error:", authError);
 
-      return NextResponse.json(
-        {
-          error:
-            "Error al crear la cuenta. Es posible que el correo electrónico ya esté en uso.",
-        },
-        { status: 400 }
-      );
+      // Provide more specific error messages
+      let errorMessage = "Error al crear la cuenta.";
+
+      if (authError?.message?.includes("already registered")) {
+        errorMessage = "Este correo electrónico ya está registrado.";
+      } else if (authError?.message?.includes("invalid")) {
+        errorMessage =
+          "Dirección de correo electrónico no válida. Por favor, usa un correo real.";
+      } else if (authError?.message?.includes("password")) {
+        errorMessage = "La contraseña no cumple con los requisitos mínimos.";
+      }
+
+      return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
 
     // Create trainer record with temporary tenant host
@@ -90,7 +81,6 @@ export async function POST(request: NextRequest) {
       tenant_host: tempTenantHost,
       email: email.toLowerCase().trim(),
       full_name: fullName.trim(),
-      invitation_code_used: invitationCode.toUpperCase().trim(),
     });
 
     if (trainerError) {
@@ -145,14 +135,6 @@ export async function POST(request: NextRequest) {
     if (tenantError) {
       console.error("[Registration] Tenant creation error:", tenantError);
       // Don't fail registration if tenant creation fails - can be fixed later
-    }
-
-    // Mark invitation code as used
-    try {
-      await markInvitationCodeUsed(invitationCode, authUser.user.id);
-    } catch (error) {
-      console.warn("[Registration] Failed to mark invitation as used:", error);
-      // Don't fail registration for this
     }
 
     // Create session and set cookie

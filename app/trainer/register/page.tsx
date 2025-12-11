@@ -36,7 +36,6 @@ export default function RegisterPage() {
     }
 
     const data = {
-      invitationCode: formData.get("invitationCode") as string,
       email: formData.get("email") as string,
       password: password,
       fullName: formData.get("fullName") as string,
@@ -93,17 +92,6 @@ export default function RegisterPage() {
             validationBehavior="native"
             onSubmit={handleSubmit}
           >
-            <Input
-              isRequired
-              className="font-body"
-              description="Contacta con nosotros para obtener un código de invitación"
-              label="Código de invitación"
-              name="invitationCode"
-              placeholder="Introduce tu código de invitación"
-              type="text"
-              variant="bordered"
-            />
-
             <Input
               isRequired
               className="font-body"
