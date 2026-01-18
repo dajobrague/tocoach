@@ -7,6 +7,7 @@
 1. Go to Railway Dashboard → Your Project → Service
 2. Click on **Variables** tab
 3. Add these required variables:
+
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://ydqhndnvrkvycnkaghro.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
@@ -41,7 +42,7 @@
 
 2. **En Railway Dashboard:**
 
-   - Ve a https://railway.app/dashboard
+   - Ve a <https://railway.app/dashboard>
    - Click en "New Project"
    - Selecciona "Deploy from GitHub repo"
    - Elige tu repositorio `top_coach`
@@ -82,6 +83,7 @@
    ```
 
 5. **Configurar variables de entorno:**
+
    ```bash
    railway variables
    ```

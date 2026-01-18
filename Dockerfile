@@ -37,9 +37,9 @@ ENV NEXT_PUBLIC_APP_DOMAIN=${NEXT_PUBLIC_APP_DOMAIN}
 
 # Build the application with error handling
 RUN echo "Starting Next.js build..." && \
-    npm run build && \
-    echo "Build completed successfully" && \
-    ls -la .next/standalone || echo "Warning: standalone directory not found"
+  npm run build && \
+  echo "Build completed successfully" && \
+  ls -la .next/standalone || echo "Warning: standalone directory not found"
 
 # Production image, copy all the files and run next
 FROM base AS runner

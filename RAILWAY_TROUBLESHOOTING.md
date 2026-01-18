@@ -24,7 +24,7 @@ scheduling build on Metal builder "builder-xxxxx"
 
 Railway needs environment variables configured **BEFORE** the build starts, not after.
 
-### ✅ Solution:
+### ✅ Solution
 
 1. Go to your Railway project dashboard
 2. Click on your service
@@ -41,14 +41,14 @@ NEXT_PUBLIC_APP_DOMAIN=${{RAILWAY_PUBLIC_DOMAIN}}
 
 **Important:** Use `${{RAILWAY_PUBLIC_DOMAIN}}` for the domain - Railway will auto-populate this with your actual domain.
 
-4. After adding variables, trigger a new deployment:
+1. After adding variables, trigger a new deployment:
    - Click **Deploy** → **Redeploy**
 
 ---
 
 ## 2. Railway Service Configuration
 
-### ✅ Solution:
+### ✅ Solution
 
 Ensure your Railway service is properly configured:
 
@@ -66,7 +66,7 @@ Ensure your Railway service is properly configured:
 
 ## 3. Git Repository Issues
 
-### ✅ Solution:
+### ✅ Solution
 
 Make sure your latest changes are pushed to GitHub:
 
@@ -82,7 +82,7 @@ Railway only builds from committed code in your repository.
 
 ## 4. Docker Build Context Too Large
 
-### Check Build Context Size:
+### Check Build Context Size
 
 ```bash
 docker build --no-cache -t test-build .
@@ -90,7 +90,7 @@ docker build --no-cache -t test-build .
 
 If this takes too long locally, Railway will timeout.
 
-### ✅ Solution:
+### ✅ Solution
 
 Verify `.dockerignore` excludes unnecessary files:
 
@@ -105,7 +105,7 @@ node_modules
 
 ## 5. Standalone Build Configuration
 
-### Verify next.config.js:
+### Verify next.config.js
 
 The `output: 'standalone'` option must be present:
 
@@ -123,7 +123,7 @@ const nextConfig = {
 
 ## Step-by-Step Deployment Checklist
 
-### Before Deploying:
+### Before Deploying
 
 - [ ] All environment variables added to Railway
 - [ ] Latest code committed and pushed to GitHub
@@ -131,7 +131,7 @@ const nextConfig = {
 - [ ] `.dockerignore` properly configured
 - [ ] `railway.json` present in root directory
 
-### Deploy Process:
+### Deploy Process
 
 1. **Push changes to GitHub:**
 
@@ -197,6 +197,7 @@ If this works locally, it should work on Railway.
    - View full build logs
 
 2. **Railway CLI:**
+
    ```bash
    railway logs --deployment
    ```
@@ -226,8 +227,8 @@ If this works locally, it should work on Railway.
 
 If you're still stuck:
 
-1. **Check Railway Status:** https://status.railway.app/
-2. **Railway Discord:** https://discord.gg/railway
+1. **Check Railway Status:** <https://status.railway.app/>
+2. **Railway Discord:** <https://discord.gg/railway>
 3. **Review full build logs** in Railway dashboard
 4. **Test Docker build locally** first
 
