@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import React from "react";
 
-// Force recompile v2
+// Force recompile v3 - Fixed redirect loop with multi-guard system
 
 import ClientsContent from "@/components/dashboard/clients-content";
 import ExerciseLibraryContent from "@/components/dashboard/exercise-library-content";
@@ -26,36 +26,84 @@ export default function TrainerDashboard() {
   const router = useRouter();
   const [session, setSession] = React.useState<TrainerSession | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [setupJustCompleted, setSetupJustCompleted] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState(() => {
     // Try to get saved section from localStorage
     if (typeof window !== "undefined") {
+      // Check if coming from setup completion
+      const urlParams = new URLSearchParams(window.location.search);
+
+      if (urlParams.get("setup") === "completed") {
+        // Clear the setup section from localStorage
+        localStorage.removeItem("activeSection");
+        localStorage.setItem("activeSection", "metricas");
+
+        return "metricas";
+      }
+
       return localStorage.getItem("activeSection") || "metricas";
     }
 
     return "metricas";
   });
 
+  // Fetch session with optional cache busting
+  const fetchSession = React.useCallback(async (bustCache = false) => {
+    console.log("[TrainerDashboard] Fetching session, bustCache:", bustCache);
+    const url = bustCache
+      ? `/api/auth/session?_t=${Date.now()}`
+      : "/api/auth/session";
+
+    const res = await fetch(url, {
+      credentials: "same-origin",
+      cache: "no-store", // Force no caching
+    });
+
+    console.log("[TrainerDashboard] Session API response:", res.status);
+
+    const data = await res.json();
+
+    console.log("[TrainerDashboard] Session data:", {
+      hasSession: !!data.session,
+      onboardingCompleted: data.session?.onboarding_completed,
+    });
+
+    return data;
+  }, []);
+
+  // Initial session fetch + handle setup completion flag
   React.useEffect(() => {
     console.log("[TrainerDashboard] Component mounted, checking session...");
 
-    // Check session on client side - MUST include credentials to send cookies
-    fetch("/api/auth/session", { credentials: "same-origin" })
-      .then((res) => {
-        console.log("[TrainerDashboard] Session API response:", res.status);
+    // Check if just completed setup
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
 
-        return res.json();
-      })
-      .then((data) => {
-        console.log("[TrainerDashboard] Session data:", data);
-        console.log("[TrainerDashboard] data.session value:", data.session);
+      if (urlParams.get("setup") === "completed") {
         console.log(
-          "[TrainerDashboard] data.session type:",
-          typeof data.session
+          "[TrainerDashboard] Setup just completed - forcing fresh session"
         );
-        console.log("[TrainerDashboard] Has session?", !!data.session);
+        setSetupJustCompleted(true);
+        // Clear the URL parameter immediately
+        window.history.replaceState({}, "", "/trainer/dashboard");
+        // Ensure localStorage is clean
+        localStorage.removeItem("activeSection");
+        localStorage.setItem("activeSection", "metricas");
+      }
+    }
+
+    // Fetch session (with cache busting if just completed setup)
+    fetchSession(setupJustCompleted)
+      .then((data) => {
         if (data.session) {
           console.log("[TrainerDashboard] Session found, setting state");
           setSession(data.session);
+
+          // If setup just completed, force activeSection to metricas
+          if (setupJustCompleted) {
+            console.log("[TrainerDashboard] Forcing activeSection to metricas");
+            setActiveSection("metricas");
+          }
         } else {
           console.log(
             "[TrainerDashboard] No session, redirecting to /trainer/login"
@@ -70,7 +118,7 @@ export default function TrainerDashboard() {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [router]);
+  }, [router, fetchSession, setupJustCompleted]);
 
   const handleLogout = async () => {
     try {
@@ -82,6 +130,16 @@ export default function TrainerDashboard() {
   };
 
   const handleSectionChange = (key: string) => {
+    // GUARD: Prevent switching to setup if onboarding is completed
+    if (key === "setup" && session?.onboarding_completed) {
+      console.log(
+        "[Dashboard] BLOCKED: Cannot switch to setup - onboarding completed"
+      );
+
+      return;
+    }
+
+    console.log("[Dashboard] Switching section to:", key);
     setActiveSection(key);
     // Save to localStorage
     if (typeof window !== "undefined") {
@@ -89,35 +147,68 @@ export default function TrainerDashboard() {
     }
   };
 
-  // Restore active section on mount
+  // Restore active section on mount (with guards)
   React.useEffect(() => {
+    // Don't restore if setup just completed
+    if (setupJustCompleted) {
+      console.log(
+        "[TrainerDashboard] Skipping restoration - setup just completed"
+      );
+
+      return;
+    }
+
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("activeSection");
 
       if (saved) {
+        // Don't restore "setup" if onboarding is completed
+        if (saved === "setup" && session?.onboarding_completed) {
+          console.log(
+            "[TrainerDashboard] Prevented restoring 'setup' - onboarding completed"
+          );
+          localStorage.setItem("activeSection", "metricas");
+          setActiveSection("metricas");
+
+          return;
+        }
+
+        console.log("[TrainerDashboard] Restoring activeSection:", saved);
         setActiveSection(saved);
       }
     }
-  }, []);
+  }, [session, setupJustCompleted]);
 
   // Handle navigation for setup section
   React.useEffect(() => {
+    // Skip if setup just completed - already handled
+    if (setupJustCompleted) {
+      console.log(
+        "[TrainerDashboard] Skipping setup navigation - just completed"
+      );
+
+      return;
+    }
+
     if (activeSection === "setup" && !isLoading && session) {
-      // Only navigate if onboarding is not completed
-      if (!session.onboarding_completed) {
-        router.push("/trainer/dashboard/setup");
-      } else {
-        // If onboarding is completed but setup is selected, reset to metricas
+      // GUARD: If onboarding is completed, prevent navigation to setup
+      if (session.onboarding_completed) {
         console.log(
-          "[Dashboard] Onboarding completed, resetting activeSection to metricas"
+          "[Dashboard] BLOCKED: Onboarding completed, cannot access setup"
         );
         setActiveSection("metricas");
         if (typeof window !== "undefined") {
           localStorage.setItem("activeSection", "metricas");
         }
+
+        return;
       }
+
+      // Only navigate if onboarding is NOT completed
+      console.log("[Dashboard] Navigating to setup - onboarding not completed");
+      router.push("/trainer/dashboard/setup");
     }
-  }, [activeSection, isLoading, session, router]);
+  }, [activeSection, isLoading, session, router, setupJustCompleted]);
 
   if (isLoading) {
     return (

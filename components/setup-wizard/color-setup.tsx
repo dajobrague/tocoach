@@ -747,6 +747,27 @@ export default function ColorSetup() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Action Buttons */}
+      <div className="flex justify-between pt-6 border-t border-gray-200">
+        <Button
+          className="border-gray-300"
+          startContent={<Icon icon="solar:arrow-left-linear" />}
+          variant="bordered"
+          onPress={actions.prevStep}
+        >
+          Anterior
+        </Button>
+
+        <Button
+          color="primary"
+          endContent={<Icon icon="solar:arrow-right-linear" />}
+          size="lg"
+          onPress={actions.nextStep}
+        >
+          Siguiente: Logo
+        </Button>
+      </div>
     </div>
   );
 }

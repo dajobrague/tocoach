@@ -26,7 +26,7 @@ import {
 interface AddExerciseLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (exercise?: any) => void;
 }
 
 export default function AddExerciseLibraryModal({
@@ -179,7 +179,7 @@ export default function AddExerciseLibraryModal({
       const result = await response.json();
 
       if (result.success) {
-        onSuccess();
+        onSuccess(result.exercise);
         handleClose();
       } else {
         alert(`Error: ${result.error}`);

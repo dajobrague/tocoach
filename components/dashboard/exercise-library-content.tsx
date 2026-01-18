@@ -46,7 +46,12 @@ export default function ExerciseLibraryContent() {
         params.append("search", searchQuery);
       }
 
-      const response = await fetch(`/api/exercises?${params.toString()}`);
+      const response = await fetch(`/api/exercises?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      });
       const result = await response.json();
 
       if (result.success) {

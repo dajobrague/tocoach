@@ -9,12 +9,16 @@ interface ClientProfileHeaderProps {
   client: MockClient;
   onBack: () => void;
   onEdit?: () => void;
+  onUpdateStatus?: () => void;
+  onDelete?: () => void;
 }
 
 export default function ClientProfileHeader({
   client,
   onBack,
   onEdit,
+  onUpdateStatus,
+  onDelete,
 }: ClientProfileHeaderProps) {
   const getStatusColor = (
     status: string
@@ -54,19 +58,52 @@ export default function ClientProfileHeader({
             Volver a Clientes
           </Button>
 
-          {/* Edit Profile */}
-          {onEdit && (
-            <Button
-              className="text-white font-semibold"
-              color="primary"
-              size="sm"
-              startContent={<Icon icon="solar:pen-bold" width={18} />}
-              variant="solid"
-              onPress={onEdit}
-            >
-              Editar Perfil
-            </Button>
-          )}
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {/* Edit Profile */}
+            {onEdit && (
+              <Button
+                className="text-white font-semibold"
+                color="primary"
+                size="sm"
+                startContent={<Icon icon="solar:pen-bold" width={18} />}
+                variant="solid"
+                onPress={onEdit}
+              >
+                Editar Perfil
+              </Button>
+            )}
+
+            {/* Update Status Button */}
+            {onUpdateStatus && (
+              <Button
+                className="text-blue-600 border-blue-600"
+                color="primary"
+                size="sm"
+                startContent={<Icon icon="solar:refresh-bold" width={18} />}
+                variant="bordered"
+                onPress={onUpdateStatus}
+              >
+                Estado
+              </Button>
+            )}
+
+            {/* Delete Button */}
+            {onDelete && (
+              <Button
+                className="text-red-600 border-red-600"
+                color="danger"
+                size="sm"
+                startContent={
+                  <Icon icon="solar:trash-bin-trash-bold" width={18} />
+                }
+                variant="bordered"
+                onPress={onDelete}
+              >
+                Eliminar
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Client Info */}

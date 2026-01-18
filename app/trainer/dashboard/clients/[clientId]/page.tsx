@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 import ClientProfileHeader from "@/components/dashboard/client-profile/client-profile-header";
 import ClientProfileTabs from "@/components/dashboard/client-profile/client-profile-tabs";
+import DeleteClientModal from "@/components/dashboard/client-profile/delete-client-modal";
+import UpdateStatusModal from "@/components/dashboard/client-profile/update-status-modal";
 import EditClientModal from "@/components/dashboard/edit-client-modal";
 import { MockClient } from "@/lib/mock-data/client-profile-mock";
 
@@ -16,6 +18,8 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const fetchClientData = async () => {
     try {
@@ -52,6 +56,24 @@ export default function ClientProfilePage() {
   const handleEditSuccess = () => {
     // Refresh client data after successful edit
     fetchClientData();
+  };
+
+  const handleUpdateStatus = () => {
+    setIsStatusModalOpen(true);
+  };
+
+  const handleStatusUpdateSuccess = () => {
+    // Refresh client data after successful status update
+    fetchClientData();
+  };
+
+  const handleDelete = () => {
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteSuccess = () => {
+    // Navigate back to clients list after successful deletion
+    router.push("/trainer/dashboard?tab=clients");
   };
 
   if (loading) {
@@ -94,7 +116,9 @@ export default function ClientProfilePage() {
       <ClientProfileHeader
         client={client}
         onBack={handleBack}
+        onDelete={handleDelete}
         onEdit={handleEdit}
+        onUpdateStatus={handleUpdateStatus}
       />
       <ClientProfileTabs clientId={clientId} />
 
@@ -120,6 +144,29 @@ export default function ClientProfilePage() {
           isOpen={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
           onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {/* Update Status Modal */}
+      {client && (
+        <UpdateStatusModal
+          clientId={clientId}
+          clientName={client.name}
+          currentStatus={client.status}
+          isOpen={isStatusModalOpen}
+          onClose={() => setIsStatusModalOpen(false)}
+          onSuccess={handleStatusUpdateSuccess}
+        />
+      )}
+
+      {/* Delete Client Modal */}
+      {client && (
+        <DeleteClientModal
+          clientId={clientId}
+          clientName={client.name}
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onSuccess={handleDeleteSuccess}
         />
       )}
     </div>

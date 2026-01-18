@@ -86,3 +86,95 @@ export async function PUT(
     );
   }
 }
+
+// DELETE - Delete client and all related data
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  try {
+    // Get trainer session
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { clientId } = await params;
+    const supabase = createServerSupabaseClient();
+
+    console.log("[Delete Client API] Starting deletion for client:", clientId);
+
+    // Verify client belongs to trainer
+    const { data: existingClient } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .eq("tenant", session.trainer_id)
+      .single();
+
+    if (!existingClient) {
+      return NextResponse.json(
+        { error: "Client not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    console.log(
+      "[Delete Client API] Client verified, proceeding with deletion"
+    );
+
+    // The following tables have ON DELETE CASCADE set up in the database:
+    // - client_form_configs
+    // - form_responses
+    // - client_supplement_assignments
+    // - nutrition_plans (cascades to nutrition_days, nutrition_meals, nutrition_ingredients)
+    // - client_neat_cards
+    // - client_programs
+    // - scheduled_sessions
+    // - exercise_logs
+    // - client_measurements
+    // - messages
+    // - notifications
+    // - client_tracking tables (body_weight_logs, body_measurements, photos, check_ins, etc.)
+
+    // Delete the client - this will cascade to all related tables
+    const { error: deleteError } = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", clientId);
+
+    if (deleteError) {
+      console.error("[Delete Client API] Error deleting client:", deleteError);
+
+      return NextResponse.json(
+        { error: "Failed to delete client" },
+        { status: 500 }
+      );
+    }
+
+    console.log(
+      "[Delete Client API] Client and all related data deleted successfully"
+    );
+    console.log("[Delete Client API] Cascaded deletes handled by database:");
+    console.log("  - Form configurations and responses");
+    console.log("  - Supplement assignments");
+    console.log("  - Nutrition plans and all related data");
+    console.log("  - NEAT cards");
+    console.log("  - Training programs and sessions");
+    console.log("  - Exercise logs and measurements");
+    console.log("  - Messages and notifications");
+
+    return NextResponse.json({
+      success: true,
+      message: "Client and all related data deleted successfully",
+    });
+  } catch (error) {
+    console.error("[Delete Client API] Error:", error);
+
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

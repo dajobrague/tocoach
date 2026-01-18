@@ -19,18 +19,18 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { domain, themeJson } = body;
+    const { domain: slug, themeJson } = body; // Keep parameter name for backward compatibility
 
     console.log("[Save Configuration] Received data:", {
-      domain,
+      slug,
       trainerId: session.trainer_id,
       themeKeys: Object.keys(themeJson || {}),
     });
 
     // Validate required fields
-    if (!domain || typeof domain !== "string") {
+    if (!slug || typeof slug !== "string") {
       return NextResponse.json(
-        { success: false, error: "Dominio requerido" },
+        { success: false, error: "Slug requerido" },
         { status: 400 }
       );
     }
@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedDomain = domain.toLowerCase().trim();
+    const normalizedSlug = slug.toLowerCase().trim();
 
-    // Update trainer's tenant_host
+    // Update trainer's tenant_host (now stores slug)
     const { error: trainerError } = await supabase
       .from("trainers")
       .update({
-        tenant_host: normalizedDomain,
+        tenant_host: normalizedSlug,
         updated_at: new Date().toISOString(),
       })
       .eq("id", session.trainer_id);
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Check if tenant already exists for this trainer
     const { data: existingTenant, error: findError } = await supabase
       .from("tenants")
-      .select("host, theme_json")
+      .select("slug, theme_json")
       .eq("trainer_id", session.trainer_id)
       .maybeSingle();
 
@@ -106,14 +106,14 @@ export async function POST(request: NextRequest) {
       // Update existing tenant
       console.log(
         "[Save Configuration] Updating existing tenant:",
-        existingTenant.host
+        existingTenant.slug
       );
 
       const { data, error } = await supabase
         .from("tenants")
         .update({
-          host: normalizedDomain,
-          slug: normalizedDomain.split(".")[0],
+          slug: normalizedSlug,
+          host: normalizedSlug, // Keep host in sync with slug for now
           theme_json: themeJson,
           status: "active",
           onboarding_completed: true,
@@ -137,15 +137,15 @@ export async function POST(request: NextRequest) {
     } else {
       // Create new tenant
       console.log(
-        "[Save Configuration] Creating new tenant for domain:",
-        normalizedDomain
+        "[Save Configuration] Creating new tenant for slug:",
+        normalizedSlug
       );
 
       const { data, error } = await supabase
         .from("tenants")
         .insert({
-          host: normalizedDomain,
-          slug: normalizedDomain.split(".")[0],
+          slug: normalizedSlug,
+          host: normalizedSlug, // Keep host in sync with slug for now
           theme_slug: "custom",
           theme_json: themeJson,
           trainer_id: session.trainer_id,

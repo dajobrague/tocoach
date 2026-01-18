@@ -38,33 +38,57 @@ export async function GET(
       );
     }
 
-    // Get tenant_host for this client using helper function
-    const { data: tenantHost, error: tenantError } = await supabase
-      .rpc("get_tenant_host_for_client", { p_client_id: clientId })
+    // Get client to find their tenant (trainer UUID)
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("tenant")
+      .eq("id", clientId)
       .single();
 
-    if (tenantError || !tenantHost) {
+    if (clientError || !client) {
       console.error(
-        "[Forms Configs GET] Client/tenant not found:",
+        "[Forms Configs GET] Client not found:",
         clientId,
-        tenantError
+        clientError
       );
 
       return NextResponse.json(
-        { success: false, error: "Cliente o tenant no encontrado" },
+        { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
     }
 
+    // Get tenant_host using the trainer_id from client.tenant
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", client.tenant)
+      .single();
+
+    if (tenantError || !tenant) {
+      console.error(
+        "[Forms Configs GET] Tenant not found for trainer:",
+        client.tenant,
+        tenantError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const tenantHost = tenant.host;
+
     // Authorization check
     if (trainerSession) {
-      const { data: tenant } = await supabase
+      const { data: tenantData } = await supabase
         .from("tenants")
         .select("host, trainer_id")
         .eq("host", tenantHost)
         .single();
 
-      if (!tenant || tenant.trainer_id !== trainerSession.trainer_id) {
+      if (!tenantData || tenantData.trainer_id !== trainerSession.trainer_id) {
         return NextResponse.json(
           { success: false, error: "No autorizado para este cliente" },
           { status: 403 }
@@ -91,17 +115,17 @@ export async function GET(
       );
     }
 
-    // Use the database function to get or create config
-    const { data: config, error } = await supabase
-      .rpc("get_or_create_client_form_config", {
-        p_client_id: clientId,
-        p_form_type: formType,
-        p_tenant_host: tenantHost,
-      })
-      .single();
+    // Try to get existing config
+    const { data: existingConfig, error: fetchError } = await supabase
+      .from("client_form_configs")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("form_type", formType)
+      .eq("tenant_host", tenantHost)
+      .maybeSingle();
 
-    if (error) {
-      console.error("[Forms Configs] Error getting/creating config:", error);
+    if (fetchError) {
+      console.error("[Forms Configs] Error fetching config:", fetchError);
 
       return NextResponse.json(
         { success: false, error: "Error al obtener configuración" },
@@ -109,11 +133,20 @@ export async function GET(
       );
     }
 
+    let config = existingConfig;
+
+    // If config doesn't exist, return success with no config (frontend will handle this gracefully)
     if (!config) {
+      console.log(
+        "[Forms Configs] No config found for client:",
+        clientId,
+        formType
+      );
+
       return NextResponse.json(
         {
           success: false,
-          error: "No se pudo crear configuración (template no encontrada)",
+          error: "No config found",
         },
         { status: 404 }
       );
@@ -163,32 +196,56 @@ export async function PUT(
       );
     }
 
-    // Get tenant_host for this client
-    const { data: tenantHost, error: tenantError } = await supabase
-      .rpc("get_tenant_host_for_client", { p_client_id: clientId })
+    // Get client to find their tenant (trainer UUID)
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("tenant")
+      .eq("id", clientId)
       .single();
 
-    if (tenantError || !tenantHost) {
+    if (clientError || !client) {
       console.error(
-        "[Forms Configs PUT] Client/tenant not found:",
+        "[Forms Configs PUT] Client not found:",
         clientId,
-        tenantError
+        clientError
       );
 
       return NextResponse.json(
-        { success: false, error: "Cliente o tenant no encontrado" },
+        { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
     }
 
+    // Get tenant_host using the trainer_id from client.tenant
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", client.tenant)
+      .single();
+
+    if (tenantError || !tenant) {
+      console.error(
+        "[Forms Configs PUT] Tenant not found for trainer:",
+        client.tenant,
+        tenantError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const tenantHost = tenant.host;
+
     // Verify this tenant belongs to the logged-in trainer
-    const { data: tenant } = await supabase
+    const { data: tenantData } = await supabase
       .from("tenants")
       .select("host, trainer_id")
       .eq("host", tenantHost)
       .single();
 
-    if (!tenant || tenant.trainer_id !== session.trainer_id) {
+    if (!tenantData || tenantData.trainer_id !== session.trainer_id) {
       return NextResponse.json(
         { success: false, error: "No autorizado para este cliente" },
         { status: 403 }

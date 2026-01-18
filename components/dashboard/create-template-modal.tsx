@@ -10,8 +10,6 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Select,
-  SelectItem,
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -214,7 +212,7 @@ export default function CreateTemplateModal({
                         isPressable
                         className={`border-2 transition-all cursor-pointer ${
                           formData.category === "strength"
-                            ? "border-primary bg-primary-50"
+                            ? "border-primary bg-primary"
                             : "border-gray-200 hover:border-primary"
                         }`}
                         onPress={() =>
@@ -225,7 +223,7 @@ export default function CreateTemplateModal({
                           <Icon
                             className={`mx-auto mb-2 ${
                               formData.category === "strength"
-                                ? "text-primary"
+                                ? "text-white"
                                 : "text-gray-600"
                             }`}
                             icon="solar:dumbbell-bold"
@@ -234,7 +232,7 @@ export default function CreateTemplateModal({
                           <p
                             className={`font-semibold ${
                               formData.category === "strength"
-                                ? "text-primary"
+                                ? "text-white"
                                 : "text-gray-700"
                             }`}
                           >
@@ -247,7 +245,7 @@ export default function CreateTemplateModal({
                         isPressable
                         className={`border-2 transition-all cursor-pointer ${
                           formData.category === "cardio"
-                            ? "border-warning bg-warning-50"
+                            ? "border-warning bg-warning"
                             : "border-gray-200 hover:border-warning"
                         }`}
                         onPress={() =>
@@ -258,7 +256,7 @@ export default function CreateTemplateModal({
                           <Icon
                             className={`mx-auto mb-2 ${
                               formData.category === "cardio"
-                                ? "text-warning"
+                                ? "text-white"
                                 : "text-gray-600"
                             }`}
                             icon="solar:heart-pulse-bold"
@@ -267,7 +265,7 @@ export default function CreateTemplateModal({
                           <p
                             className={`font-semibold ${
                               formData.category === "cardio"
-                                ? "text-warning"
+                                ? "text-white"
                                 : "text-gray-700"
                             }`}
                           >
@@ -280,67 +278,38 @@ export default function CreateTemplateModal({
 
                   {formData.category === "strength" && (
                     <>
-                      <Select
+                      <Input
                         isRequired
                         label="Tipo de Programa"
-                        placeholder="Selecciona el tipo"
-                        selectedKeys={formData.type ? [formData.type] : []}
-                        onSelectionChange={(keys) => {
-                          const type = Array.from(keys)[0] as string;
-
-                          setFormData({ ...formData, type });
-                        }}
-                      >
-                        <SelectItem key="Strength">Strength</SelectItem>
-                        <SelectItem key="Hypertrophy">Hypertrophy</SelectItem>
-                        <SelectItem key="HIIT">HIIT</SelectItem>
-                        <SelectItem key="Functional">Functional</SelectItem>
-                        <SelectItem key="Endurance">Endurance</SelectItem>
-                        <SelectItem key="Fat Loss">Fat Loss</SelectItem>
-                        <SelectItem key="Mixed">Mixed</SelectItem>
-                      </Select>
-
-                      <Select
-                        label="División (Opcional)"
-                        placeholder="Ej: Full Body, Upper/Lower"
-                        selectedKeys={
-                          formData.division ? [formData.division] : []
+                        placeholder="Ej: Fuerza, Hipertrofia, HIIT, Funcional"
+                        value={formData.type}
+                        onChange={(e) =>
+                          setFormData({ ...formData, type: e.target.value })
                         }
-                        onSelectionChange={(keys) => {
-                          const division = Array.from(keys)[0] as string;
+                      />
 
-                          setFormData({ ...formData, division });
-                        }}
-                      >
-                        <SelectItem key="Full Body">Full Body</SelectItem>
-                        <SelectItem key="Upper/Lower">Upper/Lower</SelectItem>
-                        <SelectItem key="Push/Pull/Legs">
-                          Push/Pull/Legs
-                        </SelectItem>
-                        <SelectItem key="Bro Split">Bro Split</SelectItem>
-                        <SelectItem key="Custom">Custom</SelectItem>
-                      </Select>
+                      <Input
+                        label="División (Opcional)"
+                        placeholder="Ej: Cuerpo Completo, Torso/Pierna, Empuje/Tracción/Pierna"
+                        value={formData.division}
+                        onChange={(e) =>
+                          setFormData({ ...formData, division: e.target.value })
+                        }
+                      />
                     </>
                   )}
 
                   {formData.category === "cardio" && (
                     <>
-                      <Select
+                      <Input
                         isRequired
                         label="Tipo de Programa"
-                        placeholder="Selecciona el tipo"
-                        selectedKeys={formData.type ? [formData.type] : []}
-                        onSelectionChange={(keys) => {
-                          const type = Array.from(keys)[0] as string;
-
-                          setFormData({ ...formData, type });
-                        }}
-                      >
-                        <SelectItem key="HIIT">HIIT</SelectItem>
-                        <SelectItem key="Endurance">Endurance</SelectItem>
-                        <SelectItem key="Fat Loss">Fat Loss</SelectItem>
-                        <SelectItem key="Mixed">Mixed</SelectItem>
-                      </Select>
+                        placeholder="Ej: HIIT, Resistencia, Pérdida de Grasa, Mixto"
+                        value={formData.type}
+                        onChange={(e) =>
+                          setFormData({ ...formData, type: e.target.value })
+                        }
+                      />
 
                       <Input
                         label="Objetivo (Opcional)"

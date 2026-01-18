@@ -610,7 +610,7 @@ export function SetupWizardProvider({
   }, [state.currentStep]);
 
   const setStep = useCallback((step: number) => {
-    dispatch({ type: "SET_STEP", payload: Math.max(1, Math.min(3, step)) });
+    dispatch({ type: "SET_STEP", payload: Math.max(1, Math.min(5, step)) });
   }, []);
 
   const saveConfiguration = useCallback(async () => {
@@ -744,8 +744,15 @@ export function SetupWizardProvider({
 
       console.log("[Setup Wizard] Configuration saved successfully");
 
-      // Configuration saved successfully - redirect to dashboard
-      window.location.href = "/trainer/dashboard";
+      // Clear localStorage to prevent redirect loop
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("activeSection");
+        localStorage.setItem("activeSection", "metricas");
+      }
+
+      // Add a completion flag to prevent redirect loop
+      // The dashboard will see this and not redirect back to setup
+      window.location.href = "/trainer/dashboard?setup=completed";
     } catch (error) {
       console.error("[Setup Wizard] Save error:", error);
       dispatch({

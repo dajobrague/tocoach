@@ -1,8 +1,9 @@
 // TopCoach Service Worker
 // Handles app shell caching and offline functionality
+// Updated: Excluded API routes and dynamic pages from caching
 
-const CACHE_NAME = "topcoach-v1";
-const STATIC_CACHE_NAME = "topcoach-static-v1";
+const CACHE_NAME = "topcoach-v2";
+const STATIC_CACHE_NAME = "topcoach-static-v2";
 
 // App shell files to cache
 const STATIC_FILES = [
@@ -66,6 +67,21 @@ self.addEventListener("fetch", (event) => {
 
   // Skip chrome-extension and other non-http requests
   if (!event.request.url.startsWith("http")) {
+    return;
+  }
+
+  // IMPORTANT: Skip caching for API routes - always fetch fresh data
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Skip caching for dynamic pages that need fresh data
+  if (
+    event.request.url.includes("/trainer/dashboard") ||
+    event.request.url.includes("/_next/data/")
+  ) {
+    event.respondWith(fetch(event.request));
     return;
   }
 

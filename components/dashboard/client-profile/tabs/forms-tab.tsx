@@ -290,11 +290,15 @@ export default function FormsTab({ clientId }: FormsTabProps) {
           } else {
             setHabitQuestions(questions);
           }
-        } else {
-          console.error("Error al cargar configuración del formulario");
+        } else if (data.error !== "No config found") {
+          // Only log actual errors, not missing configs (which is normal for new clients)
+          console.debug(
+            "No form config found for this client (expected for new clients)"
+          );
         }
       } catch (error) {
-        console.error("Error fetching config:", error);
+        // Silently handle errors for missing configs (normal for new clients)
+        console.debug("Form config fetch:", error);
       } finally {
         setIsLoadingConfig(false);
       }
@@ -317,10 +321,13 @@ export default function FormsTab({ clientId }: FormsTabProps) {
           if (data.success) {
             setResponses(data.responses || []);
           } else {
-            console.error("Error al cargar respuestas");
+            // No responses yet is normal for new clients
+            setResponses([]);
           }
         } catch (error) {
-          console.error("Error fetching responses:", error);
+          // Silently handle errors for missing responses (normal for new clients)
+          console.debug("Form responses fetch:", error);
+          setResponses([]);
         } finally {
           setIsLoadingResponses(false);
         }

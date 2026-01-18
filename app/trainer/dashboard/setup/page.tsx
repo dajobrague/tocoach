@@ -5,10 +5,12 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import DesignSetup from "@/components/setup-wizard/design-setup";
+import ColorSetup from "@/components/setup-wizard/color-setup";
 import DomainSetup from "@/components/setup-wizard/domain-setup";
 import LivePreview from "@/components/setup-wizard/live-preview";
+import LogoSetup from "@/components/setup-wizard/logo-setup";
 import ReviewSetup from "@/components/setup-wizard/review-setup";
+import TypographySetup from "@/components/setup-wizard/typography-setup";
 import {
   SetupWizardProvider,
   useSetupWizard,
@@ -17,8 +19,10 @@ import {
 // Wizard steps configuration
 const STEPS = [
   { key: 1, title: "Dominio", description: "Dirección web" },
-  { key: 2, title: "Diseño", description: "Colores y marca" },
-  { key: 3, title: "Revisar", description: "Confirmar cambios" },
+  { key: 2, title: "Colores", description: "Paleta de marca" },
+  { key: 3, title: "Logo", description: "Identidad visual" },
+  { key: 4, title: "Tipografía", description: "Fuentes de texto" },
+  { key: 5, title: "Revisar", description: "Confirmar cambios" },
 ];
 
 function SetupWizardContent() {
@@ -30,8 +34,12 @@ function SetupWizardContent() {
       case 1:
         return <DomainSetup />;
       case 2:
-        return <DesignSetup />;
+        return <ColorSetup />;
       case 3:
+        return <LogoSetup />;
+      case 4:
+        return <TypographySetup />;
+      case 5:
         return <ReviewSetup />;
       default:
         return <DomainSetup />;
@@ -59,7 +67,15 @@ function SetupWizardContent() {
             <Button
               isIconOnly
               variant="light"
-              onPress={() => router.push("/trainer/dashboard")}
+              onPress={() => {
+                // Clear localStorage to prevent redirect loop
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("activeSection");
+                  localStorage.setItem("activeSection", "metricas");
+                }
+                // Use window.location with completion flag
+                window.location.href = "/trainer/dashboard?setup=completed";
+              }}
             >
               <Icon
                 className="text-gray-500 text-xl"
@@ -85,50 +101,100 @@ function SetupWizardContent() {
             />
           </div>
 
-          {/* Steps Navigation */}
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            {STEPS.map((step, index) => (
-              <div
-                key={step.key}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                  state.currentStep === step.key
-                    ? "bg-blue-50 border border-blue-200"
-                    : state.currentStep > step.key
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-gray-50 border border-gray-200"
-                }`}
-              >
+          {/* Steps Navigation - 2 rows for better layout */}
+          <div className="space-y-2 mt-4">
+            {/* First row: Domain, Colors, Logo */}
+            <div className="grid grid-cols-3 gap-2">
+              {STEPS.slice(0, 3).map((step) => (
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                  key={step.key}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
                     state.currentStep === step.key
-                      ? "bg-blue-600 text-white"
+                      ? "bg-blue-50 border border-blue-200"
                       : state.currentStep > step.key
-                        ? "bg-green-600 text-white"
-                        : "bg-gray-300 text-gray-600"
+                        ? "bg-green-50 border border-green-200"
+                        : "bg-gray-50 border border-gray-200"
                   }`}
                 >
-                  {state.currentStep > step.key ? (
-                    <Icon className="text-xs" icon="solar:check-linear" />
-                  ) : (
-                    step.key
-                  )}
-                </div>
-                <div className="text-left min-w-0 flex-1">
-                  <p
-                    className={`text-sm font-medium truncate ${
-                      state.currentStep >= step.key
-                        ? "text-black"
-                        : "text-gray-500"
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      state.currentStep === step.key
+                        ? "bg-blue-600 text-white"
+                        : state.currentStep > step.key
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-300 text-gray-600"
                     }`}
                   >
-                    {step.title}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {step.description}
-                  </p>
+                    {state.currentStep > step.key ? (
+                      <Icon className="text-xs" icon="solar:check-linear" />
+                    ) : (
+                      step.key
+                    )}
+                  </div>
+                  <div className="text-left min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-medium truncate ${
+                        state.currentStep >= step.key
+                          ? "text-black"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      {step.title}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {step.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            {/* Second row: Typography, Review (centered) */}
+            <div className="grid grid-cols-3 gap-2">
+              {STEPS.slice(3).map((step) => (
+                <div
+                  key={step.key}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                    state.currentStep === step.key
+                      ? "bg-blue-50 border border-blue-200"
+                      : state.currentStep > step.key
+                        ? "bg-green-50 border border-green-200"
+                        : "bg-gray-50 border border-gray-200"
+                  }`}
+                >
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      state.currentStep === step.key
+                        ? "bg-blue-600 text-white"
+                        : state.currentStep > step.key
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-300 text-gray-600"
+                    }`}
+                  >
+                    {state.currentStep > step.key ? (
+                      <Icon className="text-xs" icon="solar:check-linear" />
+                    ) : (
+                      step.key
+                    )}
+                  </div>
+                  <div className="text-left min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-medium truncate ${
+                        state.currentStep >= step.key
+                          ? "text-black"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      {step.title}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {/* Empty placeholder for visual balance */}
+              <div />
+            </div>
           </div>
         </div>
 
@@ -156,17 +222,22 @@ export default function SetupWizardPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // Check if we just came from a completed setup (prevent redirect loop)
+    const urlParams = new URLSearchParams(window.location.search);
+    const justCompleted = urlParams.get("completed") === "true";
+
     // Get trainer session first
     fetch("/api/auth/session", { credentials: "same-origin" })
       .then((res) => res.json())
       .then(async (sessionData) => {
         if (sessionData.session) {
-          // Check if onboarding is already completed
-          if (sessionData.session.onboarding_completed) {
+          // Check if onboarding is already completed (but skip if we just completed it)
+          if (sessionData.session.onboarding_completed && !justCompleted) {
             console.log(
               "[Setup Wizard] Onboarding already completed, redirecting to dashboard"
             );
-            router.push("/trainer/dashboard");
+            // Use window.location for hard redirect to ensure state is fresh
+            window.location.href = "/trainer/dashboard?setup=completed";
 
             return;
           }
@@ -216,16 +287,16 @@ export default function SetupWizardPage() {
   }
 
   const config = trainerSession.config;
-  const currentDomain =
-    config?.domain?.current ||
-    trainerSession.tenant_host ||
-    "temp-domain.localhost";
+  // Clean up any legacy .localhost suffix from the current slug
+  const rawSlug =
+    config?.domain?.current || trainerSession.tenant_host || "temp-slug";
+  const currentSlug = rawSlug.replace(/\.localhost$/, "");
   const isConfigured = config?.domain?.isConfigured || false;
 
   const initialData = {
     domain: {
-      current: currentDomain,
-      desired: currentDomain,
+      current: currentSlug,
+      desired: currentSlug,
       isAvailable: isConfigured ? true : null, // If already configured, mark as available
       isChecking: false,
       suggestions: [],

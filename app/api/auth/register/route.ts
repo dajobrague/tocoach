@@ -37,14 +37,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a temporary tenant host based on email
+    // Generate a temporary tenant slug based on email
     // This will be updated later during the setup process
     const emailPrefix = email
       .split("@")[0]
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
     const timestamp = Date.now().toString().slice(-4);
-    const tempTenantHost = `${emailPrefix}${timestamp}.localhost`;
+    const tempTenantSlug = `${emailPrefix}${timestamp}`;
 
     // Create Supabase user using signUp
     const { data: authUser, error: authError } = await supabase.auth.signUp({
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Create trainer record with temporary tenant host
     const { error: trainerError } = await supabase.from("trainers").insert({
       id: authUser.user.id,
-      tenant_host: tempTenantHost,
+      tenant_host: tempTenantSlug,
       email: email.toLowerCase().trim(),
       full_name: fullName.trim(),
     });
@@ -100,8 +100,8 @@ export async function POST(request: NextRequest) {
     // Create temporary tenant record (will be updated during setup)
     const { error: tenantError } = await supabase.from("tenants").upsert(
       {
-        host: tempTenantHost,
-        slug: tempTenantHost.split(".")[0], // Extract subdomain part
+        slug: tempTenantSlug,
+        host: tempTenantSlug, // Keep host in sync with slug for now
         theme_slug: "default", // Default theme, can be customized later
         status: "inactive", // Inactive until setup is completed
         trainer_id: authUser.user.id,
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
           id: authUser.user.id,
           email: email.toLowerCase().trim(),
           fullName: fullName.trim(),
-          tenantHost: tempTenantHost,
+          tenantHost: tempTenantSlug,
         },
       },
       { status: 201 }
@@ -154,13 +154,13 @@ export async function POST(request: NextRequest) {
     await setSessionCookie(
       response,
       authUser.user.id,
-      tempTenantHost,
+      tempTenantSlug,
       email.toLowerCase().trim(),
       fullName.trim()
     );
 
     console.log(
-      `[Registration] Successfully created trainer: ${email} with temporary tenant: ${tempTenantHost}`
+      `[Registration] Successfully created trainer: ${email} with temporary tenant slug: ${tempTenantSlug}`
     );
 
     return response;

@@ -115,7 +115,7 @@ export async function checkTenantHostAvailability(
 }
 
 /**
- * Get available tenant host suggestions
+ * Get available tenant slug suggestions
  */
 export function generateTenantHostSuggestions(baseName: string): string[] {
   const sanitized = baseName
@@ -124,21 +124,21 @@ export function generateTenantHostSuggestions(baseName: string): string[] {
     .substring(0, 20);
 
   return [
-    `${sanitized}.localhost`,
-    `${sanitized}-coach.localhost`,
-    `${sanitized}-fitness.localhost`,
-    `coach-${sanitized}.localhost`,
-    `${sanitized}123.localhost`,
+    `${sanitized}`,
+    `${sanitized}-coach`,
+    `${sanitized}-fitness`,
+    `coach-${sanitized}`,
+    `${sanitized}123`,
   ];
 }
 
 /**
- * Validate tenant host format
+ * Validate tenant slug format
  */
 export function validateTenantHostFormat(tenantHost: string): boolean {
-  // For localhost development, allow .localhost domains
-  // In production, this would validate real domains
-  const pattern = /^[a-z0-9][a-z0-9-]*[a-z0-9]\.localhost$/;
+  // Slug validation: lowercase letters, numbers, hyphens only
+  // Must start and end with alphanumeric, 3-30 characters
+  const pattern = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
   return pattern.test(tenantHost.toLowerCase().trim());
 }

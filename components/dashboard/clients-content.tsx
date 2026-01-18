@@ -75,96 +75,83 @@ export default function ClientsContent() {
     try {
       console.log("[ClientsContent] Fetching clients...");
 
-      // First, test the connection
-      const testResponse = await fetch("/api/clients/test");
-      const testData = await testResponse.json();
+      // Use the proper list API that filters by tenant
+      const listResponse = await fetch("/api/clients/list");
 
-      console.log("[ClientsContent] Test response:", testData);
-
-      if (!testData.success) {
-        console.error("[ClientsContent] Test failed:", testData);
-        alert(
-          `Error de conexión: ${testData.error}\nDetalles: ${testData.details || "N/A"}`
+      if (!listResponse.ok) {
+        console.error(
+          "[ClientsContent] API request failed with status:",
+          listResponse.status
         );
+        throw new Error(
+          `Error ${listResponse.status}: ${listResponse.statusText}`
+        );
+      }
 
-        return;
+      const listData = await listResponse.json();
+
+      console.log("[ClientsContent] List response:", listData);
+
+      if (!listData.success) {
+        console.error("[ClientsContent] List failed:", listData);
+        throw new Error(listData.error || "Error al cargar clientes");
       }
 
       console.log(
-        "[ClientsContent] Test successful, total clients:",
-        testData.totalClients
+        "[ClientsContent] Successfully loaded clients:",
+        listData.total
       );
 
-      // If test is successful, use the test data directly for now
-      if (testData.clients && testData.clients.length > 0) {
-        // Transform the data to match our interface
-        const transformedClients = testData.clients.map((client: any) => ({
-          id: client.id,
-          name: `${client.name} ${client.last_name}`,
-          firstName: client.name,
-          lastName: client.last_name,
-          nickName: client.nick_name,
-          email: client.email,
-          phone: client.phone,
-          status: client.status,
-          profileImage: client.profile_picture_url,
-          joinedDate: client.sign_up_date,
-          occupation: client.occupation,
-          dob: client.dob,
-          location: {
-            city: client.city,
-            state: client.state,
-            country: client.country,
-            zip: client.zip,
-          },
-          nationalId: client.national_id,
-          lastLogin: null,
-        }));
+      // Use the already transformed clients from the list API
+      const transformedClients = listData.clients || [];
 
-        console.log(
-          "[ClientsContent] Transformed clients:",
-          transformedClients
-        );
+      console.log(
+        "[ClientsContent] Clients loaded:",
+        transformedClients.length
+      );
 
-        // Store all clients
-        setClients(transformedClients);
+      // Store all clients
+      setClients(transformedClients);
 
-        // Apply filters and search
-        applyFiltersAndSearch(transformedClients);
+      // Apply filters and search
+      applyFiltersAndSearch(transformedClients);
 
-        // Calculate stats
-        const now = new Date();
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      // Calculate stats
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        setStats({
-          total: transformedClients.length,
-          active: transformedClients.filter(
-            (c: Client) => c.status === "Activo"
-          ).length,
-          newThisWeek: transformedClients.filter(
-            (c: Client) => new Date(c.joinedDate) >= weekAgo
-          ).length,
-          pendingCheckins: transformedClients.filter(
-            (c: Client) => c.status === "Programación Inicial Pendiente"
-          ).length,
-        });
+      setStats({
+        total: transformedClients.length,
+        active: transformedClients.filter((c: Client) => c.status === "Activo")
+          .length,
+        newThisWeek: transformedClients.filter(
+          (c: Client) => new Date(c.joinedDate) >= weekAgo
+        ).length,
+        pendingCheckins: transformedClients.filter(
+          (c: Client) => c.status === "Programación Inicial Pendiente"
+        ).length,
+      });
 
-        console.log("[ClientsContent] Stats calculated:", {
-          total: transformedClients.length,
-          active: transformedClients.filter(
-            (c: Client) => c.status === "Activo"
-          ).length,
-        });
-      } else {
-        console.log("[ClientsContent] No clients found in test response");
-        setClients([]);
-        setFilteredClients([]);
-      }
+      console.log("[ClientsContent] Stats calculated:", {
+        total: transformedClients.length,
+        active: transformedClients.filter((c: Client) => c.status === "Activo")
+          .length,
+      });
     } catch (error) {
       console.error("[ClientsContent] Error fetching clients:", error);
+      // Only show alert for actual errors, not for empty results
       alert(
         `Error al cargar clientes: ${error instanceof Error ? error.message : "Error desconocido"}`
       );
+      // Set empty state on error
+      setClients([]);
+      setFilteredClients([]);
+      setStats({
+        total: 0,
+        active: 0,
+        newThisWeek: 0,
+        pendingCheckins: 0,
+      });
     } finally {
       setIsLoading(false);
     }

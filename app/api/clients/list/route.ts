@@ -3,11 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
+// API endpoint to list clients filtered by trainer's tenant
 export async function GET(request: NextRequest) {
+  console.log("[Clients List API] Route handler called!");
+
   const supabase = createSupabaseClient();
 
   try {
     const session = await getTrainerSession();
+
+    console.log("[Clients List API] Session:", session ? "found" : "not found");
 
     if (!session) {
       return NextResponse.json(
@@ -21,22 +26,16 @@ export async function GET(request: NextRequest) {
     const filter = searchParams.get("filter") || "all"; // all, active, checkins, plans
     const search = searchParams.get("search") || "";
 
-    // Get tenant ID from session
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("trainer_id", session.trainer_id)
-      .single();
+    console.log(
+      "[Clients List API] Fetching clients for trainer:",
+      session.trainer_id
+    );
 
-    if (!tenant) {
-      return NextResponse.json(
-        { success: false, error: "Tenant no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    // Get clients from the actual table structure
-    let query = supabase.from("clients").select("*").eq("tenant", tenant.id);
+    // Get clients directly by trainer_id (clients.tenant contains the trainer UUID)
+    let query = supabase
+      .from("clients")
+      .select("*")
+      .eq("tenant", session.trainer_id);
 
     // Apply filters
     if (filter === "active") {
@@ -45,6 +44,11 @@ export async function GET(request: NextRequest) {
 
     const { data: clients, error } = await query.order("sign_up_date", {
       ascending: false,
+    });
+
+    console.log("[Clients List API] Query result:", {
+      clientsCount: clients?.length,
+      error,
     });
 
     if (error) {
@@ -99,6 +103,12 @@ export async function GET(request: NextRequest) {
           client.nickName?.toLowerCase().includes(searchLower)
       );
     }
+
+    console.log(
+      "[Clients List API] Returning",
+      filteredClients.length,
+      "clients"
+    );
 
     return NextResponse.json({
       success: true,

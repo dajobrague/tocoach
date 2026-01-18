@@ -4,6 +4,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
+/**
+ * Clean up legacy .localhost suffix from tenant host values
+ */
+function cleanupLegacyDomain(domain: string | undefined | null): string {
+  if (!domain) return "temp-slug";
+
+  // Remove .localhost suffix if present (legacy format)
+  return domain.replace(/\.localhost$/, "");
+}
+
 export async function GET(request: NextRequest) {
   const supabase = createSupabaseClient();
 
@@ -18,7 +28,7 @@ export async function GET(request: NextRequest) {
     // Get tenant configuration directly using trainer_id (which is the auth user id)
     const { data: tenantDataArray, error: tenantError } = await supabase
       .from("tenants")
-      .select("host, theme_json, status")
+      .select("slug, theme_json, status")
       .eq("trainer_id", session.trainer_id);
 
     const tenantData =
@@ -36,11 +46,10 @@ export async function GET(request: NextRequest) {
         : null;
 
     // Use tenant data first, then session data, then trainer data as fallback
-    const currentDomain =
-      tenantData?.host ||
-      session.tenant_host ||
-      trainerData?.tenant_host ||
-      "temp-domain.localhost";
+    // Clean up any legacy .localhost suffixes
+    const currentSlug = cleanupLegacyDomain(
+      tenantData?.slug || session.tenant_host || trainerData?.tenant_host
+    );
     const themeJson = tenantData?.theme_json || null;
 
     return NextResponse.json({
@@ -52,8 +61,8 @@ export async function GET(request: NextRequest) {
           fullName: session.full_name || trainerData?.full_name,
         },
         domain: {
-          current: currentDomain,
-          isConfigured: !!tenantData?.host, // true if domain is properly configured
+          current: currentSlug,
+          isConfigured: !!tenantData?.slug, // true if slug is properly configured
         },
         theme: themeJson,
         status: tenantData?.status || "inactive",

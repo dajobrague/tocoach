@@ -81,13 +81,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      exercises: exercises || [],
-      total: count || 0,
-      page,
-      limit,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        exercises: exercises || [],
+        total: count || 0,
+        page,
+        limit,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("[Exercise Library API] Unexpected error:", error);
 

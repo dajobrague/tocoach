@@ -95,11 +95,24 @@ export default function AddClientModal({
 
     setIsLoading(true);
     try {
-      // TODO: Implement API call to create client
-      console.log("Creating client:", formData);
+      console.log("[AddClientModal] Creating client:", formData);
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Call API to create client
+      const response = await fetch("/api/clients/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Error al crear cliente");
+      }
+
+      console.log("[AddClientModal] Client created successfully:", data.client);
 
       // Reset form
       setFormData({
@@ -120,7 +133,10 @@ export default function AddClientModal({
       onSuccess?.();
       onClose();
     } catch (error) {
-      console.error("Error creating client:", error);
+      console.error("[AddClientModal] Error creating client:", error);
+      alert(
+        `Error al crear cliente: ${error instanceof Error ? error.message : "Error desconocido"}`
+      );
     } finally {
       setIsLoading(false);
     }

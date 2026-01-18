@@ -1,4 +1,4 @@
-// Save domain configuration API
+// Save slug configuration API
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -16,25 +16,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { domain } = body;
+    const { domain: slug } = body; // Keep parameter name for backward compatibility
 
-    if (!domain || typeof domain !== "string") {
-      return NextResponse.json({ error: "Dominio requerido" }, { status: 400 });
+    if (!slug || typeof slug !== "string") {
+      return NextResponse.json({ error: "Slug requerido" }, { status: 400 });
     }
 
-    const normalizedDomain = domain.toLowerCase().trim();
+    const normalizedSlug = slug.toLowerCase().trim();
 
-    // Update trainer's tenant_host
+    // Update trainer's tenant_host (now stores slug)
     const { error: trainerError } = await supabase
       .from("trainers")
       .update({
-        tenant_host: normalizedDomain,
+        tenant_host: normalizedSlug,
         updated_at: new Date().toISOString(),
       })
       .eq("id", session.trainer_id);
 
     if (trainerError) {
-      console.error("[Save Domain] Trainer update error:", trainerError);
+      console.error("[Save Slug] Trainer update error:", trainerError);
 
       return NextResponse.json(
         { error: "Error al actualizar el perfil del entrenador" },
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // First, find existing tenant for this trainer
     const { data: existingTenant, error: findError } = await supabase
       .from("tenants")
-      .select("host, theme_json")
+      .select("slug, theme_json")
       .eq("trainer_id", session.trainer_id)
       .single();
 
@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
     if (existingTenant) {
       // Update existing tenant record
       const updateData = {
-        host: normalizedDomain,
-        slug: normalizedDomain.split(".")[0],
+        slug: normalizedSlug,
+        host: normalizedSlug, // Keep host in sync with slug for now
         status: "active" as const,
       };
 
@@ -66,13 +66,13 @@ export async function POST(request: NextRequest) {
 
       tenantError = error;
       console.log(
-        `[Save Domain] Updated existing tenant from ${existingTenant.host} to ${normalizedDomain}`
+        `[Save Slug] Updated existing tenant from ${existingTenant.slug} to ${normalizedSlug}`
       );
     } else {
       // Create new tenant record
       const { error } = await supabase.from("tenants").insert({
-        host: normalizedDomain,
-        slug: normalizedDomain.split(".")[0],
+        slug: normalizedSlug,
+        host: normalizedSlug, // Keep host in sync with slug for now
         theme_slug: "default",
         trainer_id: session.trainer_id,
         status: "active",
@@ -100,13 +100,11 @@ export async function POST(request: NextRequest) {
       });
 
       tenantError = error;
-      console.log(
-        `[Save Domain] Created new tenant record: ${normalizedDomain}`
-      );
+      console.log(`[Save Slug] Created new tenant record: ${normalizedSlug}`);
     }
 
     if (tenantError) {
-      console.error("[Save Domain] Tenant operation error:", tenantError);
+      console.error("[Save Slug] Tenant operation error:", tenantError);
 
       return NextResponse.json(
         { error: "Error al actualizar el registro del tenant" },
@@ -115,16 +113,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[Save Domain] Successfully updated domain for trainer ${session.trainer_id}: ${normalizedDomain}`
+      `[Save Slug] Successfully updated slug for trainer ${session.trainer_id}: ${normalizedSlug}`
     );
 
     return NextResponse.json({
       success: true,
-      domain: normalizedDomain,
-      message: "Dominio guardado correctamente",
+      domain: normalizedSlug,
+      message: "Slug guardado correctamente",
     });
   } catch (error) {
-    console.error("[Save Domain] Unexpected error:", error);
+    console.error("[Save Slug] Unexpected error:", error);
 
     return NextResponse.json(
       { error: "Error interno del servidor" },

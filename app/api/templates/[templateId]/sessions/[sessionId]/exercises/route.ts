@@ -29,6 +29,7 @@ export async function POST(
     const body = await request.json();
     const {
       name,
+      exerciseId, // If provided, use existing exercise from library
       sets,
       reps,
       tempo,
@@ -73,55 +74,67 @@ export async function POST(
     }
 
     // First, create or find the exercise in the exercise library
-    let exerciseId: string;
+    let finalExerciseId: string;
 
-    // Check if an exercise with this name already exists for this trainer
-    const { data: existingExercise } = await supabase
-      .from("exercises")
-      .select("id")
-      .eq("name", name)
-      .eq("trainer_id", session.trainer_id)
-      .maybeSingle();
-
-    if (existingExercise) {
-      exerciseId = existingExercise.id;
+    // If exerciseId is provided, use it (selected from library)
+    if (exerciseId) {
+      finalExerciseId = exerciseId;
       console.log(
-        "[Template Exercises API] Using existing exercise:",
-        exerciseId
+        "[Template Exercises API] Using exercise from library:",
+        finalExerciseId
       );
     } else {
-      // Create new exercise
-      const exerciseCategory =
-        sessionData.session_type === "cardio" ? "cardio" : "strength";
-
-      const { data: newExercise, error: exerciseError } = await supabase
+      // Check if an exercise with this name already exists for this trainer
+      const { data: existingExercise } = await supabase
         .from("exercises")
-        .insert({
-          tenant_host: sessionData.tenant_host,
-          trainer_id: session.trainer_id,
-          name,
-          category: exerciseCategory,
-          video_url: videoUrl || null,
-          is_public: false,
-          metadata: {},
-        })
-        .select()
-        .single();
+        .select("id")
+        .eq("name", name)
+        .eq("trainer_id", session.trainer_id)
+        .maybeSingle();
 
-      if (exerciseError || !newExercise) {
-        console.error(
-          "[Template Exercises API] Error creating exercise:",
-          exerciseError
+      if (existingExercise) {
+        finalExerciseId = existingExercise.id;
+        console.log(
+          "[Template Exercises API] Using existing exercise:",
+          finalExerciseId
         );
+      } else {
+        // Create new exercise
+        const exerciseCategory =
+          sessionData.session_type === "cardio" ? "cardio" : "strength";
 
-        return NextResponse.json(
-          { success: false, error: "Error al crear ejercicio" },
-          { status: 500 }
+        const { data: newExercise, error: exerciseError } = await supabase
+          .from("exercises")
+          .insert({
+            tenant_host: sessionData.tenant_host,
+            trainer_id: session.trainer_id,
+            name,
+            category: exerciseCategory,
+            video_url: videoUrl || null,
+            is_public: false,
+            metadata: {},
+          })
+          .select()
+          .single();
+
+        if (exerciseError || !newExercise) {
+          console.error(
+            "[Template Exercises API] Error creating exercise:",
+            exerciseError
+          );
+
+          return NextResponse.json(
+            { success: false, error: "Error al crear ejercicio" },
+            { status: 500 }
+          );
+        }
+
+        finalExerciseId = newExercise.id;
+        console.log(
+          "[Template Exercises API] Created new exercise:",
+          finalExerciseId
         );
       }
-
-      exerciseId = newExercise.id;
-      console.log("[Template Exercises API] Created new exercise:", exerciseId);
     }
 
     // Get the current max exercise_order for this session
@@ -165,7 +178,7 @@ export async function POST(
       .insert({
         tenant_host: sessionData.tenant_host,
         session_id: sessionId,
-        exercise_id: exerciseId,
+        exercise_id: finalExerciseId,
         exercise_order: nextOrder,
         sets: sets ? parseInt(sets) : null,
         reps: reps || null,
@@ -174,7 +187,7 @@ export async function POST(
         rest_seconds: rest && !isNaN(parseInt(rest)) ? parseInt(rest) : null,
         metadata,
       })
-      .select()
+      .select("*, exercises(*)")
       .single();
 
     if (linkError || !sessionExercise) {
@@ -318,7 +331,7 @@ export async function PUT(
         metadata,
       })
       .eq("id", sessionExerciseId)
-      .select()
+      .select("*, exercises(*)")
       .single();
 
     if (updateError) {

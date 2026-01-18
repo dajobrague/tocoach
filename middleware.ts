@@ -79,7 +79,7 @@ async function validateTenantSlug(slug: string): Promise<boolean> {
     const { data, error } = await supabase
       .from("tenants")
       .select("slug")
-      .eq("host", slug) // Database field is 'host' but contains slug values
+      .eq("slug", slug) // Check the slug field directly
       .eq("status", "active")
       .single();
 
