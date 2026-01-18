@@ -1,17 +1,38 @@
 # Railway Deployment Guide
 
+## ⚠️ IMPORTANT: Configure Environment Variables FIRST
+
+**Before deploying**, you MUST configure environment variables in Railway:
+
+1. Go to Railway Dashboard → Your Project → Service
+2. Click on **Variables** tab
+3. Add these required variables:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://ydqhndnvrkvycnkaghro.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   ENCRYPTION_KEY=your_32_char_encryption_key
+   JWT_SECRET=your_jwt_secret
+   NEXT_PUBLIC_APP_DOMAIN=${{RAILWAY_PUBLIC_DOMAIN}}
+   ```
+
+**Without these variables, the build WILL FAIL with minimal error logs.**
+
+---
+
 ## Archivos Docker Creados
 
 - ✅ `Dockerfile` - Configuración multi-stage optimizada para Next.js 15
 - ✅ `.dockerignore` - Archivos excluidos del build
 - ✅ `railway.json` - Configuración específica de Railway
 - ✅ `docker-compose.yml` - Para testing local (opcional)
+- ✅ `app/api/health/route.ts` - Health check endpoint
 
 ## Pasos para Deployar en Railway
 
 ### Opción 1: Deploy desde GitHub (Recomendado)
 
 1. **Commit y push los cambios:**
+
    ```bash
    git add .
    git commit -m "Add Docker configuration for Railway deployment"
@@ -19,6 +40,7 @@
    ```
 
 2. **En Railway Dashboard:**
+
    - Ve a https://railway.app/dashboard
    - Click en "New Project"
    - Selecciona "Deploy from GitHub repo"
@@ -36,21 +58,25 @@
 ### Opción 2: Deploy con Railway CLI
 
 1. **Instalar Railway CLI:**
+
    ```bash
    npm i -g @railway/cli
    ```
 
 2. **Login:**
+
    ```bash
    railway login
    ```
 
 3. **Inicializar proyecto:**
+
    ```bash
    railway init
    ```
 
 4. **Deploy:**
+
    ```bash
    railway up
    ```
@@ -93,6 +119,7 @@ Railway soporta wildcards para subdomains. Para configurar:
 ## Troubleshooting
 
 Si el build falla:
+
 1. Revisa los logs en Railway Dashboard
 2. Verifica que todas las variables de entorno estén configuradas
 3. Asegúrate que el repo esté actualizado en GitHub
@@ -104,4 +131,3 @@ Si el build falla:
 - ✅ Railway auto-reinicia el servicio si falla
 - ✅ Soporta HTTPS automáticamente
 - ✅ Escalado automático disponible en planes pagos
-

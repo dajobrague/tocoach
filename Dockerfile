@@ -7,8 +7,11 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN \
+  if [ -f package-lock.json ]; then npm ci; \
+  else echo "No package-lock.json found, running npm install"; npm install; \
+  fi
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -16,24 +19,27 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Accept build arguments with default placeholders
-ARG NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder_key
-ARG ENCRYPTION_KEY=placeholder_encryption_key_32chars_min
-ARG JWT_SECRET=placeholder_jwt_secret
-ARG NEXT_PUBLIC_APP_DOMAIN=placeholder.railway.app
+# Accept build arguments - Railway will pass these as env vars
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG ENCRYPTION_KEY
+ARG JWT_SECRET
+ARG NEXT_PUBLIC_APP_DOMAIN
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
-ENV JWT_SECRET=$JWT_SECRET
-ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+ENV ENCRYPTION_KEY=${ENCRYPTION_KEY}
+ENV JWT_SECRET=${JWT_SECRET}
+ENV NEXT_PUBLIC_APP_DOMAIN=${NEXT_PUBLIC_APP_DOMAIN}
 
-# Build the application
-RUN npm run build
+# Build the application with error handling
+RUN echo "Starting Next.js build..." && \
+    npm run build && \
+    echo "Build completed successfully" && \
+    ls -la .next/standalone || echo "Warning: standalone directory not found"
 
 # Production image, copy all the files and run next
 FROM base AS runner
