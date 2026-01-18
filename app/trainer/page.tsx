@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getTrainerSession } from "@/lib/auth/session";
 
-export default async function Home() {
+export default async function TrainerPage() {
   // Check if trainer is logged in
   const session = await getTrainerSession();
 
