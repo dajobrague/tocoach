@@ -86,12 +86,20 @@ async function validateTenantSlug(slug: string): Promise<boolean> {
   }
 
   try {
+    console.log(`[Middleware] Validating tenant slug: ${slug}`);
+
     const { data, error } = await supabase
       .from("tenants")
       .select("slug")
-      .eq("slug", slug) // Check the slug field directly
+      .eq("slug", slug)
       .eq("status", "active")
       .single();
+
+    console.log(`[Middleware] Supabase query result:`, {
+      slug,
+      hasData: !!data,
+      error: error?.message || null,
+    });
 
     const exists = !error && !!data;
 
@@ -101,9 +109,15 @@ async function validateTenantSlug(slug: string): Promise<boolean> {
       expires: Date.now() + CACHE_TTL,
     });
 
+    console.log(`[Middleware] Tenant validation result: ${exists}`);
+
     return exists;
   } catch (error) {
-    console.error("[Middleware] Error validating tenant slug:", error);
+    console.error("[Middleware] Error validating tenant slug:", {
+      slug,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
 
     return false;
   }
@@ -114,15 +128,35 @@ export async function middleware(request: NextRequest) {
   const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const pathname = url.pathname;
 
+  console.log(`[Middleware] Incoming request: ${request.method} ${pathname}`, {
+    correlationId,
+  });
+
   // Extract slug from pathname
   const slug = extractSlugFromPath(pathname);
+
+  console.log(`[Middleware] Extracted slug: ${slug || "none"}`);
 
   // =============================================================================
   // CLIENT SECTION - Slug-based routes (/[slug]/...)
   // =============================================================================
   if (slug) {
     // Validate that the slug exists in the database
-    const isValidTenant = await validateTenantSlug(slug);
+    let isValidTenant = false;
+
+    try {
+      isValidTenant = await validateTenantSlug(slug);
+    } catch (error) {
+      console.error(`[Middleware:CLIENT] Critical error validating tenant:`, {
+        slug,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // On critical error, return 503 Service Unavailable
+      return new NextResponse("Service temporarily unavailable", {
+        status: 503,
+      });
+    }
 
     if (!isValidTenant) {
       console.warn(`[Middleware:CLIENT] Invalid tenant slug: ${slug}`);
