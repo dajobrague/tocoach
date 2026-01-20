@@ -3,14 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy Supabase client initialization
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 // GET - Fetch messages for a client
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {
@@ -87,6 +91,7 @@ export async function GET(request: NextRequest) {
 // POST - Send a new message
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {
@@ -164,6 +169,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Mark messages as read
 export async function PATCH(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {

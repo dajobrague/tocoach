@@ -10,18 +10,19 @@ import { createClient } from "@supabase/supabase-js";
 import { logTenantContext } from "@/lib/security/encryption";
 import { TenantContext, TenantMetadata } from "@/lib/tenant/types";
 
-// Supabase client for tenant operations
-// Note: RLS prevents client access, but server operations need service role
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Using anon key as per project standards
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+// Lazy Supabase client initialization to avoid connection pool issues
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Using anon key as per project standards
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
 
 // Types imported from types.ts for consistency
 
@@ -62,6 +63,7 @@ async function loadTenantMetadata(
   }
 
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("tenants")
       .select(
@@ -143,6 +145,7 @@ export async function loadTenantContext(
  */
 export async function getWhitelistedDomains(): Promise<string[]> {
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("tenants")
       .select("host")

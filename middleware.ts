@@ -3,27 +3,28 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { verifyClientSessionFromRequest } from "@/lib/auth/client-session";
 
-// Validate environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Lazy Supabase client initialization to avoid connection issues at module load
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error("[Middleware] Missing required environment variables:", {
-    hasUrl: !!supabaseUrl,
-    hasKey: !!supabaseKey,
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("[Middleware] Missing required environment variables:", {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseKey,
+    });
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
+  }
+
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   });
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
-  );
 }
-
-// Supabase client for tenant validation
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 // Cache for tenant slugs validation (60 second TTL)
 const tenantCache = new Map<string, { exists: boolean; expires: number }>();
@@ -88,6 +89,7 @@ async function validateTenantSlug(slug: string): Promise<boolean> {
   try {
     console.log(`[Middleware] Validating tenant slug: ${slug}`);
 
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("tenants")
       .select("slug")

@@ -3,14 +3,18 @@ import { createClient } from "@supabase/supabase-js";
 
 import { getClientSession } from "@/lib/auth/client-session";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy Supabase client initialization
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 // GET - Fetch notifications for a client
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {
@@ -76,6 +80,7 @@ export async function GET(request: NextRequest) {
 // PATCH - Mark notifications as read
 export async function PATCH(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {
@@ -126,6 +131,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Clear/delete notifications
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getClientSession();
 
     if (!session) {

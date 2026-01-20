@@ -3,14 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy Supabase client initialization
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 // GET - Fetch all conversations or messages for a specific client
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getTrainerSession();
 
     if (!session) {
@@ -209,6 +213,7 @@ export async function GET(request: NextRequest) {
 // POST - Send a new message from trainer to client
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient();
     const session = await getTrainerSession();
 
     if (!session) {

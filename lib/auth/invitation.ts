@@ -1,10 +1,13 @@
 // Server-only invitation code validation
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy Supabase client initialization
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 export interface InvitationCode {
   id: string;
@@ -25,6 +28,7 @@ export interface InvitationCode {
 export async function validateInvitationCode(
   code: string
 ): Promise<InvitationCode> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("invitation_codes")
     .select("*")
@@ -52,6 +56,7 @@ export async function markInvitationCodeUsed(
   code: string,
   trainerId: string
 ): Promise<void> {
+  const supabase = getSupabaseClient();
   // First, increment the usage count
   const { data: currentData, error: fetchError } = await supabase
     .from("invitation_codes")
@@ -93,6 +98,7 @@ export async function markInvitationCodeUsed(
 export async function checkTenantHostAvailability(
   tenantHost: string
 ): Promise<boolean> {
+  const supabase = getSupabaseClient();
   // Check if host already exists in trainers table
   const { data: trainerData } = await supabase
     .from("trainers")
