@@ -164,7 +164,7 @@ export function getCSRFTokenFromCookie(): string | null {
     return null;
   }
 
-  return csrfCookie.split("=")[1];
+  return csrfCookie.split("=")[1] || null;
 }
 
 /**
