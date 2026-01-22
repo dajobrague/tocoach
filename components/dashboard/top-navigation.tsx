@@ -95,12 +95,11 @@ export default function TopNavigation({
           >
             <Button
               className={`
-                                h-9 px-3 font-medium transition-all duration-300 ease-in-out relative overflow-hidden
-                                group-hover:px-4
+                                h-9 font-medium transition-all duration-300 ease-in-out relative overflow-hidden
                                 ${
                                   activeSection === item.key
-                                    ? "bg-blue-50 text-blue-600"
-                                    : "text-gray-600 hover:text-blue-600 hover:bg-gray-50"
+                                    ? "bg-blue-50 text-blue-600 px-4"
+                                    : "text-gray-600 hover:text-blue-600 hover:bg-gray-50 px-3 group-hover:px-4"
                                 }
                             `}
               startContent={
@@ -121,11 +120,11 @@ export default function TopNavigation({
               onPress={() => handleItemClick(item.key)}
             >
               <span
-                className={`
-                  text-sm whitespace-nowrap transition-all duration-300 ease-in-out
-                  overflow-hidden max-w-0 opacity-0
-                  group-hover:max-w-[200px] group-hover:opacity-100 group-hover:ml-2
-                `}
+                className={
+                  activeSection === item.key
+                    ? "text-sm whitespace-nowrap ml-2"
+                    : "text-sm whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden max-w-0 opacity-0 group-hover:max-w-[200px] group-hover:opacity-100 group-hover:ml-2"
+                }
               >
                 {item.title}
               </span>
