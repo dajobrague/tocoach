@@ -39,11 +39,8 @@ const nextConfig = {
             value: "max-age=63072000; includeSubDomains; preload",
           },
           // X-Frame-Options removed to allow iframe embedding
-          // Using Content-Security-Policy frame-ancestors instead
-          {
-            key: "Content-Security-Policy",
-            value: "frame-ancestors *;",
-          },
+          // Note: frame-ancestors directive omitted to allow all domains
+          // This is more reliable than using wildcards due to browser bugs
           {
             key: "X-Content-Type-Options",
             value: "nosniff",

@@ -67,6 +67,8 @@ function extractSlugFromPath(pathname: string): string | null {
     "manifest.json",
     "robots.txt",
     "sitemap.xml",
+    "iframe-diagnostic", // Diagnostic tool for iframe embedding
+    "iframe-test", // Test page for iframe embedding
   ];
 
   // Also exclude files with extensions (like .html, .css, .js, etc.)
