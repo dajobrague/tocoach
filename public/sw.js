@@ -2,12 +2,12 @@
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
 
-const CACHE_NAME = "topcoach-v2";
-const STATIC_CACHE_NAME = "topcoach-static-v2";
+const CACHE_NAME = "topcoach-v3";
+const STATIC_CACHE_NAME = "topcoach-static-v3";
 
 // App shell files to cache
+// Note: Removed "/" from cache to allow dynamic routing to work properly
 const STATIC_FILES = [
-  "/",
   "/manifest.json",
   "/icons/icon.svg",
   // Add more static assets as needed
@@ -77,7 +77,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Skip caching for dynamic pages that need fresh data
+  // Also skip root path to allow proper redirects
+  const url = new URL(event.request.url);
   if (
+    url.pathname === "/" ||
+    url.pathname.startsWith("/trainer") ||
     event.request.url.includes("/trainer/dashboard") ||
     event.request.url.includes("/_next/data/")
   ) {
