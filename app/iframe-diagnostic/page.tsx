@@ -88,24 +88,20 @@ export default function IframeDiagnosticPage() {
 
             <DiagnosticRow
               label="Protocol"
-              note={
-                diagnostics.protocol !== "https:"
-                  ? "⚠️ HTTPS required for cross-origin cookies"
-                  : undefined
-              }
               status={diagnostics.protocol === "https:" ? "success" : "warning"}
               value={diagnostics.protocol}
+              {...(diagnostics.protocol !== "https:" && {
+                note: "⚠️ HTTPS required for cross-origin cookies",
+              })}
             />
 
             <DiagnosticRow
               label="Cookies Enabled"
-              note={
-                !diagnostics.cookiesEnabled
-                  ? "⚠️ Cookies are blocked - authentication will not work"
-                  : undefined
-              }
               status={diagnostics.cookiesEnabled ? "success" : "error"}
               value={diagnostics.cookiesEnabled ? "✅ Yes" : "❌ No"}
+              {...(!diagnostics.cookiesEnabled && {
+                note: "⚠️ Cookies are blocked - authentication will not work",
+              })}
             />
 
             <DiagnosticRow
