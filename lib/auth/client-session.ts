@@ -11,7 +11,7 @@ const COOKIE_NAME = "client-session"; // Different from trainer-session
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "none" as const, // Changed from "lax" to "none" for iframe embedding support
   path: "/",
   maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
 };

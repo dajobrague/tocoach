@@ -69,6 +69,11 @@ function extractSlugFromPath(pathname: string): string | null {
     "sitemap.xml",
   ];
 
+  // Also exclude files with extensions (like .html, .css, .js, etc.)
+  if (firstSegment.includes(".")) {
+    return null;
+  }
+
   if (excludedRoutes.includes(firstSegment)) {
     return null;
   }

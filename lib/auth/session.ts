@@ -11,7 +11,7 @@ const COOKIE_NAME = "trainer-session";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "none" as const, // Changed from "lax" to "none" for iframe embedding support
   path: "/",
   maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
 };
