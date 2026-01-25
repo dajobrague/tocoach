@@ -1,37 +1,35 @@
 "use client";
 
-import { Button, Form, Input, Link } from "@heroui/react";
+import { Button, Divider, Form, Input, Link } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import React from "react";
+import { createClient } from "@supabase/supabase-js";
 
-export default function TrainerLoginPage() {
+export default function AdminLoginPage() {
   const router = useRouter();
+  const [step, setStep] = React.useState<"email" | "password">("email");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [isFirstLogin, setIsFirstLogin] = React.useState(false);
   const [isVisible, setIsVisible] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string>("");
-  const [step, setStep] = React.useState<"email" | "password">("email");
-  const [email, setEmail] = React.useState("");
-  const [isFirstLogin, setIsFirstLogin] = React.useState(false);
-  const [trainerName, setTrainerName] = React.useState("");
 
   const toggleVisibility = () => setIsVisible(!isVisible);
 
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEmailSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
     setError("");
 
-    const formData = new FormData(event.currentTarget);
-    const emailValue = formData.get("email") as string;
-
     try {
-      const response = await fetch("/api/trainer/check-email", {
+      const response = await fetch("/api/admin/check-email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: emailValue }),
+        body: JSON.stringify({ email }),
       });
 
       const result = await response.json();
@@ -40,9 +38,7 @@ export default function TrainerLoginPage() {
         throw new Error(result.error || "Error al verificar email");
       }
 
-      setEmail(emailValue);
       setIsFirstLogin(result.isFirstLogin);
-      setTrainerName(result.fullName || "");
       setStep("password");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al verificar email");
@@ -51,58 +47,64 @@ export default function TrainerLoginPage() {
     }
   };
 
-  const handlePasswordSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handlePasswordSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
     setError("");
 
-    const formData = new FormData(event.currentTarget);
-    const password = formData.get("password") as string;
-
     try {
       if (isFirstLogin) {
-        // First login: Update password in Supabase Auth and set password_set_at
+        // First login - set new password
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        const { createClient } = await import("@supabase/supabase-js");
         const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-        // First, sign in with temporary password
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password: "TopCoach2026!", // Temporary password
-        });
+        // Sign in with temporary password
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password: "TopCoachAdmin2026!",
+          });
 
         if (signInError) {
-          throw new Error("Error al autenticar. Contacta al administrador.");
+          console.error("[FirstLogin] Sign in error:", signInError);
+          throw new Error(
+            "Error al autenticar con contraseña temporal. " +
+              (signInError.message || "Por favor, contacta al administrador.")
+          );
         }
 
-        // Update to new password
+        console.log(
+          "[FirstLogin] Signed in successfully, updating password..."
+        );
+
+        // Update password
         const { error: updateError } = await supabase.auth.updateUser({
           password: password,
         });
 
         if (updateError) {
-          throw new Error("Error al configurar contraseña");
+          throw new Error(
+            "Error al configurar contraseña: " + updateError.message
+          );
         }
 
-        // Mark password as set
-        const setupResponse = await fetch("/api/trainer/setup-password", {
+        // Mark password as changed
+        const setupResponse = await fetch("/api/admin/setup-password", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email, newPassword: password }),
+          credentials: "include",
+          body: JSON.stringify({ email }),
         });
 
         if (!setupResponse.ok) {
-          throw new Error("Error al actualizar contraseña");
+          throw new Error("Error al completar la configuración");
         }
 
-        // Now login with new password
-        const loginResponse = await fetch("/api/auth/login", {
+        // Now log in with new password
+        const loginResponse = await fetch("/api/admin/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -116,10 +118,10 @@ export default function TrainerLoginPage() {
           throw new Error(loginResult.error || "Error en el inicio de sesión");
         }
 
-        window.location.href = "/trainer/dashboard";
+        window.location.href = "/admin/dashboard";
       } else {
         // Regular login
-        const response = await fetch("/api/auth/login", {
+        const response = await fetch("/api/admin/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -133,46 +135,35 @@ export default function TrainerLoginPage() {
           throw new Error(result.error || "Error en el inicio de sesión");
         }
 
-        window.location.href = "/trainer/dashboard";
+        window.location.href = "/admin/dashboard";
       }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Error en el inicio de sesión"
       );
-    } finally {
       setIsLoading(false);
     }
   };
 
-  const handleBack = () => {
-    setStep("email");
-    setError("");
-  };
-
   return (
-    <div className="flex h-full w-full items-center justify-center min-h-screen p-4">
+    <div className="flex h-full w-full items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center pb-8">
-          <h1 className="text-3xl font-heading font-bold text-black mb-4">
-            TOP COACH
+          <div className="bg-black text-white p-4 rounded-2xl mb-6">
+            <Icon className="text-5xl" icon="solar:shield-user-bold" />
+          </div>
+          <h1 className="text-3xl font-heading font-bold text-slate-900 mb-2">
+            Admin Dashboard
           </h1>
-          <h2 className="text-xl font-medium font-heading mb-2">
-            {step === "email"
-              ? "Bienvenido de nuevo"
-              : isFirstLogin
-                ? `¡Hola ${trainerName}!`
-                : `Hola de nuevo, ${trainerName}`}
+          <h2 className="text-xl font-medium font-heading mb-2 text-slate-700">
+            Panel de Administración
           </h2>
-          <p className="text-default-500 font-body text-center">
-            {step === "email"
-              ? "Inicia sesión en tu plataforma de coaching"
-              : isFirstLogin
-                ? "Configura tu contraseña para comenzar"
-                : "Ingresa tu contraseña para continuar"}
+          <p className="text-slate-500 font-body text-center text-sm">
+            Acceso exclusivo para administradores del sistema
           </p>
         </div>
 
-        <div className="rounded-large bg-content1 shadow-small flex w-full flex-col gap-6 px-8 py-8">
+        <div className="rounded-large bg-white shadow-lg flex w-full flex-col gap-6 px-8 py-8 border border-slate-200">
           {error && (
             <div className="bg-danger-50 border border-danger-200 rounded-lg p-3">
               <p className="text-danger text-sm font-body">{error}</p>
@@ -186,19 +177,19 @@ export default function TrainerLoginPage() {
               onSubmit={handleEmailSubmit}
             >
               <Input
+                autoFocus
                 isRequired
                 autoComplete="email"
                 className="font-body"
-                label="Dirección de correo electrónico"
-                name="email"
-                placeholder="Introduce tu correo electrónico"
+                label="Correo electrónico"
+                placeholder="admin@topcoach.com"
                 type="email"
+                value={email}
                 variant="bordered"
+                onValueChange={setEmail}
               />
-
               <Button
-                className="w-full font-body mt-2"
-                color="primary"
+                className="w-full font-body font-semibold mt-2 text-white shadow-lg bg-black"
                 disabled={isLoading}
                 isLoading={isLoading}
                 size="lg"
@@ -213,29 +204,46 @@ export default function TrainerLoginPage() {
               validationBehavior="native"
               onSubmit={handlePasswordSubmit}
             >
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm text-slate-600 font-body">
+                  <strong>{email}</strong>
+                </p>
                 <Button
-                  isIconOnly
+                  className="text-black"
                   size="sm"
                   variant="light"
-                  onPress={handleBack}
+                  onPress={() => {
+                    setStep("email");
+                    setPassword("");
+                    setError("");
+                  }}
                 >
-                  <Icon className="text-xl" icon="solar:arrow-left-linear" />
+                  Cambiar
                 </Button>
-                <p className="text-sm text-default-500 font-body">{email}</p>
               </div>
 
+              {isFirstLogin && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                  <div className="flex items-start gap-2">
+                    <Icon
+                      className="text-blue-600 text-lg mt-0.5"
+                      icon="solar:info-circle-bold"
+                    />
+                    <p className="text-sm text-blue-900 font-body">
+                      Es tu primer inicio de sesión. Por favor, establece una
+                      contraseña segura (mínimo 8 caracteres).
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <Input
+                autoFocus
                 isRequired
                 autoComplete={
                   isFirstLogin ? "new-password" : "current-password"
                 }
                 className="font-body"
-                description={
-                  isFirstLogin
-                    ? "Mínimo 8 caracteres, incluye letras y números"
-                    : undefined
-                }
                 endContent={
                   <button type="button" onClick={toggleVisibility}>
                     {isVisible ? (
@@ -251,28 +259,19 @@ export default function TrainerLoginPage() {
                     )}
                   </button>
                 }
-                label={isFirstLogin ? "Nueva contraseña" : "Contraseña"}
-                name="password"
+                label={isFirstLogin ? "Nueva Contraseña" : "Contraseña"}
                 placeholder={
                   isFirstLogin
                     ? "Crea una contraseña segura"
                     : "Introduce tu contraseña"
                 }
                 type={isVisible ? "text" : "password"}
+                value={password}
                 variant="bordered"
+                onValueChange={setPassword}
               />
-
-              {!isFirstLogin && (
-                <div className="flex justify-end">
-                  <Link className="font-body" href="/forgot-password" size="sm">
-                    ¿Olvidaste tu contraseña?
-                  </Link>
-                </div>
-              )}
-
               <Button
-                className="w-full font-body mt-2"
-                color="primary"
+                className="w-full font-body font-semibold mt-2 text-white shadow-lg bg-black"
                 disabled={isLoading}
                 isLoading={isLoading}
                 size="lg"
@@ -283,26 +282,37 @@ export default function TrainerLoginPage() {
                     ? "Configurando..."
                     : "Iniciando sesión..."
                   : isFirstLogin
-                    ? "Configurar contraseña"
-                    : "Iniciar sesión"}
+                    ? "Establecer Contraseña e Iniciar Sesión"
+                    : "Iniciar Sesión"}
               </Button>
             </Form>
           )}
 
-          {/* Registration link removed - trainers are now created by admin only */}
-        </div>
+          <div className="flex items-center gap-4">
+            <Divider className="flex-1" />
+            <Icon
+              className="text-slate-400 text-lg"
+              icon="solar:lock-password-bold-duotone"
+            />
+            <Divider className="flex-1" />
+          </div>
 
-        <div className="mt-6 w-full">
-          <div className="bg-default-50 rounded-lg p-4">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Icon className="text-primary text-lg" icon="ph:info-duotone" />
-              <h4 className="text-sm font-semibold font-heading">
-                Para Entrenadores y Coaches
+              <Icon
+                className="text-black text-lg"
+                icon="solar:shield-warning-bold-duotone"
+              />
+              <h4 className="text-sm font-semibold font-heading text-slate-900">
+                Acceso Restringido
               </h4>
             </div>
-            <p className="text-xs text-default-600 font-body">
-              Este es el acceso para entrenadores. Tus clientes accederán a su
-              portal a través de tu dominio personalizado.
+            <p className="text-xs text-slate-700 font-body">
+              Este panel está reservado para administradores del sistema. Si
+              eres un entrenador, inicia sesión en{" "}
+              <Link className="font-semibold" href="/trainer/login" size="sm">
+                /trainer/login
+              </Link>
             </p>
           </div>
         </div>

@@ -28,6 +28,7 @@ export interface TopNavigationProps {
   items: SidebarItem[];
   activeSection: string;
   onSelect: (key: string) => void;
+  onHelpClick?: () => void;
 }
 
 export default function TopNavigation({
@@ -37,6 +38,7 @@ export default function TopNavigation({
   items,
   activeSection,
   onSelect,
+  onHelpClick,
 }: TopNavigationProps) {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
@@ -181,6 +183,11 @@ export default function TopNavigation({
                 base: "w-64",
               }}
               variant="flat"
+              onAction={(key) => {
+                if (key === "settings") {
+                  onSelect("brand-settings");
+                }
+              }}
             >
               <DropdownItem
                 key="profile"
@@ -212,6 +219,7 @@ export default function TopNavigation({
                 startContent={
                   <Icon icon="solar:question-circle-linear" width={18} />
                 }
+                onPress={onHelpClick || (() => {})}
               >
                 Ayuda y soporte
               </DropdownItem>

@@ -7,11 +7,15 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "fallback-secret-change-in-production"
 );
 
-const COOKIE_NAME = "trainer-session";
+const TRAINER_COOKIE_NAME = "trainer-session";
+const ADMIN_COOKIE_NAME = "admin-session";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "none" as const, // Changed from "lax" to "none" for iframe embedding support
+  sameSite:
+    process.env.NODE_ENV === "production"
+      ? ("none" as const)
+      : ("lax" as const),
   path: "/",
   maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
 };
@@ -55,7 +59,7 @@ export async function createTrainerSession(
   // Set the cookie
   const cookieStore = await cookies();
 
-  cookieStore.set(COOKIE_NAME, token, COOKIE_OPTIONS);
+  cookieStore.set(TRAINER_COOKIE_NAME, token, COOKIE_OPTIONS);
 
   return token;
 }
@@ -66,10 +70,10 @@ export async function createTrainerSession(
 export async function getTrainerSession(): Promise<TrainerSession | null> {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get(COOKIE_NAME)?.value;
+    const token = cookieStore.get(TRAINER_COOKIE_NAME)?.value;
 
     console.log("[Trainer Session] Reading session:", {
-      cookieName: COOKIE_NAME,
+      cookieName: TRAINER_COOKIE_NAME,
       hasToken: !!token,
       tokenLength: token?.length,
       tokenPreview: token?.substring(0, 20) + "...",
@@ -105,7 +109,7 @@ export async function getTrainerSession(): Promise<TrainerSession | null> {
 export async function clearTrainerSession(): Promise<void> {
   const cookieStore = await cookies();
 
-  cookieStore.delete(COOKIE_NAME);
+  cookieStore.delete(TRAINER_COOKIE_NAME);
 }
 
 /**
@@ -115,7 +119,7 @@ export async function verifySessionFromRequest(
   request: NextRequest
 ): Promise<TrainerSession | null> {
   try {
-    const token = request.cookies.get(COOKIE_NAME)?.value;
+    const token = request.cookies.get(TRAINER_COOKIE_NAME)?.value;
 
     if (!token) {
       return null;
@@ -158,6 +162,10 @@ export async function setSessionCookie(
     .setExpirationTime(exp)
     .sign(JWT_SECRET);
 
+  // Determine if this is an admin or trainer session
+  const isAdmin = !tenantHost;
+  const cookieName = isAdmin ? ADMIN_COOKIE_NAME : TRAINER_COOKIE_NAME;
+
   // In production with custom domain, set domain to allow sharing across subdomains
   // For Railway/Vercel domains, DON'T set domain (cookies don't work across their infrastructure)
   let cookieOptionsWithDomain: any = COOKIE_OPTIONS;
@@ -181,16 +189,20 @@ export async function setSessionCookie(
         // Get last two parts (domain.tld) for custom domains
         const baseDomain = `.${parts.slice(-2).join(".")}`;
 
-        cookieOptionsWithDomain = { ...COOKIE_OPTIONS, domain: baseDomain };
+        cookieOptionsWithDomain = {
+          ...cookieOptionsWithDomain,
+          domain: baseDomain,
+        };
       }
     }
     // For Railway/Vercel/etc, don't set domain - use default (current host only)
   }
 
-  response.cookies.set(COOKIE_NAME, token, cookieOptionsWithDomain);
-  console.log("[Trainer Session] Cookie set:", {
-    cookieName: COOKIE_NAME,
-    trainerId,
+  response.cookies.set(cookieName, token, cookieOptionsWithDomain);
+  console.log("[Session] Cookie set:", {
+    cookieName,
+    isAdmin,
+    userId: trainerId,
     tenantHost,
     options: cookieOptionsWithDomain,
   });

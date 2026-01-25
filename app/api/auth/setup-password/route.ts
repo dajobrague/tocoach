@@ -1,7 +1,8 @@
-// Trainer login API
+// Trainer password setup API (first-time login)
+// This endpoint marks the password as set after the frontend updates it via Supabase
 import { NextRequest, NextResponse } from "next/server";
 
-import { setSessionCookie, updateTrainerLastLogin } from "@/lib/auth/session";
+import { setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 export async function POST(request: NextRequest) {
@@ -9,43 +10,27 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, password } = body;
+    const { email } = body;
 
     // Validate required fields
-    if (!email || !password) {
+    if (!email) {
       return NextResponse.json(
-        { error: "El correo electrónico y la contraseña son obligatorios" },
+        { error: "El correo electrónico es obligatorio" },
         { status: 400 }
       );
     }
 
-    // Authenticate with Supabase
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password,
-      });
-
-    if (authError || !authData.user) {
-      console.warn("[Login] Authentication failed:", authError?.message);
-
-      return NextResponse.json(
-        { error: "Correo electrónico o contraseña incorrectos" },
-        { status: 401 }
-      );
-    }
-
-    // Get trainer data
+    // Find trainer by email
     const { data: trainerData, error: trainerError } = await supabase
       .from("trainers")
       .select(
-        "id, email, full_name, status, subscription_status, password_set_at"
+        "id, email, full_name, password_set_at, subscription_status, status"
       )
-      .eq("id", authData.user.id)
+      .eq("email", email.toLowerCase().trim())
       .single();
 
     if (trainerError || !trainerData) {
-      console.error("[Login] Trainer not found:", trainerError);
+      console.error("[SetupPassword] Trainer not found:", trainerError);
 
       return NextResponse.json(
         { error: "Cuenta de entrenador no encontrada" },
@@ -57,25 +42,19 @@ export async function POST(request: NextRequest) {
     const { data: tenant } = await supabase
       .from("tenants")
       .select("host, slug")
-      .eq("trainer_id", authData.user.id)
+      .eq("trainer_id", trainerData.id)
       .single();
 
     const tenantHost = tenant?.host || "";
 
-    // Check if password needs to be set up (first-time login)
-    if (!trainerData.password_set_at) {
-      console.log(
-        "[Login] Trainer needs to setup password:",
-        trainerData.email
-      );
-
+    // Check if password was already set
+    if (trainerData.password_set_at) {
       return NextResponse.json(
         {
-          needsPasswordSetup: true,
-          email: trainerData.email,
-          message: "Debes configurar tu contraseña antes de continuar",
+          error:
+            "La contraseña ya fue configurada. Usa el inicio de sesión normal.",
         },
-        { status: 200 }
+        { status: 400 }
       );
     }
 
@@ -94,16 +73,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if trainer account is active
-    if (trainerData.status !== "active") {
+    // Mark password as set in trainers table
+    const { error: updateError } = await supabase
+      .from("trainers")
+      .update({
+        password_set_at: new Date().toISOString(),
+        last_login_at: new Date().toISOString(),
+      })
+      .eq("id", trainerData.id);
+
+    if (updateError) {
+      console.error("[SetupPassword] Trainer update error:", updateError);
+
       return NextResponse.json(
-        { error: "La cuenta está inactiva. Por favor, contacta con soporte." },
-        { status: 403 }
+        { error: "Error al marcar la contraseña como configurada" },
+        { status: 500 }
       );
     }
-
-    // Update last login timestamp (non-blocking)
-    updateTrainerLastLogin(authData.user.id).catch(console.warn);
 
     // Create session and set cookie
     const response = NextResponse.json(
@@ -115,27 +101,26 @@ export async function POST(request: NextRequest) {
           fullName: trainerData.full_name,
           tenantHost: tenantHost,
         },
+        message: "Contraseña configurada exitosamente",
       },
       { status: 200 }
     );
 
-    // Trainers log in on main domain (localhost/topcoach.app), not their client subdomain
-    // Pass tenantHost so it's stored in the session
     await setSessionCookie(
       response,
       trainerData.id,
-      tenantHost, // Store tenant host in session
+      tenantHost,
       trainerData.email,
       trainerData.full_name || undefined
     );
 
     console.log(
-      `[Login] Successfully authenticated trainer: ${trainerData.email}`
+      `[SetupPassword] Successfully marked password as set for trainer: ${trainerData.email}`
     );
 
     return response;
   } catch (error) {
-    console.error("[Login] Unexpected error:", error);
+    console.error("[SetupPassword] Unexpected error:", error);
 
     return NextResponse.json(
       { error: "Error interno del servidor" },

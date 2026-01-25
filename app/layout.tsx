@@ -18,17 +18,18 @@ import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
 
 // Function to check if the current route should not have a navbar
 function isNoNavbarRoute(pathname: string): boolean {
-  // Trainer pages should not have the public navbar (they have their own navigation)
-  const trainerRoutes = [
+  // Trainer and admin pages should not have the public navbar (they have their own navigation)
+  const noNavbarRoutes = [
     "/trainer/login",
     "/trainer/register",
     "/trainer/forgot-password",
     "/trainer/reset-password",
     "/trainer/dashboard",
+    "/admin", // All admin routes
   ];
 
   return (
-    trainerRoutes.some((route) => pathname.startsWith(route)) ||
+    noNavbarRoutes.some((route) => pathname.startsWith(route)) ||
     pathname === "/"
   );
 }
@@ -40,8 +41,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
   let pageTitle = siteConfig.name;
 
+  // Check if it's an admin route
+  if (pathname.startsWith("/admin")) {
+    pageTitle = "TopCoach Admin";
+  }
   // Check if it's a trainer route
-  if (pathname.startsWith("/trainer")) {
+  else if (pathname.startsWith("/trainer")) {
     pageTitle = "TopCoach Trainer Dashboard";
   }
   // Check if it's a client route with tenant

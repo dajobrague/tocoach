@@ -5,8 +5,11 @@ import React from "react";
 
 // Force recompile v3 - Fixed redirect loop with multi-guard system
 
+import AyudaContent from "@/components/dashboard/ayuda-content";
+import BrandSettingsContent from "@/components/dashboard/brand-settings-content";
 import ClientsContent from "@/components/dashboard/clients-content";
 import ExerciseLibraryContent from "@/components/dashboard/exercise-library-content";
+import FloatingSupportButton from "@/components/dashboard/floating-support-button";
 import InventoryContent from "@/components/dashboard/inventory-content";
 import MessagingContent from "@/components/dashboard/messaging-content";
 import MetricasContent from "@/components/dashboard/metricas-content";
@@ -127,6 +130,11 @@ export default function TrainerDashboard() {
     } catch (error) {
       console.error("Logout error:", error);
     }
+  };
+
+  const handleHelpClick = () => {
+    console.log("[Dashboard] Switching to Ayuda y Soporte");
+    handleSectionChange("ayuda");
   };
 
   const handleSectionChange = (key: string) => {
@@ -263,6 +271,10 @@ export default function TrainerDashboard() {
         return <ExerciseLibraryContent />;
       case "messaging":
         return <MessagingContent />;
+      case "ayuda":
+        return <AyudaContent />;
+      case "brand-settings":
+        return <BrandSettingsContent />;
       default:
         return <MetricasContent />;
     }
@@ -276,12 +288,16 @@ export default function TrainerDashboard() {
         items={filteredSidebarItems}
         trainerEmail={session.email}
         trainerName={session.full_name || session.email}
+        onHelpClick={handleHelpClick}
         onLogout={handleLogout}
         onSelect={handleSectionChange}
       />
 
       {/* Main Content */}
       <main className="flex-1 w-full overflow-hidden">{renderContent()}</main>
+
+      {/* Floating Support Button */}
+      <FloatingSupportButton />
     </div>
   );
 }

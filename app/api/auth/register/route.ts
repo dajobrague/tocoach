@@ -1,10 +1,26 @@
 // Trainer registration API
+// NOTE: Public registration is currently disabled. Trainers are created by admin only.
+// This endpoint is kept for potential future use or migration purposes.
+// To enable public registration, remove the feature flag check below.
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 export async function POST(request: NextRequest) {
+  // Feature flag: disable public registration
+  const ENABLE_PUBLIC_REGISTRATION = false;
+
+  if (!ENABLE_PUBLIC_REGISTRATION) {
+    return NextResponse.json(
+      {
+        error:
+          "El registro público está deshabilitado. Contacta con el administrador para obtener una cuenta.",
+      },
+      { status: 403 }
+    );
+  }
   const supabase = createSupabaseClient();
 
   try {

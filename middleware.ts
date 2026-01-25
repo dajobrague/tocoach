@@ -52,6 +52,8 @@ function extractSlugFromPath(pathname: string): string | null {
   // Exclude known trainer/admin routes and system files
   const excludedRoutes = [
     "trainer",
+    "admin", // Admin dashboard routes
+    "auth", // Auth routes (impersonation, etc.)
     "api",
     "_next",
     "brands",
@@ -180,7 +182,8 @@ export async function middleware(request: NextRequest) {
     const isPublicRoute =
       pathAfterSlug === "/login" ||
       pathAfterSlug === "/forgot-password" ||
-      pathAfterSlug === "/reset-password";
+      pathAfterSlug === "/reset-password" ||
+      pathAfterSlug === "/auth/impersonate";
 
     const isProtectedRoute =
       pathAfterSlug === "/" ||
