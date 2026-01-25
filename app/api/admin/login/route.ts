@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
       adminData.id,
       "", // Empty for admin - they're not on a tenant subdomain
       adminData.email,
-      adminData.full_name || undefined
+      adminData.full_name || undefined,
+      true // isAdmin flag
     );
 
     console.log(

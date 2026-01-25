@@ -142,7 +142,8 @@ export async function setSessionCookie(
   trainerId: string,
   tenantHost: string,
   email: string,
-  fullName?: string
+  fullName?: string,
+  isAdmin: boolean = false
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 7 * 24 * 60 * 60; // 7 days
@@ -162,8 +163,7 @@ export async function setSessionCookie(
     .setExpirationTime(exp)
     .sign(JWT_SECRET);
 
-  // Determine if this is an admin or trainer session
-  const isAdmin = !tenantHost;
+  // Use provided isAdmin flag to determine cookie name
   const cookieName = isAdmin ? ADMIN_COOKIE_NAME : TRAINER_COOKIE_NAME;
 
   // In production with custom domain, set domain to allow sharing across subdomains
