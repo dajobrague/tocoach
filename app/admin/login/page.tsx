@@ -57,7 +57,17 @@ export default function AdminLoginPage() {
         // First login - set new password
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+        // CRITICAL: Create client with persistSession: false to prevent session leakage
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: false, // Don't save session to localStorage
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        });
+
+        console.log("[AdminFirstLogin] First login detected for:", email);
 
         // Sign in with temporary password
         const { data: signInData, error: signInError } =
@@ -66,17 +76,34 @@ export default function AdminLoginPage() {
             password: "TopCoachAdmin2026!",
           });
 
-        if (signInError) {
-          console.error("[FirstLogin] Sign in error:", signInError);
+        if (signInError || !signInData.user) {
+          console.error("[AdminFirstLogin] Sign in error:", signInError);
           throw new Error(
             "Error al autenticar con contraseña temporal. " +
-              (signInError.message || "Por favor, contacta al administrador.")
+              (signInError?.message || "Por favor, contacta al administrador.")
           );
         }
 
         console.log(
-          "[FirstLogin] Signed in successfully, updating password..."
+          "[AdminFirstLogin] Authenticated user:",
+          signInData.user.email,
+          "ID:",
+          signInData.user.id
         );
+
+        // SECURITY CHECK: Verify the authenticated user matches the email
+        if (signInData.user.email?.toLowerCase() !== email.toLowerCase()) {
+          console.error(
+            "[AdminFirstLogin] SECURITY ERROR: Email mismatch!",
+            "Expected:",
+            email,
+            "Got:",
+            signInData.user.email
+          );
+          throw new Error(
+            "Error de seguridad: usuario incorrecto. Contacta al administrador."
+          );
+        }
 
         // Update password
         const { error: updateError } = await supabase.auth.updateUser({
@@ -88,6 +115,12 @@ export default function AdminLoginPage() {
             "Error al configurar contraseña: " + updateError.message
           );
         }
+
+        console.log("[AdminFirstLogin] Password updated successfully");
+
+        // CRITICAL: Sign out from Supabase to clear any temporary session
+        await supabase.auth.signOut();
+        console.log("[AdminFirstLogin] Supabase session cleared");
 
         // Mark password as changed
         const setupResponse = await fetch("/api/admin/setup-password", {
@@ -103,7 +136,7 @@ export default function AdminLoginPage() {
           throw new Error("Error al completar la configuración");
         }
 
-        // Now log in with new password
+        // Now log in with new password to create JWT session
         const loginResponse = await fetch("/api/admin/login", {
           method: "POST",
           headers: {
@@ -118,6 +151,9 @@ export default function AdminLoginPage() {
           throw new Error(loginResult.error || "Error en el inicio de sesión");
         }
 
+        console.log(
+          "[AdminFirstLogin] JWT session created, redirecting to dashboard"
+        );
         window.location.href = "/admin/dashboard";
       } else {
         // Regular login

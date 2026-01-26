@@ -68,28 +68,57 @@ export default function TrainerLoginPage() {
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const { createClient } = await import("@supabase/supabase-js");
         const { TEMP_PASSWORD_TRAINER } = await import("@/lib/constants/auth");
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+        // CRITICAL: Create client with persistSession: false to prevent session leakage
+        // This ensures we don't restore any old sessions from localStorage
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: false, // Don't save session to localStorage
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        });
 
         console.log(
-          "[TrainerLogin] First login detected, attempting auth with temp password"
+          "[TrainerLogin] First login detected for:",
+          email,
+          "- attempting auth with temp password"
         );
 
         // First, sign in with temporary password
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password: TEMP_PASSWORD_TRAINER,
-        });
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password: TEMP_PASSWORD_TRAINER,
+          });
 
-        if (signInError) {
-          console.error("[TrainerLogin] Sign in error:", signInError.message);
+        if (signInError || !signInData.user) {
+          console.error("[TrainerLogin] Sign in error:", signInError?.message);
           throw new Error(
-            `Error al autenticar: ${signInError.message}. Contacta al administrador.`
+            `Error al autenticar: ${signInError?.message}. Contacta al administrador.`
           );
         }
 
         console.log(
-          "[TrainerLogin] Successfully authenticated with temp password"
+          "[TrainerLogin] Successfully authenticated user:",
+          signInData.user.email,
+          "ID:",
+          signInData.user.id
         );
+
+        // SECURITY CHECK: Verify the authenticated user matches the email
+        if (signInData.user.email?.toLowerCase() !== email.toLowerCase()) {
+          console.error(
+            "[TrainerLogin] SECURITY ERROR: Email mismatch!",
+            "Expected:",
+            email,
+            "Got:",
+            signInData.user.email
+          );
+          throw new Error(
+            "Error de seguridad: usuario incorrecto. Contacta al administrador."
+          );
+        }
 
         // Update to new password
         const { error: updateError } = await supabase.auth.updateUser({
@@ -97,10 +126,17 @@ export default function TrainerLoginPage() {
         });
 
         if (updateError) {
+          console.error("[TrainerLogin] Password update error:", updateError);
           throw new Error("Error al configurar contraseña");
         }
 
-        // Mark password as set
+        console.log("[TrainerLogin] Password updated successfully");
+
+        // CRITICAL: Sign out from Supabase to clear any temporary session
+        await supabase.auth.signOut();
+        console.log("[TrainerLogin] Supabase session cleared");
+
+        // Mark password as set in our database
         const setupResponse = await fetch("/api/trainer/setup-password", {
           method: "POST",
           headers: {
@@ -113,7 +149,7 @@ export default function TrainerLoginPage() {
           throw new Error("Error al actualizar contraseña");
         }
 
-        // Now login with new password
+        // Now login with new password to create our JWT session
         const loginResponse = await fetch("/api/auth/login", {
           method: "POST",
           headers: {
@@ -128,6 +164,9 @@ export default function TrainerLoginPage() {
           throw new Error(loginResult.error || "Error en el inicio de sesión");
         }
 
+        console.log(
+          "[TrainerLogin] JWT session created, redirecting to dashboard"
+        );
         window.location.href = "/trainer/dashboard";
       } else {
         // Regular login
