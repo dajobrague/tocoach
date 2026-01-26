@@ -12,10 +12,9 @@ const ADMIN_COOKIE_NAME = "admin-session";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production"
-      ? ("none" as const)
-      : ("lax" as const),
+  // Use "lax" for same-site cookies (trainer/admin on app.topcoach.io)
+  // This allows cookies to be sent on normal navigation while still being secure
+  sameSite: "lax" as const,
   path: "/",
   maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
 };
