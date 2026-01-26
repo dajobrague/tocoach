@@ -285,7 +285,8 @@ export async function POST(request: NextRequest) {
         data: {
           full_name: fullName.trim(),
         },
-        emailRedirectTo: undefined, // Don't send confirmation email
+        // Note: emailRedirectTo is omitted to prevent confirmation emails
+        // Email will be auto-confirmed by database trigger (migration 056)
       },
     });
 
