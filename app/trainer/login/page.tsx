@@ -67,17 +67,29 @@ export default function TrainerLoginPage() {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const { createClient } = await import("@supabase/supabase-js");
+        const { TEMP_PASSWORD_TRAINER } = await import("@/lib/constants/auth");
         const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+        console.log(
+          "[TrainerLogin] First login detected, attempting auth with temp password"
+        );
 
         // First, sign in with temporary password
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
-          password: "TopCoach2026!", // Temporary password
+          password: TEMP_PASSWORD_TRAINER,
         });
 
         if (signInError) {
-          throw new Error("Error al autenticar. Contacta al administrador.");
+          console.error("[TrainerLogin] Sign in error:", signInError.message);
+          throw new Error(
+            `Error al autenticar: ${signInError.message}. Contacta al administrador.`
+          );
         }
+
+        console.log(
+          "[TrainerLogin] Successfully authenticated with temp password"
+        );
 
         // Update to new password
         const { error: updateError } = await supabase.auth.updateUser({

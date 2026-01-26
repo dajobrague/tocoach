@@ -210,7 +210,8 @@ export default function AddTrainerModal({
                         Iniciar sesión con su correo y contraseña temporal:{" "}
                         <code className="bg-blue-100 px-2 py-0.5 rounded font-semibold">
                           TopCoach2026!
-                        </code>
+                        </code>{" "}
+                        (siempre es la misma)
                       </li>
                       <li>
                         El sistema detectará que no tiene contraseña

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { TEMP_PASSWORD_TRAINER } from "@/lib/constants/auth";
 
 // Helper to verify admin authentication
 async function verifyAdminAuth(request: NextRequest) {
@@ -271,7 +272,11 @@ export async function POST(request: NextRequest) {
     // Create Supabase user with a temporary password
     // Admin will share this temp password with the trainer
     // On first login, trainer will be redirected to setup their own password
-    const tempPassword = "TopCoach2026!"; // Known temp password for first login
+    const tempPassword = TEMP_PASSWORD_TRAINER;
+
+    console.log(
+      `[AdminCreateTrainer] Creating auth user with temp password for: ${email}`
+    );
 
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
@@ -280,17 +285,27 @@ export async function POST(request: NextRequest) {
         data: {
           full_name: fullName.trim(),
         },
+        emailRedirectTo: undefined, // Don't send confirmation email
       },
     });
 
     if (authError || !authUser.user) {
       console.error("[AdminCreateTrainer] Auth error:", authError);
+      console.error("[AdminCreateTrainer] Full error details:", {
+        message: authError?.message,
+        status: authError?.status,
+        name: authError?.name,
+      });
 
       return NextResponse.json(
         { error: "Error al crear el usuario en el sistema de autenticación" },
         { status: 500 }
       );
     }
+
+    console.log(
+      `[AdminCreateTrainer] Auth user created: ${authUser.user.id}, email: ${authUser.user.email}`
+    );
 
     // Create trainer record (password_set_at is NULL - they need to set it)
     // Use fresh client to ensure we're using anon role (signup created an auth session)
@@ -377,7 +392,7 @@ export async function POST(request: NextRequest) {
           fullName: fullName.trim(),
           tenantHost: tenantHost.toLowerCase().trim(),
         },
-        message: `Entrenador creado exitosamente. Comparte estas credenciales con ${fullName}:\n\nEmail: ${email}\nContraseña temporal: TopCoach2026!\nURL: ${process.env.NEXT_PUBLIC_APP_DOMAIN || "tu-dominio.com"}/trainer/login\n\nAl iniciar sesión por primera vez, deberán configurar su propia contraseña.`,
+        message: `Entrenador creado exitosamente. Comparte estas credenciales con ${fullName}:\n\nEmail: ${email}\nContraseña temporal: ${TEMP_PASSWORD_TRAINER}\nURL: ${process.env.NEXT_PUBLIC_APP_DOMAIN || "tu-dominio.com"}/trainer/login\n\nAl iniciar sesión por primera vez, deberán configurar su propia contraseña.`,
       },
       { status: 201 }
     );
