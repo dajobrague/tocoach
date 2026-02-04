@@ -315,7 +315,11 @@ export default function TrainerLoginPage() {
 
               {!isFirstLogin && (
                 <div className="flex justify-end">
-                  <Link className="font-body" href="/forgot-password" size="sm">
+                  <Link
+                    className="font-body"
+                    href="/trainer/forgot-password"
+                    size="sm"
+                  >
                     ¿Olvidaste tu contraseña?
                   </Link>
                 </div>
