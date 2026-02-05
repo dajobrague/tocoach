@@ -206,7 +206,7 @@ export default function BrandColorsTab() {
       {/* Brand Colors Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:palette-linear" />
+          <Icon className="text-slate-700" icon="solar:palette-linear" />
           Colores de Marca
         </h4>
         <div className="grid md:grid-cols-2 gap-6">
@@ -228,7 +228,7 @@ export default function BrandColorsTab() {
       {/* Text Colors Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:text-field-linear" />
+          <Icon className="text-slate-700" icon="solar:text-field-linear" />
           Colores de Texto
         </h4>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -278,7 +278,7 @@ export default function BrandColorsTab() {
       {/* Background Colors Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:layers-linear" />
+          <Icon className="text-slate-700" icon="solar:layers-linear" />
           Colores de Fondo
         </h4>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -321,7 +321,7 @@ export default function BrandColorsTab() {
       {/* Button Colors Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:cursor-linear" />
+          <Icon className="text-slate-700" icon="solar:cursor-linear" />
           Colores de Botones
         </h4>
 
@@ -431,7 +431,7 @@ export default function BrandColorsTab() {
       {/* Save Button */}
       <div className="flex justify-end pt-6 border-t border-gray-200">
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           isLoading={isSaving}
           size="lg"
           startContent={<Icon icon="solar:floppy-disk-linear" />}

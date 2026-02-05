@@ -5,8 +5,6 @@ import {
   Card,
   CardBody,
   Input,
-  Select,
-  SelectItem,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useState } from "react";
@@ -83,23 +81,11 @@ export default function LogoSetup() {
     actions.setLogoUrl(null);
   };
 
-  const logoSizeOptions = [
-    { key: "small", label: "Pequeño", description: "Para headers compactos" },
-    { key: "medium", label: "Mediano", description: "Tamaño estándar" },
-    { key: "large", label: "Grande", description: "Para mayor impacto" },
-  ];
-
-  const logoPositionOptions = [
-    { key: "left", label: "Izquierda", icon: "solar:align-left-linear" },
-    { key: "center", label: "Centro", icon: "solar:align-center-linear" },
-    { key: "right", label: "Derecha", icon: "solar:align-right-linear" },
-  ];
-
   return (
     <div className="space-y-6">
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:gallery-linear" />
+          <Icon className="text-slate-700" icon="solar:gallery-linear" />
           Logo y Marca
         </h4>
       </div>
@@ -154,8 +140,8 @@ export default function LogoSetup() {
               {...getRootProps()}
               className={`border-2 border-dashed rounded-lg transition-colors cursor-pointer p-8 text-center ${
                 isDragActive
-                  ? "border-blue-400 bg-blue-50"
-                  : "border-gray-300 hover:border-blue-300 hover:bg-gray-50"
+                  ? "border-slate-400 bg-slate-100"
+                  : "border-gray-300 hover:border-slate-300 hover:bg-gray-50"
               }`}
               onClick={(e) => {
                 e.preventDefault();
@@ -165,7 +151,7 @@ export default function LogoSetup() {
               <input {...getInputProps()} />
               <div className="flex justify-center mb-4">
                 <Icon
-                  className={`text-4xl ${isDragActive ? "text-blue-600" : "text-gray-400"}`}
+                  className={`text-4xl ${isDragActive ? "text-slate-700" : "text-gray-400"}`}
                   icon="solar:upload-linear"
                 />
               </div>
@@ -200,61 +186,6 @@ export default function LogoSetup() {
         />
       </div>
 
-      {/* Logo Position */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-black">
-          Posición del logo
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {logoPositionOptions.map((option) => (
-            <Button
-              key={option.key}
-              className="h-auto p-4 flex-col gap-2"
-              color={
-                state.logo?.position === option.key ? "primary" : "default"
-              }
-              variant={
-                state.logo?.position === option.key ? "solid" : "bordered"
-              }
-              onPress={() =>
-                actions.setLogoPosition(
-                  option.key as "left" | "center" | "right"
-                )
-              }
-            >
-              <Icon className="text-xl" icon={option.icon} />
-              <span className="text-sm">{option.label}</span>
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Logo Size */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-black">
-          Tamaño del logo
-        </label>
-        <Select
-          className="w-full"
-          selectedKeys={[state.logo?.size || "medium"]}
-          variant="bordered"
-          onSelectionChange={(keys) => {
-            const size = Array.from(keys)[0] as "small" | "medium" | "large";
-
-            actions.setLogoSize(size);
-          }}
-        >
-          {logoSizeOptions.map((option) => (
-            <SelectItem key={option.key} textValue={option.label}>
-              <div>
-                <p className="font-medium">{option.label}</p>
-                <p className="text-xs text-gray-500">{option.description}</p>
-              </div>
-            </SelectItem>
-          ))}
-        </Select>
-      </div>
-
       {/* Action Buttons */}
       <div className="flex justify-between pt-6 border-t border-gray-200">
         <Button
@@ -267,7 +198,7 @@ export default function LogoSetup() {
         </Button>
 
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           endContent={<Icon icon="solar:arrow-right-linear" />}
           size="lg"
           onPress={actions.nextStep}

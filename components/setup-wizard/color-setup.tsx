@@ -11,7 +11,7 @@ import { useSetupWizard } from "@/lib/setup-wizard/context";
 const COLOR_PALETTES = [
   {
     name: "Profesional Azul",
-    primary: "#3b82f6",
+    primary: "#0f172a",
     secondary: "#6366f1",
     text: {
       h1: "#1f2937",
@@ -26,7 +26,7 @@ const COLOR_PALETTES = [
       accent: "#f1f5f9",
     },
     buttons: {
-      primary: { bg: "#3b82f6", text: "#ffffff", hover: "#2563eb" },
+      primary: { bg: "#0f172a", text: "#ffffff", hover: "#1e293b" },
       secondary: { bg: "#f1f5f9", text: "#374151", hover: "#e2e8f0" },
     },
     shadows: {
@@ -445,7 +445,7 @@ export default function ColorSetup() {
             <Card
               key={index}
               isPressable
-              className="border-2 border-gray-200 hover:border-blue-400 transition-all hover:shadow-md"
+              className="border-2 border-gray-200 hover:border-slate-400 transition-all hover:shadow-md"
               onPress={() => handlePaletteSelect(palette)}
             >
               <CardBody className="p-3">
@@ -490,7 +490,7 @@ export default function ColorSetup() {
         {/* Brand Colors Section */}
         <div>
           <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-            <Icon className="text-blue-600" icon="solar:palette-linear" />
+            <Icon className="text-slate-700" icon="solar:palette-linear" />
             Colores de Marca
           </h4>
           <div className="grid md:grid-cols-2 gap-6">
@@ -512,7 +512,7 @@ export default function ColorSetup() {
         {/* Text Colors Section */}
         <div>
           <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-            <Icon className="text-blue-600" icon="solar:text-field-linear" />
+            <Icon className="text-slate-700" icon="solar:text-field-linear" />
             Colores de Texto
           </h4>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -552,7 +552,7 @@ export default function ColorSetup() {
         {/* Background Colors Section */}
         <div>
           <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-            <Icon className="text-blue-600" icon="solar:layers-linear" />
+            <Icon className="text-slate-700" icon="solar:layers-linear" />
             Colores de Fondo
           </h4>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -582,7 +582,7 @@ export default function ColorSetup() {
         {/* Button Colors Section */}
         <div>
           <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-            <Icon className="text-blue-600" icon="solar:cursor-linear" />
+            <Icon className="text-slate-700" icon="solar:cursor-linear" />
             Colores de Botones
           </h4>
 

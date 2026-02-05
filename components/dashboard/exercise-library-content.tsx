@@ -123,8 +123,7 @@ export default function ExerciseLibraryContent() {
             </p>
           </div>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             size="lg"
             startContent={<Icon icon="solar:add-circle-bold" width={20} />}
             onPress={() => setIsAddModalOpen(true)}
@@ -137,12 +136,11 @@ export default function ExerciseLibraryContent() {
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex gap-2">
             <Button
-              className={`font-semibold ${
+              className={
                 categoryFilter === "strength"
-                  ? "text-white"
-                  : "text-blue-600 bg-white"
-              }`}
-              color={categoryFilter === "strength" ? "primary" : "default"}
+                  ? "font-semibold bg-black text-white hover:bg-slate-800"
+                  : "font-semibold text-slate-700 bg-white"
+              }
               size="lg"
               startContent={<Icon icon="solar:dumbbell-bold" width={20} />}
               variant={categoryFilter === "strength" ? "solid" : "bordered"}
@@ -170,7 +168,7 @@ export default function ExerciseLibraryContent() {
           <div className="flex gap-2">
             <Button
               isIconOnly
-              color={viewMode === "grid" ? "primary" : "default"}
+              className={viewMode === "grid" ? "bg-black text-white" : ""}
               size="md"
               variant={viewMode === "grid" ? "solid" : "bordered"}
               onPress={() => setViewMode("grid")}
@@ -179,7 +177,7 @@ export default function ExerciseLibraryContent() {
             </Button>
             <Button
               isIconOnly
-              color={viewMode === "table" ? "primary" : "default"}
+              className={viewMode === "table" ? "bg-black text-white" : ""}
               size="md"
               variant={viewMode === "table" ? "solid" : "bordered"}
               onPress={() => setViewMode("table")}
@@ -288,7 +286,7 @@ export default function ExerciseLibraryContent() {
                     className={`relative w-full h-48 bg-gradient-to-br cursor-pointer ${
                       exercise.category === "cardio"
                         ? "from-red-50 to-orange-50"
-                        : "from-blue-50 to-purple-50"
+                        : "from-slate-50 to-purple-50"
                     } flex items-center justify-center`}
                     onClick={() => setViewingExercise(exercise)}
                   >
@@ -296,7 +294,7 @@ export default function ExerciseLibraryContent() {
                       className={
                         exercise.category === "cardio"
                           ? "text-red-300"
-                          : "text-blue-300"
+                          : "text-slate-300"
                       }
                       icon={
                         exercise.category === "cardio"
@@ -321,7 +319,7 @@ export default function ExerciseLibraryContent() {
                       </h3>
                       <div className="flex flex-wrap gap-2">
                         <Chip
-                          className="bg-blue-100 text-blue-700 border border-blue-200"
+                          className="bg-slate-200 text-slate-800 border border-slate-300"
                           size="sm"
                           variant="flat"
                         >
@@ -535,7 +533,7 @@ export default function ExerciseLibraryContent() {
                                 className={
                                   exercise.category === "cardio"
                                     ? "text-red-600"
-                                    : "text-blue-600"
+                                    : "text-slate-700"
                                 }
                                 icon={
                                   exercise.category === "cardio"
@@ -608,7 +606,7 @@ export default function ExerciseLibraryContent() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Icon
-                                className="text-blue-600"
+                                className="text-slate-700"
                                 icon="solar:play-circle-bold"
                                 width={18}
                               />
@@ -696,14 +694,14 @@ export default function ExerciseLibraryContent() {
                   className={`${
                     viewingExercise.category === "cardio"
                       ? "bg-red-50"
-                      : "bg-blue-50"
+                      : "bg-slate-100"
                   } p-2 rounded-lg`}
                 >
                   <Icon
                     className={`${
                       viewingExercise.category === "cardio"
                         ? "text-red-600"
-                        : "text-blue-600"
+                        : "text-slate-700"
                     } text-xl`}
                     icon={
                       viewingExercise.category === "cardio"
@@ -721,7 +719,7 @@ export default function ExerciseLibraryContent() {
                       className={
                         viewingExercise.category === "cardio"
                           ? "bg-red-100 text-red-700 border border-red-200"
-                          : "bg-blue-100 text-blue-700 border border-blue-200"
+                          : "bg-slate-200 text-slate-800 border border-slate-300"
                       }
                       size="sm"
                       variant="flat"
@@ -730,7 +728,7 @@ export default function ExerciseLibraryContent() {
                     </Chip>
                     {viewingExercise.movement_pattern && (
                       <Chip
-                        className="bg-purple-100 text-purple-700 border border-purple-200"
+                        className="bg-slate-200 text-slate-800 border border-slate-300"
                         size="sm"
                         variant="flat"
                       >
@@ -758,8 +756,7 @@ export default function ExerciseLibraryContent() {
                     {viewingExercise.video_url && (
                       <Button
                         as="a"
-                        className="w-full text-white font-semibold"
-                        color="primary"
+                        className="w-full bg-black text-white hover:bg-slate-800 font-semibold"
                         href={viewingExercise.video_url}
                         rel="noopener noreferrer"
                         size="lg"
@@ -924,7 +921,7 @@ export default function ExerciseLibraryContent() {
                         {viewingExercise.muscle_groups.map((group) => (
                           <Chip
                             key={group}
-                            className="bg-blue-100 text-blue-700"
+                            className="bg-slate-200 text-slate-800"
                             size="sm"
                             variant="flat"
                           >
@@ -953,7 +950,7 @@ export default function ExerciseLibraryContent() {
                           className={
                             viewingExercise.category === "cardio"
                               ? "bg-orange-100 text-orange-700"
-                              : "bg-purple-100 text-purple-700"
+                              : "bg-slate-200 text-slate-800"
                           }
                           size="sm"
                           variant="flat"
@@ -975,8 +972,7 @@ export default function ExerciseLibraryContent() {
                 Cerrar
               </Button>
               <Button
-                className="text-white font-semibold"
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800 font-semibold"
                 startContent={<Icon icon="solar:pen-bold" width={18} />}
                 onPress={() => {
                   setEditingExercise(viewingExercise);

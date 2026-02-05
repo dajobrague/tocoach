@@ -55,7 +55,7 @@ export default function TopNavigation({
         wrapper: "px-4 sm:px-6",
         brand: "gap-3",
         content: "gap-4",
-        item: "data-[active=true]:text-blue-600",
+        item: "data-[active=true]:text-black",
         menu: "pt-6",
       }}
       isMenuOpen={isMenuOpen}
@@ -64,7 +64,7 @@ export default function TopNavigation({
     >
       {/* Logo/Brand */}
       <NavbarBrand>
-        <div className="bg-gradient-to-br from-blue-600 to-blue-700 flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">
+        <div className="bg-black flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">
           <span className="text-white font-bold text-sm">TC</span>
         </div>
         <div className="hidden sm:flex flex-col">
@@ -100,8 +100,8 @@ export default function TopNavigation({
                                 h-9 font-medium transition-all duration-300 ease-in-out relative overflow-hidden
                                 ${
                                   activeSection === item.key
-                                    ? "bg-blue-50 text-blue-600 px-4"
-                                    : "text-gray-600 hover:text-blue-600 hover:bg-gray-50 px-3 group-hover:px-4"
+                                    ? "bg-slate-100 text-black px-4"
+                                    : "text-gray-600 hover:text-black hover:bg-slate-50 px-3 group-hover:px-4"
                                 }
                             `}
               startContent={
@@ -110,8 +110,8 @@ export default function TopNavigation({
                     transition-all duration-300 ease-in-out flex-shrink-0
                     ${
                       activeSection === item.key
-                        ? "text-blue-600"
-                        : "text-gray-500 group-hover:text-blue-600"
+                        ? "text-black"
+                        : "text-gray-500 group-hover:text-black"
                     }
                   `}
                   icon={item.icon || ""}
@@ -246,7 +246,7 @@ export default function TopNavigation({
                                 w-full justify-start h-12 px-4 font-medium
                                 ${
                                   activeSection === item.key
-                                    ? "bg-blue-50 text-blue-600"
+                                    ? "bg-slate-100 text-black"
                                     : "text-gray-700"
                                 }
                             `}
@@ -255,7 +255,7 @@ export default function TopNavigation({
                 <Icon
                   className={
                     activeSection === item.key
-                      ? "text-blue-600"
+                      ? "text-black"
                       : "text-gray-500"
                   }
                   icon={item.icon || ""}

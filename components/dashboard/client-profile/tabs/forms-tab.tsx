@@ -658,9 +658,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
         <Tabs
           classNames={{
             tabList: "px-6",
-            cursor: "bg-blue-600",
+            cursor: "bg-black",
             tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-blue-600",
+            tabContent: "group-data-[selected=true]:text-black",
           }}
           selectedKey={selectedFormType}
           variant="underlined"
@@ -694,9 +694,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
         <Tabs
           classNames={{
             tabList: "px-6",
-            cursor: "bg-blue-600",
+            cursor: "bg-black",
             tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-blue-600",
+            tabContent: "group-data-[selected=true]:text-black",
           }}
           selectedKey={selectedView}
           variant="underlined"
@@ -767,9 +767,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                       <summary className="cursor-pointer list-none p-4 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-blue-50">
+                            <div className="p-2 rounded-lg bg-slate-100">
                               <Icon
-                                className="text-blue-600"
+                                className="text-slate-700"
                                 icon={
                                   selectedFormType === "checkins"
                                     ? "solar:clipboard-check-bold"
@@ -962,7 +962,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                       key={question.id}
                       className={`border-2 transition-all ${
                         question.enabled
-                          ? "border-blue-300 bg-blue-50"
+                          ? "border-slate-300 bg-slate-100"
                           : "border-gray-200 bg-gray-50"
                       }`}
                     >
@@ -970,13 +970,13 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         <div className="flex items-start gap-3 mb-3">
                           <div
                             className={`p-2 rounded-lg flex-shrink-0 ${
-                              question.enabled ? "bg-blue-100" : "bg-gray-200"
+                              question.enabled ? "bg-slate-200" : "bg-gray-200"
                             }`}
                           >
                             <Icon
                               className={
                                 question.enabled
-                                  ? "text-blue-600"
+                                  ? "text-slate-700"
                                   : "text-gray-400"
                               }
                               icon={question.icon}
@@ -1072,12 +1072,12 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-blue-200">
+                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
                           <div className="flex items-center gap-2">
                             <Switch
                               classNames={{
                                 wrapper:
-                                  "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                  "group-data-[selected=true]:bg-black bg-gray-300",
                               }}
                               color="primary"
                               isSelected={question.enabled}
@@ -1095,7 +1095,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                               <Switch
                                 classNames={{
                                   wrapper:
-                                    "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                    "group-data-[selected=true]:bg-black bg-gray-300",
                                 }}
                                 color="primary"
                                 isSelected={question.required}
@@ -1105,7 +1105,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                 }
                               />
                               <span
-                                className={`text-xs font-semibold ${question.required ? "text-blue-700" : "text-gray-500"}`}
+                                className={`text-xs font-semibold ${question.required ? "text-slate-700" : "text-gray-500"}`}
                               >
                                 {question.required
                                   ? "★ Obligatorio"
@@ -1119,7 +1119,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         {question.type === "group" &&
                           question.enabled &&
                           question.subQuestions && (
-                            <div className="mt-3 pt-3 border-t border-blue-200 space-y-2">
+                            <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
                               <p className="text-xs font-bold text-gray-700 mb-2">
                                 Elementos del grupo:
                               </p>
@@ -1128,14 +1128,14 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                   key={subQuestion.id}
                                   className={`flex items-center gap-2 p-2 rounded-lg ${
                                     subQuestion.enabled
-                                      ? "bg-blue-100"
+                                      ? "bg-slate-200"
                                       : "bg-gray-100"
                                   }`}
                                 >
                                   <Icon
                                     className={
                                       subQuestion.enabled
-                                        ? "text-blue-600"
+                                        ? "text-slate-700"
                                         : "text-gray-400"
                                     }
                                     icon={subQuestion.icon}
@@ -1153,7 +1153,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                   <Switch
                                     classNames={{
                                       wrapper:
-                                        "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                        "group-data-[selected=true]:bg-black bg-gray-300",
                                     }}
                                     color="primary"
                                     isSelected={subQuestion.enabled}
@@ -1170,7 +1170,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                       <Switch
                                         classNames={{
                                           wrapper:
-                                            "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                            "group-data-[selected=true]:bg-black bg-gray-300",
                                         }}
                                         color="primary"
                                         isSelected={subQuestion.required}
@@ -1210,10 +1210,10 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         width={18}
                       />
                       <div>
-                        <p className="text-sm font-semibold text-blue-900 mb-1">
+                        <p className="text-sm font-semibold text-slate-900 mb-1">
                           Frecuencia del Check-in
                         </p>
-                        <p className="text-sm text-blue-700">
+                        <p className="text-sm text-slate-700">
                           Este formulario se enviará automáticamente cada
                           semana. El cliente recibirá una notificación para
                           completarlo.
@@ -1303,7 +1303,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                       key={question.id}
                       className={`border-2 transition-all ${
                         question.enabled
-                          ? "border-blue-300 bg-blue-50"
+                          ? "border-slate-300 bg-slate-100"
                           : "border-gray-200 bg-gray-50"
                       }`}
                     >
@@ -1311,13 +1311,13 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         <div className="flex items-start gap-3 mb-3">
                           <div
                             className={`p-2 rounded-lg flex-shrink-0 ${
-                              question.enabled ? "bg-blue-100" : "bg-gray-200"
+                              question.enabled ? "bg-slate-200" : "bg-gray-200"
                             }`}
                           >
                             <Icon
                               className={
                                 question.enabled
-                                  ? "text-blue-600"
+                                  ? "text-slate-700"
                                   : "text-gray-400"
                               }
                               icon={question.icon}
@@ -1407,12 +1407,12 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-blue-200">
+                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
                           <div className="flex items-center gap-2">
                             <Switch
                               classNames={{
                                 wrapper:
-                                  "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                  "group-data-[selected=true]:bg-black bg-gray-300",
                               }}
                               color="primary"
                               isSelected={question.enabled}
@@ -1430,7 +1430,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                               <Switch
                                 classNames={{
                                   wrapper:
-                                    "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                    "group-data-[selected=true]:bg-black bg-gray-300",
                                 }}
                                 color="primary"
                                 isSelected={question.required}
@@ -1440,7 +1440,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                 }
                               />
                               <span
-                                className={`text-xs font-semibold ${question.required ? "text-blue-700" : "text-gray-500"}`}
+                                className={`text-xs font-semibold ${question.required ? "text-slate-700" : "text-gray-500"}`}
                               >
                                 {question.required
                                   ? "★ Obligatorio"
@@ -1454,7 +1454,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         {question.type === "group" &&
                           question.enabled &&
                           question.subQuestions && (
-                            <div className="mt-3 pt-3 border-t border-blue-200 space-y-2">
+                            <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
                               <p className="text-xs font-bold text-gray-700 mb-2">
                                 Elementos del grupo:
                               </p>
@@ -1463,14 +1463,14 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                   key={subQuestion.id}
                                   className={`flex items-center gap-2 p-2 rounded-lg ${
                                     subQuestion.enabled
-                                      ? "bg-blue-100"
+                                      ? "bg-slate-200"
                                       : "bg-gray-100"
                                   }`}
                                 >
                                   <Icon
                                     className={
                                       subQuestion.enabled
-                                        ? "text-blue-600"
+                                        ? "text-slate-700"
                                         : "text-gray-400"
                                     }
                                     icon={subQuestion.icon}
@@ -1488,7 +1488,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                   <Switch
                                     classNames={{
                                       wrapper:
-                                        "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                        "group-data-[selected=true]:bg-black bg-gray-300",
                                     }}
                                     color="primary"
                                     isSelected={subQuestion.enabled}
@@ -1505,7 +1505,7 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                                       <Switch
                                         classNames={{
                                           wrapper:
-                                            "group-data-[selected=true]:bg-blue-600 bg-gray-300",
+                                            "group-data-[selected=true]:bg-black bg-gray-300",
                                         }}
                                         color="primary"
                                         isSelected={subQuestion.required}
@@ -1545,10 +1545,10 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         width={18}
                       />
                       <div>
-                        <p className="text-sm font-semibold text-blue-900 mb-1">
+                        <p className="text-sm font-semibold text-slate-900 mb-1">
                           Seguimiento Diario
                         </p>
-                        <p className="text-sm text-blue-700">
+                        <p className="text-sm text-slate-700">
                           Estas métricas se pueden registrar todos los días. El
                           cliente puede completarlas cuando lo desee.
                         </p>
@@ -1602,9 +1602,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-50">
+              <div className="p-2 rounded-lg bg-slate-100">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon={
                     selectedFormType === "checkins"
                       ? "solar:clipboard-check-bold"
@@ -1792,9 +1792,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
         <ModalContent>
           <ModalHeader>
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-50">
+              <div className="p-2 rounded-lg bg-slate-100">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:add-circle-bold"
                   width={24}
                 />

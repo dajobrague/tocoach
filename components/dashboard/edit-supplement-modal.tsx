@@ -172,8 +172,8 @@ export default function EditSupplementModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Icon className="text-blue-600 text-xl" icon="solar:pen-bold" />
+            <div className="bg-slate-100 p-2 rounded-lg">
+              <Icon className="text-slate-700 text-xl" icon="solar:pen-bold" />
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">
@@ -191,7 +191,7 @@ export default function EditSupplementModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:box-linear"
                   width={18}
                 />
@@ -253,7 +253,7 @@ export default function EditSupplementModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:gallery-linear"
                   width={18}
                 />
@@ -351,8 +351,7 @@ export default function EditSupplementModal({
             Cancelar
           </Button>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             isLoading={isSubmitting}
             startContent={<Icon icon="solar:diskette-bold" width={18} />}
             onPress={handleSubmit}

@@ -801,7 +801,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         {program.name}
                       </h3>
                       <Chip
-                        className="bg-blue-100 text-blue-700 border border-blue-200 font-semibold"
+                        className="bg-slate-200 text-slate-800 border border-slate-300 font-semibold"
                         size="sm"
                         variant="flat"
                       >
@@ -822,14 +822,14 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       Iniciado el {formatDate(program.assignedDate)}
                     </p>
                     {program.notes && (
-                      <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="mt-3 p-3 bg-slate-100 rounded-lg border border-slate-200">
                         <div className="flex items-start gap-2">
                           <Icon
-                            className="text-blue-600 mt-0.5 flex-shrink-0"
+                            className="text-slate-700 mt-0.5 flex-shrink-0"
                             icon="solar:notes-bold"
                             width={16}
                           />
-                          <p className="text-sm text-blue-900">
+                          <p className="text-sm text-slate-900">
                             {program.notes}
                           </p>
                         </div>
@@ -890,7 +890,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     <p className="text-sm font-semibold text-gray-700">
                       Progreso General
                     </p>
-                    <p className="text-sm font-bold text-blue-600">
+                    <p className="text-sm font-bold text-slate-700">
                       {program.progress}%
                     </p>
                   </div>
@@ -907,7 +907,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Icon
-                        className="text-blue-600 flex-shrink-0"
+                        className="text-slate-700 flex-shrink-0"
                         icon="solar:calendar-bold"
                         width={18}
                       />
@@ -936,16 +936,16 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         open={expandedSessions.has(session.id)}
                       >
                         <summary
-                          className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
+                          className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors"
                           onClick={(e) => {
                             e.preventDefault();
                             toggleSession(session.id);
                           }}
                         >
                           <div className="flex items-center gap-4 flex-1">
-                            <div className="bg-blue-50 p-2 rounded-lg">
+                            <div className="bg-slate-100 p-2 rounded-lg">
                               <Icon
-                                className="text-blue-600"
+                                className="text-slate-700"
                                 icon="solar:dumbbell-bold"
                                 width={20}
                               />
@@ -1034,7 +1034,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                             >
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3 flex-1">
-                                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center flex-shrink-0">
                                     <span className="text-sm font-bold text-white">
                                       {exercise.order}
                                     </span>
@@ -1055,7 +1055,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                                           variant="flat"
                                         >
                                           <Icon
-                                            className="text-blue-600"
+                                            className="text-slate-700"
                                             icon="solar:play-circle-bold"
                                             width={16}
                                           />
@@ -1093,7 +1093,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                                       </div>
                                       <div className="flex items-center gap-1.5">
                                         <Icon
-                                          className="text-blue-500 flex-shrink-0"
+                                          className="text-slate-600 flex-shrink-0"
                                           icon="solar:graph-bold"
                                           width={14}
                                         />
@@ -1241,9 +1241,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:dumbbell-bold"
                 />
               </div>
@@ -1307,9 +1307,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                             src={exercise.image_url}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-md bg-blue-100 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-md bg-slate-200 flex items-center justify-center">
                             <Icon
-                              className="text-blue-600"
+                              className="text-slate-700"
                               icon="solar:dumbbell-bold"
                               width={20}
                             />
@@ -1563,9 +1563,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:dumbbell-bold"
                 />
               </div>
@@ -1806,9 +1806,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:clipboard-list-bold"
                 />
               </div>
@@ -2064,7 +2064,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               </div>
 
               {/* Info Card */}
-              <Card className="bg-blue-50 border border-blue-100">
+              <Card className="bg-slate-100 border border-slate-200">
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
@@ -2073,10 +2073,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       width={18}
                     />
                     <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                      <p className="text-sm font-semibold text-slate-900 mb-1">
                         Nota Importante
                       </p>
-                      <p className="text-sm text-blue-700">
+                      <p className="text-sm text-slate-700">
                         Una vez creado el programa, podrás añadir sesiones y
                         ejercicios específicos. Asegúrate de completar toda la
                         información requerida.
@@ -2127,9 +2127,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:clipboard-list-bold"
                 />
               </div>
@@ -2419,9 +2419,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:calendar-add-bold"
                 />
               </div>
@@ -2495,7 +2495,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               </div>
 
               {/* Info Card */}
-              <Card className="bg-blue-50 border border-blue-100">
+              <Card className="bg-slate-100 border border-slate-200">
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
@@ -2504,10 +2504,10 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       width={18}
                     />
                     <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                      <p className="text-sm font-semibold text-slate-900 mb-1">
                         Nota Importante
                       </p>
-                      <p className="text-sm text-blue-700">
+                      <p className="text-sm text-slate-700">
                         Puedes asignar la sesión a múltiples días de la semana.
                         Una vez creada, podrás añadir ejercicios específicos.
                       </p>
@@ -2555,9 +2555,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:calendar-add-bold"
                 />
               </div>

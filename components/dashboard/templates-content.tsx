@@ -168,8 +168,7 @@ export default function TemplatesContent() {
             </p>
           </div>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             size="lg"
             startContent={<Icon icon="solar:add-circle-bold" width={20} />}
             onPress={() => setIsCreateModalOpen(true)}
@@ -182,9 +181,9 @@ export default function TemplatesContent() {
         <Tabs
           classNames={{
             tabList: "gap-6",
-            cursor: "bg-blue-600",
+            cursor: "bg-black",
             tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-blue-600",
+            tabContent: "group-data-[selected=true]:text-black",
           }}
           selectedKey={templateTypeTab}
           variant="underlined"
@@ -237,24 +236,21 @@ export default function TemplatesContent() {
           {templateTypeTab === "programs" && (
             <div className="flex gap-2">
               <Button
-                className="font-semibold text-white"
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800 font-semibold"
                 variant={categoryFilter === "all" ? "solid" : "flat"}
                 onPress={() => setCategoryFilter("all")}
               >
                 Todas
               </Button>
               <Button
-                className="font-semibold text-white"
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800 font-semibold"
                 variant={categoryFilter === "strength" ? "solid" : "flat"}
                 onPress={() => setCategoryFilter("strength")}
               >
                 Fuerza
               </Button>
               <Button
-                className="font-semibold text-white"
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800 font-semibold"
                 variant={categoryFilter === "cardio" ? "solid" : "flat"}
                 onPress={() => setCategoryFilter("cardio")}
               >
@@ -407,8 +403,7 @@ export default function TemplatesContent() {
                 <div className="mt-auto pt-4 border-t border-gray-100">
                   <div className="flex gap-2 mb-3">
                     <Button
-                      className="flex-1 text-white font-semibold"
-                      color="primary"
+                      className="flex-1 bg-black text-white hover:bg-slate-800 font-semibold"
                       size="sm"
                       variant="flat"
                       onPress={() => handleViewTemplate(template)}

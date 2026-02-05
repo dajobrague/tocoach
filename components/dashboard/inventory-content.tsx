@@ -122,8 +122,7 @@ export default function InventoryContent() {
             </p>
           </div>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             size="lg"
             startContent={<Icon icon="solar:add-circle-bold" width={20} />}
             onPress={() => setIsAddModalOpen(true)}
@@ -152,8 +151,7 @@ export default function InventoryContent() {
             onValueChange={setSearchQuery}
           />
           <Button
-            className="font-medium"
-            color={includeArchived ? "primary" : "default"}
+            className={includeArchived ? "font-medium bg-black text-white hover:bg-slate-800" : "font-medium"}
             startContent={<Icon icon="solar:archive-linear" width={20} />}
             variant={includeArchived ? "solid" : "bordered"}
             onPress={() => setIncludeArchived(!includeArchived)}
@@ -164,19 +162,19 @@ export default function InventoryContent() {
       </div>
 
       {/* Info Card */}
-      <Card className="bg-blue-50 border border-blue-100 mb-6">
+      <Card className="bg-slate-100 border border-slate-200 mb-6">
         <CardBody className="p-5">
           <div className="flex items-start gap-3">
             <Icon
-              className="text-blue-600 mt-0.5 flex-shrink-0"
+              className="text-slate-700 mt-0.5 flex-shrink-0"
               icon="solar:info-circle-bold"
               width={20}
             />
             <div>
-              <p className="text-sm font-semibold text-blue-900 mb-1">
+              <p className="text-sm font-semibold text-slate-900 mb-1">
                 Inventario Centralizado
               </p>
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-slate-700">
                 Añade suplementos aquí una vez y asígnalos a múltiples clientes
                 sin tener que volver a escribir la información.
               </p>
@@ -282,7 +280,7 @@ export default function InventoryContent() {
                 {/* Product URL */}
                 {item.product_url && (
                   <a
-                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mb-3"
+                    className="text-sm text-slate-700 hover:text-slate-800 flex items-center gap-1 mb-3"
                     href={item.product_url}
                     rel="noopener noreferrer"
                     target="_blank"

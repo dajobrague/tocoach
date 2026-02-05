@@ -281,7 +281,7 @@ export default function TrainerDashboard() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-slate-50">
       {/* Top Navigation */}
       <TopNavigation
         activeSection={activeSection}

@@ -205,19 +205,19 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
       </div>
 
       {/* Info Card */}
-      <Card className="bg-blue-50 border border-blue-100">
+      <Card className="bg-slate-100 border border-slate-200">
         <CardBody className="p-5">
           <div className="flex items-start gap-3">
             <Icon
-              className="text-blue-600 mt-0.5 flex-shrink-0"
+              className="text-slate-700 mt-0.5 flex-shrink-0"
               icon="solar:info-circle-bold"
               width={20}
             />
             <div>
-              <p className="text-sm font-semibold text-blue-900 mb-1">
+              <p className="text-sm font-semibold text-slate-900 mb-1">
                 Protocolo de Suplementación Actual
               </p>
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-slate-700">
                 Este cliente tiene {assignments.length} suplementos en su
                 protocolo. Asegúrate de que el cliente entienda la importancia
                 de la consistencia y el timing adecuado.
@@ -255,7 +255,7 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-start gap-3 flex-1">
                         {/* Product Image */}
-                        <div className="flex-shrink-0 w-16 h-16 bg-blue-100 rounded-xl overflow-hidden">
+                        <div className="flex-shrink-0 w-16 h-16 bg-slate-200 rounded-xl overflow-hidden">
                           {productImage ? (
                             <img
                               alt={assignment.supplement_name}
@@ -265,7 +265,7 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Icon
-                                className="text-blue-600 text-2xl"
+                                className="text-slate-700 text-2xl"
                                 icon="solar:health-bold"
                               />
                             </div>
@@ -334,18 +334,18 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
 
                       {/* Notes */}
                       {assignment.notes && (
-                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <div className="p-3 bg-slate-100 rounded-lg border border-slate-200">
                           <div className="flex items-start gap-2">
                             <Icon
-                              className="text-blue-600 mt-0.5 flex-shrink-0"
+                              className="text-slate-700 mt-0.5 flex-shrink-0"
                               icon="solar:clipboard-text-bold"
                               width={16}
                             />
                             <div>
-                              <p className="text-xs text-blue-600 font-medium mb-0.5">
+                              <p className="text-xs text-slate-700 font-medium mb-0.5">
                                 Nota
                               </p>
-                              <p className="text-sm text-blue-900">
+                              <p className="text-sm text-slate-900">
                                 {assignment.notes}
                               </p>
                             </div>
@@ -490,8 +490,8 @@ function InventoryPickerModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Icon className="text-blue-600 text-xl" icon="solar:box-linear" />
+            <div className="bg-slate-100 p-2 rounded-lg">
+              <Icon className="text-slate-700 text-xl" icon="solar:box-linear" />
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">
@@ -533,7 +533,7 @@ function InventoryPickerModal({
                   <Card
                     key={item.id}
                     isPressable
-                    className="bg-white border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all"
+                    className="bg-white border border-gray-200 hover:border-slate-400 hover:shadow-md transition-all"
                     onPress={() => onSelect(item)}
                   >
                     <CardBody className="p-4">
@@ -638,9 +638,9 @@ function AssignmentDetailsModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
+            <div className="bg-slate-100 p-2 rounded-lg">
               <Icon
-                className="text-blue-600 text-xl"
+                className="text-slate-700 text-xl"
                 icon="solar:health-bold"
               />
             </div>
@@ -681,7 +681,7 @@ function AssignmentDetailsModal({
                     )}
                     {supplement.product_url && (
                       <a
-                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        className="text-xs text-slate-700 hover:text-slate-800 flex items-center gap-1"
                         href={supplement.product_url}
                         rel="noopener noreferrer"
                         target="_blank"

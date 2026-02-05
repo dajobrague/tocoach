@@ -167,8 +167,7 @@ export default function RegisterPage() {
             />
 
             <Button
-              className="w-full font-body mt-2"
-              color="primary"
+              className="w-full font-body mt-2 bg-black text-white hover:bg-slate-800"
               disabled={isLoading}
               isLoading={isLoading}
               size="lg"

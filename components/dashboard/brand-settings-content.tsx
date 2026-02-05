@@ -70,7 +70,7 @@ export default function BrandSettingsContent() {
                 tabList: "gap-2 w-full relative rounded-lg bg-gray-100 p-1",
                 cursor: "bg-white shadow-sm",
                 tab: "max-w-fit px-4 h-10",
-                tabContent: "group-data-[selected=true]:text-blue-600",
+                tabContent: "group-data-[selected=true]:text-black",
               }}
               selectedKey={selectedTab}
               variant="light"

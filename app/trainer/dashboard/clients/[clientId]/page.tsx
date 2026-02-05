@@ -100,7 +100,7 @@ export default function ClientProfilePage() {
               {error || "Cliente no encontrado"}
             </p>
             <button
-              className="text-primary hover:underline"
+              className="text-black hover:underline"
               onClick={handleBack}
             >
               Volver a Clientes

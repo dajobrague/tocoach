@@ -214,8 +214,8 @@ export default function TypographySetup() {
       isPressable
       className={`border transition-all ${
         isSelected
-          ? "border-blue-500 bg-blue-50"
-          : "border-gray-200 hover:border-blue-300"
+          ? "border-slate-500 bg-slate-100"
+          : "border-gray-200 hover:border-slate-300"
       }`}
       onPress={onClick}
     >
@@ -238,7 +238,7 @@ export default function TypographySetup() {
           <p className="text-xs text-gray-600">{font.description}</p>
 
           {isSelected && (
-            <div className="flex items-center gap-2 text-blue-600">
+            <div className="flex items-center gap-2 text-slate-700">
               <Icon className="text-sm" icon="solar:check-circle-bold" />
               <span className="text-xs font-medium">Seleccionado</span>
             </div>
@@ -252,7 +252,7 @@ export default function TypographySetup() {
     <div className="space-y-6">
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:text-field-linear" />
+          <Icon className="text-slate-700" icon="solar:text-field-linear" />
           Tipografía
         </h4>
       </div>
@@ -267,7 +267,7 @@ export default function TypographySetup() {
             <Card
               key={index}
               isPressable
-              className="border border-gray-200 hover:border-blue-300 transition-colors"
+              className="border border-gray-200 hover:border-slate-300 transition-colors"
               onPress={() => handleFontPairingSelect(pairing)}
             >
               <CardBody className="p-4">
@@ -301,9 +301,9 @@ export default function TypographySetup() {
         <CardBody className="p-6">
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-blue-50">
+              <div className="p-2 rounded-lg bg-slate-100">
                 <Icon
-                  className="text-2xl text-blue-600"
+                  className="text-2xl text-slate-700"
                   icon="solar:link-circle-linear"
                 />
               </div>
@@ -381,12 +381,12 @@ export default function TypographySetup() {
                 <div className="mt-3 space-y-1">
                   <p className="text-xs text-gray-500 flex items-center gap-1">
                     <Icon
-                      className="text-blue-500"
+                      className="text-slate-600"
                       icon="solar:info-circle-linear"
                     />
                     Visita{" "}
                     <a
-                      className="text-blue-600 underline"
+                      className="text-slate-700 underline"
                       href="https://fonts.google.com"
                       rel="noopener noreferrer"
                       target="_blank"

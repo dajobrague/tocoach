@@ -234,9 +234,9 @@ export default function EditExerciseLibraryModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
+            <div className="bg-slate-100 p-2 rounded-lg">
               <Icon
-                className="text-blue-600 text-xl"
+                className="text-slate-700 text-xl"
                 icon="solar:dumbbell-bold"
               />
             </div>
@@ -256,7 +256,7 @@ export default function EditExerciseLibraryModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:clipboard-list-bold"
                   width={18}
                 />
@@ -334,7 +334,7 @@ export default function EditExerciseLibraryModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:gallery-bold"
                   width={18}
                 />
@@ -358,7 +358,7 @@ export default function EditExerciseLibraryModal({
                           <Button
                             isIconOnly
                             as="span"
-                            color="primary"
+                            className="bg-black text-white hover:bg-slate-800"
                             size="sm"
                             variant="solid"
                           >
@@ -411,7 +411,7 @@ export default function EditExerciseLibraryModal({
                     </label>
                   )}
                   {uploadingImage && (
-                    <p className="text-sm text-blue-600 mt-2">
+                    <p className="text-sm text-slate-700 mt-2">
                       Subiendo imagen...
                     </p>
                   )}
@@ -439,7 +439,7 @@ export default function EditExerciseLibraryModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:settings-bold"
                   width={18}
                 />
@@ -536,7 +536,7 @@ export default function EditExerciseLibraryModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:notes-bold"
                   width={18}
                 />
@@ -561,7 +561,7 @@ export default function EditExerciseLibraryModal({
                       onValueChange={setMuscleGroupInput}
                     />
                     <Button
-                      color="primary"
+                      className="bg-black text-white hover:bg-slate-800"
                       variant="flat"
                       onPress={handleAddMuscleGroup}
                     >
@@ -573,7 +573,7 @@ export default function EditExerciseLibraryModal({
                       {formData.muscle_groups.map((group) => (
                         <Chip
                           key={group}
-                          className="bg-blue-100 text-blue-700"
+                          className="bg-slate-200 text-slate-800"
                           endContent={
                             <button
                               className="ml-1"
@@ -610,7 +610,7 @@ export default function EditExerciseLibraryModal({
                       onValueChange={setEquipmentInput}
                     />
                     <Button
-                      color="primary"
+                      className="bg-black text-white hover:bg-slate-800"
                       variant="flat"
                       onPress={handleAddEquipment}
                     >
@@ -622,7 +622,7 @@ export default function EditExerciseLibraryModal({
                       {formData.equipment.map((item) => (
                         <Chip
                           key={item}
-                          className="bg-purple-100 text-purple-700"
+                          className="bg-slate-200 text-slate-800"
                           endContent={
                             <button
                               className="ml-1"
@@ -649,8 +649,7 @@ export default function EditExerciseLibraryModal({
             Cancelar
           </Button>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             isDisabled={isSubmitting || uploadingImage}
             isLoading={isSubmitting}
             startContent={

@@ -121,9 +121,9 @@ export default function MetricasContent() {
                     {isLoading ? "..." : metrics.activeClients}
                   </p>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-xl">
+                <div className="bg-slate-100 p-3 rounded-xl">
                   <Icon
-                    className="text-blue-600 text-2xl"
+                    className="text-slate-700 text-2xl"
                     icon="solar:users-group-rounded-bold"
                   />
                 </div>
@@ -200,7 +200,7 @@ export default function MetricasContent() {
                   <p className="text-sm text-gray-500 mt-1">Esta semana</p>
                 </div>
                 <Button
-                  className="bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  className="bg-slate-100 text-slate-700 hover:bg-slate-200"
                   size="sm"
                   variant="flat"
                   onPress={() => {
@@ -217,9 +217,9 @@ export default function MetricasContent() {
             <CardBody className="px-6 pb-6">
               {metrics.activeClients > 0 ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100/50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-lg border border-slate-200">
                     <div className="flex items-center gap-3">
-                      <div className="bg-blue-500 p-2 rounded-full">
+                      <div className="bg-slate-700 p-2 rounded-full">
                         <Icon
                           className="text-white text-lg"
                           icon="solar:users-group-rounded-bold"
@@ -235,7 +235,7 @@ export default function MetricasContent() {
                       </div>
                     </div>
                     <Icon
-                      className="text-blue-600 text-xl"
+                      className="text-slate-700 text-xl"
                       icon="solar:arrow-right-linear"
                     />
                   </div>
@@ -305,7 +305,7 @@ export default function MetricasContent() {
         </div>
 
         {/* Quick Actions */}
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 shadow-sm">
+        <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 border border-slate-200 shadow-sm">
           <CardHeader className="px-6 pt-6 pb-4">
             <h3 className="font-heading font-semibold text-gray-900 text-lg">
               Acciones Rápidas
@@ -316,9 +316,9 @@ export default function MetricasContent() {
               <Button
                 className="h-auto p-4 justify-start bg-white hover:bg-gray-50 border border-gray-200 cursor-pointer"
                 startContent={
-                  <div className="bg-blue-50 p-2.5 rounded-lg">
+                  <div className="bg-slate-100 p-2.5 rounded-lg">
                     <Icon
-                      className="text-blue-600 text-xl"
+                      className="text-slate-700 text-xl"
                       icon="solar:user-plus-bold"
                     />
                   </div>

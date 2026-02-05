@@ -6,8 +6,7 @@ import {
   Card,
   CardBody,
   Input,
-  Select,
-  SelectItem,
+  Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React, { useCallback } from "react";
@@ -16,14 +15,9 @@ import { useDropzone } from "react-dropzone";
 export default function BrandLogoTab() {
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
   const [logoText, setLogoText] = React.useState("");
-  const [logoSize, setLogoSize] = React.useState<"small" | "medium" | "large">(
-    "medium"
-  );
-  const [logoPosition, setLogoPosition] = React.useState<
-    "left" | "center" | "right"
-  >("left");
   const [isUploading, setIsUploading] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [message, setMessage] = React.useState<{
     type: "success" | "error";
     text: string;
@@ -32,18 +26,29 @@ export default function BrandLogoTab() {
   React.useEffect(() => {
     // Fetch current brand configuration
     const fetchBrandConfig = async () => {
+      setIsLoading(true);
       try {
         const response = await fetch("/api/brand/config");
 
         if (response.ok) {
           const data = await response.json();
 
-          setLogoUrl(data.logo_url || data.theme_json?.assets?.logo || null);
-          // You might want to fetch these from somewhere
+          console.log("[Logo Tab] Brand config data:", data);
+          
+          // Try multiple possible locations for the logo
+          const logo = data.logo_url || 
+                       data.theme_json?.assets?.logo || 
+                       data.theme_json?.logo_url ||
+                       null;
+          
+          console.log("[Logo Tab] Logo URL found:", logo);
+          setLogoUrl(logo);
           setLogoText(data.brand_name || "");
         }
       } catch (error) {
         console.error("Error fetching brand config:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -141,18 +146,6 @@ export default function BrandLogoTab() {
     }
   };
 
-  const logoSizeOptions = [
-    { key: "small", label: "Pequeño", description: "Para headers compactos" },
-    { key: "medium", label: "Mediano", description: "Tamaño estándar" },
-    { key: "large", label: "Grande", description: "Para mayor impacto" },
-  ];
-
-  const logoPositionOptions = [
-    { key: "left", label: "Izquierda", icon: "solar:align-left-linear" },
-    { key: "center", label: "Centro", icon: "solar:align-center-linear" },
-    { key: "right", label: "Derecha", icon: "solar:align-right-linear" },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Success/Error Message */}
@@ -186,11 +179,25 @@ export default function BrandLogoTab() {
       {/* Logo Upload */}
       <div className="space-y-4">
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:gallery-linear" />
+          <Icon className="text-slate-700" icon="solar:gallery-linear" />
           Logo de tu Marca
         </h4>
 
-        {logoUrl ? (
+        {isLoading ? (
+          // Show loading state
+          <Card className="border border-gray-200">
+            <CardBody className="p-6">
+              <div className="flex items-center justify-center gap-3">
+                <Icon
+                  className="text-slate-700 animate-spin"
+                  icon="solar:refresh-linear"
+                  width={24}
+                />
+                <p className="text-sm text-gray-600">Cargando logo...</p>
+              </div>
+            </CardBody>
+          </Card>
+        ) : logoUrl ? (
           // Show uploaded logo
           <Card className="border border-gray-200">
             <CardBody className="p-6">
@@ -235,14 +242,14 @@ export default function BrandLogoTab() {
             {...getRootProps()}
             className={`border-2 border-dashed rounded-lg transition-colors cursor-pointer p-8 text-center ${
               isDragActive
-                ? "border-blue-400 bg-blue-50"
-                : "border-gray-300 hover:border-blue-300 hover:bg-gray-50"
+                ? "border-slate-400 bg-slate-100"
+                : "border-gray-300 hover:border-slate-300 hover:bg-gray-50"
             }`}
           >
             <input {...getInputProps()} />
             <div className="flex justify-center mb-4">
               <Icon
-                className={`text-4xl ${isDragActive ? "text-blue-600" : "text-gray-400"}`}
+                className={`text-4xl ${isDragActive ? "text-slate-700" : "text-gray-400"}`}
                 icon={
                   isUploading ? "solar:refresh-linear" : "solar:upload-linear"
                 }
@@ -282,59 +289,10 @@ export default function BrandLogoTab() {
         />
       </div>
 
-      {/* Logo Position */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-black">
-          Posición del logo
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {logoPositionOptions.map((option) => (
-            <Button
-              key={option.key}
-              className="h-auto p-4 flex-col gap-2"
-              color={logoPosition === option.key ? "primary" : "default"}
-              variant={logoPosition === option.key ? "solid" : "bordered"}
-              onPress={() =>
-                setLogoPosition(option.key as "left" | "center" | "right")
-              }
-            >
-              <Icon className="text-xl" icon={option.icon} />
-              <span className="text-sm">{option.label}</span>
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Logo Size */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-black">
-          Tamaño del logo
-        </label>
-        <Select
-          className="w-full"
-          selectedKeys={[logoSize]}
-          variant="bordered"
-          onSelectionChange={(keys) => {
-            const size = Array.from(keys)[0] as "small" | "medium" | "large";
-
-            setLogoSize(size);
-          }}
-        >
-          {logoSizeOptions.map((option) => (
-            <SelectItem key={option.key} textValue={option.label}>
-              <div>
-                <p className="font-medium">{option.label}</p>
-                <p className="text-xs text-gray-500">{option.description}</p>
-              </div>
-            </SelectItem>
-          ))}
-        </Select>
-      </div>
-
       {/* Save Button */}
       <div className="flex justify-end pt-6 border-t border-gray-200">
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           isLoading={isSaving}
           size="lg"
           startContent={<Icon icon="solar:floppy-disk-linear" />}

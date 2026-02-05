@@ -98,7 +98,7 @@ export default function AyudaContent() {
                   base: "border-b border-gray-200 last:border-b-0",
                   title: "font-semibold text-gray-900 text-sm",
                   trigger:
-                    "py-4 hover:bg-gray-50 px-4 rounded-lg data-[open=true]:bg-blue-50",
+                    "py-4 hover:bg-gray-50 px-4 rounded-lg data-[open=true]:bg-slate-100",
                   content: "text-sm text-gray-600 px-4 pb-4",
                   indicator: "text-gray-500",
                 }}
@@ -110,7 +110,7 @@ export default function AyudaContent() {
                     aria-label={faq.question}
                     startContent={
                       <Icon
-                        className="text-blue-600"
+                        className="text-slate-700"
                         icon="solar:chat-round-line-linear"
                         width={20}
                       />

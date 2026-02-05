@@ -164,8 +164,8 @@ export default function AddSupplementModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Icon className="text-blue-600 text-xl" icon="solar:box-linear" />
+            <div className="bg-slate-100 p-2 rounded-lg">
+              <Icon className="text-slate-700 text-xl" icon="solar:box-linear" />
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">
@@ -183,7 +183,7 @@ export default function AddSupplementModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:box-linear"
                   width={18}
                 />
@@ -245,7 +245,7 @@ export default function AddSupplementModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:gallery-linear"
                   width={18}
                 />
@@ -314,19 +314,19 @@ export default function AddSupplementModal({
             </div>
 
             {/* Info Card */}
-            <Card className="bg-blue-50 border border-blue-100">
+            <Card className="bg-slate-100 border border-slate-200">
               <CardBody className="p-4">
                 <div className="flex items-start gap-2">
                   <Icon
-                    className="text-blue-600 mt-0.5 flex-shrink-0"
+                    className="text-slate-700 mt-0.5 flex-shrink-0"
                     icon="solar:info-circle-bold"
                     width={18}
                   />
                   <div>
-                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                    <p className="text-sm font-semibold text-slate-900 mb-1">
                       Consejo
                     </p>
-                    <p className="text-sm text-blue-700">
+                    <p className="text-sm text-slate-700">
                       Añade imágenes claras del producto y un enlace de compra
                       para facilitar su identificación y adquisición.
                     </p>
@@ -345,8 +345,7 @@ export default function AddSupplementModal({
             Cancelar
           </Button>
           <Button
-            className="text-white font-semibold"
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800 font-semibold"
             isLoading={isSubmitting}
             startContent={<Icon icon="solar:add-circle-bold" width={18} />}
             onPress={handleSubmit}

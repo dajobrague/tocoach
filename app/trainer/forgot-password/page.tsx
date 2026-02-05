@@ -59,7 +59,7 @@ export default function TrainerForgotPasswordPage() {
               Si existe una cuenta con ese correo electrónico, recibirás
               instrucciones para restablecer tu contraseña.
             </p>
-            <Link className="text-primary font-body" href="/trainer/login">
+            <Link className="text-black font-semibold font-body" href="/trainer/login">
               Volver al inicio de sesión
             </Link>
           </div>
@@ -108,8 +108,7 @@ export default function TrainerForgotPasswordPage() {
             />
 
             <Button
-              className="w-full mt-2"
-              color="primary"
+              className="w-full mt-2 bg-black text-white hover:bg-slate-800"
               disabled={isLoading}
               isLoading={isLoading}
               size="lg"

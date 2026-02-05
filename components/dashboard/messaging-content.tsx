@@ -271,7 +271,7 @@ export default function MessagingContent() {
                   key={conversation.id}
                   className={`
                                         w-full p-4 flex items-start gap-3 hover:bg-gray-50 transition-colors
-                                        ${selectedConversation?.id === conversation.id ? "bg-blue-50" : ""}
+                                        ${selectedConversation?.id === conversation.id ? "bg-slate-100" : ""}
                                     `}
                   onClick={() => setSelectedConversation(conversation)}
                 >
@@ -421,7 +421,7 @@ export default function MessagingContent() {
                             className={`
                                                             ${
                                                               isOwn
-                                                                ? "bg-blue-600 text-white"
+                                                                ? "bg-black text-white"
                                                                 : "bg-white text-gray-900"
                                                             }
                                                             shadow-sm

@@ -129,8 +129,8 @@ export default function BrandTypographyTab() {
       isPressable
       className={`border transition-all ${
         isSelected
-          ? "border-blue-500 bg-blue-50"
-          : "border-gray-200 hover:border-blue-300"
+          ? "border-slate-500 bg-slate-100"
+          : "border-gray-200 hover:border-slate-300"
       }`}
       onPress={onClick}
     >
@@ -153,7 +153,7 @@ export default function BrandTypographyTab() {
           <p className="text-xs text-gray-600">{font.description}</p>
 
           {isSelected && (
-            <div className="flex items-center gap-2 text-blue-600">
+            <div className="flex items-center gap-2 text-slate-700">
               <Icon className="text-sm" icon="solar:check-circle-bold" />
               <span className="text-xs font-medium">Seleccionado</span>
             </div>
@@ -198,9 +198,9 @@ export default function BrandTypographyTab() {
         <CardBody className="p-6">
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-blue-50">
+              <div className="p-2 rounded-lg bg-slate-100">
                 <Icon
-                  className="text-2xl text-blue-600"
+                  className="text-2xl text-slate-700"
                   icon="solar:link-circle-linear"
                 />
               </div>
@@ -229,7 +229,7 @@ export default function BrandTypographyTab() {
                     onValueChange={setCustomFontUrl}
                   />
                   <Button
-                    color="primary"
+                    className="bg-black text-white hover:bg-slate-800"
                     isDisabled={!customFontUrl.trim()}
                     size="md"
                     startContent={<Icon icon="solar:download-linear" />}
@@ -241,12 +241,12 @@ export default function BrandTypographyTab() {
                 <div className="mt-3 space-y-1">
                   <p className="text-xs text-gray-500 flex items-center gap-1">
                     <Icon
-                      className="text-blue-500"
+                      className="text-slate-600"
                       icon="solar:info-circle-linear"
                     />
                     Visita{" "}
                     <a
-                      className="text-blue-600 underline"
+                      className="text-slate-700 underline"
                       href="https://fonts.google.com"
                       rel="noopener noreferrer"
                       target="_blank"
@@ -265,7 +265,7 @@ export default function BrandTypographyTab() {
       {/* Heading Font Selection */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:text-bold-linear" />
+          <Icon className="text-slate-700" icon="solar:text-bold-linear" />
           Fuente para títulos
         </h4>
         <div className="grid md:grid-cols-2 gap-4">
@@ -284,7 +284,7 @@ export default function BrandTypographyTab() {
       {/* Body Font Selection */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:text-linear" />
+          <Icon className="text-slate-700" icon="solar:text-linear" />
           Fuente para texto
         </h4>
         <div className="grid md:grid-cols-2 gap-4">
@@ -303,7 +303,7 @@ export default function BrandTypographyTab() {
       {/* Save Button */}
       <div className="flex justify-end pt-6 border-t border-gray-200">
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           isLoading={isSaving}
           size="lg"
           startContent={<Icon icon="solar:floppy-disk-linear" />}

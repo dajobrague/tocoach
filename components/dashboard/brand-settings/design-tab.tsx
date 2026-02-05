@@ -117,7 +117,7 @@ export default function BrandDesignTab() {
       {/* Border Radius Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:layers-linear" />
+          <Icon className="text-slate-700" icon="solar:layers-linear" />
           Bordes Redondeados
         </h4>
         <p className="text-sm text-gray-600 mb-6">
@@ -146,7 +146,7 @@ export default function BrandDesignTab() {
             />
             <div className="mt-3 flex gap-2">
               <div
-                className="w-16 h-16 bg-blue-500"
+                className="w-16 h-16 bg-slate-700"
                 style={{ borderRadius: `${radius.sm}px` }}
               />
               <div className="flex-1 text-xs text-gray-500">
@@ -176,7 +176,7 @@ export default function BrandDesignTab() {
             />
             <div className="mt-3 flex gap-2">
               <div
-                className="w-16 h-16 bg-blue-500"
+                className="w-16 h-16 bg-slate-700"
                 style={{ borderRadius: `${radius.md}px` }}
               />
               <div className="flex-1 text-xs text-gray-500">
@@ -206,7 +206,7 @@ export default function BrandDesignTab() {
             />
             <div className="mt-3 flex gap-2">
               <div
-                className="w-16 h-16 bg-blue-500"
+                className="w-16 h-16 bg-slate-700"
                 style={{ borderRadius: `${radius.lg}px` }}
               />
               <div className="flex-1 text-xs text-gray-500">
@@ -236,7 +236,7 @@ export default function BrandDesignTab() {
             />
             <div className="mt-3 flex gap-2">
               <div
-                className="w-16 h-16 bg-blue-500"
+                className="w-16 h-16 bg-slate-700"
                 style={{ borderRadius: `${radius.xl}px` }}
               />
               <div className="flex-1 text-xs text-gray-500">
@@ -250,28 +250,28 @@ export default function BrandDesignTab() {
       {/* Preview Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:eye-linear" />
+          <Icon className="text-slate-700" icon="solar:eye-linear" />
           Vista Previa
         </h4>
         <Card className="border border-gray-200">
           <CardBody className="p-6 space-y-4">
             <div className="flex flex-wrap gap-3">
               <Button
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800"
                 size="sm"
                 style={{ borderRadius: `${radius.sm}px` }}
               >
                 Botón SM
               </Button>
               <Button
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800"
                 size="md"
                 style={{ borderRadius: `${radius.md}px` }}
               >
                 Botón MD
               </Button>
               <Button
-                color="primary"
+                className="bg-black text-white hover:bg-slate-800"
                 size="lg"
                 style={{ borderRadius: `${radius.lg}px` }}
               >

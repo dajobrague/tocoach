@@ -178,18 +178,18 @@ export default function BrandDomainTab() {
       )}
       {/* Current Domain Info */}
       {currentSlug && (
-        <Card className="bg-blue-50 border border-blue-200">
+        <Card className="bg-slate-100 border border-slate-200">
           <CardBody className="p-4">
             <div className="flex items-center gap-3">
               <Icon
-                className="text-blue-600 text-xl"
+                className="text-slate-700 text-xl"
                 icon="solar:info-circle-linear"
               />
               <div>
-                <p className="text-small font-medium text-blue-800">
+                <p className="text-small font-medium text-slate-800">
                   Tu URL actual
                 </p>
-                <p className="text-small text-blue-600 font-mono">
+                <p className="text-small text-slate-700 font-mono">
                   {BASE_DOMAIN}/{currentSlug}
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function BrandDomainTab() {
       {/* Slug Input */}
       <div className="space-y-3">
         <h4 className="text-md font-semibold text-black mb-4 flex items-center gap-2">
-          <Icon className="text-blue-600" icon="solar:link-circle-linear" />
+          <Icon className="text-slate-700" icon="solar:link-circle-linear" />
           Personaliza tu Slug
         </h4>
         <Input
@@ -212,7 +212,7 @@ export default function BrandDomainTab() {
             <div className="flex items-center gap-1">
               <div className="w-px h-4 bg-gray-300 mx-1" />
               {isChecking ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
               ) : isAvailable === true ? (
                 <Icon
                   className="text-success text-xl"
@@ -276,8 +276,7 @@ export default function BrandDomainTab() {
             {suggestions.map((suggestion, index) => (
               <Chip
                 key={index}
-                className="cursor-pointer hover:bg-blue-100"
-                color="primary"
+                className="cursor-pointer bg-black text-white hover:bg-slate-800"
                 variant="bordered"
                 onClick={() => setDesiredSlug(suggestion)}
               >

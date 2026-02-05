@@ -58,17 +58,17 @@ export default function LivePreview() {
 
         {/* Preview Content */}
         <div
-          className="flex-1 p-4 bg-gray-100 overflow-auto"
+          className="flex-1 p-4 bg-gray-100 overflow-hidden flex flex-col"
           style={{ overscrollBehavior: "contain" }}
         >
           {/* Browser Mockup */}
           <div
-            className={`mx-auto transition-all duration-300 ${
+            className={`mx-auto transition-all duration-300 flex-1 flex flex-col ${
               viewMode === "mobile" ? "max-w-sm" : "max-w-4xl"
             }`}
           >
             {/* Browser Chrome */}
-            <div className="bg-gray-200 rounded-t-lg p-3 border-b border-gray-300">
+            <div className="bg-gray-200 rounded-t-lg p-3 border-b border-gray-300 flex-shrink-0">
               <div className="flex items-center gap-2 mb-2">
                 {/* Browser Controls */}
                 <div className="flex gap-1.5">
@@ -114,7 +114,7 @@ export default function LivePreview() {
                     <div
                       className="w-3 h-3 rounded-sm flex-shrink-0"
                       style={{
-                        backgroundColor: state.colors?.primary || "#3b82f6",
+                        backgroundColor: state.colors?.primary || "#0f172a",
                       }}
                     />
                     <span className="text-xs text-gray-700 truncate">
@@ -129,7 +129,7 @@ export default function LivePreview() {
             </div>
 
             {/* Real Client Dashboard Preview */}
-            <div className="bg-white shadow-lg overflow-hidden h-[600px]">
+            <div className="bg-white shadow-lg overflow-hidden flex-1">
               <div className="h-full overflow-y-auto scrollbar-hide">
                 <DashboardPreview viewMode={viewMode} />
               </div>

@@ -58,7 +58,7 @@ export default function FloatingSupportButton() {
           style={{ width: "420px", maxHeight: "calc(100vh - 120px)" }}
         >
           {/* Widget Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+          <div className="bg-black px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur">
                 <Icon
@@ -69,7 +69,7 @@ export default function FloatingSupportButton() {
               </div>
               <div>
                 <h3 className="text-white font-bold text-base">Soporte</h3>
-                <p className="text-blue-100 text-xs">
+                <p className="text-white/80 text-xs">
                   Responderemos en menos de 24hrs
                 </p>
               </div>
@@ -170,14 +170,14 @@ export default function FloatingSupportButton() {
                 }
               />
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="bg-slate-100 border border-slate-200 rounded-lg p-3">
                 <div className="flex gap-2">
                   <Icon
-                    className="text-blue-600 flex-shrink-0 mt-0.5"
+                    className="text-slate-700 flex-shrink-0 mt-0.5"
                     icon="solar:info-circle-bold"
                     width={18}
                   />
-                  <p className="text-xs text-blue-700">
+                  <p className="text-xs text-slate-700">
                     Los tickets urgentes son priorizados por nuestro equipo de
                     soporte.
                   </p>
@@ -187,7 +187,7 @@ export default function FloatingSupportButton() {
           </div>
 
           {/* Widget Footer */}
-          <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex items-center justify-between gap-3">
+          <div className="border-t border-gray-200 bg-slate-50 px-6 py-4 flex items-center justify-between gap-3">
             <Button
               color="default"
               size="sm"
@@ -210,7 +210,7 @@ export default function FloatingSupportButton() {
         {/* Floating Button */}
         <button
           className={`
-            flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 group
+            flex items-center gap-2 bg-black text-white px-5 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 group
             ${isOpen ? "scale-95" : "hover:scale-105"}
           `}
           onClick={() => setIsOpen(!isOpen)}

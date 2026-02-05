@@ -258,9 +258,9 @@ export default function ClientsContent() {
               <Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                 <CardBody className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="bg-blue-50 p-3 rounded-xl">
+                    <div className="bg-slate-100 p-3 rounded-xl">
                       <Icon
-                        className="text-blue-600 text-2xl"
+                        className="text-slate-700 text-2xl"
                         icon="solar:users-group-rounded-bold"
                       />
                     </div>
@@ -364,8 +364,7 @@ export default function ClientsContent() {
 
                     {/* Add Button */}
                     <Button
-                      className="sm:w-auto w-full"
-                      color="primary"
+                      className="sm:w-auto w-full bg-black text-white hover:bg-slate-800"
                       size="md"
                       startContent={
                         <Icon icon="solar:user-plus-bold" width={18} />
@@ -382,8 +381,7 @@ export default function ClientsContent() {
                       Estado:
                     </span>
                     <Button
-                      className={statusFilter !== "all" ? "bg-gray-100" : ""}
-                      color={statusFilter === "all" ? "primary" : "default"}
+                      className={statusFilter === "all" ? "bg-black text-white hover:bg-slate-800" : "bg-gray-100"}
                       size="sm"
                       variant={statusFilter === "all" ? "solid" : "flat"}
                       onPress={() => setStatusFilter("all")}

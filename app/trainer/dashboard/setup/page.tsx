@@ -96,7 +96,6 @@ function SetupWizardContent() {
             </div>
             <Progress
               className="w-full"
-              color="primary"
               value={(state.currentStep / STEPS.length) * 100}
             />
           </div>
@@ -110,7 +109,7 @@ function SetupWizardContent() {
                   key={step.key}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
                     state.currentStep === step.key
-                      ? "bg-blue-50 border border-blue-200"
+                      ? "bg-slate-100 border border-slate-200"
                       : state.currentStep > step.key
                         ? "bg-green-50 border border-green-200"
                         : "bg-gray-50 border border-gray-200"
@@ -119,7 +118,7 @@ function SetupWizardContent() {
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                       state.currentStep === step.key
-                        ? "bg-blue-600 text-white"
+                        ? "bg-black text-white"
                         : state.currentStep > step.key
                           ? "bg-green-600 text-white"
                           : "bg-gray-300 text-gray-600"
@@ -155,7 +154,7 @@ function SetupWizardContent() {
                   key={step.key}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
                     state.currentStep === step.key
-                      ? "bg-blue-50 border border-blue-200"
+                      ? "bg-slate-100 border border-slate-200"
                       : state.currentStep > step.key
                         ? "bg-green-50 border border-green-200"
                         : "bg-gray-50 border border-gray-200"
@@ -164,7 +163,7 @@ function SetupWizardContent() {
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                       state.currentStep === step.key
-                        ? "bg-blue-600 text-white"
+                        ? "bg-black text-white"
                         : state.currentStep > step.key
                           ? "bg-green-600 text-white"
                           : "bg-gray-300 text-gray-600"
@@ -317,8 +316,8 @@ export default function SetupWizardPage() {
     },
     // Initialize colors from existing theme or use defaults
     colors: {
-      primary: config?.theme?.colors?.brand || "#3b82f6",
-      secondary: config?.theme?.colors?.secondary || "#6366f1",
+      primary: config?.theme?.colors?.brand || "#0f172a",
+      secondary: config?.theme?.colors?.secondary || "#334155",
       text: config?.theme?.colors?.text || {
         h1: "#1f2937",
         h2: "#374151",
@@ -337,7 +336,7 @@ export default function SetupWizardPage() {
         "3": "#f1f5f9",
       },
       buttons: config?.theme?.colors?.buttons || {
-        primary: { bg: "#3b82f6", text: "#ffffff", hover: "#2563eb" },
+        primary: { bg: "#0f172a", text: "#ffffff", hover: "#1e293b" },
         secondary: { bg: "#f3f4f6", text: "#374151", hover: "#e5e7eb" },
       },
       shadows: config?.theme?.colors?.shadows || {

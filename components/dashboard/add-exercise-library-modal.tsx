@@ -232,9 +232,9 @@ export default function AddExerciseLibraryModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
+            <div className="bg-slate-100 p-2 rounded-lg">
               <Icon
-                className="text-blue-600 text-xl"
+                className="text-slate-700 text-xl"
                 icon="solar:dumbbell-bold"
               />
             </div>
@@ -254,7 +254,7 @@ export default function AddExerciseLibraryModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:tag-bold"
                   width={18}
                 />
@@ -264,7 +264,7 @@ export default function AddExerciseLibraryModal({
                 <button
                   className={`relative p-6 rounded-xl border-2 transition-all ${
                     formData.category === "strength"
-                      ? "border-blue-500 bg-blue-50 shadow-md"
+                      ? "border-slate-500 bg-slate-100 shadow-md"
                       : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                   type="button"
@@ -275,7 +275,7 @@ export default function AddExerciseLibraryModal({
                   {formData.category === "strength" && (
                     <div className="absolute top-2 right-2">
                       <Icon
-                        className="text-blue-500"
+                        className="text-slate-600"
                         icon="solar:check-circle-bold"
                         width={24}
                       />
@@ -285,14 +285,14 @@ export default function AddExerciseLibraryModal({
                     <div
                       className={`p-4 rounded-full ${
                         formData.category === "strength"
-                          ? "bg-blue-100"
+                          ? "bg-slate-200"
                           : "bg-gray-100"
                       }`}
                     >
                       <Icon
                         className={
                           formData.category === "strength"
-                            ? "text-blue-600"
+                            ? "text-slate-700"
                             : "text-gray-400"
                         }
                         icon="solar:dumbbell-bold"
@@ -303,7 +303,7 @@ export default function AddExerciseLibraryModal({
                       <p
                         className={`font-bold text-lg ${
                           formData.category === "strength"
-                            ? "text-blue-900"
+                            ? "text-slate-900"
                             : "text-gray-700"
                         }`}
                       >
@@ -378,7 +378,7 @@ export default function AddExerciseLibraryModal({
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -440,7 +440,7 @@ export default function AddExerciseLibraryModal({
                   <Icon
                     className={
                       formData.category === "strength"
-                        ? "text-blue-600"
+                            ? "text-slate-700"
                         : "text-red-600"
                     }
                     icon="solar:gallery-bold"
@@ -500,7 +500,7 @@ export default function AddExerciseLibraryModal({
                       </label>
                     )}
                     {uploadingImage && (
-                      <p className="text-sm text-blue-600 mt-2">
+                      <p className="text-sm text-slate-700 mt-2">
                         Subiendo imagen...
                       </p>
                     )}
@@ -530,7 +530,7 @@ export default function AddExerciseLibraryModal({
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
@@ -728,7 +728,7 @@ export default function AddExerciseLibraryModal({
                   <Icon
                     className={
                       formData.category === "strength"
-                        ? "text-blue-600"
+                            ? "text-slate-700"
                         : "text-red-600"
                     }
                     icon="solar:notes-bold"
@@ -756,7 +756,7 @@ export default function AddExerciseLibraryModal({
                           onValueChange={setMuscleGroupInput}
                         />
                         <Button
-                          color="primary"
+                          className="bg-black text-white hover:bg-slate-800"
                           variant="flat"
                           onPress={handleAddMuscleGroup}
                         >
@@ -768,7 +768,7 @@ export default function AddExerciseLibraryModal({
                           {formData.muscle_groups.map((group) => (
                             <Chip
                               key={group}
-                              className="bg-blue-100 text-blue-700"
+                              className="bg-slate-200 text-slate-800"
                               endContent={
                                 <button
                                   className="ml-1"
@@ -815,10 +815,10 @@ export default function AddExerciseLibraryModal({
                         onValueChange={setEquipmentInput}
                       />
                       <Button
-                        color={
+                        className={
                           formData.category === "strength"
-                            ? "primary"
-                            : "danger"
+                            ? "bg-black text-white hover:bg-slate-800"
+                            : "bg-red-600 text-white hover:bg-red-700"
                         }
                         variant="flat"
                         onPress={handleAddEquipment}
@@ -833,7 +833,7 @@ export default function AddExerciseLibraryModal({
                             key={item}
                             className={
                               formData.category === "strength"
-                                ? "bg-purple-100 text-purple-700"
+                                ? "bg-slate-200 text-slate-800"
                                 : "bg-orange-100 text-orange-700"
                             }
                             endContent={
@@ -887,7 +887,7 @@ export default function AddExerciseLibraryModal({
               <Card
                 className={
                   formData.category === "strength"
-                    ? "bg-blue-50 border border-blue-100"
+                    ? "bg-slate-100 border border-slate-200"
                     : "bg-red-50 border border-red-100"
                 }
               >
@@ -896,7 +896,7 @@ export default function AddExerciseLibraryModal({
                     <Icon
                       className={`${
                         formData.category === "strength"
-                          ? "text-blue-600"
+                            ? "text-slate-700"
                           : "text-red-600"
                       } mt-0.5 flex-shrink-0`}
                       icon="solar:info-circle-bold"
@@ -906,7 +906,7 @@ export default function AddExerciseLibraryModal({
                       <p
                         className={`text-sm font-semibold ${
                           formData.category === "strength"
-                            ? "text-blue-900"
+                            ? "text-slate-900"
                             : "text-red-900"
                         } mb-1`}
                       >
@@ -917,7 +917,7 @@ export default function AddExerciseLibraryModal({
                       <p
                         className={`text-sm ${
                           formData.category === "strength"
-                            ? "text-blue-700"
+                            ? "text-slate-700"
                             : "text-red-700"
                         }`}
                       >
@@ -941,8 +941,7 @@ export default function AddExerciseLibraryModal({
             Cancelar
           </Button>
           <Button
-            className="text-white font-semibold"
-            color={formData.category === "cardio" ? "danger" : "primary"}
+            className={formData.category === "cardio" ? "bg-red-600 text-white hover:bg-red-700 font-semibold" : "bg-black text-white hover:bg-slate-800 font-semibold"}
             isDisabled={isSubmitting || uploadingImage || !formData.category}
             isLoading={isSubmitting}
             startContent={

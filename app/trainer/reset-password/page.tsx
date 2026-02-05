@@ -197,8 +197,7 @@ export default function TrainerResetPasswordPage() {
             />
 
             <Button
-              className="w-full mt-2"
-              color="primary"
+              className="w-full mt-2 bg-black text-white hover:bg-slate-800"
               disabled={isLoading}
               isLoading={isLoading}
               size="lg"

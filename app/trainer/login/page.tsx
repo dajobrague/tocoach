@@ -201,7 +201,7 @@ export default function TrainerLoginPage() {
   };
 
   return (
-    <div className="flex h-full w-full items-center justify-center min-h-screen p-4">
+    <div className="flex h-full w-full items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center pb-8">
           <h1 className="text-3xl font-heading font-bold text-black mb-4">
@@ -248,8 +248,7 @@ export default function TrainerLoginPage() {
               />
 
               <Button
-                className="w-full font-body mt-2"
-                color="primary"
+                className="w-full font-body mt-2 bg-black text-white hover:bg-slate-800"
                 disabled={isLoading}
                 isLoading={isLoading}
                 size="lg"
@@ -316,7 +315,7 @@ export default function TrainerLoginPage() {
               {!isFirstLogin && (
                 <div className="flex justify-end">
                   <Link
-                    className="font-body"
+                    className="font-body text-slate-700 hover:text-black"
                     href="/trainer/forgot-password"
                     size="sm"
                   >
@@ -326,8 +325,7 @@ export default function TrainerLoginPage() {
               )}
 
               <Button
-                className="w-full font-body mt-2"
-                color="primary"
+                className="w-full font-body mt-2 bg-black text-white hover:bg-slate-800"
                 disabled={isLoading}
                 isLoading={isLoading}
                 size="lg"
@@ -350,7 +348,7 @@ export default function TrainerLoginPage() {
         <div className="mt-6 w-full">
           <div className="bg-default-50 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Icon className="text-primary text-lg" icon="ph:info-duotone" />
+              <Icon className="text-slate-700 text-lg" icon="ph:info-duotone" />
               <h4 className="text-sm font-semibold font-heading">
                 Para Entrenadores y Coaches
               </h4>

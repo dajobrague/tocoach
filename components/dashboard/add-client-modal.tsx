@@ -179,9 +179,9 @@ export default function AddClientModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
+            <div className="bg-slate-100 p-2 rounded-lg">
               <Icon
-                className="text-blue-600 text-xl"
+                className="text-slate-700 text-xl"
                 icon="solar:user-plus-bold"
               />
             </div>
@@ -201,7 +201,7 @@ export default function AddClientModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:user-id-bold"
                   width={18}
                 />
@@ -309,7 +309,7 @@ export default function AddClientModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:phone-calling-bold"
                   width={18}
                 />
@@ -361,7 +361,7 @@ export default function AddClientModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:case-bold"
                   width={18}
                 />
@@ -392,7 +392,7 @@ export default function AddClientModal({
             <div>
               <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Icon
-                  className="text-blue-600"
+                  className="text-slate-700"
                   icon="solar:map-point-bold"
                   width={18}
                 />
@@ -493,7 +493,7 @@ export default function AddClientModal({
             Cancelar
           </Button>
           <Button
-            color="primary"
+            className="bg-black text-white hover:bg-slate-800"
             isLoading={isLoading}
             startContent={
               !isLoading ? (

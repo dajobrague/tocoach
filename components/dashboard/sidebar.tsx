@@ -117,7 +117,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
               isCompact || isNestType ? null : item.icon ? (
                 <Icon
                   className={cn(
-                    "text-blue-600 group-data-[selected=true]:text-blue-600",
+                    "text-slate-700 group-data-[selected=true]:text-black",
                     iconClassName
                   )}
                   icon={item.icon}
@@ -135,7 +135,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
                   {item.icon ? (
                     <Icon
                       className={cn(
-                        "text-blue-600 group-data-[selected=true]:text-blue-600",
+                        "text-slate-700 group-data-[selected=true]:text-black",
                         iconClassName
                       )}
                       icon={item.icon}
@@ -164,7 +164,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
                       >
                         <Icon
                           className={cn(
-                            "text-blue-600 group-data-[selected=true]:text-blue-600",
+                            "text-slate-700 group-data-[selected=true]:text-black",
                             iconClassName
                           )}
                           icon={item.icon}
@@ -225,7 +225,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
               isCompact ? null : item.icon ? (
                 <Icon
                   className={cn(
-                    "text-blue-600 group-data-[selected=true]:text-blue-600",
+                    "text-slate-700 group-data-[selected=true]:text-black",
                     iconClassName
                   )}
                   icon={item.icon}
@@ -244,7 +244,7 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(
                   {item.icon ? (
                     <Icon
                       className={cn(
-                        "text-blue-600 group-data-[selected=true]:text-blue-600",
+                        "text-slate-700 group-data-[selected=true]:text-black",
                         iconClassName
                       )}
                       icon={item.icon}

@@ -138,12 +138,12 @@ export default function CreateTemplateModal({
               <div className="grid grid-cols-2 gap-4">
                 <Card
                   isPressable
-                  className="border-2 border-transparent hover:border-primary transition-all cursor-pointer"
+                  className="border-2 border-transparent hover:border-black transition-all cursor-pointer"
                   onPress={() => setTemplateType("program")}
                 >
                   <CardBody className="p-6 text-center">
                     <Icon
-                      className="mx-auto mb-3 text-primary"
+                      className="mx-auto mb-3 text-slate-700"
                       icon="solar:dumbbell-bold"
                       width={48}
                     />
@@ -212,8 +212,8 @@ export default function CreateTemplateModal({
                         isPressable
                         className={`border-2 transition-all cursor-pointer ${
                           formData.category === "strength"
-                            ? "border-primary bg-primary"
-                            : "border-gray-200 hover:border-primary"
+                            ? "border-black bg-black"
+                            : "border-gray-200 hover:border-black"
                         }`}
                         onPress={() =>
                           setFormData({ ...formData, category: "strength" })
@@ -364,8 +364,7 @@ export default function CreateTemplateModal({
           </Button>
           {templateType && (
             <Button
-              className="text-white"
-              color="primary"
+              className="bg-black text-white hover:bg-slate-800"
               isLoading={isSubmitting}
               onPress={handleSubmit}
             >
