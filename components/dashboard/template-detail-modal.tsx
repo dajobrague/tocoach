@@ -1,6 +1,23 @@
 "use client";
 
 import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Autocomplete,
   AutocompleteItem,
   Button,
@@ -17,7 +34,7 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 
@@ -34,7 +51,19 @@ interface TemplateDetailModalProps {
     goal?: string;
     sessionsPerWeek?: number;
   };
-  onClose: () => void;
+  onClose: (updatedData?: {
+    name: string;
+    description?: string;
+    type?: string;
+    category: "cardio" | "strength" | "nutrition";
+    division?: string;
+    goal?: string;
+    sessionsPerWeek?: number;
+    sessionCount?: number;
+    exerciseCount?: number;
+    dayCount?: number;
+    mealCount?: number;
+  }) => void;
   onSuccess: () => void;
 }
 
@@ -49,6 +78,7 @@ interface Session {
     id: string;
     exercise_id: string;
     exercise_order: number;
+    custom_name?: string;
     sets?: number;
     reps?: string;
     duration_seconds?: number;
@@ -63,6 +93,119 @@ interface Session {
       category?: string;
     };
   }>;
+}
+
+// Sortable wrapper for session cards
+function SortableSessionItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`border rounded-xl p-4 transition-all bg-white ${isDragging
+        ? "border-slate-400 shadow-lg"
+        : "border-gray-200 shadow-sm hover:border-gray-300"
+        }`}
+    >
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+// Sortable wrapper for day cards
+function SortableDayItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`border rounded-xl p-4 transition-all bg-white ${isDragging
+        ? "border-green-300 shadow-lg"
+        : "border-gray-200 shadow-sm hover:border-gray-300"
+        }`}
+    >
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+// Sortable wrapper for exercise items
+function SortableExerciseItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
 }
 
 export default function TemplateDetailModal({
@@ -80,6 +223,7 @@ export default function TemplateDetailModal({
     new Set()
   );
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
 
   // Inline editing states for basic info
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -131,10 +275,11 @@ export default function TemplateDetailModal({
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionName, setEditingSessionName] = useState("");
 
   const [newSessionForm, setNewSessionForm] = useState({
     name: "",
-    dayOfWeek: "",
   });
   const [newExerciseForm, setNewExerciseForm] = useState({
     exercise_id: "",
@@ -478,6 +623,8 @@ export default function TemplateDetailModal({
           : day
       )
     );
+    // Auto-expand the new meal
+    setExpandedMeals((prev) => new Set([...prev, optimisticMeal.id]));
     setAddingMealToDayId(null);
     setNewMealForm({ label: "", notes: "" });
 
@@ -501,28 +648,37 @@ export default function TemplateDetailModal({
           prevDays.map((day) =>
             day.id === dayId
               ? {
-                  ...day,
-                  meals:
-                    day.meals?.map((m: any) =>
-                      m.id === optimisticMeal.id
-                        ? { ...result.data, ingredients: [] }
-                        : m
-                    ) || [],
-                }
+                ...day,
+                meals:
+                  day.meals?.map((m: any) =>
+                    m.id === optimisticMeal.id
+                      ? { ...result.data, ingredients: [] }
+                      : m
+                  ) || [],
+              }
               : day
           )
         );
+        // Update expandedMeals with the real meal id
+        setExpandedMeals((prev) => {
+          const next = new Set(prev);
+          if (next.has(optimisticMeal.id)) {
+            next.delete(optimisticMeal.id);
+            next.add(result.data.id);
+          }
+          return next;
+        });
       } else {
         // Rollback on error
         setDays((prevDays) =>
           prevDays.map((day) =>
             day.id === dayId
               ? {
-                  ...day,
-                  meals:
-                    day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
-                    [],
-                }
+                ...day,
+                meals:
+                  day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
+                  [],
+              }
               : day
           )
         );
@@ -534,11 +690,11 @@ export default function TemplateDetailModal({
         prevDays.map((day) =>
           day.id === dayId
             ? {
-                ...day,
-                meals:
-                  day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
-                  [],
-              }
+              ...day,
+              meals:
+                day.meals?.filter((m: any) => m.id !== optimisticMeal.id) ||
+                [],
+            }
             : day
         )
       );
@@ -626,12 +782,12 @@ export default function TemplateDetailModal({
           day.meals?.map((meal: any) =>
             meal.id === mealId
               ? {
-                  ...meal,
-                  ingredients: [
-                    ...(meal.ingredients || []),
-                    optimisticIngredient,
-                  ],
-                }
+                ...meal,
+                ingredients: [
+                  ...(meal.ingredients || []),
+                  optimisticIngredient,
+                ],
+              }
               : meal
           ) || [],
       }))
@@ -663,12 +819,12 @@ export default function TemplateDetailModal({
               day.meals?.map((meal: any) =>
                 meal.id === mealId
                   ? {
-                      ...meal,
-                      ingredients:
-                        meal.ingredients?.map((i: any) =>
-                          i.id === optimisticIngredient.id ? result.data : i
-                        ) || [],
-                    }
+                    ...meal,
+                    ingredients:
+                      meal.ingredients?.map((i: any) =>
+                        i.id === optimisticIngredient.id ? result.data : i
+                      ) || [],
+                  }
                   : meal
               ) || [],
           }))
@@ -682,12 +838,12 @@ export default function TemplateDetailModal({
               day.meals?.map((meal: any) =>
                 meal.id === mealId
                   ? {
-                      ...meal,
-                      ingredients:
-                        meal.ingredients?.filter(
-                          (i: any) => i.id !== optimisticIngredient.id
-                        ) || [],
-                    }
+                    ...meal,
+                    ingredients:
+                      meal.ingredients?.filter(
+                        (i: any) => i.id !== optimisticIngredient.id
+                      ) || [],
+                  }
                   : meal
               ) || [],
           }))
@@ -703,12 +859,12 @@ export default function TemplateDetailModal({
             day.meals?.map((meal: any) =>
               meal.id === mealId
                 ? {
-                    ...meal,
-                    ingredients:
-                      meal.ingredients?.filter(
-                        (i: any) => i.id !== optimisticIngredient.id
-                      ) || [],
-                  }
+                  ...meal,
+                  ingredients:
+                    meal.ingredients?.filter(
+                      (i: any) => i.id !== optimisticIngredient.id
+                    ) || [],
+                }
                 : meal
             ) || [],
         }))
@@ -844,12 +1000,12 @@ export default function TemplateDetailModal({
                 day.meals?.map((meal: any) =>
                   meal.id === parentMealId
                     ? {
-                        ...meal,
-                        ingredients: [
-                          ...(meal.ingredients || []),
-                          deletedIngredient,
-                        ],
-                      }
+                      ...meal,
+                      ingredients: [
+                        ...(meal.ingredients || []),
+                        deletedIngredient,
+                      ],
+                    }
                     : meal
                 ) || [],
             }))
@@ -867,12 +1023,12 @@ export default function TemplateDetailModal({
               day.meals?.map((meal: any) =>
                 meal.id === parentMealId
                   ? {
-                      ...meal,
-                      ingredients: [
-                        ...(meal.ingredients || []),
-                        deletedIngredient,
-                      ],
-                    }
+                    ...meal,
+                    ingredients: [
+                      ...(meal.ingredients || []),
+                      deletedIngredient,
+                    ],
+                  }
                   : meal
               ) || [],
           }))
@@ -882,13 +1038,65 @@ export default function TemplateDetailModal({
     }
   };
 
+  // Compute daily macros as sum of all meal macros for a given day
+  const computeDayMacros = (day: any) => {
+    const meals = day.meals || [];
+    let protein = 0;
+    let carbs = 0;
+    let fats = 0;
+    let calories = 0;
+
+    for (const meal of meals) {
+      // If meal has explicit macros, use those
+      if (meal.protein || meal.carbs || meal.fats || meal.calories) {
+        protein += meal.protein || 0;
+        carbs += meal.carbs || 0;
+        fats += meal.fats || 0;
+        calories += meal.calories || 0;
+      } else {
+        // Otherwise sum from ingredients
+        for (const ing of meal.ingredients || []) {
+          protein += ing.protein || 0;
+          carbs += ing.carbs || 0;
+          fats += ing.fats || 0;
+          calories += ing.calories || 0;
+        }
+      }
+    }
+
+    return { protein, carbs, fats, calories };
+  };
+
+  // Get effective macros for a day: use stored values if they exist and are non-zero, otherwise compute from meals
+  const getEffectiveDayMacros = (day: any) => {
+    const hasManualMacros =
+      (day.protein && day.protein > 0) ||
+      (day.carbs && day.carbs > 0) ||
+      (day.fats && day.fats > 0) ||
+      (day.calories && day.calories > 0);
+
+    if (hasManualMacros) {
+      return {
+        protein: day.protein || 0,
+        carbs: day.carbs || 0,
+        fats: day.fats || 0,
+        calories: day.calories || 0,
+        isComputed: false,
+      };
+    }
+
+    const computed = computeDayMacros(day);
+    return { ...computed, isComputed: true };
+  };
+
   const handleEditDayMacrosClick = (day: any) => {
     setEditingDayMacros(day.id);
+    const effective = getEffectiveDayMacros(day);
     setDayMacrosForm({
-      protein: (day.protein || 0).toString(),
-      carbs: (day.carbs || 0).toString(),
-      fats: (day.fats || 0).toString(),
-      calories: (day.calories || 0).toString(),
+      protein: effective.protein.toString(),
+      carbs: effective.carbs.toString(),
+      fats: effective.fats.toString(),
+      calories: effective.calories.toString(),
     });
   };
 
@@ -1023,7 +1231,7 @@ export default function TemplateDetailModal({
       program_id: template.id,
       name: newSessionForm.name,
       session_order: sessions.length,
-      metadata: { day_of_week: newSessionForm.dayOfWeek },
+      metadata: {},
       exercises: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1032,7 +1240,7 @@ export default function TemplateDetailModal({
     // Optimistically add to UI
     setSessions([...sessions, optimisticSession]);
     setIsAddingSession(false);
-    setNewSessionForm({ name: "", dayOfWeek: "" });
+    setNewSessionForm({ name: "" });
 
     // Expand the new session automatically
     setExpandedSessions(new Set([...expandedSessions, optimisticSession.id]));
@@ -1043,7 +1251,6 @@ export default function TemplateDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: optimisticSession.name,
-          dayOfWeek: newSessionForm.dayOfWeek,
           sessionOrder: optimisticSession.session_order,
         }),
       });
@@ -1081,6 +1288,42 @@ export default function TemplateDetailModal({
         prevSessions.filter((s) => s.id !== optimisticSession.id)
       );
       alert("Error al crear sesión");
+    }
+  };
+
+  const handleEditSessionName = async (sessionId: string, newName: string) => {
+    if (!newName.trim()) {
+      setEditingSessionId(null);
+      return;
+    }
+
+    // Optimistically update
+    const oldSessions = [...sessions];
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId ? { ...s, name: newName } : s
+      )
+    );
+    setEditingSessionId(null);
+
+    try {
+      const response = await fetch(`/api/templates/${template.id}/sessions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          name: newName,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        setSessions(oldSessions);
+        console.error("Error updating session name:", result.error);
+      }
+    } catch (error) {
+      setSessions(oldSessions);
+      console.error("Error updating session name:", error);
     }
   };
 
@@ -1152,9 +1395,9 @@ export default function TemplateDetailModal({
       prevSessions.map((session) =>
         session.id === sessionId
           ? {
-              ...session,
-              exercises: [...(session.exercises || []), optimisticExercise],
-            }
+            ...session,
+            exercises: [...(session.exercises || []), optimisticExercise],
+          }
           : session
       )
     );
@@ -1193,14 +1436,14 @@ export default function TemplateDetailModal({
           prevSessions.map((session) =>
             session.id === sessionId
               ? {
-                  ...session,
-                  exercises:
-                    session.exercises?.map((e) =>
-                      e.id === optimisticExercise.id
-                        ? result.sessionExercise
-                        : e
-                    ) || [],
-                }
+                ...session,
+                exercises:
+                  session.exercises?.map((e) =>
+                    e.id === optimisticExercise.id
+                      ? result.sessionExercise
+                      : e
+                  ) || [],
+              }
               : session
           )
         );
@@ -1210,12 +1453,12 @@ export default function TemplateDetailModal({
           prevSessions.map((session) =>
             session.id === sessionId
               ? {
-                  ...session,
-                  exercises:
-                    session.exercises?.filter(
-                      (e) => e.id !== optimisticExercise.id
-                    ) || [],
-                }
+                ...session,
+                exercises:
+                  session.exercises?.filter(
+                    (e) => e.id !== optimisticExercise.id
+                  ) || [],
+              }
               : session
           )
         );
@@ -1227,12 +1470,12 @@ export default function TemplateDetailModal({
         prevSessions.map((session) =>
           session.id === sessionId
             ? {
-                ...session,
-                exercises:
-                  session.exercises?.filter(
-                    (e) => e.id !== optimisticExercise.id
-                  ) || [],
-              }
+              ...session,
+              exercises:
+                session.exercises?.filter(
+                  (e) => e.id !== optimisticExercise.id
+                ) || [],
+            }
             : session
         )
       );
@@ -1241,8 +1484,23 @@ export default function TemplateDetailModal({
   };
 
   const handleEditExercise = async (exerciseId: string, data: any) => {
-    // Store old exercise for rollback
+    // Store old exercise for rollback and find the session it belongs to
     let oldExercise: any = null;
+    let sessionId: string | null = null;
+
+    // Find which session this exercise belongs to
+    for (const session of sessions) {
+      const found = session.exercises?.find((e) => e.id === exerciseId);
+      if (found) {
+        sessionId = session.id;
+        break;
+      }
+    }
+
+    if (!sessionId) {
+      alert("Error: no se encontró la sesión del ejercicio");
+      return;
+    }
 
     // Optimistically update UI
     setSessions((prevSessions) =>
@@ -1255,18 +1513,13 @@ export default function TemplateDetailModal({
 
               const updatedExercise = {
                 ...e,
+                ...(data.name !== undefined && { custom_name: data.name || null }),
                 ...(data.sets !== undefined && { sets: parseInt(data.sets) }),
                 ...(data.reps !== undefined && { reps: data.reps }),
                 ...(data.rest_seconds !== undefined && {
                   rest_seconds: parseInt(data.rest_seconds),
                 }),
                 ...(data.notes !== undefined && { notes: data.notes }),
-                ...(e.exercises && {
-                  exercises: {
-                    ...e.exercises,
-                    name: data.name || e.exercises?.name || "",
-                  },
-                }),
               };
 
               return updatedExercise;
@@ -1280,15 +1533,16 @@ export default function TemplateDetailModal({
 
     try {
       const response = await fetch(
-        `/api/templates/${template.id}/sessions/exercises/${exerciseId}`,
+        `/api/templates/${template.id}/sessions/${sessionId}/exercises`,
         {
-          method: "PATCH",
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            exerciseName: data.name,
-            sets: parseInt(data.sets),
+            sessionExerciseId: exerciseId,
+            name: data.name,
+            sets: data.sets,
             reps: data.reps,
-            restSeconds: parseInt(data.rest_seconds),
+            rest_seconds: data.rest_seconds,
             notes: data.notes,
           }),
         }
@@ -1354,7 +1608,7 @@ export default function TemplateDetailModal({
 
     try {
       const response = await fetch(
-        `/api/templates/${template.id}/sessions/exercises/${exerciseId}`,
+        `/api/templates/${template.id}/sessions/${parentSessionId}/exercises?sessionExerciseId=${exerciseId}`,
         {
           method: "DELETE",
         }
@@ -1367,9 +1621,9 @@ export default function TemplateDetailModal({
             prevSessions.map((session) =>
               session.id === parentSessionId
                 ? {
-                    ...session,
-                    exercises: [...(session.exercises || []), deletedExercise],
-                  }
+                  ...session,
+                  exercises: [...(session.exercises || []), deletedExercise],
+                }
                 : session
             )
           );
@@ -1383,9 +1637,9 @@ export default function TemplateDetailModal({
           prevSessions.map((session) =>
             session.id === parentSessionId
               ? {
-                  ...session,
-                  exercises: [...(session.exercises || []), deletedExercise],
-                }
+                ...session,
+                exercises: [...(session.exercises || []), deletedExercise],
+              }
               : session
           )
         );
@@ -1398,203 +1652,275 @@ export default function TemplateDetailModal({
     return category === "cardio" ? "secondary" : "primary";
   };
 
+  // Build updated template data to pass back on close
+  const handleClose = useCallback(() => {
+    const totalExercises = sessions.reduce(
+      (sum, s) => sum + (s.exercises?.length || 0),
+      0
+    );
+    const totalMeals = days.reduce(
+      (sum, d) => sum + (d.meals?.length || 0),
+      0
+    );
+
+    onClose({
+      name: formData.name,
+      description: formData.description || undefined,
+      type: formData.type,
+      category: formData.category as "cardio" | "strength" | "nutrition",
+      division: formData.division || undefined,
+      goal: formData.goal || undefined,
+      sessionsPerWeek: formData.sessionsPerWeek
+        ? parseInt(formData.sessionsPerWeek)
+        : undefined,
+      sessionCount: sessions.length,
+      exerciseCount: totalExercises,
+      dayCount: days.length,
+      mealCount: totalMeals,
+    });
+  }, [formData, sessions, days, onClose]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Reorder sessions handler
+  const handleSessionDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = sessions.findIndex((s) => s.id === active.id);
+      const newIndex = sessions.findIndex((s) => s.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Capture previous state before optimistic update
+      const previousSessions = [...sessions];
+      const reordered = arrayMove(sessions, oldIndex, newIndex);
+
+      setSessions(reordered);
+
+      // Build reorder payload
+      const reorderPayload = reordered.map((s, idx) => ({
+        id: s.id,
+        session_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/templates/${template.id}/sessions`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          // Rollback to captured previous state
+          setSessions(previousSessions);
+          console.error("Error reordering sessions:", result.error);
+        }
+      } catch (error) {
+        setSessions(previousSessions);
+        console.error("Error reordering sessions:", error);
+      }
+    },
+    [sessions, template.id]
+  );
+
+  // Reorder days handler
+  const handleDayDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = days.findIndex((d) => d.id === active.id);
+      const newIndex = days.findIndex((d) => d.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Capture previous state before optimistic update
+      const previousDays = [...days];
+      const reordered = arrayMove(days, oldIndex, newIndex);
+
+      setDays(reordered);
+
+      const reorderPayload = reordered.map((d, idx) => ({
+        id: d.id,
+        day_order: idx,
+      }));
+
+      try {
+        const response = await fetch("/api/nutrition/days", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reorder: reorderPayload }),
+        });
+        const result = await response.json();
+
+        if (!result.success) {
+          setDays(previousDays);
+          console.error("Error reordering days:", result.error);
+        }
+      } catch (error) {
+        setDays(previousDays);
+        console.error("Error reordering days:", error);
+      }
+    },
+    [days]
+  );
+
+  // Reorder exercises within a session handler
+  const handleExerciseDragEnd = useCallback(
+    async (sessionId: string, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const session = sessions.find((s) => s.id === sessionId);
+      if (!session || !session.exercises) return;
+
+      const oldIndex = session.exercises.findIndex((e) => e.id === active.id);
+      const newIndex = session.exercises.findIndex((e) => e.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Capture previous state before optimistic update
+      const previousSessions = sessions.map((s) => ({
+        ...s,
+        exercises: s.exercises ? [...s.exercises] : [],
+      }));
+
+      const reorderedExercises = arrayMove(
+        session.exercises,
+        oldIndex,
+        newIndex
+      );
+
+      // Optimistic update
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId ? { ...s, exercises: reorderedExercises } : s
+        )
+      );
+
+      // Build reorder payload
+      const reorderPayload = reorderedExercises.map((e, idx) => ({
+        id: e.id,
+        exercise_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/templates/${template.id}/sessions/${sessionId}/exercises`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          setSessions(previousSessions);
+          console.error("Error reordering exercises:", result.error);
+        }
+      } catch (error) {
+        setSessions(previousSessions);
+        console.error("Error reordering exercises:", error);
+      }
+    },
+    [sessions, template.id]
+  );
+
   return (
     <>
       <Modal
         isOpen={isOpen}
         scrollBehavior="inside"
         size="5xl"
-        onClose={onClose}
+        onClose={handleClose}
+        classNames={{
+          base: "max-h-[90vh]",
+          header: "border-b border-gray-200",
+          footer: "border-t border-gray-200",
+          body: "py-6",
+        }}
       >
         <ModalContent>
-          <ModalHeader className="border-b border-gray-200">
-            <div className="w-full space-y-3 py-2">
-              {/* Nombre y Categoría */}
-              <div className="flex items-center gap-1">
-                {editingField === "name" ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <Input
-                      autoFocus
-                      size="lg"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveField("name");
-                        if (e.key === "Escape") {
-                          setEditingField(null);
-                          setFormData({ ...formData, name: template.name });
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="w-full space-y-4 py-1">
+              {/* Icon + Title Row */}
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${template.templateType === "nutrition"
+                  ? "bg-green-50"
+                  : formData.category === "cardio"
+                    ? "bg-amber-50"
+                    : "bg-slate-100"
+                  }`}>
+                  <Icon
+                    className={
+                      template.templateType === "nutrition"
+                        ? "text-green-600"
+                        : formData.category === "cardio"
+                          ? "text-amber-600"
+                          : "text-slate-700"
+                    }
+                    icon={
+                      template.templateType === "nutrition"
+                        ? "fluent:food-20-filled"
+                        : formData.category === "cardio"
+                          ? "solar:heart-pulse-bold"
+                          : "solar:dumbbell-bold"
+                    }
+                    width={24}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  {editingField === "name" ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        autoFocus
+                        size="sm"
+                        value={formData.name}
+                        classNames={{ input: "text-lg font-bold" }}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value })
                         }
-                      }}
-                    />
-                    <Button
-                      isIconOnly
-                      color="success"
-                      isLoading={savingField === "name"}
-                      size="sm"
-                      onPress={() => handleSaveField("name")}
-                    >
-                      <Icon icon="solar:check-circle-bold" width={20} />
-                    </Button>
-                    <Button
-                      isIconOnly
-                      color="danger"
-                      size="sm"
-                      variant="light"
-                      onPress={() => {
-                        setEditingField(null);
-                        setFormData({ ...formData, name: template.name });
-                      }}
-                    >
-                      <Icon icon="solar:close-circle-bold" width={20} />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="text-xl font-bold flex-1">
-                      {formData.name}
-                    </h2>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      onPress={() => setEditingField("name")}
-                    >
-                      <Icon
-                        className="text-gray-600"
-                        icon="solar:pen-bold"
-                        width={16}
-                      />
-                    </Button>
-                    {editingField === "category" ? (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          className={
-                            formData.category === "strength"
-                              ? "bg-primary text-white"
-                              : ""
-                          }
-                          color="primary"
-                          size="sm"
-                          startContent={
-                            <Icon
-                              className={
-                                formData.category === "strength"
-                                  ? "text-white"
-                                  : "text-gray-600"
-                              }
-                              icon="solar:dumbbell-bold"
-                              width={18}
-                            />
-                          }
-                          variant={
-                            formData.category === "strength" ? "solid" : "flat"
-                          }
-                          onPress={() =>
-                            setFormData({ ...formData, category: "strength" })
-                          }
-                        >
-                          Fuerza
-                        </Button>
-                        <Button
-                          className={
-                            formData.category === "cardio"
-                              ? "bg-warning text-white"
-                              : ""
-                          }
-                          color="warning"
-                          size="sm"
-                          startContent={
-                            <Icon
-                              className={
-                                formData.category === "cardio"
-                                  ? "text-white"
-                                  : "text-gray-600"
-                              }
-                              icon="solar:heart-pulse-bold"
-                              width={18}
-                            />
-                          }
-                          variant={
-                            formData.category === "cardio" ? "solid" : "flat"
-                          }
-                          onPress={() =>
-                            setFormData({ ...formData, category: "cardio" })
-                          }
-                        >
-                          Cardio
-                        </Button>
-                        <Button
-                          isIconOnly
-                          color="success"
-                          isLoading={savingField === "category"}
-                          size="sm"
-                          onPress={() => handleSaveField("category")}
-                        >
-                          <Icon icon="solar:check-circle-bold" width={20} />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          color="danger"
-                          size="sm"
-                          variant="light"
-                          onPress={() => {
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveField("name");
+                          if (e.key === "Escape") {
                             setEditingField(null);
-                            setFormData({
-                              ...formData,
-                              category: template.category,
-                            });
-                          }}
-                        >
-                          <Icon icon="solar:close-circle-bold" width={20} />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 mr-8">
-                        <Chip
-                          className="text-white"
-                          color={
-                            formData.category === "nutrition"
-                              ? "success"
-                              : formData.category === "cardio"
-                                ? "warning"
-                                : "primary"
+                            setFormData({ ...formData, name: template.name });
                           }
-                          size="sm"
-                        >
-                          {formData.category === "nutrition"
-                            ? "Nutrición"
-                            : formData.category === "cardio"
-                              ? "Cardio"
-                              : "Fuerza"}
-                        </Chip>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          onPress={() => setEditingField("category")}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:pen-bold"
-                            width={14}
-                          />
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Description */}
-              {(formData.description || editingField === "description") && (
-                <div className="flex items-start gap-1">
+                        }}
+                        onBlur={() => handleSaveField("name")}
+                      />
+                      {savingField === "name" && <Spinner size="sm" />}
+                    </div>
+                  ) : (
+                    <h3
+                      className="text-xl font-bold text-gray-900 cursor-pointer hover:text-gray-600 transition-colors truncate"
+                      onClick={() => setEditingField("name")}
+                      title="Clic para editar"
+                    >
+                      {formData.name}
+                    </h3>
+                  )}
+                  {/* Description */}
                   {editingField === "description" ? (
-                    <div className="flex-1 flex items-start gap-2">
+                    <div className="flex items-start gap-2 mt-1">
                       <Textarea
                         autoFocus
-                        minRows={2}
+                        minRows={1}
+                        size="sm"
                         value={formData.description}
                         onChange={(e) =>
                           setFormData({
@@ -1611,64 +1937,34 @@ export default function TemplateDetailModal({
                             });
                           }
                         }}
+                        onBlur={() => handleSaveField("description")}
                       />
-                      <Button
-                        isIconOnly
-                        color="success"
-                        isLoading={savingField === "description"}
-                        size="sm"
-                        onPress={() => handleSaveField("description")}
-                      >
-                        <Icon icon="solar:check-circle-bold" width={20} />
-                      </Button>
-                      <Button
-                        isIconOnly
-                        color="danger"
-                        size="sm"
-                        variant="light"
-                        onPress={() => {
-                          setEditingField(null);
-                          setFormData({
-                            ...formData,
-                            description: template.description || "",
-                          });
-                        }}
-                      >
-                        <Icon icon="solar:close-circle-bold" width={20} />
-                      </Button>
+                      {savingField === "description" && <Spinner size="sm" />}
                     </div>
                   ) : (
-                    <>
-                      <p className="text-sm text-gray-600 flex-1">
-                        {formData.description}
-                      </p>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="light"
-                        onPress={() => setEditingField("description")}
-                      >
-                        <Icon
-                          className="text-gray-600"
-                          icon="solar:pen-bold"
-                          width={14}
-                        />
-                      </Button>
-                    </>
+                    <p
+                      className="text-sm text-gray-500 font-normal cursor-pointer hover:text-gray-400 transition-colors mt-0.5"
+                      onClick={() => setEditingField("description")}
+                      title="Clic para editar"
+                    >
+                      {formData.description || "Agregar descripción..."}
+                    </p>
                   )}
                 </div>
-              )}
+              </div>
 
-              {/* Tipo, División/Objetivo, Sesiones por semana */}
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                {/* Tipo de Programa */}
-                <div className="flex items-center gap-1">
+              {/* Metadata Pills */}
+              {template.templateType !== "nutrition" && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Tipo */}
                   {editingField === "type" ? (
-                    <div className="flex-1 flex items-center gap-1">
+                    <div className="flex items-center gap-1">
                       <Input
                         autoFocus
                         size="sm"
+                        className="w-40"
                         value={formData.type}
+                        placeholder="Tipo de programa"
                         onChange={(e) =>
                           setFormData({ ...formData, type: e.target.value })
                         }
@@ -1676,142 +1972,67 @@ export default function TemplateDetailModal({
                           if (e.key === "Enter") handleSaveField("type");
                           if (e.key === "Escape") {
                             setEditingField(null);
-                            setFormData({
-                              ...formData,
-                              type: template.type || "Strength",
-                            });
+                            setFormData({ ...formData, type: template.type || "Strength" });
                           }
                         }}
+                        onBlur={() => handleSaveField("type")}
                       />
-                      <Button
-                        isIconOnly
-                        color="success"
-                        isLoading={savingField === "type"}
-                        size="sm"
-                        onPress={() => handleSaveField("type")}
-                      >
-                        <Icon icon="solar:check-circle-bold" width={18} />
-                      </Button>
-                      <Button
-                        isIconOnly
-                        color="danger"
-                        size="sm"
-                        variant="light"
-                        onPress={() => {
-                          setEditingField(null);
-                          setFormData({
-                            ...formData,
-                            type: template.type || "Strength",
-                          });
-                        }}
-                      >
-                        <Icon icon="solar:close-circle-bold" width={18} />
-                      </Button>
+                      {savingField === "type" && <Spinner size="sm" />}
                     </div>
                   ) : (
-                    <>
-                      <div className="flex-1">
-                        <span className="text-gray-500">Tipo:</span>{" "}
-                        <span className="font-medium">{formData.type}</span>
-                      </div>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="light"
-                        onPress={() => setEditingField("type")}
-                      >
-                        <Icon
-                          className="text-gray-600"
-                          icon="solar:pen-bold"
-                          width={13}
-                        />
-                      </Button>
-                    </>
+                    <button
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                      onClick={() => setEditingField("type")}
+                      title="Clic para editar"
+                    >
+                      <Icon icon="solar:tag-bold" width={14} className="text-gray-500" />
+                      {formData.type || "Sin tipo"}
+                    </button>
                   )}
-                </div>
 
-                {/* División o Objetivo */}
-                {formData.category === "strength" ? (
-                  <div className="flex items-center gap-1">
-                    {editingField === "division" ? (
-                      <div className="flex-1 flex items-center gap-1">
+                  {/* División / Objetivo */}
+                  {formData.category === "strength" ? (
+                    editingField === "division" ? (
+                      <div className="flex items-center gap-1">
                         <Input
                           autoFocus
                           size="sm"
+                          className="w-48"
                           value={formData.division}
+                          placeholder="División"
                           onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              division: e.target.value,
-                            })
+                            setFormData({ ...formData, division: e.target.value })
                           }
                           onKeyDown={(e) => {
                             if (e.key === "Enter") handleSaveField("division");
                             if (e.key === "Escape") {
                               setEditingField(null);
-                              setFormData({
-                                ...formData,
-                                division: template.division || "",
-                              });
+                              setFormData({ ...formData, division: template.division || "" });
                             }
                           }}
+                          onBlur={() => handleSaveField("division")}
                         />
-                        <Button
-                          isIconOnly
-                          color="success"
-                          isLoading={savingField === "division"}
-                          size="sm"
-                          onPress={() => handleSaveField("division")}
-                        >
-                          <Icon icon="solar:check-circle-bold" width={18} />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          color="danger"
-                          size="sm"
-                          variant="light"
-                          onPress={() => {
-                            setEditingField(null);
-                            setFormData({
-                              ...formData,
-                              division: template.division || "",
-                            });
-                          }}
-                        >
-                          <Icon icon="solar:close-circle-bold" width={18} />
-                        </Button>
+                        {savingField === "division" && <Spinner size="sm" />}
                       </div>
                     ) : (
-                      <>
-                        <div className="flex-1">
-                          <span className="text-gray-500">División:</span>{" "}
-                          <span className="font-medium">
-                            {formData.division || "-"}
-                          </span>
-                        </div>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          onPress={() => setEditingField("division")}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:pen-bold"
-                            width={13}
-                          />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1">
-                    {editingField === "goal" ? (
-                      <div className="flex-1 flex items-center gap-1">
+                      <button
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                        onClick={() => setEditingField("division")}
+                        title="Clic para editar"
+                      >
+                        <Icon icon="solar:layers-bold" width={14} className="text-gray-500" />
+                        {formData.division || "Sin división"}
+                      </button>
+                    )
+                  ) : (
+                    editingField === "goal" ? (
+                      <div className="flex items-center gap-1">
                         <Input
                           autoFocus
                           size="sm"
+                          className="w-48"
                           value={formData.goal}
+                          placeholder="Objetivo"
                           onChange={(e) =>
                             setFormData({ ...formData, goal: e.target.value })
                           }
@@ -1819,157 +2040,79 @@ export default function TemplateDetailModal({
                             if (e.key === "Enter") handleSaveField("goal");
                             if (e.key === "Escape") {
                               setEditingField(null);
-                              setFormData({
-                                ...formData,
-                                goal: template.goal || "",
-                              });
+                              setFormData({ ...formData, goal: template.goal || "" });
                             }
                           }}
+                          onBlur={() => handleSaveField("goal")}
                         />
-                        <Button
-                          isIconOnly
-                          color="success"
-                          isLoading={savingField === "goal"}
-                          size="sm"
-                          onPress={() => handleSaveField("goal")}
-                        >
-                          <Icon icon="solar:check-circle-bold" width={18} />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          color="danger"
-                          size="sm"
-                          variant="light"
-                          onPress={() => {
-                            setEditingField(null);
-                            setFormData({
-                              ...formData,
-                              goal: template.goal || "",
-                            });
-                          }}
-                        >
-                          <Icon icon="solar:close-circle-bold" width={18} />
-                        </Button>
+                        {savingField === "goal" && <Spinner size="sm" />}
                       </div>
                     ) : (
-                      <>
-                        <div className="flex-1">
-                          <span className="text-gray-500">Objetivo:</span>{" "}
-                          <span className="font-medium">
-                            {formData.goal || "-"}
-                          </span>
-                        </div>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          onPress={() => setEditingField("goal")}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:pen-bold"
-                            width={13}
-                          />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
+                      <button
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                        onClick={() => setEditingField("goal")}
+                        title="Clic para editar"
+                      >
+                        <Icon icon="solar:target-bold" width={14} className="text-gray-500" />
+                        {formData.goal || "Sin objetivo"}
+                      </button>
+                    )
+                  )}
 
-                {/* Sesiones por semana */}
-                <div className="flex items-center gap-1">
+                  {/* Sesiones por semana */}
                   {editingField === "sessionsPerWeek" ? (
-                    <div className="flex-1 flex items-center gap-1">
+                    <div className="flex items-center gap-1">
                       <Input
                         autoFocus
                         size="sm"
                         type="number"
+                        className="w-20"
                         value={formData.sessionsPerWeek}
                         onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            sessionsPerWeek: e.target.value,
-                          })
+                          setFormData({ ...formData, sessionsPerWeek: e.target.value })
                         }
                         onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            handleSaveField("sessionsPerWeek");
+                          if (e.key === "Enter") handleSaveField("sessionsPerWeek");
                           if (e.key === "Escape") {
                             setEditingField(null);
                             setFormData({
                               ...formData,
-                              sessionsPerWeek:
-                                template.sessionsPerWeek?.toString() || "3",
+                              sessionsPerWeek: template.sessionsPerWeek?.toString() || "3",
                             });
                           }
                         }}
+                        onBlur={() => handleSaveField("sessionsPerWeek")}
                       />
-                      <Button
-                        isIconOnly
-                        color="success"
-                        isLoading={savingField === "sessionsPerWeek"}
-                        size="sm"
-                        onPress={() => handleSaveField("sessionsPerWeek")}
-                      >
-                        <Icon icon="solar:check-circle-bold" width={18} />
-                      </Button>
-                      <Button
-                        isIconOnly
-                        color="danger"
-                        size="sm"
-                        variant="light"
-                        onPress={() => {
-                          setEditingField(null);
-                          setFormData({
-                            ...formData,
-                            sessionsPerWeek:
-                              template.sessionsPerWeek?.toString() || "3",
-                          });
-                        }}
-                      >
-                        <Icon icon="solar:close-circle-bold" width={18} />
-                      </Button>
+                      {savingField === "sessionsPerWeek" && <Spinner size="sm" />}
                     </div>
                   ) : (
-                    <>
-                      <div className="flex-1">
-                        <span className="text-gray-500">Sesiones/sem:</span>{" "}
-                        <span className="font-medium">
-                          {formData.sessionsPerWeek}
-                        </span>
-                      </div>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="light"
-                        onPress={() => setEditingField("sessionsPerWeek")}
-                      >
-                        <Icon
-                          className="text-gray-600"
-                          icon="solar:pen-bold"
-                          width={13}
-                        />
-                      </Button>
-                    </>
+                    <button
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                      onClick={() => setEditingField("sessionsPerWeek")}
+                      title="Clic para editar"
+                    >
+                      <Icon icon="solar:calendar-bold" width={14} className="text-gray-500" />
+                      {formData.sessionsPerWeek} ses/sem
+                    </button>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           </ModalHeader>
           <ModalBody>
             <div>
               {template.templateType === "program" ? (
                 <>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-md font-semibold">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <Icon className="text-slate-700" icon="solar:clipboard-list-bold" width={18} />
                       Sesiones ({sessions.length})
                     </h4>
                     <Button
-                      className="text-white"
-                      color="primary"
+                      className="bg-black text-white hover:bg-slate-800"
                       size="sm"
                       startContent={
-                        <Icon icon="solar:add-circle-bold" width={20} />
+                        <Icon icon="solar:add-circle-bold" width={18} />
                       }
                       onPress={() => setIsAddingSession(true)}
                     >
@@ -1978,13 +2121,15 @@ export default function TemplateDetailModal({
                   </div>
 
                   {isAddingSession && (
-                    <Card className="mb-3 border-2 border-primary">
+                    <Card className="mb-4 border border-slate-200 shadow-sm">
                       <CardBody className="p-4">
-                        <div className="flex gap-2">
+                        <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Nueva Sesión</p>
+                        <div className="flex gap-3 items-end">
                           <Input
                             autoFocus
+                            className="flex-1"
                             label="Nombre de la sesión"
-                            placeholder="Ej: Día 1 - Push"
+                            placeholder="Ej: Día 1 - Push, Tren Superior, Piernas"
                             size="sm"
                             value={newSessionForm.name}
                             onValueChange={(value) =>
@@ -1993,22 +2138,12 @@ export default function TemplateDetailModal({
                                 name: value,
                               })
                             }
-                          />
-                          <Input
-                            label="Día de la semana"
-                            placeholder="Ej: Lunes"
-                            size="sm"
-                            value={newSessionForm.dayOfWeek}
-                            onValueChange={(value) =>
-                              setNewSessionForm({
-                                ...newSessionForm,
-                                dayOfWeek: value,
-                              })
-                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleAddSession();
+                            }}
                           />
                           <Button
-                            className="text-white"
-                            color="primary"
+                            className="bg-black text-white hover:bg-slate-800"
                             size="sm"
                             onPress={handleAddSession}
                           >
@@ -2016,10 +2151,10 @@ export default function TemplateDetailModal({
                           </Button>
                           <Button
                             size="sm"
-                            variant="flat"
+                            variant="light"
                             onPress={() => {
                               setIsAddingSession(false);
-                              setNewSessionForm({ name: "", dayOfWeek: "" });
+                              setNewSessionForm({ name: "" });
                             }}
                           >
                             Cancelar
@@ -2034,571 +2169,678 @@ export default function TemplateDetailModal({
                       <Spinner />
                     </div>
                   ) : sessions.length === 0 && !isAddingSession ? (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-gray-400">
                       <Icon
-                        className="mx-auto mb-2"
+                        className="mx-auto mb-3"
                         icon="solar:dumbbell-linear"
-                        width={40}
+                        width={48}
                       />
-                      <p>No hay sesiones en esta plantilla</p>
-                      <p className="text-sm">
-                        Haz clic en "Agregar Sesión" para comenzar
+                      <p className="text-gray-600 font-medium">No hay sesiones en esta plantilla</p>
+                      <p className="text-sm mt-1">
+                        Haz clic en &quot;Agregar Sesión&quot; para comenzar
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {sessions.map((session) => (
-                        <Card key={session.id} className="shadow-sm">
-                          <CardBody className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <button
-                                className="flex items-center gap-3 flex-1"
-                                onClick={() => toggleSession(session.id)}
-                              >
-                                <Chip
-                                  className="text-white"
-                                  color="primary"
-                                  size="sm"
-                                  variant="flat"
-                                >
-                                  {session.metadata?.day_of_week || "Día"}
-                                </Chip>
-                                <span className="font-semibold">
-                                  {session.name}
-                                </span>
-                                <span className="text-sm text-gray-500">
-                                  ({session.exercises?.length || 0} ejercicios)
-                                </span>
-                                <Icon
-                                  className={`transition-transform ${
-                                    expandedSessions.has(session.id)
-                                      ? "rotate-180"
-                                      : ""
-                                  }`}
-                                  icon="solar:alt-arrow-down-linear"
-                                  width={20}
-                                />
-                              </button>
-                              <Button
-                                isIconOnly
-                                color="danger"
-                                size="sm"
-                                variant="light"
-                                onPress={() => handleDeleteSession(session.id)}
-                              >
-                                <Icon
-                                  icon="solar:trash-bin-trash-bold"
-                                  width={18}
-                                />
-                              </Button>
-                            </div>
-
-                            {expandedSessions.has(session.id) && (
-                              <div className="mt-4 space-y-2">
-                                <div className="flex justify-end mb-2">
-                                  <Button
-                                    className="text-white"
-                                    color="primary"
-                                    size="sm"
-                                    startContent={
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleSessionDragEnd}
+                    >
+                      <SortableContext
+                        items={sessions.map((s) => s.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-3">
+                          {sessions.map((session) => (
+                            <SortableSessionItem key={session.id} id={session.id}>
+                              {({ dragHandleProps }) => (<>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <div className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 transition-colors drag-handle flex-shrink-0" {...dragHandleProps}>
+                                      <Icon icon="solar:hamburger-menu-linear" width={18} />
+                                    </div>
+                                    {editingSessionId === session.id ? (
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <Input
+                                          autoFocus
+                                          size="sm"
+                                          value={editingSessionName}
+                                          onChange={(e) => setEditingSessionName(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleEditSessionName(session.id, editingSessionName);
+                                            if (e.key === "Escape") setEditingSessionId(null);
+                                          }}
+                                          onBlur={() => handleEditSessionName(session.id, editingSessionName)}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="flex items-center gap-3 flex-1 min-w-0"
+                                        onClick={() => toggleSession(session.id)}
+                                      >
+                                        <span className="font-semibold text-gray-900 truncate">
+                                          {session.name}
+                                        </span>
+                                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                                          {session.exercises?.length || 0} ejercicios
+                                        </span>
+                                        <Icon
+                                          className={`transition-transform text-gray-400 flex-shrink-0 ${expandedSessions.has(session.id)
+                                            ? "rotate-180"
+                                            : ""
+                                            }`}
+                                          icon="solar:alt-arrow-down-linear"
+                                          width={18}
+                                        />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <Button
+                                      isIconOnly
+                                      size="sm"
+                                      variant="light"
+                                      onPress={() => {
+                                        setEditingSessionId(session.id);
+                                        setEditingSessionName(session.name);
+                                      }}
+                                    >
                                       <Icon
-                                        icon="solar:add-circle-bold"
-                                        width={18}
+                                        className="text-gray-400"
+                                        icon="solar:pen-bold"
+                                        width={14}
                                       />
-                                    }
-                                    onPress={() =>
-                                      setAddingExerciseToSessionId(session.id)
-                                    }
-                                  >
-                                    Agregar Ejercicio
-                                  </Button>
+                                    </Button>
+                                    <Button
+                                      isIconOnly
+                                      color="danger"
+                                      size="sm"
+                                      variant="light"
+                                      onPress={() => handleDeleteSession(session.id)}
+                                    >
+                                      <Icon
+                                        icon="solar:trash-bin-trash-bold"
+                                        width={16}
+                                      />
+                                    </Button>
+                                  </div>
                                 </div>
 
-                                {addingExerciseToSessionId === session.id && (
-                                  <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-300 mb-3">
-                                    <div className="space-y-2 mb-2">
-                                      <div className="flex gap-2 mb-2">
-                                        <Button
-                                          color={
-                                            exerciseCategoryFilter === "all"
-                                              ? "primary"
-                                              : "default"
-                                          }
-                                          size="sm"
-                                          startContent={
-                                            <Icon
-                                              icon="solar:list-bold"
-                                              width={16}
-                                            />
-                                          }
-                                          variant={
-                                            exerciseCategoryFilter === "all"
-                                              ? "solid"
-                                              : "bordered"
-                                          }
-                                          onPress={() =>
-                                            setExerciseCategoryFilter("all")
-                                          }
-                                        >
-                                          Todos
-                                        </Button>
-                                        <Button
-                                          color={
-                                            exerciseCategoryFilter ===
-                                            "strength"
-                                              ? "primary"
-                                              : "default"
-                                          }
-                                          size="sm"
-                                          startContent={
-                                            <Icon
-                                              icon="solar:dumbbell-bold"
-                                              width={16}
-                                            />
-                                          }
-                                          variant={
-                                            exerciseCategoryFilter ===
-                                            "strength"
-                                              ? "solid"
-                                              : "bordered"
-                                          }
-                                          onPress={() =>
-                                            setExerciseCategoryFilter(
-                                              "strength"
-                                            )
-                                          }
-                                        >
-                                          Fuerza
-                                        </Button>
-                                        <Button
-                                          color={
-                                            exerciseCategoryFilter === "cardio"
-                                              ? "primary"
-                                              : "default"
-                                          }
-                                          size="sm"
-                                          startContent={
-                                            <Icon
-                                              icon="solar:running-round-bold"
-                                              width={16}
-                                            />
-                                          }
-                                          variant={
-                                            exerciseCategoryFilter === "cardio"
-                                              ? "solid"
-                                              : "bordered"
-                                          }
-                                          onPress={() =>
-                                            setExerciseCategoryFilter("cardio")
-                                          }
-                                        >
-                                          Cardio
-                                        </Button>
-                                      </div>
-                                      <div className="flex gap-2 items-end">
-                                        <Autocomplete
-                                          autoFocus
-                                          className="flex-1"
-                                          defaultItems={filteredExercises}
-                                          label="Buscar ejercicio"
-                                          placeholder="Escribe para buscar..."
-                                          selectedKey={
-                                            newExerciseForm.exercise_id || null
-                                          }
-                                          size="sm"
-                                          startContent={
-                                            newExerciseForm.exercise_id &&
-                                            (() => {
-                                              const selected =
-                                                exerciseLibrary.find(
-                                                  (ex) =>
-                                                    ex.id ===
-                                                    newExerciseForm.exercise_id
-                                                );
+                                {expandedSessions.has(session.id) && (
+                                  <div className="mt-4 space-y-2 pt-3 border-t border-gray-100">
+                                    <div className="flex justify-end mb-2">
+                                      <Button
+                                        className="bg-black text-white hover:bg-slate-800"
+                                        size="sm"
+                                        startContent={
+                                          <Icon
+                                            icon="solar:add-circle-bold"
+                                            width={16}
+                                          />
+                                        }
+                                        onPress={() =>
+                                          setAddingExerciseToSessionId(session.id)
+                                        }
+                                      >
+                                        Agregar Ejercicio
+                                      </Button>
+                                    </div>
 
-                                              return selected?.image_url ? (
-                                                <img
-                                                  alt={selected.name}
-                                                  className="w-6 h-6 rounded object-cover"
-                                                  src={selected.image_url}
-                                                />
-                                              ) : null;
-                                            })()
-                                          }
-                                          onSelectionChange={(key) => {
-                                            if (key) {
-                                              const selectedExercise =
-                                                exerciseLibrary.find(
-                                                  (ex) => ex.id === key
-                                                );
-
-                                              if (selectedExercise) {
-                                                setNewExerciseForm({
-                                                  exercise_id:
-                                                    selectedExercise.id,
-                                                  name: selectedExercise.name,
-                                                  sets:
-                                                    selectedExercise.default_sets?.toString() ||
-                                                    "",
-                                                  reps:
-                                                    selectedExercise.default_reps ||
-                                                    "",
-                                                  rest_seconds:
-                                                    selectedExercise.default_rest_seconds?.toString() ||
-                                                    "",
-                                                  notes:
-                                                    selectedExercise.description ||
-                                                    "",
-                                                });
+                                    {addingExerciseToSessionId === session.id && (
+                                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-3">
+                                        <div className="space-y-2 mb-2">
+                                          <div className="flex gap-2 mb-2">
+                                            <Button
+                                              className={
+                                                exerciseCategoryFilter === "all"
+                                                  ? "bg-black text-white"
+                                                  : "text-gray-600"
                                               }
-                                            }
-                                          }}
-                                        >
-                                          {(exercise) => (
-                                            <AutocompleteItem
-                                              key={exercise.id}
+                                              size="sm"
                                               startContent={
-                                                exercise.image_url ? (
-                                                  <img
-                                                    alt={exercise.name}
-                                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                                                    src={exercise.image_url}
-                                                  />
-                                                ) : (
-                                                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                                    <Icon
-                                                      className="text-gray-400"
-                                                      icon={
-                                                        exercise.category ===
-                                                        "cardio"
-                                                          ? "solar:running-bold"
-                                                          : "solar:dumbbell-bold"
-                                                      }
-                                                      width={28}
-                                                    />
-                                                  </div>
-                                                )
+                                                <Icon
+                                                  icon="solar:list-bold"
+                                                  width={16}
+                                                />
+                                              }
+                                              variant={
+                                                exerciseCategoryFilter === "all"
+                                                  ? "solid"
+                                                  : "bordered"
+                                              }
+                                              onPress={() =>
+                                                setExerciseCategoryFilter("all")
                                               }
                                             >
-                                              {exercise.name}
-                                            </AutocompleteItem>
-                                          )}
-                                        </Autocomplete>
-                                        <Button
-                                          className="text-white"
-                                          color="primary"
-                                          size="sm"
-                                          startContent={
-                                            <Icon
-                                              icon="solar:add-circle-bold"
-                                              width={18}
-                                            />
-                                          }
-                                          onPress={() =>
-                                            setIsAddExerciseModalOpen(true)
-                                          }
-                                        >
-                                          Crear Nuevo
-                                        </Button>
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                      <Input
-                                        label="Series"
-                                        placeholder="4"
-                                        size="sm"
-                                        type="number"
-                                        value={newExerciseForm.sets}
-                                        onValueChange={(value) =>
-                                          setNewExerciseForm({
-                                            ...newExerciseForm,
-                                            sets: value,
-                                          })
-                                        }
-                                      />
-                                      <Input
-                                        label="Repeticiones"
-                                        placeholder="8-12"
-                                        size="sm"
-                                        value={newExerciseForm.reps}
-                                        onValueChange={(value) =>
-                                          setNewExerciseForm({
-                                            ...newExerciseForm,
-                                            reps: value,
-                                          })
-                                        }
-                                      />
-                                      <Input
-                                        label="Descanso (seg)"
-                                        placeholder="90"
-                                        size="sm"
-                                        type="number"
-                                        value={newExerciseForm.rest_seconds}
-                                        onValueChange={(value) =>
-                                          setNewExerciseForm({
-                                            ...newExerciseForm,
-                                            rest_seconds: value,
-                                          })
-                                        }
-                                      />
-                                      <Input
-                                        label="Notas"
-                                        placeholder="Opcional"
-                                        size="sm"
-                                        value={newExerciseForm.notes}
-                                        onValueChange={(value) =>
-                                          setNewExerciseForm({
-                                            ...newExerciseForm,
-                                            notes: value,
-                                          })
-                                        }
-                                      />
-                                    </div>
-                                    <div className="flex gap-2 justify-end">
-                                      <Button
-                                        className="text-white"
-                                        color="primary"
-                                        size="sm"
-                                        onPress={() =>
-                                          handleAddExercise(session.id)
-                                        }
-                                      >
-                                        Guardar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="flat"
-                                        onPress={() => {
-                                          setAddingExerciseToSessionId(null);
-                                          setNewExerciseForm({
-                                            exercise_id: "",
-                                            name: "",
-                                            sets: "",
-                                            reps: "",
-                                            rest_seconds: "",
-                                            notes: "",
-                                          });
-                                        }}
-                                      >
-                                        Cancelar
-                                      </Button>
-                                    </div>
-                                  </div>
-                                )}
+                                              Todos
+                                            </Button>
+                                            <Button
+                                              className={
+                                                exerciseCategoryFilter === "strength"
+                                                  ? "bg-black text-white"
+                                                  : "text-gray-600"
+                                              }
+                                              size="sm"
+                                              startContent={
+                                                <Icon
+                                                  icon="solar:dumbbell-bold"
+                                                  width={16}
+                                                />
+                                              }
+                                              variant={
+                                                exerciseCategoryFilter === "strength"
+                                                  ? "solid"
+                                                  : "bordered"
+                                              }
+                                              onPress={() =>
+                                                setExerciseCategoryFilter("strength")
+                                              }
+                                            >
+                                              Fuerza
+                                            </Button>
+                                            <Button
+                                              className={
+                                                exerciseCategoryFilter === "cardio"
+                                                  ? "bg-black text-white"
+                                                  : "text-gray-600"
+                                              }
+                                              size="sm"
+                                              startContent={
+                                                <Icon
+                                                  icon="solar:running-round-bold"
+                                                  width={16}
+                                                />
+                                              }
+                                              variant={
+                                                exerciseCategoryFilter === "cardio"
+                                                  ? "solid"
+                                                  : "bordered"
+                                              }
+                                              onPress={() =>
+                                                setExerciseCategoryFilter("cardio")
+                                              }
+                                            >
+                                              Cardio
+                                            </Button>
+                                          </div>
+                                          <div className="flex gap-2 items-end">
+                                            <Autocomplete
+                                              autoFocus
+                                              className="flex-1"
+                                              defaultItems={filteredExercises}
+                                              label="Buscar ejercicio"
+                                              placeholder="Escribe para buscar..."
+                                              selectedKey={
+                                                newExerciseForm.exercise_id || null
+                                              }
+                                              size="sm"
+                                              listboxProps={{
+                                                className: "shadow-lg border border-gray-200 rounded-xl",
+                                              }}
+                                              popoverProps={{
+                                                className: "shadow-xl",
+                                                placement: "bottom",
+                                              }}
+                                              startContent={
+                                                newExerciseForm.exercise_id &&
+                                                (() => {
+                                                  const selected =
+                                                    exerciseLibrary.find(
+                                                      (ex) =>
+                                                        ex.id ===
+                                                        newExerciseForm.exercise_id
+                                                    );
 
-                                {session.exercises?.map((exercise, idx) => (
-                                  <div key={exercise.id}>
-                                    {editingExerciseId === exercise.id ? (
-                                      <div className="p-3 bg-gray-50 rounded-lg border-2 border-blue-300">
+                                                  return selected?.image_url ? (
+                                                    <img
+                                                      alt={selected.name}
+                                                      className="w-6 h-6 rounded object-cover"
+                                                      src={selected.image_url}
+                                                    />
+                                                  ) : null;
+                                                })()
+                                              }
+                                              onSelectionChange={(key) => {
+                                                if (key) {
+                                                  const selectedExercise =
+                                                    exerciseLibrary.find(
+                                                      (ex) => ex.id === key
+                                                    );
+
+                                                  if (selectedExercise) {
+                                                    setNewExerciseForm({
+                                                      exercise_id:
+                                                        selectedExercise.id,
+                                                      name: selectedExercise.name,
+                                                      sets:
+                                                        selectedExercise.default_sets?.toString() ||
+                                                        "",
+                                                      reps:
+                                                        selectedExercise.default_reps ||
+                                                        "",
+                                                      rest_seconds:
+                                                        selectedExercise.default_rest_seconds?.toString() ||
+                                                        "",
+                                                      notes:
+                                                        selectedExercise.description ||
+                                                        "",
+                                                    });
+                                                  }
+                                                }
+                                              }}
+                                            >
+                                              {(exercise) => (
+                                                <AutocompleteItem
+                                                  key={exercise.id}
+                                                  className="py-2 data-[hover=true]:bg-slate-100"
+                                                  startContent={
+                                                    exercise.image_url ? (
+                                                      <img
+                                                        alt={exercise.name}
+                                                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                                        src={exercise.image_url}
+                                                      />
+                                                    ) : (
+                                                      <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                        <Icon
+                                                          className="text-slate-500"
+                                                          icon={
+                                                            exercise.category ===
+                                                              "cardio"
+                                                              ? "solar:running-bold"
+                                                              : "solar:dumbbell-bold"
+                                                          }
+                                                          width={24}
+                                                        />
+                                                      </div>
+                                                    )
+                                                  }
+                                                >
+                                                  <span className="font-medium text-gray-900">{exercise.name}</span>
+                                                </AutocompleteItem>
+                                              )}
+                                            </Autocomplete>
+                                            <Button
+                                              className="bg-black text-white hover:bg-slate-800"
+                                              size="sm"
+                                              startContent={
+                                                <Icon
+                                                  icon="solar:add-circle-bold"
+                                                  width={18}
+                                                />
+                                              }
+                                              onPress={() =>
+                                                setIsAddExerciseModalOpen(true)
+                                              }
+                                            >
+                                              Crear Nuevo
+                                            </Button>
+                                          </div>
+                                        </div>
                                         <div className="grid grid-cols-2 gap-2 mb-2">
                                           <Input
-                                            className="col-span-2"
-                                            defaultValue={
-                                              exercise.exercises?.name || ""
-                                            }
-                                            id={`name-${exercise.id}`}
-                                            label="Nombre"
-                                            size="sm"
-                                          />
-                                          <Input
-                                            defaultValue={
-                                              exercise.sets?.toString() || ""
-                                            }
-                                            id={`sets-${exercise.id}`}
                                             label="Series"
+                                            placeholder=""
                                             size="sm"
                                             type="number"
+                                            value={newExerciseForm.sets}
+                                            onValueChange={(value) =>
+                                              setNewExerciseForm({
+                                                ...newExerciseForm,
+                                                sets: value,
+                                              })
+                                            }
                                           />
                                           <Input
-                                            defaultValue={exercise.reps || ""}
-                                            id={`reps-${exercise.id}`}
                                             label="Repeticiones"
+                                            placeholder=""
                                             size="sm"
+                                            value={newExerciseForm.reps}
+                                            onValueChange={(value) =>
+                                              setNewExerciseForm({
+                                                ...newExerciseForm,
+                                                reps: value,
+                                              })
+                                            }
                                           />
                                           <Input
-                                            defaultValue={
-                                              exercise.rest_seconds?.toString() ||
-                                              ""
-                                            }
-                                            id={`rest-${exercise.id}`}
                                             label="Descanso (seg)"
+                                            placeholder=""
                                             size="sm"
                                             type="number"
+                                            value={newExerciseForm.rest_seconds}
+                                            onValueChange={(value) =>
+                                              setNewExerciseForm({
+                                                ...newExerciseForm,
+                                                rest_seconds: value,
+                                              })
+                                            }
                                           />
                                           <Input
-                                            defaultValue={
-                                              exercise.notes ||
-                                              exercise.metadata?.notes ||
-                                              ""
-                                            }
-                                            id={`notes-${exercise.id}`}
                                             label="Notas"
+                                            placeholder=""
                                             size="sm"
+                                            value={newExerciseForm.notes}
+                                            onValueChange={(value) =>
+                                              setNewExerciseForm({
+                                                ...newExerciseForm,
+                                                notes: value,
+                                              })
+                                            }
                                           />
                                         </div>
                                         <div className="flex gap-2 justify-end">
                                           <Button
-                                            isIconOnly
-                                            color="success"
+                                            className="bg-black text-white hover:bg-slate-800"
+                                            size="sm"
+                                            onPress={() =>
+                                              handleAddExercise(session.id)
+                                            }
+                                          >
+                                            Guardar
+                                          </Button>
+                                          <Button
                                             size="sm"
                                             variant="flat"
                                             onPress={() => {
-                                              const name = (
-                                                document.getElementById(
-                                                  `name-${exercise.id}`
-                                                ) as HTMLInputElement
-                                              )?.value;
-                                              const sets = (
-                                                document.getElementById(
-                                                  `sets-${exercise.id}`
-                                                ) as HTMLInputElement
-                                              )?.value;
-                                              const reps = (
-                                                document.getElementById(
-                                                  `reps-${exercise.id}`
-                                                ) as HTMLInputElement
-                                              )?.value;
-                                              const rest_seconds = (
-                                                document.getElementById(
-                                                  `rest-${exercise.id}`
-                                                ) as HTMLInputElement
-                                              )?.value;
-                                              const notes = (
-                                                document.getElementById(
-                                                  `notes-${exercise.id}`
-                                                ) as HTMLInputElement
-                                              )?.value;
-
-                                              handleEditExercise(exercise.id, {
-                                                name,
-                                                sets,
-                                                reps,
-                                                rest_seconds,
-                                                notes,
+                                              setAddingExerciseToSessionId(null);
+                                              setNewExerciseForm({
+                                                exercise_id: "",
+                                                name: "",
+                                                sets: "",
+                                                reps: "",
+                                                rest_seconds: "",
+                                                notes: "",
                                               });
                                             }}
                                           >
-                                            <Icon
-                                              icon="solar:check-circle-bold"
-                                              width={18}
-                                            />
-                                          </Button>
-                                          <Button
-                                            isIconOnly
-                                            size="sm"
-                                            variant="flat"
-                                            onPress={() =>
-                                              setEditingExerciseId(null)
-                                            }
-                                          >
-                                            <Icon
-                                              icon="solar:close-circle-bold"
-                                              width={18}
-                                            />
+                                            Cancelar
                                           </Button>
                                         </div>
-                                      </div>
-                                    ) : (
-                                      <div
-                                        className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                                        onClick={() =>
-                                          setEditingExerciseId(exercise.id)
-                                        }
-                                      >
-                                        <span className="text-sm font-semibold text-gray-500 min-w-[30px]">
-                                          {idx + 1}.
-                                        </span>
-                                        {/* Exercise Image */}
-                                        {exercise.exercises?.image_url ? (
-                                          <img
-                                            alt={
-                                              exercise.exercises.name ||
-                                              "Exercise"
-                                            }
-                                            className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                                            src={exercise.exercises.image_url}
-                                          />
-                                        ) : (
-                                          <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                            <Icon
-                                              className="text-gray-400"
-                                              icon={
-                                                exercise.exercises?.category ===
-                                                "cardio"
-                                                  ? "solar:running-bold"
-                                                  : "solar:dumbbell-bold"
-                                              }
-                                              width={28}
-                                            />
-                                          </div>
-                                        )}
-                                        <div className="flex-1">
-                                          <p className="font-medium">
-                                            {exercise.exercises?.name ||
-                                              "Ejercicio"}
-                                          </p>
-                                          <div className="text-sm text-gray-600 mt-1">
-                                            {exercise.sets && exercise.reps && (
-                                              <span>
-                                                {exercise.sets} series ×{" "}
-                                                {exercise.reps} reps
-                                              </span>
-                                            )}
-                                            {exercise.rest_seconds && (
-                                              <span className="ml-2">
-                                                • {exercise.rest_seconds}s
-                                                descanso
-                                              </span>
-                                            )}
-                                            {(exercise.notes ||
-                                              exercise.metadata?.notes) && (
-                                              <p className="text-gray-500 mt-1 text-xs italic">
-                                                Notas:{" "}
-                                                {exercise.notes ||
-                                                  exercise.metadata?.notes}
-                                              </p>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <Button
-                                          isIconOnly
-                                          size="sm"
-                                          variant="light"
-                                          onPress={(e: any) => {
-                                            e?.stopPropagation?.();
-                                            handleDeleteExercise(exercise.id);
-                                          }}
-                                        >
-                                          <Icon
-                                            className="text-gray-400 hover:text-red-600"
-                                            icon="solar:trash-bin-trash-linear"
-                                            width={16}
-                                          />
-                                        </Button>
                                       </div>
                                     )}
+
+                                    <DndContext
+                                      collisionDetection={closestCenter}
+                                      sensors={sensors}
+                                      onDragEnd={(event) =>
+                                        handleExerciseDragEnd(session.id, event)
+                                      }
+                                    >
+                                      <SortableContext
+                                        items={
+                                          session.exercises?.map((e) => e.id) ||
+                                          []
+                                        }
+                                        strategy={verticalListSortingStrategy}
+                                      >
+                                        {session.exercises?.map(
+                                          (exercise, idx) => (
+                                            <SortableExerciseItem
+                                              key={exercise.id}
+                                              id={exercise.id}
+                                            >
+                                              {({ dragHandleProps }) => (
+                                                <div>
+                                                  {editingExerciseId ===
+                                                    exercise.id ? (
+                                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                                      <div className="grid grid-cols-2 gap-2 mb-2">
+                                                        <Input
+                                                          className="col-span-2"
+                                                          defaultValue={
+                                                            exercise.custom_name ||
+                                                            exercise.exercises
+                                                              ?.name || ""
+                                                          }
+                                                          id={`name-${exercise.id}`}
+                                                          label="Nombre"
+                                                          size="sm"
+                                                        />
+                                                        <Input
+                                                          defaultValue={
+                                                            exercise.sets?.toString() ||
+                                                            ""
+                                                          }
+                                                          id={`sets-${exercise.id}`}
+                                                          label="Series"
+                                                          size="sm"
+                                                          type="number"
+                                                        />
+                                                        <Input
+                                                          defaultValue={
+                                                            exercise.reps || ""
+                                                          }
+                                                          id={`reps-${exercise.id}`}
+                                                          label="Repeticiones"
+                                                          size="sm"
+                                                        />
+                                                        <Input
+                                                          defaultValue={
+                                                            exercise.rest_seconds?.toString() ||
+                                                            ""
+                                                          }
+                                                          id={`rest-${exercise.id}`}
+                                                          label="Descanso (seg)"
+                                                          size="sm"
+                                                          type="number"
+                                                        />
+                                                        <Input
+                                                          defaultValue={
+                                                            exercise.notes ||
+                                                            exercise.metadata
+                                                              ?.notes ||
+                                                            ""
+                                                          }
+                                                          id={`notes-${exercise.id}`}
+                                                          label="Notas"
+                                                          size="sm"
+                                                        />
+                                                      </div>
+                                                      <div className="flex gap-2 justify-end">
+                                                        <Button
+                                                          isIconOnly
+                                                          color="success"
+                                                          size="sm"
+                                                          variant="flat"
+                                                          onPress={() => {
+                                                            const name = (
+                                                              document.getElementById(
+                                                                `name-${exercise.id}`
+                                                              ) as HTMLInputElement
+                                                            )?.value;
+                                                            const sets = (
+                                                              document.getElementById(
+                                                                `sets-${exercise.id}`
+                                                              ) as HTMLInputElement
+                                                            )?.value;
+                                                            const reps = (
+                                                              document.getElementById(
+                                                                `reps-${exercise.id}`
+                                                              ) as HTMLInputElement
+                                                            )?.value;
+                                                            const rest_seconds = (
+                                                              document.getElementById(
+                                                                `rest-${exercise.id}`
+                                                              ) as HTMLInputElement
+                                                            )?.value;
+                                                            const notes = (
+                                                              document.getElementById(
+                                                                `notes-${exercise.id}`
+                                                              ) as HTMLInputElement
+                                                            )?.value;
+
+                                                            handleEditExercise(
+                                                              exercise.id,
+                                                              {
+                                                                name,
+                                                                sets,
+                                                                reps,
+                                                                rest_seconds,
+                                                                notes,
+                                                              }
+                                                            );
+                                                          }}
+                                                        >
+                                                          <Icon
+                                                            icon="solar:check-circle-bold"
+                                                            width={18}
+                                                          />
+                                                        </Button>
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="flat"
+                                                          onPress={() =>
+                                                            setEditingExerciseId(
+                                                              null
+                                                            )
+                                                          }
+                                                        >
+                                                          <Icon
+                                                            icon="solar:close-circle-bold"
+                                                            width={18}
+                                                          />
+                                                        </Button>
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                                                      {/* Drag handle */}
+                                                      <div
+                                                        className="flex items-center justify-center mt-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+                                                        {...dragHandleProps}
+                                                      >
+                                                        <Icon
+                                                          icon="solar:hamburger-menu-linear"
+                                                          width={16}
+                                                        />
+                                                      </div>
+                                                      <span className="text-sm font-semibold text-gray-500 min-w-[24px] mt-1">
+                                                        {idx + 1}.
+                                                      </span>
+                                                      {/* Exercise Image */}
+                                                      {exercise.exercises
+                                                        ?.image_url ? (
+                                                        <img
+                                                          alt={
+                                                            exercise.custom_name ||
+                                                            exercise.exercises
+                                                              .name || "Exercise"
+                                                          }
+                                                          className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                                                          src={
+                                                            exercise.exercises
+                                                              .image_url
+                                                          }
+                                                        />
+                                                      ) : (
+                                                        <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                          <Icon
+                                                            className="text-gray-400"
+                                                            icon={
+                                                              exercise.exercises
+                                                                ?.category ===
+                                                                "cardio"
+                                                                ? "solar:running-bold"
+                                                                : "solar:dumbbell-bold"
+                                                            }
+                                                            width={28}
+                                                          />
+                                                        </div>
+                                                      )}
+                                                      <div
+                                                        className="flex-1"
+                                                        onClick={() =>
+                                                          setEditingExerciseId(
+                                                            exercise.id
+                                                          )
+                                                        }
+                                                      >
+                                                        <p className="font-medium">
+                                                          {exercise.custom_name ||
+                                                            exercise.exercises
+                                                              ?.name || "Ejercicio"}
+                                                        </p>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                          {exercise.sets &&
+                                                            exercise.reps && (
+                                                              <span>
+                                                                {exercise.sets}{" "}
+                                                                series ×{" "}
+                                                                {exercise.reps}{" "}
+                                                                reps
+                                                              </span>
+                                                            )}
+                                                          {exercise.rest_seconds && (
+                                                            <span className="ml-2">
+                                                              •{" "}
+                                                              {
+                                                                exercise.rest_seconds
+                                                              }
+                                                              s descanso
+                                                            </span>
+                                                          )}
+                                                          {(exercise.notes ||
+                                                            exercise.metadata
+                                                              ?.notes) && (
+                                                              <p className="text-gray-500 mt-1 text-xs italic">
+                                                                Notas:{" "}
+                                                                {exercise.notes ||
+                                                                  exercise.metadata
+                                                                    ?.notes}
+                                                              </p>
+                                                            )}
+                                                        </div>
+                                                      </div>
+                                                      <Button
+                                                        isIconOnly
+                                                        size="sm"
+                                                        variant="light"
+                                                        onPress={(e: any) => {
+                                                          e?.stopPropagation?.();
+                                                          handleDeleteExercise(
+                                                            exercise.id
+                                                          );
+                                                        }}
+                                                      >
+                                                        <Icon
+                                                          className="text-gray-400 hover:text-red-600"
+                                                          icon="solar:trash-bin-trash-linear"
+                                                          width={16}
+                                                        />
+                                                      </Button>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </SortableExerciseItem>
+                                          )
+                                        )}
+                                      </SortableContext>
+                                    </DndContext>
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                          </CardBody>
-                        </Card>
-                      ))}
-                    </div>
+                                )}
+                              </>)}
+                            </SortableSessionItem>
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-md font-semibold">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <Icon className="text-green-600" icon="solar:calendar-bold" width={18} />
                       Días ({days.length})
                     </h4>
                     <Button
-                      className="text-white"
-                      color="success"
+                      className="bg-black text-white hover:bg-slate-800"
                       size="sm"
                       startContent={
-                        <Icon icon="solar:add-circle-bold" width={20} />
+                        <Icon icon="solar:add-circle-bold" width={18} />
                       }
                       onPress={() => setIsAddingDay(true)}
                     >
@@ -2607,9 +2849,10 @@ export default function TemplateDetailModal({
                   </div>
 
                   {isAddingDay && (
-                    <Card className="mb-3 border-2 border-success">
+                    <Card className="mb-4 border border-slate-200 shadow-sm">
                       <CardBody className="p-4">
-                        <div className="flex gap-2">
+                        <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Nuevo Día</p>
+                        <div className="flex gap-3 items-end">
                           <Input
                             autoFocus
                             label="Nombre del día"
@@ -2621,8 +2864,7 @@ export default function TemplateDetailModal({
                             }
                           />
                           <Button
-                            className="text-white"
-                            color="success"
+                            className="bg-black text-white hover:bg-slate-800"
                             size="sm"
                             onPress={handleAddDay}
                           >
@@ -2630,7 +2872,7 @@ export default function TemplateDetailModal({
                           </Button>
                           <Button
                             size="sm"
-                            variant="flat"
+                            variant="light"
                             onPress={() => {
                               setIsAddingDay(false);
                               setNewDayForm({ label: "" });
@@ -2648,307 +2890,115 @@ export default function TemplateDetailModal({
                       <Spinner />
                     </div>
                   ) : days.length === 0 && !isAddingDay ? (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-gray-400">
                       <Icon
-                        className="mx-auto mb-2"
+                        className="mx-auto mb-3"
                         icon="solar:salad-linear"
-                        width={40}
+                        width={48}
                       />
-                      <p>No hay días en esta plantilla</p>
-                      <p className="text-sm">
-                        Haz clic en "Agregar Día" para comenzar
+                      <p className="text-gray-600 font-medium">No hay días en esta plantilla</p>
+                      <p className="text-sm mt-1">
+                        Haz clic en &quot;Agregar Día&quot; para comenzar
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {days.map((day) => (
-                        <Card key={day.id} className="shadow-sm">
-                          <CardBody className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <button
-                                className="flex items-center gap-3 flex-1"
-                                onClick={() => toggleDay(day.id)}
-                              >
-                                <Chip
-                                  className="text-white"
-                                  color="primary"
-                                  size="sm"
-                                  variant="flat"
-                                >
-                                  {day.day_label}
-                                </Chip>
-                                <span className="text-sm text-gray-500">
-                                  ({day.meals?.length || 0} comidas)
-                                </span>
-                                <Icon
-                                  className={`transition-transform ${
-                                    expandedDays.has(day.id) ? "rotate-180" : ""
-                                  }`}
-                                  icon="solar:alt-arrow-down-linear"
-                                  width={20}
-                                />
-                              </button>
-                              <Button
-                                isIconOnly
-                                color="danger"
-                                size="sm"
-                                variant="light"
-                                onPress={() => handleDeleteDay(day.id)}
-                              >
-                                <Icon
-                                  icon="solar:trash-bin-trash-bold"
-                                  width={18}
-                                />
-                              </Button>
-                            </div>
-
-                            {expandedDays.has(day.id) && (
-                              <div className="mt-4 space-y-4">
-                                {/* Day-level Macros */}
-                                <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                      <Icon
-                                        className="text-purple-600"
-                                        icon="solar:chart-2-bold"
-                                        width={20}
-                                      />
-                                      <h4 className="font-bold text-gray-900">
-                                        Macros del Día
-                                      </h4>
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDayDragEnd}
+                    >
+                      <SortableContext
+                        items={days.map((d) => d.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-3">
+                          {days.map((day) => (
+                            <SortableDayItem key={day.id} id={day.id}>
+                              {({ dragHandleProps }) => (<>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <div className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 transition-colors drag-handle" {...dragHandleProps}>
+                                      <Icon icon="solar:hamburger-menu-linear" width={18} />
                                     </div>
-                                    <Button
-                                      size="sm"
-                                      startContent={
-                                        <Icon
-                                          icon="solar:pen-linear"
-                                          width={16}
-                                        />
-                                      }
-                                      variant="flat"
-                                      onPress={() =>
-                                        handleEditDayMacrosClick(day)
-                                      }
+                                    <button
+                                      className="flex items-center gap-3 flex-1"
+                                      onClick={() => toggleDay(day.id)}
                                     >
-                                      Editar
-                                    </Button>
+                                      <Chip
+                                        className="text-white"
+                                        color="success"
+                                        size="sm"
+                                      >
+                                        {day.day_label}
+                                      </Chip>
+                                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                                        {day.meals?.length || 0} comidas
+                                      </span>
+                                      <Icon
+                                        className={`transition-transform text-gray-400 ${expandedDays.has(day.id) ? "rotate-180" : ""
+                                          }`}
+                                        icon="solar:alt-arrow-down-linear"
+                                        width={18}
+                                      />
+                                    </button>
                                   </div>
-
-                                  {editingDayMacros === day.id ? (
-                                    <div className="p-3 bg-white rounded-lg border border-purple-200">
-                                      <div className="grid grid-cols-4 gap-2 mb-2">
-                                        <Input
-                                          label="Proteína (g)"
-                                          size="sm"
-                                          type="number"
-                                          value={dayMacrosForm.protein}
-                                          onValueChange={(value) =>
-                                            setDayMacrosForm({
-                                              ...dayMacrosForm,
-                                              protein: value,
-                                            })
-                                          }
-                                        />
-                                        <Input
-                                          label="Carbohidratos (g)"
-                                          size="sm"
-                                          type="number"
-                                          value={dayMacrosForm.carbs}
-                                          onValueChange={(value) =>
-                                            setDayMacrosForm({
-                                              ...dayMacrosForm,
-                                              carbs: value,
-                                            })
-                                          }
-                                        />
-                                        <Input
-                                          label="Grasas (g)"
-                                          size="sm"
-                                          type="number"
-                                          value={dayMacrosForm.fats}
-                                          onValueChange={(value) =>
-                                            setDayMacrosForm({
-                                              ...dayMacrosForm,
-                                              fats: value,
-                                            })
-                                          }
-                                        />
-                                        <Input
-                                          label="Calorías"
-                                          size="sm"
-                                          type="number"
-                                          value={dayMacrosForm.calories}
-                                          onValueChange={(value) =>
-                                            setDayMacrosForm({
-                                              ...dayMacrosForm,
-                                              calories: value,
-                                            })
-                                          }
-                                        />
-                                      </div>
-                                      <div className="flex gap-2 justify-end">
-                                        <Button
-                                          className="text-white"
-                                          color="primary"
-                                          size="sm"
-                                          onPress={() =>
-                                            handleSaveDayMacros(day.id)
-                                          }
-                                        >
-                                          Guardar
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="flat"
-                                          onPress={() =>
-                                            setEditingDayMacros(null)
-                                          }
-                                        >
-                                          Cancelar
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-3">
-                                      <div className="bg-purple-100 px-3 py-2 rounded-lg">
-                                        <span className="text-xs text-purple-700 font-medium">
-                                          Proteína:
-                                        </span>
-                                        <span className="text-base font-bold text-purple-900 ml-1">
-                                          {(day.protein || 0).toFixed(1)}g
-                                        </span>
-                                      </div>
-                                      <div className="bg-green-100 px-3 py-2 rounded-lg">
-                                        <span className="text-xs text-green-700 font-medium">
-                                          Carbohidratos:
-                                        </span>
-                                        <span className="text-base font-bold text-green-900 ml-1">
-                                          {(day.carbs || 0).toFixed(1)}g
-                                        </span>
-                                      </div>
-                                      <div className="bg-yellow-100 px-3 py-2 rounded-lg">
-                                        <span className="text-xs text-yellow-700 font-medium">
-                                          Grasas:
-                                        </span>
-                                        <span className="text-base font-bold text-yellow-900 ml-1">
-                                          {(day.fats || 0).toFixed(1)}g
-                                        </span>
-                                      </div>
-                                      <div className="bg-red-100 px-3 py-2 rounded-lg">
-                                        <span className="text-xs text-red-700 font-medium">
-                                          Calorías:
-                                        </span>
-                                        <span className="text-base font-bold text-red-900 ml-1">
-                                          {(day.calories || 0).toFixed(0)} kcal
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
+                                  <Button
+                                    isIconOnly
+                                    color="danger"
+                                    size="sm"
+                                    variant="light"
+                                    onPress={() => handleDeleteDay(day.id)}
+                                  >
+                                    <Icon
+                                      icon="solar:trash-bin-trash-bold"
+                                      width={16}
+                                    />
+                                  </Button>
                                 </div>
 
-                                {/* Meals */}
-                                <div className="space-y-3">
-                                  <div className="flex justify-end mb-2">
-                                    <Button
-                                      className="text-white"
-                                      color="primary"
-                                      size="sm"
-                                      startContent={
-                                        <Icon
-                                          icon="solar:add-circle-bold"
-                                          width={18}
-                                        />
-                                      }
-                                      onPress={() =>
-                                        setAddingMealToDayId(day.id)
-                                      }
-                                    >
-                                      Agregar Comida
-                                    </Button>
-                                  </div>
-
-                                  {addingMealToDayId === day.id && (
-                                    <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-300">
-                                      <div className="space-y-2">
-                                        <Input
-                                          autoFocus
-                                          label="Nombre de la comida"
-                                          placeholder="Ej: Desayuno, Almuerzo"
-                                          size="sm"
-                                          value={newMealForm.label}
-                                          onValueChange={(value) =>
-                                            setNewMealForm({
-                                              ...newMealForm,
-                                              label: value,
-                                            })
-                                          }
-                                        />
-                                        <div className="flex gap-2 justify-end">
-                                          <Button
-                                            className="text-white"
-                                            color="primary"
-                                            size="sm"
-                                            onPress={() =>
-                                              handleAddMeal(day.id)
-                                            }
-                                          >
-                                            Guardar
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="flat"
-                                            onPress={() => {
-                                              setAddingMealToDayId(null);
-                                              setNewMealForm({
-                                                label: "",
-                                                notes: "",
-                                              });
-                                            }}
-                                          >
-                                            Cancelar
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {day.meals?.map((meal: any) => (
-                                    <div
-                                      key={meal.id}
-                                      className="p-4 bg-white rounded-lg border border-gray-200"
-                                    >
+                                {expandedDays.has(day.id) && (
+                                  <div className="mt-4 space-y-4">
+                                    {/* Day-level Macros */}
+                                    <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
                                       <div className="flex items-center justify-between mb-3">
-                                        <h5 className="font-semibold text-gray-900">
-                                          {meal.label}
-                                        </h5>
+                                        <div className="flex items-center gap-2">
+                                          <Icon
+                                            className="text-purple-600"
+                                            icon="solar:chart-2-bold"
+                                            width={20}
+                                          />
+                                          <h4 className="font-bold text-gray-900">
+                                            Macros del Día
+                                          </h4>
+                                        </div>
                                         <Button
-                                          isIconOnly
-                                          color="danger"
                                           size="sm"
-                                          variant="light"
+                                          startContent={
+                                            <Icon
+                                              icon="solar:pen-linear"
+                                              width={16}
+                                            />
+                                          }
+                                          variant="flat"
                                           onPress={() =>
-                                            handleDeleteMeal(meal.id)
+                                            handleEditDayMacrosClick(day)
                                           }
                                         >
-                                          <Icon
-                                            icon="solar:trash-bin-trash-bold"
-                                            width={18}
-                                          />
+                                          Editar
                                         </Button>
                                       </div>
 
-                                      {/* Meal-level Macros */}
-                                      {editingMealMacros === meal.id ? (
-                                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+                                      {editingDayMacros === day.id ? (
+                                        <div className="p-3 bg-white rounded-lg border border-purple-200">
                                           <div className="grid grid-cols-4 gap-2 mb-2">
                                             <Input
                                               label="Proteína (g)"
                                               size="sm"
                                               type="number"
-                                              value={mealMacrosForm.protein}
+                                              value={dayMacrosForm.protein}
                                               onValueChange={(value) =>
-                                                setMealMacrosForm({
-                                                  ...mealMacrosForm,
+                                                setDayMacrosForm({
+                                                  ...dayMacrosForm,
                                                   protein: value,
                                                 })
                                               }
@@ -2957,10 +3007,10 @@ export default function TemplateDetailModal({
                                               label="Carbohidratos (g)"
                                               size="sm"
                                               type="number"
-                                              value={mealMacrosForm.carbs}
+                                              value={dayMacrosForm.carbs}
                                               onValueChange={(value) =>
-                                                setMealMacrosForm({
-                                                  ...mealMacrosForm,
+                                                setDayMacrosForm({
+                                                  ...dayMacrosForm,
                                                   carbs: value,
                                                 })
                                               }
@@ -2969,10 +3019,10 @@ export default function TemplateDetailModal({
                                               label="Grasas (g)"
                                               size="sm"
                                               type="number"
-                                              value={mealMacrosForm.fats}
+                                              value={dayMacrosForm.fats}
                                               onValueChange={(value) =>
-                                                setMealMacrosForm({
-                                                  ...mealMacrosForm,
+                                                setDayMacrosForm({
+                                                  ...dayMacrosForm,
                                                   fats: value,
                                                 })
                                               }
@@ -2981,10 +3031,10 @@ export default function TemplateDetailModal({
                                               label="Calorías"
                                               size="sm"
                                               type="number"
-                                              value={mealMacrosForm.calories}
+                                              value={dayMacrosForm.calories}
                                               onValueChange={(value) =>
-                                                setMealMacrosForm({
-                                                  ...mealMacrosForm,
+                                                setDayMacrosForm({
+                                                  ...dayMacrosForm,
                                                   calories: value,
                                                 })
                                               }
@@ -2992,11 +3042,10 @@ export default function TemplateDetailModal({
                                           </div>
                                           <div className="flex gap-2 justify-end">
                                             <Button
-                                              className="text-white"
-                                              color="primary"
+                                              className="bg-black text-white hover:bg-slate-800"
                                               size="sm"
                                               onPress={() =>
-                                                handleSaveMealMacros(meal.id)
+                                                handleSaveDayMacros(day.id)
                                               }
                                             >
                                               Guardar
@@ -3005,128 +3054,485 @@ export default function TemplateDetailModal({
                                               size="sm"
                                               variant="flat"
                                               onPress={() =>
-                                                setEditingMealMacros(null)
+                                                setEditingDayMacros(null)
                                               }
                                             >
                                               Cancelar
                                             </Button>
                                           </div>
                                         </div>
-                                      ) : (
-                                        <div
-                                          className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
-                                          onClick={() =>
-                                            handleEditMealMacrosClick(meal)
+                                      ) : (() => {
+                                        const macros = getEffectiveDayMacros(day);
+                                        return (
+                                          <div>
+                                            <div className="flex items-center gap-3">
+                                              <div className="bg-purple-100 px-3 py-2 rounded-lg">
+                                                <span className="text-xs text-purple-700 font-medium">
+                                                  Proteína:
+                                                </span>
+                                                <span className="text-base font-bold text-purple-900 ml-1">
+                                                  {macros.protein.toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-green-100 px-3 py-2 rounded-lg">
+                                                <span className="text-xs text-green-700 font-medium">
+                                                  Carbohidratos:
+                                                </span>
+                                                <span className="text-base font-bold text-green-900 ml-1">
+                                                  {macros.carbs.toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-yellow-100 px-3 py-2 rounded-lg">
+                                                <span className="text-xs text-yellow-700 font-medium">
+                                                  Grasas:
+                                                </span>
+                                                <span className="text-base font-bold text-yellow-900 ml-1">
+                                                  {macros.fats.toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-red-100 px-3 py-2 rounded-lg">
+                                                <span className="text-xs text-red-700 font-medium">
+                                                  Calorías:
+                                                </span>
+                                                <span className="text-base font-bold text-red-900 ml-1">
+                                                  {macros.calories.toFixed(0)} kcal
+                                                </span>
+                                              </div>
+                                            </div>
+                                            {macros.isComputed && macros.protein === 0 && macros.carbs === 0 && macros.fats === 0 && macros.calories === 0 && (
+                                              <p className="text-xs text-gray-400 mt-2 italic">
+                                                Los macros se calculan automáticamente de las comidas. Usa &quot;Editar&quot; para establecer valores manualmente.
+                                              </p>
+                                            )}
+                                            {!macros.isComputed && (
+                                              <p className="text-xs text-gray-400 mt-2 italic">
+                                                Valores manuales. Elimínalos para usar el cálculo automático de comidas.
+                                              </p>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+
+                                    {/* Meals */}
+                                    <div className="space-y-3">
+                                      <div className="flex justify-end mb-2">
+                                        <Button
+                                          className="bg-black text-white hover:bg-slate-800"
+                                          size="sm"
+                                          startContent={
+                                            <Icon
+                                              icon="solar:add-circle-bold"
+                                              width={16}
+                                            />
+                                          }
+                                          onPress={() =>
+                                            setAddingMealToDayId(day.id)
                                           }
                                         >
-                                          <div className="bg-blue-50 px-3 py-1.5 rounded-lg">
-                                            <span className="text-xs text-gray-600">
-                                              Proteína:
-                                            </span>
-                                            <span className="text-sm font-bold text-gray-900 ml-1">
-                                              {(meal.protein || 0).toFixed(1)}g
-                                            </span>
+                                          Agregar Comida
+                                        </Button>
+                                      </div>
+
+                                      {addingMealToDayId === day.id && (
+                                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                          <div className="space-y-2">
+                                            <Input
+                                              autoFocus
+                                              label="Nombre de la comida"
+                                              placeholder="Ej: Desayuno, Almuerzo"
+                                              size="sm"
+                                              value={newMealForm.label}
+                                              onValueChange={(value) =>
+                                                setNewMealForm({
+                                                  ...newMealForm,
+                                                  label: value,
+                                                })
+                                              }
+                                            />
+                                            <div className="flex gap-2 justify-end">
+                                              <Button
+                                                className="bg-black text-white hover:bg-slate-800"
+                                                size="sm"
+                                                onPress={() =>
+                                                  handleAddMeal(day.id)
+                                                }
+                                              >
+                                                Guardar
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="flat"
+                                                onPress={() => {
+                                                  setAddingMealToDayId(null);
+                                                  setNewMealForm({
+                                                    label: "",
+                                                    notes: "",
+                                                  });
+                                                }}
+                                              >
+                                                Cancelar
+                                              </Button>
+                                            </div>
                                           </div>
-                                          <div className="bg-green-50 px-3 py-1.5 rounded-lg">
-                                            <span className="text-xs text-gray-600">
-                                              Carbohidratos:
-                                            </span>
-                                            <span className="text-sm font-bold text-gray-900 ml-1">
-                                              {(meal.carbs || 0).toFixed(1)}g
-                                            </span>
-                                          </div>
-                                          <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
-                                            <span className="text-xs text-gray-600">
-                                              Grasas:
-                                            </span>
-                                            <span className="text-sm font-bold text-gray-900 ml-1">
-                                              {(meal.fats || 0).toFixed(1)}g
-                                            </span>
-                                          </div>
-                                          <div className="bg-red-50 px-3 py-1.5 rounded-lg">
-                                            <span className="text-xs text-gray-600">
-                                              Calorías:
-                                            </span>
-                                            <span className="text-sm font-bold text-gray-900 ml-1">
-                                              {(meal.calories || 0).toFixed(0)}{" "}
-                                              kcal
-                                            </span>
-                                          </div>
-                                          <Icon
-                                            className="text-gray-400 ml-auto"
-                                            icon="solar:pen-linear"
-                                            width={16}
-                                          />
                                         </div>
                                       )}
 
-                                      {/* Ingredients */}
-                                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                        <div className="space-y-2">
-                                          {meal.ingredients?.map(
-                                            (ingredient: any) => (
-                                              <div key={ingredient.id}>
-                                                {editingIngredientId ===
-                                                ingredient.id ? (
-                                                  <div className="flex items-center gap-2 py-2 border-b border-gray-100">
+                                      {day.meals?.map((meal: any) => (
+                                        <div
+                                          key={meal.id}
+                                          className="p-4 bg-white rounded-lg border border-gray-200"
+                                        >
+                                          <div className="flex items-center justify-between mb-3">
+                                            <div
+                                              className="flex items-center gap-2 cursor-pointer flex-1"
+                                              onClick={() => {
+                                                setExpandedMeals((prev) => {
+                                                  const next = new Set(prev);
+                                                  if (next.has(meal.id)) {
+                                                    next.delete(meal.id);
+                                                  } else {
+                                                    next.add(meal.id);
+                                                  }
+                                                  return next;
+                                                });
+                                              }}
+                                            >
+                                              <Icon
+                                                className={`transition-transform text-gray-400 ${expandedMeals.has(meal.id) ? "rotate-180" : ""}`}
+                                                icon="solar:alt-arrow-down-linear"
+                                                width={16}
+                                              />
+                                              <h5 className="font-semibold text-gray-900">
+                                                {meal.label}
+                                              </h5>
+                                              <span className="text-xs text-gray-400 ml-1">
+                                                ({meal.ingredients?.length || 0} ingredientes)
+                                              </span>
+                                            </div>
+                                            <Button
+                                              isIconOnly
+                                              color="danger"
+                                              size="sm"
+                                              variant="light"
+                                              onPress={() =>
+                                                handleDeleteMeal(meal.id)
+                                              }
+                                            >
+                                              <Icon
+                                                icon="solar:trash-bin-trash-bold"
+                                                width={18}
+                                              />
+                                            </Button>
+                                          </div>
+
+                                          {/* Meal-level Macros */}
+                                          {editingMealMacros === meal.id ? (
+                                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                                              <div className="grid grid-cols-4 gap-2 mb-2">
+                                                <Input
+                                                  label="Proteína (g)"
+                                                  size="sm"
+                                                  type="number"
+                                                  value={mealMacrosForm.protein}
+                                                  onValueChange={(value) =>
+                                                    setMealMacrosForm({
+                                                      ...mealMacrosForm,
+                                                      protein: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Input
+                                                  label="Carbohidratos (g)"
+                                                  size="sm"
+                                                  type="number"
+                                                  value={mealMacrosForm.carbs}
+                                                  onValueChange={(value) =>
+                                                    setMealMacrosForm({
+                                                      ...mealMacrosForm,
+                                                      carbs: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Input
+                                                  label="Grasas (g)"
+                                                  size="sm"
+                                                  type="number"
+                                                  value={mealMacrosForm.fats}
+                                                  onValueChange={(value) =>
+                                                    setMealMacrosForm({
+                                                      ...mealMacrosForm,
+                                                      fats: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Input
+                                                  label="Calorías"
+                                                  size="sm"
+                                                  type="number"
+                                                  value={mealMacrosForm.calories}
+                                                  onValueChange={(value) =>
+                                                    setMealMacrosForm({
+                                                      ...mealMacrosForm,
+                                                      calories: value,
+                                                    })
+                                                  }
+                                                />
+                                              </div>
+                                              <div className="flex gap-2 justify-end">
+                                                <Button
+                                                  className="bg-black text-white hover:bg-slate-800"
+                                                  size="sm"
+                                                  onPress={() =>
+                                                    handleSaveMealMacros(meal.id)
+                                                  }
+                                                >
+                                                  Guardar
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant="flat"
+                                                  onPress={() =>
+                                                    setEditingMealMacros(null)
+                                                  }
+                                                >
+                                                  Cancelar
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div
+                                              className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                                              onClick={() =>
+                                                handleEditMealMacrosClick(meal)
+                                              }
+                                            >
+                                              <div className="bg-slate-100 px-3 py-1.5 rounded-lg">
+                                                <span className="text-xs text-gray-600">
+                                                  Proteína:
+                                                </span>
+                                                <span className="text-sm font-bold text-gray-900 ml-1">
+                                                  {(meal.protein || 0).toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-green-50 px-3 py-1.5 rounded-lg">
+                                                <span className="text-xs text-gray-600">
+                                                  Carbohidratos:
+                                                </span>
+                                                <span className="text-sm font-bold text-gray-900 ml-1">
+                                                  {(meal.carbs || 0).toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
+                                                <span className="text-xs text-gray-600">
+                                                  Grasas:
+                                                </span>
+                                                <span className="text-sm font-bold text-gray-900 ml-1">
+                                                  {(meal.fats || 0).toFixed(1)}g
+                                                </span>
+                                              </div>
+                                              <div className="bg-red-50 px-3 py-1.5 rounded-lg">
+                                                <span className="text-xs text-gray-600">
+                                                  Calorías:
+                                                </span>
+                                                <span className="text-sm font-bold text-gray-900 ml-1">
+                                                  {(meal.calories || 0).toFixed(0)}{" "}
+                                                  kcal
+                                                </span>
+                                              </div>
+                                              <Icon
+                                                className="text-gray-400 ml-auto"
+                                                icon="solar:pen-linear"
+                                                width={16}
+                                              />
+                                            </div>
+                                          )}
+
+                                          {/* Ingredients - collapsible */}
+                                          {expandedMeals.has(meal.id) && (
+                                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                              <div className="space-y-2">
+                                                {meal.ingredients?.map(
+                                                  (ingredient: any) => (
+                                                    <div key={ingredient.id}>
+                                                      {editingIngredientId ===
+                                                        ingredient.id ? (
+                                                        <div className="flex items-center gap-2 py-2 border-b border-gray-100">
+                                                          <Input
+                                                            className="flex-1"
+                                                            defaultValue={
+                                                              ingredient.name
+                                                            }
+                                                            id={`name-${ingredient.id}`}
+                                                            placeholder="Ingrediente"
+                                                            size="sm"
+                                                          />
+                                                          <Input
+                                                            className="w-24"
+                                                            defaultValue={
+                                                              ingredient.quantity
+                                                            }
+                                                            id={`quantity-${ingredient.id}`}
+                                                            placeholder="Cantidad"
+                                                            size="sm"
+                                                          />
+                                                          <Input
+                                                            className="w-24"
+                                                            defaultValue={
+                                                              ingredient.unit
+                                                            }
+                                                            id={`unit-${ingredient.id}`}
+                                                            placeholder="Unidad"
+                                                            size="sm"
+                                                          />
+                                                          <Button
+                                                            isIconOnly
+                                                            color="success"
+                                                            size="sm"
+                                                            variant="flat"
+                                                            onPress={() => {
+                                                              const name = (
+                                                                document.getElementById(
+                                                                  `name-${ingredient.id}`
+                                                                ) as HTMLInputElement
+                                                              )?.value;
+                                                              const quantity = (
+                                                                document.getElementById(
+                                                                  `quantity-${ingredient.id}`
+                                                                ) as HTMLInputElement
+                                                              )?.value;
+                                                              const unit = (
+                                                                document.getElementById(
+                                                                  `unit-${ingredient.id}`
+                                                                ) as HTMLInputElement
+                                                              )?.value;
+
+                                                              handleEditIngredient(
+                                                                ingredient.id,
+                                                                {
+                                                                  name,
+                                                                  quantity,
+                                                                  unit,
+                                                                }
+                                                              );
+                                                            }}
+                                                          >
+                                                            <Icon
+                                                              icon="solar:check-circle-bold"
+                                                              width={18}
+                                                            />
+                                                          </Button>
+                                                          <Button
+                                                            isIconOnly
+                                                            size="sm"
+                                                            variant="flat"
+                                                            onPress={() =>
+                                                              setEditingIngredientId(
+                                                                null
+                                                              )
+                                                            }
+                                                          >
+                                                            <Icon
+                                                              icon="solar:close-circle-bold"
+                                                              width={18}
+                                                            />
+                                                          </Button>
+                                                        </div>
+                                                      ) : (
+                                                        <div
+                                                          className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
+                                                          onClick={() =>
+                                                            setEditingIngredientId(
+                                                              ingredient.id
+                                                            )
+                                                          }
+                                                        >
+                                                          <div className="flex items-center gap-3 flex-1">
+                                                            <span className="text-sm text-gray-900">
+                                                              {ingredient.name}
+                                                            </span>
+                                                          </div>
+                                                          <div className="flex items-center gap-3">
+                                                            <div className="text-sm text-gray-600">
+                                                              <span className="font-semibold text-gray-900">
+                                                                {ingredient.quantity}
+                                                              </span>{" "}
+                                                              {ingredient.unit}
+                                                            </div>
+                                                            <Button
+                                                              isIconOnly
+                                                              size="sm"
+                                                              variant="light"
+                                                              onPress={(e: any) => {
+                                                                e?.stopPropagation?.();
+                                                                handleDeleteIngredient(
+                                                                  ingredient.id
+                                                                );
+                                                              }}
+                                                            >
+                                                              <Icon
+                                                                className="text-gray-400 hover:text-red-600"
+                                                                icon="solar:trash-bin-trash-linear"
+                                                                width={16}
+                                                              />
+                                                            </Button>
+                                                          </div>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  )
+                                                )}
+
+                                                {addingIngredientToMealId ===
+                                                  meal.id ? (
+                                                  <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
                                                     <Input
+                                                      autoFocus
                                                       className="flex-1"
-                                                      defaultValue={
-                                                        ingredient.name
-                                                      }
-                                                      id={`name-${ingredient.id}`}
-                                                      placeholder="Ingrediente"
+                                                      placeholder="Nombre del ingrediente"
                                                       size="sm"
+                                                      value={newIngredientForm.name}
+                                                      onValueChange={(value) =>
+                                                        setNewIngredientForm({
+                                                          ...newIngredientForm,
+                                                          name: value,
+                                                        })
+                                                      }
                                                     />
                                                     <Input
                                                       className="w-24"
-                                                      defaultValue={
-                                                        ingredient.quantity
-                                                      }
-                                                      id={`quantity-${ingredient.id}`}
                                                       placeholder="Cantidad"
                                                       size="sm"
+                                                      value={
+                                                        newIngredientForm.quantity
+                                                      }
+                                                      onValueChange={(value) =>
+                                                        setNewIngredientForm({
+                                                          ...newIngredientForm,
+                                                          quantity: value,
+                                                        })
+                                                      }
                                                     />
                                                     <Input
                                                       className="w-24"
-                                                      defaultValue={
-                                                        ingredient.unit
-                                                      }
-                                                      id={`unit-${ingredient.id}`}
                                                       placeholder="Unidad"
                                                       size="sm"
+                                                      value={newIngredientForm.unit}
+                                                      onValueChange={(value) =>
+                                                        setNewIngredientForm({
+                                                          ...newIngredientForm,
+                                                          unit: value,
+                                                        })
+                                                      }
                                                     />
                                                     <Button
                                                       isIconOnly
                                                       color="success"
                                                       size="sm"
                                                       variant="flat"
-                                                      onPress={() => {
-                                                        const name = (
-                                                          document.getElementById(
-                                                            `name-${ingredient.id}`
-                                                          ) as HTMLInputElement
-                                                        )?.value;
-                                                        const quantity = (
-                                                          document.getElementById(
-                                                            `quantity-${ingredient.id}`
-                                                          ) as HTMLInputElement
-                                                        )?.value;
-                                                        const unit = (
-                                                          document.getElementById(
-                                                            `unit-${ingredient.id}`
-                                                          ) as HTMLInputElement
-                                                        )?.value;
-
-                                                        handleEditIngredient(
-                                                          ingredient.id,
-                                                          {
-                                                            name,
-                                                            quantity,
-                                                            unit,
-                                                          }
-                                                        );
-                                                      }}
+                                                      onPress={() =>
+                                                        handleAddIngredient(meal.id)
+                                                      }
                                                     >
                                                       <Icon
                                                         icon="solar:check-circle-bold"
@@ -3137,11 +3543,16 @@ export default function TemplateDetailModal({
                                                       isIconOnly
                                                       size="sm"
                                                       variant="flat"
-                                                      onPress={() =>
-                                                        setEditingIngredientId(
+                                                      onPress={() => {
+                                                        setAddingIngredientToMealId(
                                                           null
-                                                        )
-                                                      }
+                                                        );
+                                                        setNewIngredientForm({
+                                                          name: "",
+                                                          quantity: "",
+                                                          unit: "",
+                                                        });
+                                                      }}
                                                     >
                                                       <Icon
                                                         icon="solar:close-circle-bold"
@@ -3150,166 +3561,47 @@ export default function TemplateDetailModal({
                                                     </Button>
                                                   </div>
                                                 ) : (
-                                                  <div
-                                                    className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
-                                                    onClick={() =>
-                                                      setEditingIngredientId(
-                                                        ingredient.id
-                                                      )
-                                                    }
-                                                  >
-                                                    <div className="flex items-center gap-3 flex-1">
-                                                      <span className="text-sm text-gray-900">
-                                                        {ingredient.name}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                      <div className="text-sm text-gray-600">
-                                                        <span className="font-semibold text-gray-900">
-                                                          {ingredient.quantity}
-                                                        </span>{" "}
-                                                        {ingredient.unit}
-                                                      </div>
-                                                      <Button
-                                                        isIconOnly
-                                                        size="sm"
-                                                        variant="light"
-                                                        onPress={(e: any) => {
-                                                          e?.stopPropagation?.();
-                                                          handleDeleteIngredient(
-                                                            ingredient.id
-                                                          );
-                                                        }}
-                                                      >
+                                                  <div className="flex justify-center pt-2">
+                                                    <Button
+                                                      size="sm"
+                                                      startContent={
                                                         <Icon
-                                                          className="text-gray-400 hover:text-red-600"
-                                                          icon="solar:trash-bin-trash-linear"
+                                                          icon="solar:add-circle-linear"
                                                           width={16}
                                                         />
-                                                      </Button>
-                                                    </div>
+                                                      }
+                                                      variant="light"
+                                                      onPress={() =>
+                                                        setAddingIngredientToMealId(
+                                                          meal.id
+                                                        )
+                                                      }
+                                                    >
+                                                      Agregar Ingrediente
+                                                    </Button>
                                                   </div>
                                                 )}
                                               </div>
-                                            )
-                                          )}
-
-                                          {addingIngredientToMealId ===
-                                          meal.id ? (
-                                            <div className="flex items-center gap-2 py-2 border-b border-blue-200 bg-blue-50 rounded px-2">
-                                              <Input
-                                                autoFocus
-                                                className="flex-1"
-                                                placeholder="Nombre del ingrediente"
-                                                size="sm"
-                                                value={newIngredientForm.name}
-                                                onValueChange={(value) =>
-                                                  setNewIngredientForm({
-                                                    ...newIngredientForm,
-                                                    name: value,
-                                                  })
-                                                }
-                                              />
-                                              <Input
-                                                className="w-24"
-                                                placeholder="Cantidad"
-                                                size="sm"
-                                                value={
-                                                  newIngredientForm.quantity
-                                                }
-                                                onValueChange={(value) =>
-                                                  setNewIngredientForm({
-                                                    ...newIngredientForm,
-                                                    quantity: value,
-                                                  })
-                                                }
-                                              />
-                                              <Input
-                                                className="w-24"
-                                                placeholder="Unidad"
-                                                size="sm"
-                                                value={newIngredientForm.unit}
-                                                onValueChange={(value) =>
-                                                  setNewIngredientForm({
-                                                    ...newIngredientForm,
-                                                    unit: value,
-                                                  })
-                                                }
-                                              />
-                                              <Button
-                                                isIconOnly
-                                                color="success"
-                                                size="sm"
-                                                variant="flat"
-                                                onPress={() =>
-                                                  handleAddIngredient(meal.id)
-                                                }
-                                              >
-                                                <Icon
-                                                  icon="solar:check-circle-bold"
-                                                  width={18}
-                                                />
-                                              </Button>
-                                              <Button
-                                                isIconOnly
-                                                size="sm"
-                                                variant="flat"
-                                                onPress={() => {
-                                                  setAddingIngredientToMealId(
-                                                    null
-                                                  );
-                                                  setNewIngredientForm({
-                                                    name: "",
-                                                    quantity: "",
-                                                    unit: "",
-                                                  });
-                                                }}
-                                              >
-                                                <Icon
-                                                  icon="solar:close-circle-bold"
-                                                  width={18}
-                                                />
-                                              </Button>
-                                            </div>
-                                          ) : (
-                                            <div className="flex justify-center pt-2">
-                                              <Button
-                                                size="sm"
-                                                startContent={
-                                                  <Icon
-                                                    icon="solar:add-circle-linear"
-                                                    width={16}
-                                                  />
-                                                }
-                                                variant="light"
-                                                onPress={() =>
-                                                  setAddingIngredientToMealId(
-                                                    meal.id
-                                                  )
-                                                }
-                                              >
-                                                Agregar Ingrediente
-                                              </Button>
                                             </div>
                                           )}
                                         </div>
-                                      </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </CardBody>
-                        </Card>
-                      ))}
-                    </div>
+                                  </div>
+                                )}
+                              </>)}
+                            </SortableDayItem>
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </>
               )}
             </div>
           </ModalBody>
           <ModalFooter>
-            <Button color="danger" variant="light" onPress={onClose}>
+            <Button variant="light" onPress={handleClose}>
               Cerrar
             </Button>
           </ModalFooter>

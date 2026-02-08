@@ -205,10 +205,8 @@ export async function POST(request: NextRequest) {
           client_id: is_template ? null : client_id, // Templates don't have client_id
           trainer_id: session.trainer_id,
           name,
-          start_date: is_template
-            ? null
-            : start_date || new Date().toISOString().split("T")[0],
-          status: is_template ? null : status || "active",
+          start_date: start_date || new Date().toISOString().split("T")[0],
+          status: is_template ? "active" : status || "active",
           notes,
           is_template: is_template || false,
         })

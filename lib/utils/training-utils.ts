@@ -133,11 +133,11 @@ export function transformToWorkoutProgram(
               : {}),
             ...(se.metadata?.heart_rate_min && se.metadata?.heart_rate_max
               ? {
-                  heartRateZone: {
-                    min: se.metadata.heart_rate_min,
-                    max: se.metadata.heart_rate_max,
-                  },
-                }
+                heartRateZone: {
+                  min: se.metadata.heart_rate_min,
+                  max: se.metadata.heart_rate_max,
+                },
+              }
               : {}),
             ...(se.metadata?.cardio_type
               ? { cardioType: se.metadata.cardio_type }
@@ -145,6 +145,9 @@ export function transformToWorkoutProgram(
             notes: se.notes || undefined,
             ...(se.exercise?.video_url
               ? { videoUrl: se.exercise.video_url }
+              : {}),
+            ...(se.exercise?.image_url
+              ? { imageUrl: se.exercise.image_url }
               : {}),
             ...(se.id ? { id: se.id } : {}),
             ...(se.exercise_id ? { exercise_id: se.exercise_id } : {}),
@@ -163,6 +166,7 @@ export function transformToWorkoutProgram(
             trainingSystem: se.metadata?.training_system || "",
             notes: se.notes || undefined,
             videoUrl: se.exercise?.video_url,
+            imageUrl: se.exercise?.image_url,
             id: se.id,
             exercise_id: se.exercise_id,
           };

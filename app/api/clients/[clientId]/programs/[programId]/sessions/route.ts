@@ -243,3 +243,86 @@ export async function DELETE(
     );
   }
 }
+
+// PATCH - Reorder sessions in a program
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string; programId: string }> }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { programId } = await params;
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    // Verify program belongs to this trainer
+    const { data: program, error: programError } = await supabase
+      .from("programs")
+      .select("id, trainer_id")
+      .eq("id", programId)
+      .eq("trainer_id", session.trainer_id)
+      .eq("is_template", false)
+      .single();
+
+    if (programError || !program) {
+      return NextResponse.json(
+        { success: false, error: "Programa no encontrado o no autorizado" },
+        { status: 404 }
+      );
+    }
+
+    // Batch update session_order for each session
+    const updatePromises = reorder.map(
+      (item: { id: string; session_order: number }) =>
+        supabase
+          .from("sessions")
+          .update({ session_order: item.session_order })
+          .eq("id", item.id)
+          .eq("program_id", programId)
+          .eq("trainer_id", session.trainer_id)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
+      console.error(
+        "[Sessions API] Error reordering sessions:",
+        results.filter((r) => r.error).map((r) => r.error)
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar sesiones" },
+        { status: 500 }
+      );
+    }
+
+    console.log("[Sessions API] Sessions reordered successfully");
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[Sessions API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}

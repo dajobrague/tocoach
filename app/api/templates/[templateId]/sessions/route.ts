@@ -203,6 +203,90 @@ export async function PUT(
   }
 }
 
+// PATCH - Reorder sessions in a template
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ templateId: string }> }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { templateId } = await params;
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    // Verify template belongs to this trainer
+    const { data: template, error: templateError } = await supabase
+      .from("programs")
+      .select("id, trainer_id")
+      .eq("id", templateId)
+      .eq("trainer_id", session.trainer_id)
+      .eq("is_template", true)
+      .single();
+
+    if (templateError || !template) {
+      return NextResponse.json(
+        { success: false, error: "Plantilla no encontrada o no autorizada" },
+        { status: 404 }
+      );
+    }
+
+    // Batch update session_order for each session
+    const updatePromises = reorder.map(
+      (item: { id: string; session_order: number }) =>
+        supabase
+          .from("sessions")
+          .update({ session_order: item.session_order })
+          .eq("id", item.id)
+          .eq("program_id", templateId)
+          .eq("trainer_id", session.trainer_id)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
+      console.error(
+        "[Template Sessions API] Error reordering sessions:",
+        results.filter((r) => r.error).map((r) => r.error)
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar sesiones" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Sesiones reordenadas exitosamente",
+    });
+  } catch (error) {
+    console.error("[Template Sessions API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Remove session from template
 export async function DELETE(
   request: NextRequest,

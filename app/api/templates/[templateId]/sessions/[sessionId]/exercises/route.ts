@@ -233,7 +233,6 @@ export async function PUT(
   const supabase = createSupabaseClient();
 
   try {
-    // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
@@ -245,110 +244,182 @@ export async function PUT(
 
     const { sessionId } = await params;
     const body = await request.json();
-    const {
-      sessionExerciseId,
-      name,
-      sets,
-      reps,
-      tempo,
-      rest,
-      trainingSystem,
-      videoUrl,
-      // Cardio-specific fields
-      duration,
-      distance,
-      intensity,
-      minHeartRate,
-      maxHeartRate,
-      type,
-      notes,
-    } = body;
 
-    console.log(
-      "[Template Exercises API] Updating session exercise:",
-      sessionExerciseId
-    );
+    console.log("[Exercise Update] Raw body received:", JSON.stringify(body));
 
-    // Verify the session exercise belongs to this trainer
-    const { data: sessionExercise, error: fetchError } = await supabase
+    const { sessionExerciseId, name, sets, reps, rest_seconds, notes } = body;
+
+    if (!sessionExerciseId) {
+      return NextResponse.json(
+        { success: false, error: "sessionExerciseId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Step 1: Read current row to get the exercise_id (needed for name update)
+    const { data: before, error: readError } = await supabase
       .from("session_exercises")
-      .select("*, sessions!inner(trainer_id, session_type)")
+      .select("id, exercise_id, sets, reps, rest_seconds, notes")
       .eq("id", sessionExerciseId)
       .eq("session_id", sessionId)
       .single();
 
-    if (fetchError || !sessionExercise) {
-      console.error(
-        "[Template Exercises API] Session exercise not found:",
-        fetchError
-      );
-
+    if (readError || !before) {
+      console.error("[Exercise Update] Row not found:", readError);
       return NextResponse.json(
         { success: false, error: "Ejercicio no encontrado" },
         { status: 404 }
       );
     }
 
-    // Check trainer access
-    if ((sessionExercise as any).sessions.trainer_id !== session.trainer_id) {
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
-      );
+    console.log("[Exercise Update] BEFORE:", JSON.stringify(before));
+
+    // Step 2: Build session_exercises update payload — only touch provided fields
+    const updatePayload: Record<string, any> = {};
+
+    if (name !== undefined) {
+      updatePayload.custom_name = name && name.trim() ? name.trim() : null;
     }
 
-    const sessionType = (sessionExercise as any).sessions.session_type;
+    if (sets !== undefined && sets !== null && sets !== "") {
+      updatePayload.sets = parseInt(sets);
+    } else if (sets === "" || sets === null) {
+      updatePayload.sets = null;
+    }
 
-    // Build metadata object
-    const metadata: any = {};
+    if (reps !== undefined) {
+      updatePayload.reps = reps || null;
+    }
 
-    if (sessionType === "cardio") {
-      if (type) metadata.cardio_type = type;
-      if (intensity) metadata.intensity = intensity;
-      if (minHeartRate && maxHeartRate) {
-        metadata.heart_rate_zone = {
-          min: parseInt(minHeartRate),
-          max: parseInt(maxHeartRate),
-        };
+    if (rest_seconds !== undefined && rest_seconds !== null && rest_seconds !== "") {
+      updatePayload.rest_seconds = parseInt(rest_seconds);
+    } else if (rest_seconds === "" || rest_seconds === null) {
+      updatePayload.rest_seconds = null;
+    }
+
+    if (notes !== undefined) {
+      updatePayload.notes = notes || null;
+    }
+
+    // Step 4: Update session_exercises row (only if there are fields to update)
+    if (Object.keys(updatePayload).length > 0) {
+      const { error: updateError } = await supabase
+        .from("session_exercises")
+        .update(updatePayload)
+        .eq("id", sessionExerciseId)
+        .eq("session_id", sessionId);
+
+      if (updateError) {
+        console.error("[Exercise Update] UPDATE ERROR:", JSON.stringify(updateError));
+        return NextResponse.json(
+          { success: false, error: "Error al actualizar: " + updateError.message },
+          { status: 500 }
+        );
       }
-    } else {
-      if (tempo) metadata.tempo = tempo;
-      if (trainingSystem) metadata.training_system = trainingSystem;
-      if (rest) metadata.rest_description = rest;
     }
 
-    if (notes) metadata.notes = notes;
-
-    // Update the session exercise
-    const { data: updated, error: updateError } = await supabase
+    // Step 5: Read back the full row to return
+    const { data: updated, error: verifyError } = await supabase
       .from("session_exercises")
-      .update({
-        sets: sets ? parseInt(sets) : null,
-        reps: reps || null,
-        duration_seconds: duration ? parseInt(duration) * 60 : null,
-        distance_meters: distance ? parseFloat(distance) * 1000 : null,
-        rest_seconds: rest && !isNaN(parseInt(rest)) ? parseInt(rest) : null,
-        metadata,
-      })
-      .eq("id", sessionExerciseId)
       .select("*, exercises(*)")
+      .eq("id", sessionExerciseId)
       .single();
 
-    if (updateError) {
+    console.log("[Exercise Update] AFTER:", JSON.stringify(updated));
+
+    if (verifyError) {
+      console.error("[Exercise Update] Verify error:", JSON.stringify(verifyError));
+    }
+
+    return NextResponse.json({
+      success: true,
+      sessionExercise: updated,
+    });
+  } catch (error) {
+    console.error("[Exercise Update] Unexpected error:", error);
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH - Reorder exercises in a session
+export async function PATCH(
+  request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{ templateId: string; sessionId: string }>;
+  }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { templateId, sessionId } = await params;
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    // Verify session belongs to this trainer's template
+    const { data: sessionData, error: sessionError } = await supabase
+      .from("sessions")
+      .select("id, trainer_id, program_id")
+      .eq("id", sessionId)
+      .eq("program_id", templateId)
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return NextResponse.json(
+        { success: false, error: "Sesión no encontrada o no autorizada" },
+        { status: 404 }
+      );
+    }
+
+    // Batch update exercise_order for each exercise
+    const updatePromises = reorder.map(
+      (item: { id: string; exercise_order: number }) =>
+        supabase
+          .from("session_exercises")
+          .update({ exercise_order: item.exercise_order })
+          .eq("id", item.id)
+          .eq("session_id", sessionId)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
       console.error(
-        "[Template Exercises API] Error updating exercise:",
-        updateError
+        "[Template Exercises API] Error reordering exercises:",
+        results.filter((r) => r.error).map((r) => r.error)
       );
 
       return NextResponse.json(
-        { success: false, error: "Error al actualizar ejercicio" },
+        { success: false, error: "Error al reordenar ejercicios" },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      sessionExercise: updated,
+      message: "Ejercicios reordenados exitosamente",
     });
   } catch (error) {
     console.error("[Template Exercises API] Unexpected error:", error);

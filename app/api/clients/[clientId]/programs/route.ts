@@ -118,24 +118,27 @@ export async function GET(
     // Create a map of programs by ID for easy lookup
     const programsMap = new Map((programs || []).map((p) => [p.id, p]));
 
-    // Clean up orphaned client_programs (where program doesn't exist or doesn't match category)
-    const orphanedClientPrograms = clientPrograms.filter(
-      (cp) => !programsMap.has(cp.program_id)
-    );
-
-    if (orphanedClientPrograms.length > 0) {
-      console.log(
-        "[Programs API] Found",
-        orphanedClientPrograms.length,
-        "orphaned client_programs, cleaning up..."
+    // Only clean up orphaned client_programs when NOT filtering by category.
+    // When filtering by category, a program missing from the map simply means
+    // it belongs to a different category — NOT that it's orphaned.
+    if (!category) {
+      const orphanedClientPrograms = clientPrograms.filter(
+        (cp) => !programsMap.has(cp.program_id)
       );
 
-      // Delete orphaned client_programs
-      const orphanedIds = orphanedClientPrograms.map((cp) => cp.id);
+      if (orphanedClientPrograms.length > 0) {
+        console.log(
+          "[Programs API] Found",
+          orphanedClientPrograms.length,
+          "orphaned client_programs, cleaning up..."
+        );
 
-      await supabase.from("client_programs").delete().in("id", orphanedIds);
+        const orphanedIds = orphanedClientPrograms.map((cp) => cp.id);
 
-      console.log("[Programs API] Cleaned up orphaned client_programs");
+        await supabase.from("client_programs").delete().in("id", orphanedIds);
+
+        console.log("[Programs API] Cleaned up orphaned client_programs");
+      }
     }
 
     // For each program, fetch sessions and exercises
@@ -432,6 +435,7 @@ export async function POST(
               session_id: newSession.id,
               exercise_id: ex.exercise_id,
               exercise_order: ex.exercise_order,
+              custom_name: ex.custom_name,
               sets: ex.sets,
               reps: ex.reps,
               duration_seconds: ex.duration_seconds,

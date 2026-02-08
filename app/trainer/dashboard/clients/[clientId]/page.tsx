@@ -120,7 +120,7 @@ export default function ClientProfilePage() {
         onEdit={handleEdit}
         onUpdateStatus={handleUpdateStatus}
       />
-      <ClientProfileTabs clientId={clientId} />
+      <ClientProfileTabs clientId={clientId} clientName={client.name} />
 
       {/* Edit Client Modal */}
       {client && (

@@ -129,6 +129,21 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
 
+  // Delete confirmation modal state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    type: "plan" | "day" | "meal" | "ingredient";
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+
+  // Inline editing state for day name and meal name
+  const [editingDayName, setEditingDayName] = useState<string | null>(null);
+  const [editingDayNameValue, setEditingDayNameValue] = useState("");
+  const [editingMealName, setEditingMealName] = useState<string | null>(null);
+  const [editingMealNameValue, setEditingMealNameValue] = useState("");
+
   const [createPlanTab, setCreatePlanTab] = useState<"blank" | "template">(
     "blank"
   );
@@ -357,30 +372,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
-  const handleDeletePlan = async () => {
+  const handleDeletePlan = () => {
     if (!nutritionPlan) return;
-    if (
-      !confirm(
-        "¿Estás seguro de eliminar este plan nutricional? Se eliminarán todos los días, comidas e ingredientes."
-      )
-    )
-      return;
-
-    try {
-      const response = await fetch(`/api/nutrition/plans/${nutritionPlan.id}`, {
-        method: "DELETE",
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        setNutritionPlan(null);
-      } else {
-        alert(`Error al eliminar plan: ${result.error || "Error desconocido"}`);
-      }
-    } catch (err) {
-      console.error("Error deleting plan:", err);
-      alert("Error al eliminar plan. Por favor intenta de nuevo.");
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      type: "plan",
+      id: nutritionPlan.id,
+      name: nutritionPlan.name || "Plan Nutricional",
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -522,29 +521,53 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
-  const handleEditDay = async (dayId: string) => {
-    // For now, just log - can add edit modal later
-    console.log("Editando día:", dayId);
+  const handleEditDay = (dayId: string) => {
+    const day = nutritionPlan?.days.find((d) => d.id === dayId);
+    if (day) {
+      setEditingDayName(dayId);
+      setEditingDayNameValue(day.day_label);
+    }
   };
 
-  const handleDeleteDay = async (dayId: string) => {
-    if (!confirm("¿Estás seguro de eliminar este día?")) return;
+  const handleSaveDayName = async (dayId: string) => {
+    if (!editingDayNameValue.trim()) return;
+
+    // Optimistic update
+    setNutritionPlan((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, day_label: editingDayNameValue.trim() } : d
+        ),
+      };
+    });
+    setEditingDayName(null);
 
     try {
       const response = await fetch(`/api/nutrition/days/${dayId}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ day_label: editingDayNameValue.trim() }),
       });
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (!response.ok) {
         await refreshPlan();
-      } else {
-        console.error("Error deleting day:", result.error);
       }
     } catch (err) {
-      console.error("Error deleting day:", err);
+      console.error("Error saving day name:", err);
+      await refreshPlan();
     }
+  };
+
+  const handleDeleteDay = (dayId: string) => {
+    const day = nutritionPlan?.days.find((d) => d.id === dayId);
+    setDeleteConfirm({
+      isOpen: true,
+      type: "day",
+      id: dayId,
+      name: day?.day_label || "Día",
+    });
   };
 
   // Meal handlers
@@ -647,29 +670,64 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
-  const handleEditMeal = async (mealId: string) => {
-    // For now, just log - can add edit modal later
-    console.log("Editando comida:", mealId);
+  const handleEditMeal = (mealId: string) => {
+    let foundMeal: NutritionMealWithIngredients | null = null;
+    nutritionPlan?.days.forEach((day) => {
+      const meal = day.meals.find((m) => m.id === mealId);
+      if (meal) foundMeal = meal;
+    });
+    if (foundMeal) {
+      setEditingMealName(mealId);
+      setEditingMealNameValue((foundMeal as NutritionMealWithIngredients).label);
+    }
   };
 
-  const handleDeleteMeal = async (mealId: string) => {
-    if (!confirm("¿Estás seguro de eliminar esta comida?")) return;
+  const handleSaveMealName = async (mealId: string) => {
+    if (!editingMealNameValue.trim()) return;
+
+    // Optimistic update
+    setNutritionPlan((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((m) =>
+            m.id === mealId ? { ...m, label: editingMealNameValue.trim() } : m
+          ),
+        })),
+      };
+    });
+    setEditingMealName(null);
 
     try {
       const response = await fetch(`/api/nutrition/meals/${mealId}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: editingMealNameValue.trim() }),
       });
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (!response.ok) {
         await refreshPlan();
-      } else {
-        console.error("Error deleting meal:", result.error);
       }
     } catch (err) {
-      console.error("Error deleting meal:", err);
+      console.error("Error saving meal name:", err);
+      await refreshPlan();
     }
+  };
+
+  const handleDeleteMeal = (mealId: string) => {
+    let mealLabel = "Comida";
+    nutritionPlan?.days.forEach((day) => {
+      const meal = day.meals.find((m) => m.id === mealId);
+      if (meal) mealLabel = meal.label;
+    });
+    setDeleteConfirm({
+      isOpen: true,
+      type: "meal",
+      id: mealId,
+      name: mealLabel,
+    });
   };
 
   // Ingredient handlers - Inline
@@ -705,9 +763,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           meals: day.meals.map((meal) =>
             meal.id === mealId
               ? {
-                  ...meal,
-                  ingredients: [...meal.ingredients, optimisticIngredient],
-                }
+                ...meal,
+                ingredients: [...meal.ingredients, optimisticIngredient],
+              }
               : meal
           ),
         })),
@@ -745,11 +803,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               meals: day.meals.map((meal) =>
                 meal.id === mealId
                   ? {
-                      ...meal,
-                      ingredients: meal.ingredients.map((ing) =>
-                        ing.id === optimisticIngredient.id ? result.data : ing
-                      ),
-                    }
+                    ...meal,
+                    ingredients: meal.ingredients.map((ing) =>
+                      ing.id === optimisticIngredient.id ? result.data : ing
+                    ),
+                  }
                   : meal
               ),
             })),
@@ -832,56 +890,85 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     setEditingIngredient(null);
   };
 
-  const handleDeleteIngredient = async (ingredientId: string) => {
-    if (!confirm("¿Estás seguro de eliminar este ingrediente?")) return;
-
-    if (!nutritionPlan) return;
-
-    // Store current state for potential rollback
-    const previousPlan = { ...nutritionPlan };
-
-    // Optimistically remove ingredient from UI
-    setNutritionPlan((prevPlan) => {
-      if (!prevPlan) return prevPlan;
-
-      return {
-        ...prevPlan,
-        days: prevPlan.days.map((day) => ({
-          ...day,
-          meals: day.meals.map((meal) => ({
-            ...meal,
-            ingredients: meal.ingredients.filter(
-              (ing) => ing.id !== ingredientId
-            ),
-          })),
-        })),
-      };
+  const handleDeleteIngredient = (ingredientId: string) => {
+    let ingredientName = "Ingrediente";
+    nutritionPlan?.days.forEach((day) => {
+      day.meals.forEach((meal) => {
+        const ing = meal.ingredients.find((i) => i.id === ingredientId);
+        if (ing) ingredientName = ing.name;
+      });
     });
+    setDeleteConfirm({
+      isOpen: true,
+      type: "ingredient",
+      id: ingredientId,
+      name: ingredientName,
+    });
+  };
 
-    // Make API call in background
+  // Generic delete confirmation handler
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setIsDeleteLoading(true);
+
     try {
-      const response = await fetch(
-        `/api/nutrition/ingredients/${ingredientId}`,
-        {
-          method: "DELETE",
-        }
-      );
+      let endpoint = "";
+      switch (deleteConfirm.type) {
+        case "plan":
+          endpoint = `/api/nutrition/plans/${deleteConfirm.id}`;
+          break;
+        case "day":
+          endpoint = `/api/nutrition/days/${deleteConfirm.id}`;
+          break;
+        case "meal":
+          endpoint = `/api/nutrition/meals/${deleteConfirm.id}`;
+          break;
+        case "ingredient":
+          endpoint = `/api/nutrition/ingredients/${deleteConfirm.id}`;
+          break;
+      }
 
+      // For ingredient, do optimistic removal
+      const previousPlan = nutritionPlan ? { ...nutritionPlan } : null;
+      if (deleteConfirm.type === "ingredient" && nutritionPlan) {
+        setNutritionPlan((prevPlan) => {
+          if (!prevPlan) return prevPlan;
+          return {
+            ...prevPlan,
+            days: prevPlan.days.map((day) => ({
+              ...day,
+              meals: day.meals.map((meal) => ({
+                ...meal,
+                ingredients: meal.ingredients.filter(
+                  (ing) => ing.id !== deleteConfirm.id
+                ),
+              })),
+            })),
+          };
+        });
+      }
+
+      const response = await fetch(endpoint, { method: "DELETE" });
       const result = await response.json();
 
-      if (!result.success) {
-        console.error("Error deleting ingredient:", result.error);
-        // Revert on error
-        setNutritionPlan(previousPlan);
-        alert(
-          `Error al eliminar ingrediente: ${result.error || "Error desconocido"}`
-        );
+      if (result.success) {
+        if (deleteConfirm.type === "plan") {
+          setNutritionPlan(null);
+        } else if (deleteConfirm.type !== "ingredient") {
+          await refreshPlan();
+        }
+      } else {
+        if (deleteConfirm.type === "ingredient" && previousPlan) {
+          setNutritionPlan(previousPlan);
+        }
+        alert(`Error al eliminar: ${result.error || "Error desconocido"}`);
       }
     } catch (err) {
-      console.error("Error deleting ingredient:", err);
-      // Revert on error
-      setNutritionPlan(previousPlan);
-      alert("Error al eliminar ingrediente. Por favor intenta de nuevo.");
+      console.error("Error deleting:", err);
+      alert("Error al eliminar. Por favor intenta de nuevo.");
+    } finally {
+      setIsDeleteLoading(false);
+      setDeleteConfirm(null);
     }
   };
 
@@ -1085,7 +1172,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-20">
-        <Spinner size="lg" />
+        <Spinner color="default" size="lg" />
       </div>
     );
   }
@@ -1105,35 +1192,225 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   if (!nutritionPlan) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Icon
-          className="text-gray-300 mb-4"
-          icon="solar:dish-linear"
-          width={64}
-        />
-        <p className="text-gray-500 text-lg mb-4">
-          No hay plan nutricional para este cliente
-        </p>
-        <Button
-          className="text-white font-semibold"
-          color="primary"
-          startContent={<Icon icon="solar:add-circle-bold" width={20} />}
-          onPress={handleOpenCreatePlan}
+      <>
+        <div className="flex flex-col items-center justify-center py-20">
+          <Icon
+            className="text-gray-300 mb-4"
+            icon="solar:dish-linear"
+            width={64}
+          />
+          <p className="text-gray-500 text-lg mb-4">
+            No hay plan nutricional para este cliente
+          </p>
+          <Button
+            className="bg-black text-white font-semibold hover:bg-slate-800"
+            startContent={<Icon icon="solar:add-circle-bold" width={20} />}
+            onPress={handleOpenCreatePlan}
+          >
+            Crear Plan Nutricional
+          </Button>
+        </div>
+
+        {/* Plan Details Modal - must be rendered even when no plan exists */}
+        <Modal
+          classNames={{
+            header: "border-b border-gray-200",
+            footer: "border-t border-gray-200",
+            body: "py-6",
+          }}
+          isOpen={isPlanModalOpen}
+          size="lg"
+          onClose={handleClosePlanModal}
         >
-          Crear Plan Nutricional
-        </Button>
-      </div>
+          <ModalContent>
+            <ModalHeader className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <div className="bg-slate-100 p-2 rounded-lg">
+                  <Icon
+                    className="text-slate-700 text-xl"
+                    icon="solar:document-text-bold"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Crear Plan Nutricional
+                  </h3>
+                  <p className="text-sm text-gray-500 font-normal">
+                    Define los detalles del plan nutricional
+                  </p>
+                </div>
+              </div>
+            </ModalHeader>
+            <ModalBody>
+              <div className="flex flex-col gap-4">
+                {/* Tabs for Blank/Template */}
+                <Tabs
+                  selectedKey={createPlanTab}
+                  onSelectionChange={(key) =>
+                    setCreatePlanTab(key as "blank" | "template")
+                  }
+                >
+                  <Tab key="blank" title="Plan en Blanco" />
+                  <Tab key="template" title="Desde Plantilla" />
+                </Tabs>
+
+                {createPlanTab === "template" && (
+                  <div className="mb-4">
+                    {isLoadingTemplates ? (
+                      <div className="flex justify-center py-8">
+                        <Spinner size="sm" />
+                      </div>
+                    ) : availableTemplates.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <Icon
+                          className="mx-auto text-gray-300 mb-2"
+                          icon="fluent:food-20-filled"
+                          width={48}
+                        />
+                        <p className="text-sm text-gray-500">
+                          No hay plantillas nutricionales disponibles
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {availableTemplates.map((template) => (
+                          <div
+                            key={template.id}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedTemplateId === template.id
+                              ? "border-slate-500 bg-slate-50"
+                              : "border-gray-200 hover:border-slate-300"
+                              }`}
+                            onClick={() => {
+                              setSelectedTemplateId(template.id);
+                              if (!planForm.name) {
+                                setPlanForm({
+                                  ...planForm,
+                                  name: template.name,
+                                });
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-gray-900">
+                                  {template.name}
+                                </h4>
+                                {template.description && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {template.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-3 mt-2 text-xs text-gray-600">
+                                  <span>
+                                    <Icon
+                                      className="inline mr-1"
+                                      icon="solar:calendar-linear"
+                                      width={14}
+                                    />
+                                    {template.dayCount || 0} días
+                                  </span>
+                                  <span>
+                                    <Icon
+                                      className="inline mr-1"
+                                      icon="fluent:food-20-filled"
+                                      width={14}
+                                    />
+                                    {template.mealCount || 0} comidas
+                                  </span>
+                                </div>
+                              </div>
+                              {selectedTemplateId === template.id && (
+                                <Icon
+                                  className="text-slate-700"
+                                  icon="solar:check-circle-bold"
+                                  width={24}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Input
+                  isRequired
+                  label="Nombre del Plan"
+                  placeholder='Ej: "Plan de Definición", "Nutrición Deportiva"'
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:document-text-linear"
+                      width={18}
+                    />
+                  }
+                  value={planForm.name}
+                  onValueChange={(value) =>
+                    setPlanForm({ ...planForm, name: value })
+                  }
+                />
+                <Input
+                  isRequired
+                  label="Fecha de Inicio"
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:calendar-linear"
+                      width={18}
+                    />
+                  }
+                  type="date"
+                  value={planForm.start_date || ""}
+                  onValueChange={(value) =>
+                    setPlanForm({ ...planForm, start_date: value })
+                  }
+                />
+                <Textarea
+                  label="Notas del Plan (Opcional)"
+                  minRows={3}
+                  placeholder="Ej: Plan diseñado para aumentar masa muscular..."
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:notes-linear"
+                      width={18}
+                    />
+                  }
+                  value={planForm.notes}
+                  onValueChange={(value) =>
+                    setPlanForm({ ...planForm, notes: value })
+                  }
+                />
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={handleClosePlanModal}>
+                Cancelar
+              </Button>
+              <Button
+                className="bg-black text-white font-semibold hover:bg-slate-800"
+                isDisabled={!planForm.name}
+                startContent={<Icon icon="solar:diskette-bold" width={18} />}
+                onPress={handleSavePlan}
+              >
+                Crear Plan
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+      </>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
       {/* Plan Selector and New Plan Button */}
-      <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-200">
+      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
         <div className="flex items-center gap-3">
           {allPlans.length > 1 ? (
             <>
-              <span className="text-sm font-semibold text-blue-900">
+              <span className="text-sm font-semibold text-gray-900">
                 Plan {selectedPlanIndex + 1} de {allPlans.length}
               </span>
               <div className="flex gap-2">
@@ -1158,14 +1435,13 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               </div>
             </>
           ) : (
-            <span className="text-sm font-semibold text-blue-900">
+            <span className="text-sm font-semibold text-gray-900">
               Plan Nutricional
             </span>
           )}
         </div>
         <Button
-          className="text-white font-semibold"
-          color="primary"
+          className="bg-black text-white font-semibold hover:bg-slate-800"
           size="sm"
           startContent={<Icon icon="solar:add-circle-bold" width={18} />}
           onPress={handleOpenCreatePlan}
@@ -1175,15 +1451,15 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       </div>
 
       {/* Plan Container Card - Everything is inside */}
-      <Card className="border-2 border-blue-300 shadow-lg">
+      <Card className="border-2 border-slate-300 shadow-lg">
         <CardBody className="p-0">
           {/* Plan Header */}
-          <div className="p-6 bg-gradient-to-r from-blue-50 to-blue-100 border-b-2 border-blue-300">
+          <div className="p-6 bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-slate-300">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-3">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-600"
                     icon="solar:document-text-bold"
                     width={28}
                   />
@@ -1208,13 +1484,13 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   </Badge>
                 </div>
                 {nutritionPlan.notes && (
-                  <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200">
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
                     <Icon
-                      className="inline text-blue-600 mr-2"
+                      className="inline text-slate-600 mr-2"
                       icon="solar:notes-bold"
                       width={16}
                     />
-                    <span className="text-sm text-blue-900">
+                    <span className="text-sm text-gray-900">
                       {nutritionPlan.notes}
                     </span>
                   </div>
@@ -1274,8 +1550,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                 </p>
               </div>
               <Button
-                className="text-white font-semibold"
-                color="primary"
+                className="bg-black text-white font-semibold hover:bg-slate-800"
                 startContent={<Icon icon="solar:add-circle-bold" width={20} />}
                 onPress={handleOpenAddDay}
               >
@@ -1287,19 +1562,52 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
             <div className="space-y-3">
               {nutritionPlan.days.map((day) => (
                 <details key={day.id} className="group">
-                  <summary className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                  <summary className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="bg-blue-50 p-2 rounded-lg">
+                      <div className="bg-slate-50 p-2 rounded-lg">
                         <Icon
-                          className="text-blue-600"
+                          className="text-slate-600"
                           icon="solar:calendar-bold"
                           width={24}
                         />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900">
-                          {day.day_label}
-                        </h3>
+                        {editingDayName === day.id ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+                            <Input
+                              autoFocus
+                              className="max-w-xs"
+                              size="sm"
+                              value={editingDayNameValue}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveDayName(day.id);
+                                if (e.key === "Escape") setEditingDayName(null);
+                              }}
+                              onValueChange={setEditingDayNameValue}
+                            />
+                            <Button
+                              isIconOnly
+                              color="success"
+                              size="sm"
+                              variant="flat"
+                              onPress={() => handleSaveDayName(day.id)}
+                            >
+                              <Icon icon="solar:check-circle-bold" width={18} />
+                            </Button>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="flat"
+                              onPress={() => setEditingDayName(null)}
+                            >
+                              <Icon icon="solar:close-circle-bold" width={18} />
+                            </Button>
+                          </div>
+                        ) : (
+                          <h3 className="text-xl font-bold text-gray-900">
+                            {day.day_label}
+                          </h3>
+                        )}
                         <div className="flex items-center gap-3 mt-1">
                           <p className="text-sm text-gray-600">
                             {day.meals.length} comidas
@@ -1307,31 +1615,29 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           {day.weekdays && day.weekdays.length > 0 && (
                             <div className="flex items-center gap-1">
                               <Icon
-                                className="text-blue-500"
+                                className="text-slate-500"
                                 icon="solar:calendar-bold"
                                 width={14}
                               />
-                              <span className="text-xs text-blue-600 font-medium">
+                              <span className="text-xs text-slate-600 font-medium">
                                 {formatWeekdays(day.weekdays)}
                               </span>
                             </div>
                           )}
                           {(!day.weekdays || day.weekdays.length === 0) && (
                             <span className="text-xs text-orange-600 font-medium">
-                              ⚠️ Sin días asignados
+                              Sin días asignados
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
-                          className="text-white font-semibold"
-                          color="primary"
+                          className="bg-black text-white font-semibold hover:bg-slate-800"
                           size="sm"
                           startContent={
                             <Icon icon="solar:add-circle-bold" width={16} />
                           }
-                          variant="flat"
                           onPress={(e: any) => {
                             e?.preventDefault?.();
                             handleOpenAddMeal(day.id);
@@ -1379,11 +1685,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   </summary>
 
                   {/* Weekdays Assignment Section */}
-                  <div className="mt-2 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-200">
+                  <div className="mt-2 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border-2 border-slate-200">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <Icon
-                          className="text-blue-600"
+                          className="text-slate-600"
                           icon="solar:calendar-bold"
                           width={20}
                         />
@@ -1404,7 +1710,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                     </div>
 
                     {editingDayWeekdays === day.id ? (
-                      <div className="p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="p-3 bg-white rounded-lg border border-slate-200">
                         <p className="text-xs text-gray-600 mb-3">
                           Selecciona los días de la semana en que este plan
                           nutricional aplica:
@@ -1413,11 +1719,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
                             <button
                               key={dayNum}
-                              className={`p-3 rounded-lg border-2 transition-all ${
-                                weekdaysForm.includes(dayNum)
-                                  ? "bg-blue-500 border-blue-600 text-white"
-                                  : "bg-white border-gray-200 text-gray-700 hover:border-blue-300"
-                              }`}
+                              className={`p-3 rounded-lg border-2 transition-all ${weekdaysForm.includes(dayNum)
+                                ? "bg-black border-black text-white"
+                                : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
+                                }`}
                               onClick={() => handleToggleWeekday(dayNum)}
                             >
                               <div className="text-xs font-bold">
@@ -1428,8 +1733,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                         </div>
                         <div className="flex gap-2 justify-end">
                           <Button
-                            className="text-white"
-                            color="primary"
+                            className="bg-black text-white hover:bg-slate-800"
                             size="sm"
                             onPress={() => handleSaveWeekdays(day.id)}
                           >
@@ -1453,7 +1757,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                               .map((dayNum) => (
                                 <div
                                   key={dayNum}
-                                  className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium text-sm"
+                                  className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg font-medium text-sm"
                                 >
                                   {getWeekdayName(dayNum)}
                                 </div>
@@ -1477,7 +1781,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   </div>
 
                   {/* Day-level Macros Section */}
-                  <div className="mt-2 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
+                  <div className="mt-2 p-4 bg-gradient-to-r from-purple-50 to-slate-50 rounded-lg border-2 border-purple-200">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <Icon
@@ -1555,8 +1859,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                         </div>
                         <div className="flex gap-2 justify-end">
                           <Button
-                            className="text-white"
-                            color="primary"
+                            className="bg-black text-white hover:bg-slate-800"
                             size="sm"
                             onPress={() => handleSaveDayMacros(day.id)}
                           >
@@ -1583,11 +1886,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           const mealTotals = calculateMealTotals(day.meals);
                           const displayValues = hasManualMacros
                             ? {
-                                protein: day.protein || 0,
-                                carbs: day.carbs || 0,
-                                fats: day.fats || 0,
-                                calories: day.calories || 0,
-                              }
+                              protein: day.protein || 0,
+                              carbs: day.carbs || 0,
+                              fats: day.fats || 0,
+                              calories: day.calories || 0,
+                            }
                             : mealTotals;
 
                           return (
@@ -1645,13 +1948,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                             No hay comidas en este día
                           </p>
                           <Button
-                            className="mt-3 text-white font-semibold"
-                            color="primary"
+                            className="mt-3 bg-black text-white font-semibold hover:bg-slate-800"
                             size="sm"
                             startContent={
                               <Icon icon="solar:add-circle-bold" width={16} />
                             }
-                            variant="flat"
                             onPress={() => handleOpenAddMeal(day.id)}
                           >
                             Añadir Primera Comida
@@ -1665,15 +1966,48 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           >
                             {/* Meal Header */}
                             <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-1">
                                 <Icon
-                                  className="text-blue-600"
+                                  className="text-slate-600"
                                   icon="solar:dish-bold"
                                   width={20}
                                 />
-                                <h4 className="font-bold text-gray-900">
-                                  {meal.label}
-                                </h4>
+                                {editingMealName === meal.id ? (
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <Input
+                                      autoFocus
+                                      className="max-w-xs"
+                                      size="sm"
+                                      value={editingMealNameValue}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleSaveMealName(meal.id);
+                                        if (e.key === "Escape") setEditingMealName(null);
+                                      }}
+                                      onValueChange={setEditingMealNameValue}
+                                    />
+                                    <Button
+                                      isIconOnly
+                                      color="success"
+                                      size="sm"
+                                      variant="flat"
+                                      onPress={() => handleSaveMealName(meal.id)}
+                                    >
+                                      <Icon icon="solar:check-circle-bold" width={18} />
+                                    </Button>
+                                    <Button
+                                      isIconOnly
+                                      size="sm"
+                                      variant="flat"
+                                      onPress={() => setEditingMealName(null)}
+                                    >
+                                      <Icon icon="solar:close-circle-bold" width={18} />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <h4 className="font-bold text-gray-900">
+                                    {meal.label}
+                                  </h4>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Button
@@ -1758,8 +2092,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 </div>
                                 <div className="flex gap-2 justify-end">
                                   <Button
-                                    className="text-white"
-                                    color="primary"
+                                    className="bg-black text-white hover:bg-slate-800"
                                     size="sm"
                                     onPress={() =>
                                       handleSaveMealMacros(meal.id)
@@ -1781,7 +2114,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
                                 onClick={() => handleEditMealMacrosClick(meal)}
                               >
-                                <div className="bg-blue-50 px-3 py-1.5 rounded-lg">
+                                <div className="bg-slate-50 px-3 py-1.5 rounded-lg">
                                   <span className="text-xs text-gray-600">
                                     Proteína:
                                   </span>
@@ -1929,7 +2262,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
                                 {/* Add new ingredient inline */}
                                 {addingIngredientToMeal === meal.id ? (
-                                  <div className="flex items-center gap-2 py-2 border-b border-blue-200 bg-blue-50 rounded px-2">
+                                  <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
                                     <Input
                                       autoFocus
                                       className="flex-1"
@@ -1969,9 +2302,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                     />
                                     <Button
                                       isIconOnly
-                                      className="text-white"
-                                      color="primary"
+                                      color="success"
                                       size="sm"
+                                      variant="flat"
                                       onPress={() =>
                                         handleSaveNewIngredient(meal.id)
                                       }
@@ -2016,14 +2349,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
                             {/* Meal Notes */}
                             {meal.notes && (
-                              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                                 <div className="flex items-start gap-2">
                                   <Icon
-                                    className="text-blue-600 mt-0.5 flex-shrink-0"
+                                    className="text-slate-600 mt-0.5 flex-shrink-0"
                                     icon="solar:notes-bold"
                                     width={16}
                                   />
-                                  <p className="text-sm text-blue-700">
+                                  <p className="text-sm text-slate-700">
                                     {meal.notes}
                                   </p>
                                 </div>
@@ -2055,9 +2388,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-50 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-600 text-xl"
                   icon="solar:calendar-add-bold"
                 />
               </div>
@@ -2111,7 +2444,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                 </p>
                 <p className="text-xs text-gray-500 mb-3">
                   {dayForm.dayLabel &&
-                  detectWeekdaysFromLabel(dayForm.dayLabel).length > 0
+                    detectWeekdaysFromLabel(dayForm.dayLabel).length > 0
                     ? `Auto-detectado: ${formatWeekdays(detectWeekdaysFromLabel(dayForm.dayLabel))}. Puedes personalizar abajo.`
                     : "Selecciona los días de la semana en que este plan aplica"}
                 </p>
@@ -2119,11 +2452,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
                     <button
                       key={dayNum}
-                      className={`p-2 rounded-lg border-2 transition-all ${
-                        dayForm.weekdays.includes(dayNum)
-                          ? "bg-blue-500 border-blue-600 text-white"
-                          : "bg-white border-gray-200 text-gray-700 hover:border-blue-300"
-                      }`}
+                      className={`p-2 rounded-lg border-2 transition-all ${dayForm.weekdays.includes(dayNum)
+                        ? "bg-black border-black text-white"
+                        : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
+                        }`}
                       type="button"
                       onClick={() => handleToggleWeekdayInForm(dayNum)}
                     >
@@ -2190,8 +2522,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               startContent={<Icon icon="solar:add-circle-bold" width={18} />}
               onPress={handleSaveDay}
             >
@@ -2215,9 +2546,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-50 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-600 text-xl"
                   icon="solar:document-text-bold"
                 />
               </div>
@@ -2271,11 +2602,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                         {availableTemplates.map((template) => (
                           <div
                             key={template.id}
-                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                              selectedTemplateId === template.id
-                                ? "border-blue-500 bg-blue-50"
-                                : "border-gray-200 hover:border-blue-300"
-                            }`}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedTemplateId === template.id
+                              ? "border-slate-500 bg-slate-50"
+                              : "border-gray-200 hover:border-slate-300"
+                              }`}
                             onClick={() => {
                               setSelectedTemplateId(template.id);
                               if (!planForm.name) {
@@ -2317,7 +2647,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                               </div>
                               {selectedTemplateId === template.id && (
                                 <Icon
-                                  className="text-blue-500"
+                                  className="text-slate-500"
                                   icon="solar:check-circle-bold"
                                   width={24}
                                 />
@@ -2489,8 +2819,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={!planForm.name}
               startContent={<Icon icon="solar:diskette-bold" width={18} />}
               onPress={handleSavePlan}
@@ -2529,9 +2858,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-50 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-600 text-xl"
                   icon="solar:dish-bold"
                 />
               </div>
@@ -2635,12 +2964,58 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               startContent={<Icon icon="solar:add-circle-bold" width={18} />}
               onPress={handleSaveMeal}
             >
               Crear Comida
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!deleteConfirm}
+        size="sm"
+        onClose={() => setDeleteConfirm(null)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-red-100 rounded-full">
+                <Icon className="text-red-600" icon="solar:trash-bin-trash-bold" width={20} />
+              </div>
+              <span>
+                Eliminar {deleteConfirm?.type === "plan" ? "Plan" : deleteConfirm?.type === "day" ? "Día" : deleteConfirm?.type === "meal" ? "Comida" : "Ingrediente"}
+              </span>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-gray-700">
+              ¿Estás seguro de que quieres eliminar{" "}
+              <span className="font-semibold">&quot;{deleteConfirm?.name}&quot;</span>?
+            </p>
+            <p className="text-sm text-gray-500">
+              {deleteConfirm?.type === "plan"
+                ? "Se eliminarán todos los días, comidas e ingredientes asociados."
+                : deleteConfirm?.type === "day"
+                  ? "Se eliminarán todas las comidas e ingredientes de este día."
+                  : deleteConfirm?.type === "meal"
+                    ? "Se eliminarán todos los ingredientes de esta comida."
+                    : "Esta acción no se puede deshacer."}
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setDeleteConfirm(null)}>
+              Cancelar
+            </Button>
+            <Button
+              color="danger"
+              isLoading={isDeleteLoading}
+              onPress={handleConfirmDelete}
+            >
+              Eliminar
             </Button>
           </ModalFooter>
         </ModalContent>

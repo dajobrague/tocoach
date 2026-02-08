@@ -15,10 +15,12 @@ import WorkoutsTab from "./tabs/workouts-tab";
 
 interface ClientProfileTabsProps {
   clientId: string;
+  clientName?: string;
 }
 
 export default function ClientProfileTabs({
   clientId,
+  clientName,
 }: ClientProfileTabsProps) {
   const [selectedTab, setSelectedTab] = useState("workouts");
 
@@ -119,8 +121,8 @@ export default function ClientProfileTabs({
       {/* Tab Content */}
       <div className="bg-gray-50">
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-          {selectedTab === "workouts" && <WorkoutsTab clientId={clientId} />}
-          {selectedTab === "cardio" && <CardioTab clientId={clientId} />}
+          {selectedTab === "workouts" && <WorkoutsTab clientId={clientId} clientName={clientName} />}
+          {selectedTab === "cardio" && <CardioTab clientId={clientId} clientName={clientName} />}
           {selectedTab === "neat" && <NeatTab clientId={clientId} />}
           {selectedTab === "nutrition" && <NutritionTab clientId={clientId} />}
           {selectedTab === "supplements" && (

@@ -3,6 +3,23 @@
 import type { WorkoutProgram } from "@/types/training";
 
 import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Autocomplete,
   AutocompleteItem,
   Button,
@@ -10,31 +27,97 @@ import {
   CardBody,
   Chip,
   Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
   DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
   Input,
   Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Progress,
   Select,
   SelectItem,
   Spinner,
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
 
-interface CardioTabProps {
-  clientId: string;
+// Sortable wrapper for session cards
+function SortableSessionItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
 }
 
-export default function CardioTab({ clientId }: CardioTabProps) {
+// Sortable wrapper for exercise items
+function SortableExerciseItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+interface CardioTabProps {
+  clientId: string;
+  clientName?: string;
+}
+
+export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +237,147 @@ export default function CardioTab({ clientId }: CardioTabProps) {
   useEffect(() => {
     fetchPrograms();
   }, [clientId]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Reorder sessions handler
+  const handleSessionDragEnd = useCallback(
+    async (programId: string, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const program = programs.find((p) => p.programId === programId);
+      if (!program) return;
+
+      const oldIndex = program.sessions.findIndex((s) => s.id === active.id);
+      const newIndex = program.sessions.findIndex((s) => s.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const previousPrograms = programs.map((p) => ({
+        ...p,
+        sessions: [...p.sessions],
+      }));
+
+      const reordered = arrayMove(program.sessions, oldIndex, newIndex);
+
+      setPrograms((prev) =>
+        prev.map((p) =>
+          p.programId === programId ? { ...p, sessions: reordered } : p
+        )
+      );
+
+      const reorderPayload = reordered.map((s, idx) => ({
+        id: s.id,
+        session_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/clients/${clientId}/programs/${programId}/sessions`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          setPrograms(previousPrograms);
+          console.error("Error reordering sessions:", result.error);
+        }
+      } catch (error) {
+        setPrograms(previousPrograms);
+        console.error("Error reordering sessions:", error);
+      }
+    },
+    [programs, clientId]
+  );
+
+  // Reorder exercises within a session handler
+  const handleExerciseDragEnd = useCallback(
+    async (programId: string, sessionId: string, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const program = programs.find((p) => p.programId === programId);
+      if (!program) return;
+
+      const session = program.sessions.find((s) => s.id === sessionId);
+      if (!session) return;
+
+      const oldIndex = session.exercises.findIndex(
+        (e) => (e.id || `exercise-${e.order}`) === active.id
+      );
+      const newIndex = session.exercises.findIndex(
+        (e) => (e.id || `exercise-${e.order}`) === over.id
+      );
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const previousPrograms = programs.map((p) => ({
+        ...p,
+        sessions: p.sessions.map((s) => ({
+          ...s,
+          exercises: [...s.exercises],
+        })),
+      }));
+
+      const reorderedExercises = arrayMove(
+        session.exercises,
+        oldIndex,
+        newIndex
+      );
+
+      setPrograms((prev) =>
+        prev.map((p) =>
+          p.programId === programId
+            ? {
+              ...p,
+              sessions: p.sessions.map((s) =>
+                s.id === sessionId
+                  ? { ...s, exercises: reorderedExercises }
+                  : s
+              ),
+            }
+            : p
+        )
+      );
+
+      const reorderPayload = reorderedExercises.map((e, idx) => ({
+        id: e.id,
+        exercise_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/clients/${clientId}/programs/${programId}/sessions/${sessionId}/exercises`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          setPrograms(previousPrograms);
+          console.error("Error reordering exercises:", result.error);
+        }
+      } catch (error) {
+        setPrograms(previousPrograms);
+        console.error("Error reordering exercises:", error);
+      }
+    },
+    [programs, clientId]
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -412,11 +636,11 @@ export default function CardioTab({ clientId }: CardioTabProps) {
   ) => {
     const confirmed = confirm(
       `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
-        "Esto eliminará permanentemente:\n" +
-        "• Todas las sesiones del programa\n" +
-        "• Todos los ejercicios asignados\n" +
-        "• El historial de entrenamientos completados\n\n" +
-        "Esta acción no se puede deshacer."
+      "Esto eliminará permanentemente:\n" +
+      "• Todas las sesiones del programa\n" +
+      "• Todos los ejercicios asignados\n" +
+      "• El historial de entrenamientos completados\n\n" +
+      "Esta acción no se puede deshacer."
     );
 
     if (!confirmed) return;
@@ -704,7 +928,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       } else {
         alert(
           "Error al actualizar ejercicio: " +
-            (data.error || "Error desconocido")
+          (data.error || "Error desconocido")
         );
       }
     } catch (err) {
@@ -770,8 +994,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Cardio</h2>
         <Button
-          className="text-white font-semibold"
-          color="primary"
+          className="bg-black text-white font-semibold hover:bg-slate-800"
           isDisabled={isLoading}
           startContent={<Icon icon="solar:add-circle-bold" width={20} />}
           onPress={handleOpenAddProgram}
@@ -785,7 +1008,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <Card className="bg-white border border-gray-200 shadow-sm">
           <CardBody className="p-12">
             <div className="flex flex-col items-center justify-center">
-              <Spinner color="primary" size="lg" />
+              <Spinner color="default" size="lg" />
               <p className="mt-4 text-gray-600">Cargando programas...</p>
             </div>
           </CardBody>
@@ -828,7 +1051,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                         {program.name}
                       </h3>
                       <Chip
-                        className="bg-blue-100 text-blue-700 border border-blue-200 font-semibold"
+                        className="bg-slate-100 text-gray-700 border border-slate-200 font-semibold"
                         size="sm"
                         variant="flat"
                       >
@@ -902,30 +1125,12 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                   </Dropdown>
                 </div>
 
-                {/* Progress */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium text-gray-700">
-                      Progreso General
-                    </p>
-                    <p className="text-sm font-bold text-blue-600">
-                      {program.progress}%
-                    </p>
-                  </div>
-                  <Progress
-                    className="max-w-full"
-                    color="primary"
-                    size="md"
-                    value={program.progress}
-                  />
-                </div>
-
                 {/* Sessions - Accordion */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Icon
-                        className="text-blue-600 flex-shrink-0"
+                        className="text-slate-700 flex-shrink-0"
                         icon="solar:calendar-bold"
                         width={18}
                       />
@@ -934,8 +1139,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                       </h4>
                     </div>
                     <Button
-                      className="text-white font-semibold"
-                      color="primary"
+                      className="bg-black text-white font-semibold hover:bg-slate-800"
                       size="sm"
                       startContent={
                         <Icon icon="solar:add-circle-bold" width={16} />
@@ -946,258 +1150,305 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                     </Button>
                   </div>
 
-                  <div className="space-y-3">
-                    {program.sessions.map((session) => (
-                      <details
-                        key={session.id}
-                        className="group"
-                        open={expandedSessions.has(session.id)}
-                      >
-                        <summary
-                          className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            toggleSession(session.id);
-                          }}
-                        >
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="bg-blue-50 p-2 rounded-lg">
-                              <Icon
-                                className="text-blue-600"
-                                icon="solar:heart-pulse-bold"
-                                width={20}
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="font-bold text-gray-900">
-                                  {session.name}
-                                </p>
-                                <span className="text-xs font-medium text-gray-500">
-                                  •{" "}
-                                  {Array.isArray(session.dayOfWeek)
-                                    ? session.dayOfWeek.join(", ")
-                                    : session.dayOfWeek}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                {session.exercises.length} ejercicios
-                              </p>
-                            </div>
-                            <div
-                              className="flex items-center gap-2"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button
-                                className="text-white font-semibold"
-                                color="primary"
-                                size="sm"
-                                startContent={
-                                  <Icon
-                                    icon="solar:add-circle-bold"
-                                    width={16}
-                                  />
-                                }
-                                onPress={() => {
-                                  setSelectedProgramId(program.programId);
-                                  handleOpenAddExercise(session.id);
-                                }}
-                              >
-                                Añadir Ejercicio
-                              </Button>
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="flat"
-                                onPress={(e: any) => {
-                                  e?.preventDefault?.();
-                                  handleEditSession(session.id);
-                                }}
-                              >
-                                <Icon
-                                  className="text-gray-600"
-                                  icon="solar:pen-linear"
-                                  width={18}
-                                />
-                              </Button>
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="flat"
-                                onPress={(e: any) => {
-                                  e?.preventDefault?.();
-                                  handleDeleteSession(session.id);
-                                }}
-                              >
-                                <Icon
-                                  className="text-gray-600"
-                                  icon="solar:trash-bin-trash-linear"
-                                  width={18}
-                                />
-                              </Button>
-                              <Icon
-                                className="text-gray-400 group-open:rotate-180 transition-transform"
-                                icon="solar:alt-arrow-down-linear"
-                                width={20}
-                              />
-                            </div>
-                          </div>
-                        </summary>
-
-                        <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                          {session.exercises.map((exercise) => (
-                            <div
-                              key={exercise.order}
-                              className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow"
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="text-sm font-bold text-white">
-                                      {exercise.order}
-                                    </span>
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-3">
-                                      <p className="text-sm font-bold text-gray-900">
-                                        {exercise.name}
+                  <DndContext
+                    collisionDetection={closestCenter}
+                    sensors={sensors}
+                    onDragEnd={(event) => handleSessionDragEnd(program.programId, event)}
+                  >
+                    <SortableContext
+                      items={program.sessions.map((s) => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-3">
+                        {program.sessions.map((session) => (
+                          <SortableSessionItem key={session.id} id={session.id}>
+                            {({ dragHandleProps }) => (
+                              <div className="group">
+                                <div
+                                  className="flex items-center justify-between cursor-pointer p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors"
+                                  onClick={() => toggleSession(session.id)}
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <div
+                                      {...dragHandleProps}
+                                      className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Icon
+                                        className="text-gray-400"
+                                        icon="solar:hamburger-menu-linear"
+                                        width={18}
+                                      />
+                                    </div>
+                                    <div className="bg-slate-100 p-2 rounded-lg">
+                                      <Icon
+                                        className="text-slate-700"
+                                        icon="solar:heart-pulse-bold"
+                                        width={20}
+                                      />
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-bold text-gray-900">
+                                          {session.name}
+                                        </p>
+                                        <span className="text-xs font-medium text-gray-500">
+                                          •{" "}
+                                          {Array.isArray(session.dayOfWeek)
+                                            ? session.dayOfWeek.join(", ")
+                                            : session.dayOfWeek}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        {session.exercises.length} ejercicios
                                       </p>
-                                      {exercise.cardioType && (
-                                        <Chip
-                                          className="bg-gray-100 text-gray-600 border border-gray-200"
-                                          size="sm"
-                                          variant="flat"
-                                        >
-                                          <div className="flex items-center gap-1">
-                                            <Icon
-                                              icon={getTypeIcon(
-                                                exercise.cardioType
-                                              )}
-                                              width={12}
-                                            />
-                                            <span className="text-xs font-medium">
-                                              {exercise.cardioType}
-                                            </span>
-                                          </div>
-                                        </Chip>
-                                      )}
                                     </div>
-
-                                    {/* Exercise Details */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                                      {exercise.duration && (
-                                        <div className="flex items-center gap-1.5">
+                                    <div
+                                      className="flex items-center gap-2"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Button
+                                        className="bg-black text-white font-semibold hover:bg-slate-800"
+                                        size="sm"
+                                        startContent={
                                           <Icon
-                                            className="text-blue-500 flex-shrink-0"
-                                            icon="solar:clock-circle-bold"
-                                            width={14}
-                                          />
-                                          <span className="text-xs text-gray-600">
-                                            <span className="font-semibold text-gray-900">
-                                              {exercise.duration}
-                                            </span>{" "}
-                                            min
-                                          </span>
-                                        </div>
-                                      )}
-                                      {exercise.distance && (
-                                        <div className="flex items-center gap-1.5">
-                                          <Icon
-                                            className="text-purple-500 flex-shrink-0"
-                                            icon="solar:route-bold"
-                                            width={14}
-                                          />
-                                          <span className="text-xs text-gray-600">
-                                            <span className="font-semibold text-gray-900">
-                                              {exercise.distance}
-                                            </span>{" "}
-                                            km
-                                          </span>
-                                        </div>
-                                      )}
-                                      {exercise.intensity && (
-                                        <div className="flex items-center gap-1.5">
-                                          <Icon
-                                            className={`${getIntensityColor(exercise.intensity)} flex-shrink-0`}
-                                            icon="solar:fire-bold"
-                                            width={14}
-                                          />
-                                          <span className="text-xs text-gray-700 font-medium">
-                                            {exercise.intensity}
-                                          </span>
-                                        </div>
-                                      )}
-                                      {exercise.heartRateZone && (
-                                        <div className="flex items-center gap-1.5">
-                                          <Icon
-                                            className="text-red-500 flex-shrink-0"
-                                            icon="solar:heart-pulse-bold"
-                                            width={14}
-                                          />
-                                          <span className="text-xs text-gray-700">
-                                            {exercise.heartRateZone.min}-
-                                            {exercise.heartRateZone.max} bpm
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Notes */}
-                                    {exercise.notes && (
-                                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                                        <div className="flex items-start gap-2">
-                                          <Icon
-                                            className="text-blue-600 mt-0.5 flex-shrink-0"
-                                            icon="solar:notes-bold"
+                                            icon="solar:add-circle-bold"
                                             width={16}
                                           />
-                                          <p className="text-xs text-blue-700">
-                                            {exercise.notes}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
+                                        }
+                                        onPress={() => {
+                                          setSelectedProgramId(program.programId);
+                                          handleOpenAddExercise(session.id);
+                                        }}
+                                      >
+                                        Añadir Ejercicio
+                                      </Button>
+                                      <Button
+                                        isIconOnly
+                                        size="sm"
+                                        variant="flat"
+                                        onPress={(e: any) => {
+                                          e?.preventDefault?.();
+                                          handleEditSession(session.id);
+                                        }}
+                                      >
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon="solar:pen-linear"
+                                          width={18}
+                                        />
+                                      </Button>
+                                      <Button
+                                        isIconOnly
+                                        size="sm"
+                                        variant="flat"
+                                        onPress={(e: any) => {
+                                          e?.preventDefault?.();
+                                          handleDeleteSession(session.id);
+                                        }}
+                                      >
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon="solar:trash-bin-trash-linear"
+                                          width={18}
+                                        />
+                                      </Button>
+                                      <Icon
+                                        className={`text-gray-400 transition-transform ${expandedSessions.has(session.id) ? "rotate-180" : ""}`}
+                                        icon="solar:alt-arrow-down-linear"
+                                        width={20}
+                                      />
+                                    </div>
                                   </div>
                                 </div>
 
-                                {/* Actions */}
-                                <div className="flex flex-col gap-1">
-                                  <Button
-                                    isIconOnly
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() =>
-                                      handleEditExercise(session.id, exercise)
-                                    }
-                                  >
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon="solar:pen-linear"
-                                      width={18}
-                                    />
-                                  </Button>
-                                  <Button
-                                    isIconOnly
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() =>
-                                      handleDeleteExercise(session.id, exercise)
-                                    }
-                                  >
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon="solar:trash-bin-trash-linear"
-                                      width={18}
-                                    />
-                                  </Button>
-                                </div>
+                                {expandedSessions.has(session.id) && (
+                                  <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                                    <DndContext
+                                      collisionDetection={closestCenter}
+                                      sensors={sensors}
+                                      onDragEnd={(event) =>
+                                        handleExerciseDragEnd(program.programId, session.id, event)
+                                      }
+                                    >
+                                      <SortableContext
+                                        items={session.exercises.map((e) => e.id || `exercise-${e.order}`)}
+                                        strategy={verticalListSortingStrategy}
+                                      >
+                                        {session.exercises.map((exercise) => (
+                                          <SortableExerciseItem
+                                            key={exercise.id || `exercise-${exercise.order}`}
+                                            id={exercise.id || `exercise-${exercise.order}`}
+                                          >
+                                            {({ dragHandleProps: exerciseDragHandleProps }) => (
+                                              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                                                {/* Drag handle */}
+                                                <div
+                                                  className="flex items-center justify-center mt-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+                                                  {...exerciseDragHandleProps}
+                                                >
+                                                  <Icon
+                                                    icon="solar:hamburger-menu-linear"
+                                                    width={16}
+                                                  />
+                                                </div>
+                                                <span className="text-sm font-semibold text-gray-500 min-w-[24px] mt-1">
+                                                  {exercise.order}.
+                                                </span>
+                                                {/* Exercise Image */}
+                                                {exercise.imageUrl ? (
+                                                  <img
+                                                    alt={exercise.name}
+                                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                                                    src={exercise.imageUrl}
+                                                  />
+                                                ) : (
+                                                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                    <Icon
+                                                      className="text-gray-400"
+                                                      icon={exercise.cardioType ? getTypeIcon(exercise.cardioType) : "solar:heart-pulse-bold"}
+                                                      width={28}
+                                                    />
+                                                  </div>
+                                                )}
+                                                <div className="flex-1">
+                                                  <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-gray-900">
+                                                      {exercise.name}
+                                                    </p>
+                                                    {exercise.cardioType && (
+                                                      <Chip
+                                                        className="bg-gray-100 text-gray-600 border border-gray-200"
+                                                        size="sm"
+                                                        variant="flat"
+                                                      >
+                                                        <div className="flex items-center gap-1">
+                                                          <Icon
+                                                            icon={getTypeIcon(exercise.cardioType)}
+                                                            width={12}
+                                                          />
+                                                          <span className="text-xs font-medium">
+                                                            {exercise.cardioType}
+                                                          </span>
+                                                        </div>
+                                                      </Chip>
+                                                    )}
+                                                    {exercise.intensity && (
+                                                      <Chip
+                                                        className={`border ${exercise.intensity === "Low"
+                                                          ? "bg-green-50 text-green-700 border-green-200"
+                                                          : exercise.intensity === "Moderate"
+                                                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                                            : exercise.intensity === "High"
+                                                              ? "bg-orange-50 text-orange-700 border-orange-200"
+                                                              : "bg-red-50 text-red-700 border-red-200"
+                                                          }`}
+                                                        size="sm"
+                                                        variant="flat"
+                                                      >
+                                                        <div className="flex items-center gap-1">
+                                                          <Icon icon="solar:fire-bold" width={12} />
+                                                          <span className="text-xs font-medium">
+                                                            {exercise.intensity === "Low"
+                                                              ? "Baja"
+                                                              : exercise.intensity === "Moderate"
+                                                                ? "Moderada"
+                                                                : exercise.intensity === "High"
+                                                                  ? "Alta"
+                                                                  : exercise.intensity === "Interval"
+                                                                    ? "Intervalos"
+                                                                    : exercise.intensity}
+                                                          </span>
+                                                        </div>
+                                                      </Chip>
+                                                    )}
+                                                  </div>
+                                                  <div className="text-sm text-gray-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                    {exercise.duration !== undefined && exercise.duration > 0 && (
+                                                      <span className="flex items-center gap-1">
+                                                        <Icon className="text-slate-500" icon="solar:clock-circle-bold" width={14} />
+                                                        <span className="font-semibold text-gray-900">{exercise.duration}</span> min
+                                                      </span>
+                                                    )}
+                                                    {exercise.distance !== undefined && exercise.distance > 0 && (
+                                                      <span className="flex items-center gap-1">
+                                                        <Icon className="text-slate-500" icon="solar:route-bold" width={14} />
+                                                        <span className="font-semibold text-gray-900">{exercise.distance}</span> km
+                                                      </span>
+                                                    )}
+                                                    {exercise.heartRateZone && (
+                                                      <span className="flex items-center gap-1">
+                                                        <Icon className="text-red-500" icon="solar:heart-pulse-bold" width={14} />
+                                                        <span className="font-semibold text-gray-900">
+                                                          {exercise.heartRateZone.min}-{exercise.heartRateZone.max}
+                                                        </span> bpm
+                                                      </span>
+                                                    )}
+                                                    {exercise.sets > 0 && (
+                                                      <span className="flex items-center gap-1">
+                                                        <Icon className="text-slate-500" icon="solar:copy-bold" width={14} />
+                                                        <span className="font-semibold text-gray-900">{exercise.sets}</span> series
+                                                      </span>
+                                                    )}
+                                                    {exercise.reps && exercise.reps !== "0" && exercise.reps !== "" && (
+                                                      <span className="flex items-center gap-1">
+                                                        <Icon className="text-slate-500" icon="solar:hashtag-bold" width={14} />
+                                                        <span className="font-semibold text-gray-900">{exercise.reps}</span> reps
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  {exercise.notes && (
+                                                    <p className="text-gray-500 mt-1 text-xs italic">
+                                                      Notas: {exercise.notes}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1">
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      handleEditExercise(session.id, exercise)
+                                                    }
+                                                  >
+                                                    <Icon
+                                                      className="text-gray-400 hover:text-gray-600"
+                                                      icon="solar:pen-linear"
+                                                      width={16}
+                                                    />
+                                                  </Button>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      handleDeleteExercise(session.id, exercise)
+                                                    }
+                                                  >
+                                                    <Icon
+                                                      className="text-gray-400 hover:text-red-600"
+                                                      icon="solar:trash-bin-trash-linear"
+                                                      width={16}
+                                                    />
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </SortableExerciseItem>
+                                        ))}
+                                      </SortableContext>
+                                    </DndContext>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
+                            )}
+                          </SortableSessionItem>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 </div>
               </CardBody>
             </Card>
@@ -1223,8 +1474,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                 Asigna un programa cardiovascular para comenzar
               </p>
               <Button
-                className="text-white font-semibold"
-                color="primary"
+                className="bg-black text-white font-semibold hover:bg-slate-800"
                 startContent={<Icon icon="solar:add-circle-bold" width={20} />}
                 onPress={handleOpenAddProgram}
               >
@@ -1251,9 +1501,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:heart-pulse-bold"
                 />
               </div>
@@ -1273,7 +1523,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
@@ -1351,7 +1601,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:running-bold"
                     width={18}
                   />
@@ -1412,7 +1662,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:graph-bold"
                     width={18}
                   />
@@ -1459,7 +1709,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:fire-bold"
                     width={18}
                   />
@@ -1538,7 +1788,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -1572,8 +1822,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -1603,9 +1852,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:heart-pulse-bold"
                 />
               </div>
@@ -1625,7 +1874,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:running-bold"
                     width={18}
                   />
@@ -1685,7 +1934,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:graph-bold"
                     width={18}
                   />
@@ -1731,7 +1980,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:fire-bold"
                     width={18}
                   />
@@ -1811,7 +2060,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -1845,8 +2094,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -1876,9 +2124,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:clipboard-list-bold"
                 />
               </div>
@@ -1898,7 +2146,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
@@ -1916,7 +2164,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                     label="Plantilla"
                     placeholder="Selecciona una plantilla o crea desde cero"
                     selectedKeys={
-                      programForm.templateId ? [programForm.templateId] : []
+                      programForm.templateId
+                        ? new Set([programForm.templateId])
+                        : new Set<string>()
                     }
                     startContent={
                       <Icon
@@ -1932,8 +2182,12 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                       );
 
                       if (selectedTemplate) {
+                        const autoName = clientName
+                          ? `${selectedTemplate.name} - ${clientName}`
+                          : selectedTemplate.name;
                         setProgramForm({
                           ...programForm,
+                          name: autoName,
                           templateId,
                           type: selectedTemplate.type,
                           goal: selectedTemplate.goal || "",
@@ -1949,7 +2203,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
                     }}
                   >
                     {templates.map((template) => (
-                      <SelectItem key={template.id}>
+                      <SelectItem key={template.id} textValue={template.name}>
                         {template.name} ({template.sessionCount} sesiones,{" "}
                         {template.exerciseCount} ejercicios)
                       </SelectItem>
@@ -1973,7 +2227,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2035,7 +2289,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
@@ -2084,7 +2338,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -2109,19 +2363,19 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               </div>
 
               {/* Info Card */}
-              <Card className="bg-blue-50 border border-blue-100">
+              <Card className="bg-slate-100 border border-slate-200">
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
-                      className="text-blue-600 mt-0.5 flex-shrink-0"
+                      className="text-slate-700 mt-0.5 flex-shrink-0"
                       icon="solar:info-circle-bold"
                       width={18}
                     />
                     <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                      <p className="text-sm font-semibold text-gray-900 mb-1">
                         Nota Importante
                       </p>
-                      <p className="text-sm text-blue-700">
+                      <p className="text-sm text-gray-700">
                         Una vez creado el programa, podrás añadir sesiones y
                         ejercicios de cardio específicos. Asegúrate de completar
                         toda la información requerida.
@@ -2141,8 +2395,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2172,9 +2425,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:clipboard-list-bold"
                 />
               </div>
@@ -2194,7 +2447,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2255,7 +2508,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
@@ -2304,7 +2557,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:shield-check-bold"
                     width={18}
                   />
@@ -2374,7 +2627,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -2408,8 +2661,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2437,9 +2689,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:calendar-add-bold"
                 />
               </div>
@@ -2459,7 +2711,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2513,19 +2765,19 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               </div>
 
               {/* Info Card */}
-              <Card className="bg-blue-50 border border-blue-100">
+              <Card className="bg-slate-100 border border-slate-200">
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
-                      className="text-blue-600 mt-0.5 flex-shrink-0"
+                      className="text-slate-700 mt-0.5 flex-shrink-0"
                       icon="solar:info-circle-bold"
                       width={18}
                     />
                     <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                      <p className="text-sm font-semibold text-gray-900 mb-1">
                         Nota Importante
                       </p>
-                      <p className="text-sm text-blue-700">
+                      <p className="text-sm text-gray-700">
                         Puedes asignar la sesión a múltiples días de la semana.
                         Una vez creada, podrás añadir ejercicios de cardio
                         específicos.
@@ -2545,8 +2797,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2574,9 +2825,9 @@ export default function CardioTab({ clientId }: CardioTabProps) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-50 p-2 rounded-lg">
+              <div className="bg-slate-100 p-2 rounded-lg">
                 <Icon
-                  className="text-blue-600 text-xl"
+                  className="text-slate-700 text-xl"
                   icon="solar:calendar-add-bold"
                 />
               </div>
@@ -2596,7 +2847,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2659,8 +2910,7 @@ export default function CardioTab({ clientId }: CardioTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={

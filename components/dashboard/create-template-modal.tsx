@@ -13,22 +13,32 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface CreateTemplateModalProps {
   isOpen: boolean;
+  defaultType?: "program" | "nutrition";
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export default function CreateTemplateModal({
   isOpen,
+  defaultType,
   onClose,
   onSuccess,
 }: CreateTemplateModalProps) {
   const [templateType, setTemplateType] = useState<
     "program" | "nutrition" | null
-  >(null);
+  >(defaultType || null);
+
+  // Sync templateType with defaultType when modal opens
+  useEffect(() => {
+    if (isOpen && defaultType) {
+      setTemplateType(defaultType);
+    }
+  }, [isOpen, defaultType]);
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -210,31 +220,28 @@ export default function CreateTemplateModal({
                     <div className="grid grid-cols-2 gap-3">
                       <Card
                         isPressable
-                        className={`border-2 transition-all cursor-pointer ${
-                          formData.category === "strength"
-                            ? "border-black bg-black"
-                            : "border-gray-200 hover:border-black"
-                        }`}
+                        className={`border-2 transition-all cursor-pointer ${formData.category === "strength"
+                          ? "border-black bg-black"
+                          : "border-gray-200 hover:border-black"
+                          }`}
                         onPress={() =>
                           setFormData({ ...formData, category: "strength" })
                         }
                       >
                         <CardBody className="p-4 text-center">
                           <Icon
-                            className={`mx-auto mb-2 ${
-                              formData.category === "strength"
-                                ? "text-white"
-                                : "text-gray-600"
-                            }`}
+                            className={`mx-auto mb-2 ${formData.category === "strength"
+                              ? "text-white"
+                              : "text-gray-600"
+                              }`}
                             icon="solar:dumbbell-bold"
                             width={32}
                           />
                           <p
-                            className={`font-semibold ${
-                              formData.category === "strength"
-                                ? "text-white"
-                                : "text-gray-700"
-                            }`}
+                            className={`font-semibold ${formData.category === "strength"
+                              ? "text-white"
+                              : "text-gray-700"
+                              }`}
                           >
                             Fuerza
                           </p>
@@ -243,31 +250,28 @@ export default function CreateTemplateModal({
 
                       <Card
                         isPressable
-                        className={`border-2 transition-all cursor-pointer ${
-                          formData.category === "cardio"
-                            ? "border-warning bg-warning"
-                            : "border-gray-200 hover:border-warning"
-                        }`}
+                        className={`border-2 transition-all cursor-pointer ${formData.category === "cardio"
+                          ? "border-danger bg-danger"
+                          : "border-gray-200 hover:border-danger"
+                          }`}
                         onPress={() =>
                           setFormData({ ...formData, category: "cardio" })
                         }
                       >
                         <CardBody className="p-4 text-center">
                           <Icon
-                            className={`mx-auto mb-2 ${
-                              formData.category === "cardio"
-                                ? "text-white"
-                                : "text-gray-600"
-                            }`}
-                            icon="solar:heart-pulse-bold"
+                            className={`mx-auto mb-2 ${formData.category === "cardio"
+                              ? "text-white"
+                              : "text-gray-600"
+                              }`}
+                            icon="solar:fire-bold"
                             width={32}
                           />
                           <p
-                            className={`font-semibold ${
-                              formData.category === "cardio"
-                                ? "text-white"
-                                : "text-gray-700"
-                            }`}
+                            className={`font-semibold ${formData.category === "cardio"
+                              ? "text-white"
+                              : "text-gray-700"
+                              }`}
                           >
                             Cardio
                           </p>

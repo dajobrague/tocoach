@@ -6,6 +6,11 @@ import {
   CardBody,
   Chip,
   Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
   Spinner,
   Tab,
   Tabs,
@@ -45,6 +50,8 @@ export default function TemplatesContent() {
     "all" | "cardio" | "strength"
   >("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<Template | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
     null
   );
@@ -89,22 +96,17 @@ export default function TemplatesContent() {
   );
 
   // Handle delete template
-  const handleDelete = async (template: Template) => {
-    if (
-      !confirm(
-        "¿Estás seguro de que quieres eliminar esta plantilla? Esta acción no se puede deshacer."
-      )
-    ) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    if (!templateToDelete) return;
 
+    setIsDeleting(true);
     try {
       let endpoint = "";
 
-      if (template.templateType === "nutrition") {
-        endpoint = `/api/nutrition/plans/${template.id}`;
+      if (templateToDelete.templateType === "nutrition") {
+        endpoint = `/api/nutrition/plans/${templateToDelete.id}`;
       } else {
-        endpoint = `/api/templates/${template.id}`;
+        endpoint = `/api/templates/${templateToDelete.id}`;
       }
 
       const response = await fetch(endpoint, {
@@ -122,6 +124,9 @@ export default function TemplatesContent() {
     } catch (error) {
       console.error("Error deleting template:", error);
       alert("Error al eliminar la plantilla");
+    } finally {
+      setIsDeleting(false);
+      setTemplateToDelete(null);
     }
   };
 
@@ -132,7 +137,7 @@ export default function TemplatesContent() {
 
   // Get category color
   const getCategoryColor = (category: "cardio" | "strength" | "nutrition") => {
-    if (category === "cardio") return "secondary";
+    if (category === "cardio") return "danger";
     if (category === "nutrition") return "success";
 
     return "primary";
@@ -141,6 +146,7 @@ export default function TemplatesContent() {
   // Get category icon
   const getCategoryIcon = (template: Template) => {
     if (template.templateType === "nutrition") return "fluent:food-20-filled";
+    if (template.category === "cardio") return "solar:fire-bold";
 
     return "solar:dumbbell-linear";
   };
@@ -414,12 +420,12 @@ export default function TemplatesContent() {
                       isIconOnly
                       color="danger"
                       size="sm"
-                      variant="light"
-                      onPress={() => handleDelete(template)}
+                      variant="solid"
+                      onPress={() => setTemplateToDelete(template)}
                     >
                       <Icon
-                        className="text-red-500"
-                        icon="solar:trash-bin-trash-linear"
+                        className="text-white"
+                        icon="solar:trash-bin-trash-bold"
                         width={18}
                       />
                     </Button>
@@ -439,6 +445,7 @@ export default function TemplatesContent() {
 
       {/* Create Template Modal */}
       <CreateTemplateModal
+        defaultType={templateTypeTab === "nutrition" ? "nutrition" : "program"}
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
@@ -452,13 +459,80 @@ export default function TemplatesContent() {
         <TemplateDetailModal
           isOpen={!!selectedTemplate}
           template={selectedTemplate}
-          onClose={() => setSelectedTemplate(null)}
-          onSuccess={() => {
+          onClose={(updatedData) => {
+            if (updatedData) {
+              // Optimistically update the local templates list with the changes
+              setTemplates((prev) =>
+                prev.map((t) =>
+                  t.id === selectedTemplate.id
+                    ? {
+                      ...t,
+                      name: updatedData.name,
+                      description: updatedData.description,
+                      type: updatedData.type,
+                      category: updatedData.category,
+                      division: updatedData.division,
+                      goal: updatedData.goal,
+                      sessionsPerWeek: updatedData.sessionsPerWeek,
+                      sessionCount: updatedData.sessionCount ?? t.sessionCount,
+                      exerciseCount: updatedData.exerciseCount ?? t.exerciseCount,
+                      dayCount: updatedData.dayCount ?? t.dayCount,
+                      mealCount: updatedData.mealCount ?? t.mealCount,
+                      updatedAt: new Date().toISOString(),
+                    }
+                    : t
+                )
+              );
+            }
             setSelectedTemplate(null);
-            fetchTemplates();
+          }}
+          onSuccess={() => {
+            // No-op: updates are handled via onClose
           }}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!templateToDelete}
+        size="sm"
+        onClose={() => setTemplateToDelete(null)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-red-100 rounded-full">
+                <Icon className="text-red-600" icon="solar:trash-bin-trash-bold" width={20} />
+              </div>
+              <span>Eliminar Plantilla</span>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-gray-700">
+              ¿Estás seguro de que quieres eliminar{" "}
+              <span className="font-semibold">&quot;{templateToDelete?.name}&quot;</span>?
+            </p>
+            <p className="text-sm text-gray-500">
+              Esta acción no se puede deshacer.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="flat"
+              onPress={() => setTemplateToDelete(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="danger"
+              isLoading={isDeleting}
+              onPress={handleConfirmDelete}
+            >
+              Eliminar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

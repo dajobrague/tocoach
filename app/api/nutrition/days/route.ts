@@ -27,6 +27,68 @@ function detectWeekdaysFromLabel(label: string): number[] {
   return [];
 }
 
+// PATCH - Reorder nutrition days
+export async function PATCH(request: NextRequest) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    // Batch update day_order for each day
+    const updatePromises = reorder.map(
+      (item: { id: string; day_order: number }) =>
+        supabase
+          .from("nutrition_days")
+          .update({ day_order: item.day_order })
+          .eq("id", item.id)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
+      console.error(
+        "[Nutrition Days API] Error reordering days:",
+        results.filter((r) => r.error).map((r) => r.error)
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar días" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Días reordenados exitosamente",
+    });
+  } catch (error) {
+    console.error("[Nutrition Days API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error inesperado" },
+      { status: 500 }
+    );
+  }
+}
+
 // POST - Create a new nutrition day
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();

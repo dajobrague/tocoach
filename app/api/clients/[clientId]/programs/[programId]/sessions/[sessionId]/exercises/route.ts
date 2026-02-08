@@ -428,3 +428,88 @@ export async function DELETE(
     );
   }
 }
+
+// PATCH - Reorder exercises in a session
+export async function PATCH(
+  request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{ clientId: string; programId: string; sessionId: string }>;
+  }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { sessionId } = await params;
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    // Verify session belongs to this trainer's program
+    const { data: sessionData, error: sessionError } = await supabase
+      .from("sessions")
+      .select("id, trainer_id, program_id")
+      .eq("id", sessionId)
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return NextResponse.json(
+        { success: false, error: "Sesión no encontrada o no autorizada" },
+        { status: 404 }
+      );
+    }
+
+    // Batch update exercise_order for each exercise
+    const updatePromises = reorder.map(
+      (item: { id: string; exercise_order: number }) =>
+        supabase
+          .from("session_exercises")
+          .update({ exercise_order: item.exercise_order })
+          .eq("id", item.id)
+          .eq("session_id", sessionId)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
+      console.error(
+        "[Exercises API] Error reordering exercises:",
+        results.filter((r) => r.error).map((r) => r.error)
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar ejercicios" },
+        { status: 500 }
+      );
+    }
+
+    console.log("[Exercises API] Exercises reordered successfully");
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[Exercises API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}

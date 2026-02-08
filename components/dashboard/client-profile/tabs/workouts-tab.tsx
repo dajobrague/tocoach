@@ -3,6 +3,23 @@
 import type { WorkoutProgram } from "@/types/training";
 
 import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Autocomplete,
   AutocompleteItem,
   Button,
@@ -19,19 +36,19 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Progress,
   Select,
   SelectItem,
   Spinner,
-  Textarea,
+  Textarea
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
 
 interface WorkoutsTabProps {
   clientId: string;
+  clientName?: string;
 }
 
 // Helper functions for category translation
@@ -44,7 +61,73 @@ const getCategoryLabel = (category: string) => {
   return labels[category] || category;
 };
 
-export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
+// Sortable wrapper for session cards
+function SortableSessionItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+// Sortable wrapper for exercise items
+function SortableExerciseItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    dragHandleProps: Record<string, any>;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) {
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,9 +226,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch all active programs for the client (strength, cardio, etc.)
+      // Fetch only active strength programs for the client
       const response = await fetch(
-        `/api/clients/${clientId}/programs?status=active`
+        `/api/clients/${clientId}/programs?category=strength&status=active`
       );
       const data = await response.json();
 
@@ -165,6 +248,153 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   useEffect(() => {
     fetchPrograms();
   }, [clientId]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Reorder sessions handler
+  const handleSessionDragEnd = useCallback(
+    async (programId: string, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const program = programs.find((p) => p.programId === programId);
+      if (!program) return;
+
+      const oldIndex = program.sessions.findIndex((s) => s.id === active.id);
+      const newIndex = program.sessions.findIndex((s) => s.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Capture previous state before optimistic update
+      const previousPrograms = programs.map((p) => ({
+        ...p,
+        sessions: [...p.sessions],
+      }));
+
+      const reordered = arrayMove(program.sessions, oldIndex, newIndex);
+
+      // Optimistic update
+      setPrograms((prev) =>
+        prev.map((p) =>
+          p.programId === programId ? { ...p, sessions: reordered } : p
+        )
+      );
+
+      // Build reorder payload
+      const reorderPayload = reordered.map((s, idx) => ({
+        id: s.id,
+        session_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/clients/${clientId}/programs/${programId}/sessions`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          setPrograms(previousPrograms);
+          console.error("Error reordering sessions:", result.error);
+        }
+      } catch (error) {
+        setPrograms(previousPrograms);
+        console.error("Error reordering sessions:", error);
+      }
+    },
+    [programs, clientId]
+  );
+
+  // Reorder exercises within a session handler
+  const handleExerciseDragEnd = useCallback(
+    async (programId: string, sessionId: string, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id) return;
+
+      const program = programs.find((p) => p.programId === programId);
+      if (!program) return;
+
+      const session = program.sessions.find((s) => s.id === sessionId);
+      if (!session) return;
+
+      const oldIndex = session.exercises.findIndex(
+        (e) => (e.id || `exercise-${e.order}`) === active.id
+      );
+      const newIndex = session.exercises.findIndex(
+        (e) => (e.id || `exercise-${e.order}`) === over.id
+      );
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Capture previous state before optimistic update
+      const previousPrograms = programs.map((p) => ({
+        ...p,
+        sessions: p.sessions.map((s) => ({
+          ...s,
+          exercises: [...s.exercises],
+        })),
+      }));
+
+      const reorderedExercises = arrayMove(
+        session.exercises,
+        oldIndex,
+        newIndex
+      );
+
+      // Optimistic update
+      setPrograms((prev) =>
+        prev.map((p) =>
+          p.programId === programId
+            ? {
+              ...p,
+              sessions: p.sessions.map((s) =>
+                s.id === sessionId
+                  ? { ...s, exercises: reorderedExercises }
+                  : s
+              ),
+            }
+            : p
+        )
+      );
+
+      // Build reorder payload
+      const reorderPayload = reorderedExercises.map((e, idx) => ({
+        id: e.id,
+        exercise_order: idx + 1,
+      }));
+
+      try {
+        const response = await fetch(
+          `/api/clients/${clientId}/programs/${programId}/sessions/${sessionId}/exercises`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reorder: reorderPayload }),
+          }
+        );
+        const result = await response.json();
+
+        if (!result.success) {
+          setPrograms(previousPrograms);
+          console.error("Error reordering exercises:", result.error);
+        }
+      } catch (error) {
+        setPrograms(previousPrograms);
+        console.error("Error reordering exercises:", error);
+      }
+    },
+    [programs, clientId]
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -283,7 +513,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
     setIsLoadingTemplates(true);
     try {
       const response = await fetch(
-        "/api/templates?type=programs&category=strength"
+        "/api/templates?type=programs"
       );
       const result = await response.json();
 
@@ -388,11 +618,11 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
   ) => {
     const confirmed = confirm(
       `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
-        "Esto eliminará permanentemente:\n" +
-        "• Todas las sesiones del programa\n" +
-        "• Todos los ejercicios asignados\n" +
-        "• El historial de entrenamientos completados\n\n" +
-        "Esta acción no se puede deshacer."
+      "Esto eliminará permanentemente:\n" +
+      "• Todas las sesiones del programa\n" +
+      "• Todos los ejercicios asignados\n" +
+      "• El historial de entrenamientos completados\n\n" +
+      "Esta acción no se puede deshacer."
     );
 
     if (!confirmed) return;
@@ -677,7 +907,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       } else {
         alert(
           "Error al actualizar ejercicio: " +
-            (data.error || "Error desconocido")
+          (data.error || "Error desconocido")
         );
       }
     } catch (err) {
@@ -743,8 +973,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Entrenamientos</h2>
         <Button
-          className="text-white font-semibold"
-          color="primary"
+          className="bg-black text-white font-semibold hover:bg-slate-800"
           isDisabled={isLoading}
           startContent={<Icon icon="solar:add-circle-bold" width={20} />}
           onPress={handleOpenAddProgram}
@@ -758,7 +987,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
         <Card className="bg-white border border-gray-200 shadow-sm">
           <CardBody className="p-12">
             <div className="flex flex-col items-center justify-center">
-              <Spinner color="primary" size="lg" />
+              <Spinner color="default" size="lg" />
               <p className="mt-4 text-gray-600">Cargando programas...</p>
             </div>
           </CardBody>
@@ -884,24 +1113,6 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   </Dropdown>
                 </div>
 
-                {/* Progress */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-gray-700">
-                      Progreso General
-                    </p>
-                    <p className="text-sm font-bold text-slate-700">
-                      {program.progress}%
-                    </p>
-                  </div>
-                  <Progress
-                    className="max-w-full"
-                    color="primary"
-                    size="md"
-                    value={program.progress}
-                  />
-                </div>
-
                 {/* Sessions - Accordion */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -916,8 +1127,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       </h4>
                     </div>
                     <Button
-                      className="text-white font-semibold"
-                      color="primary"
+                      className="bg-black text-white font-semibold hover:bg-slate-800"
                       size="sm"
                       startContent={
                         <Icon icon="solar:add-circle-bold" width={16} />
@@ -928,266 +1138,264 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     </Button>
                   </div>
 
-                  <div className="space-y-3">
-                    {program.sessions.map((session) => (
-                      <details
-                        key={session.id}
-                        className="group"
-                        open={expandedSessions.has(session.id)}
-                      >
-                        <summary
-                          className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            toggleSession(session.id);
-                          }}
-                        >
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="bg-slate-100 p-2 rounded-lg">
-                              <Icon
-                                className="text-slate-700"
-                                icon="solar:dumbbell-bold"
-                                width={20}
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="font-bold text-gray-900">
-                                  {session.name}
-                                </p>
-                                <span className="text-xs font-medium text-gray-500">
-                                  •{" "}
-                                  {Array.isArray(session.dayOfWeek)
-                                    ? session.dayOfWeek.join(", ")
-                                    : session.dayOfWeek}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                {session.exercises.length} ejercicios
-                              </p>
-                            </div>
-                            <div
-                              className="flex items-center gap-2"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button
-                                className="text-white font-semibold"
-                                color="primary"
-                                size="sm"
-                                startContent={
-                                  <Icon
-                                    icon="solar:add-circle-bold"
-                                    width={16}
-                                  />
-                                }
-                                onPress={() => {
-                                  setSelectedProgramId(program.programId);
-                                  handleOpenAddExercise(session.id);
-                                }}
-                              >
-                                Añadir Ejercicio
-                              </Button>
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="flat"
-                                onPress={(e: any) => {
-                                  e?.preventDefault?.();
-                                  handleEditSession(session.id);
-                                }}
-                              >
-                                <Icon
-                                  className="text-gray-600"
-                                  icon="solar:pen-linear"
-                                  width={18}
-                                />
-                              </Button>
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="flat"
-                                onPress={(e: any) => {
-                                  e?.preventDefault?.();
-                                  handleDeleteSession(session.id);
-                                }}
-                              >
-                                <Icon
-                                  className="text-gray-600"
-                                  icon="solar:trash-bin-trash-linear"
-                                  width={18}
-                                />
-                              </Button>
-                              <Icon
-                                className="text-gray-400 group-open:rotate-180 transition-transform"
-                                icon="solar:alt-arrow-down-linear"
-                                width={20}
-                              />
-                            </div>
-                          </div>
-                        </summary>
-
-                        <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                          {session.exercises.map((exercise) => (
-                            <div
-                              key={exercise.order}
-                              className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow"
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="text-sm font-bold text-white">
-                                      {exercise.order}
-                                    </span>
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-3">
-                                      <p className="text-sm font-bold text-gray-900">
-                                        {exercise.name}
+                  <DndContext
+                    collisionDetection={closestCenter}
+                    sensors={sensors}
+                    onDragEnd={(event) => handleSessionDragEnd(program.programId, event)}
+                  >
+                    <SortableContext
+                      items={program.sessions.map((s) => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-3">
+                        {program.sessions.map((session) => (
+                          <SortableSessionItem key={session.id} id={session.id}>
+                            {({ dragHandleProps }) => (
+                              <div className="group">
+                                <div
+                                  className="flex items-center justify-between cursor-pointer p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors"
+                                  onClick={() => toggleSession(session.id)}
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <div
+                                      {...dragHandleProps}
+                                      className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Icon
+                                        className="text-gray-400"
+                                        icon="solar:hamburger-menu-linear"
+                                        width={18}
+                                      />
+                                    </div>
+                                    <div className="bg-slate-100 p-2 rounded-lg">
+                                      <Icon
+                                        className="text-slate-700"
+                                        icon="solar:dumbbell-bold"
+                                        width={20}
+                                      />
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-bold text-gray-900">
+                                          {session.name}
+                                        </p>
+                                        <span className="text-xs font-medium text-gray-500">
+                                          •{" "}
+                                          {Array.isArray(session.dayOfWeek)
+                                            ? session.dayOfWeek.join(", ")
+                                            : session.dayOfWeek}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        {session.exercises.length} ejercicios
                                       </p>
-                                      {exercise.videoUrl && (
-                                        <Button
-                                          isIconOnly
-                                          as="a"
-                                          className="h-6 w-6 min-w-6"
-                                          href={exercise.videoUrl}
-                                          size="sm"
-                                          target="_blank"
-                                          variant="flat"
-                                        >
+                                    </div>
+                                    <div
+                                      className="flex items-center gap-2"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Button
+                                        className="bg-black text-white font-semibold hover:bg-slate-800"
+                                        size="sm"
+                                        startContent={
                                           <Icon
-                                            className="text-slate-700"
-                                            icon="solar:play-circle-bold"
+                                            icon="solar:add-circle-bold"
                                             width={16}
                                           />
-                                        </Button>
-                                      )}
+                                        }
+                                        onPress={() => {
+                                          setSelectedProgramId(program.programId);
+                                          handleOpenAddExercise(session.id);
+                                        }}
+                                      >
+                                        Añadir Ejercicio
+                                      </Button>
+                                      <Button
+                                        isIconOnly
+                                        size="sm"
+                                        variant="flat"
+                                        onPress={(e: any) => {
+                                          e?.preventDefault?.();
+                                          handleEditSession(session.id);
+                                        }}
+                                      >
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon="solar:pen-linear"
+                                          width={18}
+                                        />
+                                      </Button>
+                                      <Button
+                                        isIconOnly
+                                        size="sm"
+                                        variant="flat"
+                                        onPress={(e: any) => {
+                                          e?.preventDefault?.();
+                                          handleDeleteSession(session.id);
+                                        }}
+                                      >
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon="solar:trash-bin-trash-linear"
+                                          width={18}
+                                        />
+                                      </Button>
+                                      <Icon
+                                        className={`text-gray-400 transition-transform ${expandedSessions.has(session.id) ? "rotate-180" : ""}`}
+                                        icon="solar:alt-arrow-down-linear"
+                                        width={20}
+                                      />
                                     </div>
-
-                                    {/* Exercise Details */}
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                      <div className="flex items-center gap-1.5">
-                                        <Icon
-                                          className="text-gray-400 flex-shrink-0"
-                                          icon="solar:copy-bold"
-                                          width={14}
-                                        />
-                                        <span className="text-xs text-gray-600">
-                                          <span className="font-semibold text-gray-900">
-                                            {exercise.sets}
-                                          </span>{" "}
-                                          series
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <Icon
-                                          className="text-gray-400 flex-shrink-0"
-                                          icon="solar:hashtag-bold"
-                                          width={14}
-                                        />
-                                        <span className="text-xs text-gray-600">
-                                          <span className="font-semibold text-gray-900">
-                                            {exercise.reps}
-                                          </span>{" "}
-                                          reps
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <Icon
-                                          className="text-slate-600 flex-shrink-0"
-                                          icon="solar:graph-bold"
-                                          width={14}
-                                        />
-                                        <span
-                                          className="text-xs text-gray-700 font-medium truncate"
-                                          title={exercise.trainingSystem}
-                                        >
-                                          {exercise.trainingSystem}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <Icon
-                                          className="text-purple-500 flex-shrink-0"
-                                          icon="solar:speedometer-bold"
-                                          width={14}
-                                        />
-                                        <span
-                                          className="text-xs text-gray-700 truncate"
-                                          title={exercise.tempo}
-                                        >
-                                          {exercise.tempo}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <Icon
-                                          className="text-orange-500 flex-shrink-0"
-                                          icon="solar:clock-circle-bold"
-                                          width={14}
-                                        />
-                                        <span
-                                          className="text-xs text-gray-700 truncate"
-                                          title={exercise.rest}
-                                        >
-                                          {exercise.rest}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {/* Exercise Notes */}
-                                    {exercise.notes && (
-                                      <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
-                                        <div className="flex items-start gap-2">
-                                          <Icon
-                                            className="text-amber-600 flex-shrink-0 mt-0.5"
-                                            icon="solar:info-circle-bold"
-                                            width={14}
-                                          />
-                                          <p className="text-xs text-amber-900">
-                                            {exercise.notes}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
 
-                                {/* Actions */}
-                                <div className="flex flex-col gap-1">
-                                  <Button
-                                    isIconOnly
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() =>
-                                      handleEditExercise(session.id, exercise)
-                                    }
-                                  >
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon="solar:pen-linear"
-                                      width={18}
-                                    />
-                                  </Button>
-                                  <Button
-                                    isIconOnly
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() =>
-                                      handleDeleteExercise(session.id, exercise)
-                                    }
-                                  >
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon="solar:trash-bin-trash-linear"
-                                      width={18}
-                                    />
-                                  </Button>
-                                </div>
+                                {expandedSessions.has(session.id) && (
+                                  <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                                    <DndContext
+                                      collisionDetection={closestCenter}
+                                      sensors={sensors}
+                                      onDragEnd={(event) =>
+                                        handleExerciseDragEnd(program.programId, session.id, event)
+                                      }
+                                    >
+                                      <SortableContext
+                                        items={session.exercises.map((e) => e.id || `exercise-${e.order}`)}
+                                        strategy={verticalListSortingStrategy}
+                                      >
+                                        {session.exercises.map((exercise) => (
+                                          <SortableExerciseItem
+                                            key={exercise.id || `exercise-${exercise.order}`}
+                                            id={exercise.id || `exercise-${exercise.order}`}
+                                          >
+                                            {({ dragHandleProps: exerciseDragHandleProps }) => (
+                                              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                                                {/* Drag handle */}
+                                                <div
+                                                  className="flex items-center justify-center mt-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+                                                  {...exerciseDragHandleProps}
+                                                >
+                                                  <Icon
+                                                    icon="solar:hamburger-menu-linear"
+                                                    width={16}
+                                                  />
+                                                </div>
+                                                <span className="text-sm font-semibold text-gray-500 min-w-[24px] mt-1">
+                                                  {exercise.order}.
+                                                </span>
+                                                {/* Exercise Image */}
+                                                {exercise.imageUrl ? (
+                                                  <img
+                                                    alt={exercise.name}
+                                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                                                    src={exercise.imageUrl}
+                                                  />
+                                                ) : (
+                                                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                    <Icon
+                                                      className="text-gray-400"
+                                                      icon="solar:dumbbell-bold"
+                                                      width={28}
+                                                    />
+                                                  </div>
+                                                )}
+                                                <div className="flex-1">
+                                                  <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-gray-900">
+                                                      {exercise.name}
+                                                    </p>
+                                                    {exercise.videoUrl && (
+                                                      <Button
+                                                        isIconOnly
+                                                        as="a"
+                                                        className="h-6 w-6 min-w-6"
+                                                        href={exercise.videoUrl}
+                                                        size="sm"
+                                                        target="_blank"
+                                                        variant="flat"
+                                                      >
+                                                        <Icon
+                                                          className="text-slate-700"
+                                                          icon="solar:play-circle-bold"
+                                                          width={16}
+                                                        />
+                                                      </Button>
+                                                    )}
+                                                  </div>
+                                                  <div className="text-sm text-gray-600 mt-1">
+                                                    {exercise.sets && exercise.reps && (
+                                                      <span>
+                                                        {exercise.sets} series × {exercise.reps} reps
+                                                      </span>
+                                                    )}
+                                                    {exercise.rest && (
+                                                      <span className="ml-2">
+                                                        • {exercise.rest} descanso
+                                                      </span>
+                                                    )}
+                                                    {exercise.trainingSystem && (
+                                                      <span className="ml-2">
+                                                        • {exercise.trainingSystem}
+                                                      </span>
+                                                    )}
+                                                    {exercise.tempo && (
+                                                      <span className="ml-2">
+                                                        • Tempo: {exercise.tempo}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  {exercise.notes && (
+                                                    <p className="text-gray-500 mt-1 text-xs italic">
+                                                      Notas: {exercise.notes}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1">
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      handleEditExercise(session.id, exercise)
+                                                    }
+                                                  >
+                                                    <Icon
+                                                      className="text-gray-400 hover:text-gray-600"
+                                                      icon="solar:pen-linear"
+                                                      width={16}
+                                                    />
+                                                  </Button>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      handleDeleteExercise(session.id, exercise)
+                                                    }
+                                                  >
+                                                    <Icon
+                                                      className="text-gray-400 hover:text-red-600"
+                                                      icon="solar:trash-bin-trash-linear"
+                                                      width={16}
+                                                    />
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </SortableExerciseItem>
+                                        ))}
+                                      </SortableContext>
+                                    </DndContext>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
+                            )}
+                          </SortableSessionItem>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 </div>
               </CardBody>
             </Card>
@@ -1213,8 +1421,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                 Asigna un programa de entrenamiento para comenzar
               </p>
               <Button
-                className="text-white font-semibold"
-                color="primary"
+                className="bg-black text-white font-semibold hover:bg-slate-800"
                 startContent={<Icon icon="solar:add-circle-bold" width={20} />}
                 onPress={handleOpenAddProgram}
               >
@@ -1263,7 +1470,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
@@ -1342,7 +1549,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:dumbbell-bold"
                     width={18}
                   />
@@ -1387,17 +1594,18 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:graph-bold"
                     width={18}
                   />
                   Parámetros de Entrenamiento
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <Input
                     isRequired
                     label="Series"
                     placeholder="Ej: 4"
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1415,6 +1623,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     isRequired
                     label="Repeticiones"
                     placeholder="Ej: 8 o 30"
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1430,7 +1639,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   <Input
                     isRequired
                     label="Sistema de Entrenamiento"
-                    placeholder="Ej: Series Rectas, Drop Sets, Super Series..."
+                    placeholder="Ej: Series Rectas, Drop Sets..."
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1449,7 +1659,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   <Input
                     isRequired
                     label="Tempo"
-                    placeholder="Ej: Pausa Final Excéntrica, Explosivo, Normal..."
+                    placeholder="Ej: Explosivo, Normal..."
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1462,43 +1673,31 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       setExerciseForm({ ...exerciseForm, tempo: value })
                     }
                   />
-                </div>
-              </div>
-
-              {/* Descanso */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-blue-600"
-                    icon="solar:clock-circle-bold"
-                    width={18}
+                  <Input
+                    isRequired
+                    label="Tiempo de Descanso"
+                    placeholder="Ej: 90s, 2 min..."
+                    size="lg"
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:time-linear"
+                        width={18}
+                      />
+                    }
+                    value={exerciseForm.rest}
+                    onValueChange={(value) =>
+                      setExerciseForm({ ...exerciseForm, rest: value })
+                    }
                   />
-                  Descanso
-                </h4>
-                <Textarea
-                  isRequired
-                  label="Tiempo de Descanso"
-                  minRows={2}
-                  placeholder="Ej: El necesario para rendir al 100%"
-                  startContent={
-                    <Icon
-                      className="text-gray-400"
-                      icon="solar:time-linear"
-                      width={18}
-                    />
-                  }
-                  value={exerciseForm.rest}
-                  onValueChange={(value) =>
-                    setExerciseForm({ ...exerciseForm, rest: value })
-                  }
-                />
+                </div>
               </div>
 
               {/* Notas del Ejercicio */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -1532,8 +1731,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -1585,7 +1783,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -1630,17 +1828,18 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
                   Configuración del Ejercicio
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <Input
                     isRequired
                     label="Series"
                     placeholder="Ej: 4"
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1658,6 +1857,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     isRequired
                     label="Repeticiones"
                     placeholder="Ej: 8 o 30"
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1673,7 +1873,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   <Input
                     isRequired
                     label="Sistema de Entrenamiento"
-                    placeholder="Ej: Series Rectas, Drop Sets, Super Series..."
+                    placeholder="Ej: Series Rectas, Drop Sets..."
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1692,7 +1893,8 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                   <Input
                     isRequired
                     label="Tempo"
-                    placeholder="Ej: Pausa Final Excéntrica, Explosivo, Normal..."
+                    placeholder="Ej: Explosivo, Normal..."
+                    size="lg"
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1705,43 +1907,31 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       setExerciseForm({ ...exerciseForm, tempo: value })
                     }
                   />
-                </div>
-              </div>
-
-              {/* Descanso */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-blue-600"
-                    icon="solar:time-bold"
-                    width={18}
+                  <Input
+                    isRequired
+                    label="Tiempo de Descanso"
+                    placeholder="Ej: 90s, 2 min..."
+                    size="lg"
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:time-linear"
+                        width={18}
+                      />
+                    }
+                    value={exerciseForm.rest}
+                    onValueChange={(value) =>
+                      setExerciseForm({ ...exerciseForm, rest: value })
+                    }
                   />
-                  Tiempo de Descanso
-                </h4>
-                <Textarea
-                  isRequired
-                  label="Tiempo de Descanso"
-                  minRows={2}
-                  placeholder="Ej: El necesario para rendir al 100%"
-                  startContent={
-                    <Icon
-                      className="text-gray-400"
-                      icon="solar:time-linear"
-                      width={18}
-                    />
-                  }
-                  value={exerciseForm.rest}
-                  onValueChange={(value) =>
-                    setExerciseForm({ ...exerciseForm, rest: value })
-                  }
-                />
+                </div>
               </div>
 
               {/* Notas del Ejercicio */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -1775,8 +1965,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -1828,7 +2017,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
@@ -1846,7 +2035,9 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                     label="Plantilla"
                     placeholder="Selecciona una plantilla o crea desde cero"
                     selectedKeys={
-                      programForm.templateId ? [programForm.templateId] : []
+                      programForm.templateId
+                        ? new Set([programForm.templateId])
+                        : new Set<string>()
                     }
                     startContent={
                       <Icon
@@ -1862,10 +2053,16 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                       );
 
                       if (selectedTemplate) {
+                        const autoName = clientName
+                          ? `${selectedTemplate.name} - ${clientName}`
+                          : selectedTemplate.name;
+
                         setProgramForm({
                           ...programForm,
                           templateId,
-                          type: selectedTemplate.type,
+                          name: autoName,
+                          type: selectedTemplate.type || "",
+                          category: selectedTemplate.category || "strength",
                           division: selectedTemplate.division || "",
                           sessionsPerWeek:
                             selectedTemplate.sessionsPerWeek?.toString() || "3",
@@ -1874,12 +2071,13 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                         setProgramForm({
                           ...programForm,
                           templateId: "",
+                          name: "",
                         });
                       }
                     }}
                   >
                     {templates.map((template) => (
-                      <SelectItem key={template.id}>
+                      <SelectItem key={template.id} textValue={template.name}>
                         {template.name} ({template.sessionCount} sesiones,{" "}
                         {template.exerciseCount} ejercicios)
                       </SelectItem>
@@ -1903,7 +2101,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -1990,7 +2188,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
@@ -2039,7 +2237,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -2068,7 +2266,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
-                      className="text-blue-600 mt-0.5 flex-shrink-0"
+                      className="text-slate-700 mt-0.5 flex-shrink-0"
                       icon="solar:info-circle-bold"
                       width={18}
                     />
@@ -2096,8 +2294,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2149,7 +2346,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2236,7 +2433,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:settings-bold"
                     width={18}
                   />
@@ -2285,7 +2482,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:shield-check-bold"
                     width={18}
                   />
@@ -2356,7 +2553,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:notes-bold"
                     width={18}
                   />
@@ -2390,8 +2587,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2441,7 +2637,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2499,7 +2695,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
                 <CardBody className="p-4">
                   <div className="flex items-start gap-2">
                     <Icon
-                      className="text-blue-600 mt-0.5 flex-shrink-0"
+                      className="text-slate-700 mt-0.5 flex-shrink-0"
                       icon="solar:info-circle-bold"
                       width={18}
                     />
@@ -2526,8 +2722,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
@@ -2577,7 +2772,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
-                    className="text-blue-600"
+                    className="text-slate-700"
                     icon="solar:clipboard-list-bold"
                     width={18}
                   />
@@ -2640,8 +2835,7 @@ export default function WorkoutsTab({ clientId }: WorkoutsTabProps) {
               Cancelar
             </Button>
             <Button
-              className="text-white font-semibold"
-              color="primary"
+              className="bg-black text-white font-semibold hover:bg-slate-800"
               isDisabled={isSaving}
               isLoading={isSaving}
               startContent={
