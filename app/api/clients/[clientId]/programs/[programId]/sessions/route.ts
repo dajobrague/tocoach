@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -21,7 +22,7 @@ export async function POST(
       );
     }
 
-    const { clientId, programId } = await params;
+    const { clientId: _clientId, programId } = await params;
     const body = await request.json();
     const { name, daysOfWeek } = body;
 
@@ -113,7 +114,9 @@ export async function POST(
 // PUT - Update a session
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string; programId: string }> }
+  {
+    params: _params,
+  }: { params: Promise<{ clientId: string; programId: string }> }
 ) {
   const supabase = createSupabaseClient();
 
@@ -186,7 +189,9 @@ export async function PUT(
 // DELETE - Delete a session
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string; programId: string }> }
+  {
+    params: _params,
+  }: { params: Promise<{ clientId: string; programId: string }> }
 ) {
   const supabase = createSupabaseClient();
 

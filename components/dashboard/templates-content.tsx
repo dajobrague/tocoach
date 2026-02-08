@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 "use client";
 
 import {
@@ -50,7 +51,9 @@ export default function TemplatesContent() {
     "all" | "cardio" | "strength"
   >("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [templateToDelete, setTemplateToDelete] = useState<Template | null>(null);
+  const [templateToDelete, setTemplateToDelete] = useState<Template | null>(
+    null
+  );
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
     null
@@ -471,19 +474,30 @@ export default function TemplatesContent() {
                     category: updatedData.category,
                     updatedAt: new Date().toISOString(),
                   };
-                  if (updatedData.description !== undefined) updated.description = updatedData.description;
-                  if (updatedData.type !== undefined) updated.type = updatedData.type;
-                  if (updatedData.division !== undefined) updated.division = updatedData.division;
-                  if (updatedData.goal !== undefined) updated.goal = updatedData.goal;
-                  if (updatedData.sessionsPerWeek !== undefined) updated.sessionsPerWeek = updatedData.sessionsPerWeek;
+
+                  if (updatedData.description !== undefined)
+                    updated.description = updatedData.description;
+                  if (updatedData.type !== undefined)
+                    updated.type = updatedData.type;
+                  if (updatedData.division !== undefined)
+                    updated.division = updatedData.division;
+                  if (updatedData.goal !== undefined)
+                    updated.goal = updatedData.goal;
+                  if (updatedData.sessionsPerWeek !== undefined)
+                    updated.sessionsPerWeek = updatedData.sessionsPerWeek;
                   const sc = updatedData.sessionCount ?? t.sessionCount;
+
                   if (sc !== undefined) updated.sessionCount = sc;
                   const ec = updatedData.exerciseCount ?? t.exerciseCount;
+
                   if (ec !== undefined) updated.exerciseCount = ec;
                   const dc = updatedData.dayCount ?? t.dayCount;
+
                   if (dc !== undefined) updated.dayCount = dc;
                   const mc = updatedData.mealCount ?? t.mealCount;
+
                   if (mc !== undefined) updated.mealCount = mc;
+
                   return updated;
                 })
               );
@@ -506,7 +520,11 @@ export default function TemplatesContent() {
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-red-100 rounded-full">
-                <Icon className="text-red-600" icon="solar:trash-bin-trash-bold" width={20} />
+                <Icon
+                  className="text-red-600"
+                  icon="solar:trash-bin-trash-bold"
+                  width={20}
+                />
               </div>
               <span>Eliminar Plantilla</span>
             </div>
@@ -514,17 +532,17 @@ export default function TemplatesContent() {
           <ModalBody>
             <p className="text-gray-700">
               ¿Estás seguro de que quieres eliminar{" "}
-              <span className="font-semibold">&quot;{templateToDelete?.name}&quot;</span>?
+              <span className="font-semibold">
+                &quot;{templateToDelete?.name}&quot;
+              </span>
+              ?
             </p>
             <p className="text-sm text-gray-500">
               Esta acción no se puede deshacer.
             </p>
           </ModalBody>
           <ModalFooter>
-            <Button
-              variant="flat"
-              onPress={() => setTemplateToDelete(null)}
-            >
+            <Button variant="flat" onPress={() => setTemplateToDelete(null)}>
               Cancelar
             </Button>
             <Button

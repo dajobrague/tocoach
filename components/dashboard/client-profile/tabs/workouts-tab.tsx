@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 "use client";
 
 import type { WorkoutProgram } from "@/types/training";
@@ -39,7 +40,7 @@ import {
   Select,
   SelectItem,
   Spinner,
-  Textarea
+  Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useState } from "react";
@@ -50,16 +51,6 @@ interface WorkoutsTabProps {
   clientId: string;
   clientName?: string;
 }
-
-// Helper functions for category translation
-const getCategoryLabel = (category: string) => {
-  const labels: Record<string, string> = {
-    strength: "Fuerza",
-    cardio: "Cardio",
-  };
-
-  return labels[category] || category;
-};
 
 // Sortable wrapper for session cards
 function SortableSessionItem({
@@ -127,7 +118,10 @@ function SortableExerciseItem({
   );
 }
 
-export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) {
+export default function WorkoutsTab({
+  clientId,
+  clientName,
+}: WorkoutsTabProps) {
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +257,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
       if (!over || active.id === over.id) return;
 
       const program = programs.find((p) => p.programId === programId);
+
       if (!program) return;
 
       const oldIndex = program.sessions.findIndex((s) => s.id === active.id);
@@ -322,9 +317,11 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
       if (!over || active.id === over.id) return;
 
       const program = programs.find((p) => p.programId === programId);
+
       if (!program) return;
 
       const session = program.sessions.find((s) => s.id === sessionId);
+
       if (!session) return;
 
       const oldIndex = session.exercises.findIndex(
@@ -356,13 +353,13 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
         prev.map((p) =>
           p.programId === programId
             ? {
-              ...p,
-              sessions: p.sessions.map((s) =>
-                s.id === sessionId
-                  ? { ...s, exercises: reorderedExercises }
-                  : s
-              ),
-            }
+                ...p,
+                sessions: p.sessions.map((s) =>
+                  s.id === sessionId
+                    ? { ...s, exercises: reorderedExercises }
+                    : s
+                ),
+              }
             : p
         )
       );
@@ -512,9 +509,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
     // Fetch templates for strength programs
     setIsLoadingTemplates(true);
     try {
-      const response = await fetch(
-        "/api/templates?type=programs"
-      );
+      const response = await fetch("/api/templates?type=programs");
       const result = await response.json();
 
       if (result.success) {
@@ -618,11 +613,11 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
   ) => {
     const confirmed = confirm(
       `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
-      "Esto eliminará permanentemente:\n" +
-      "• Todas las sesiones del programa\n" +
-      "• Todos los ejercicios asignados\n" +
-      "• El historial de entrenamientos completados\n\n" +
-      "Esta acción no se puede deshacer."
+        "Esto eliminará permanentemente:\n" +
+        "• Todas las sesiones del programa\n" +
+        "• Todos los ejercicios asignados\n" +
+        "• El historial de entrenamientos completados\n\n" +
+        "Esta acción no se puede deshacer."
     );
 
     if (!confirmed) return;
@@ -907,7 +902,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
       } else {
         alert(
           "Error al actualizar ejercicio: " +
-          (data.error || "Error desconocido")
+            (data.error || "Error desconocido")
         );
       }
     } catch (err) {
@@ -1141,7 +1136,9 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                   <DndContext
                     collisionDetection={closestCenter}
                     sensors={sensors}
-                    onDragEnd={(event) => handleSessionDragEnd(program.programId, event)}
+                    onDragEnd={(event) =>
+                      handleSessionDragEnd(program.programId, event)
+                    }
                   >
                     <SortableContext
                       items={program.sessions.map((s) => s.id)}
@@ -1152,11 +1149,13 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                           <SortableSessionItem key={session.id} id={session.id}>
                             {({ dragHandleProps }) => (
                               <div className="group">
+                                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                                 <div
                                   className="flex items-center justify-between cursor-pointer p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors"
                                   onClick={() => toggleSession(session.id)}
                                 >
                                   <div className="flex items-center gap-4 flex-1">
+                                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                                     <div
                                       {...dragHandleProps}
                                       className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
@@ -1191,6 +1190,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                         {session.exercises.length} ejercicios
                                       </p>
                                     </div>
+                                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                                     <div
                                       className="flex items-center gap-2"
                                       onClick={(e) => e.stopPropagation()}
@@ -1205,7 +1205,9 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                           />
                                         }
                                         onPress={() => {
-                                          setSelectedProgramId(program.programId);
+                                          setSelectedProgramId(
+                                            program.programId
+                                          );
                                           handleOpenAddExercise(session.id);
                                         }}
                                       >
@@ -1256,19 +1258,34 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                       collisionDetection={closestCenter}
                                       sensors={sensors}
                                       onDragEnd={(event) =>
-                                        handleExerciseDragEnd(program.programId, session.id, event)
+                                        handleExerciseDragEnd(
+                                          program.programId,
+                                          session.id,
+                                          event
+                                        )
                                       }
                                     >
                                       <SortableContext
-                                        items={session.exercises.map((e) => e.id || `exercise-${e.order}`)}
+                                        items={session.exercises.map(
+                                          (e) => e.id || `exercise-${e.order}`
+                                        )}
                                         strategy={verticalListSortingStrategy}
                                       >
                                         {session.exercises.map((exercise) => (
                                           <SortableExerciseItem
-                                            key={exercise.id || `exercise-${exercise.order}`}
-                                            id={exercise.id || `exercise-${exercise.order}`}
+                                            key={
+                                              exercise.id ||
+                                              `exercise-${exercise.order}`
+                                            }
+                                            id={
+                                              exercise.id ||
+                                              `exercise-${exercise.order}`
+                                            }
                                           >
-                                            {({ dragHandleProps: exerciseDragHandleProps }) => (
+                                            {({
+                                              dragHandleProps:
+                                                exerciseDragHandleProps,
+                                            }) => (
                                               <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                                                 {/* Drag handle */}
                                                 <div
@@ -1285,6 +1302,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                                 </span>
                                                 {/* Exercise Image */}
                                                 {exercise.imageUrl ? (
+                                                  // eslint-disable-next-line @next/next/no-img-element
                                                   <img
                                                     alt={exercise.name}
                                                     className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
@@ -1323,24 +1341,31 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                                     )}
                                                   </div>
                                                   <div className="text-sm text-gray-600 mt-1">
-                                                    {exercise.sets && exercise.reps && (
-                                                      <span>
-                                                        {exercise.sets} series × {exercise.reps} reps
-                                                      </span>
-                                                    )}
+                                                    {exercise.sets &&
+                                                      exercise.reps && (
+                                                        <span>
+                                                          {exercise.sets} series
+                                                          × {exercise.reps} reps
+                                                        </span>
+                                                      )}
                                                     {exercise.rest && (
                                                       <span className="ml-2">
-                                                        • {exercise.rest} descanso
+                                                        • {exercise.rest}{" "}
+                                                        descanso
                                                       </span>
                                                     )}
                                                     {exercise.trainingSystem && (
                                                       <span className="ml-2">
-                                                        • {exercise.trainingSystem}
+                                                        •{" "}
+                                                        {
+                                                          exercise.trainingSystem
+                                                        }
                                                       </span>
                                                     )}
                                                     {exercise.tempo && (
                                                       <span className="ml-2">
-                                                        • Tempo: {exercise.tempo}
+                                                        • Tempo:{" "}
+                                                        {exercise.tempo}
                                                       </span>
                                                     )}
                                                   </div>
@@ -1357,7 +1382,10 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                                     size="sm"
                                                     variant="light"
                                                     onPress={() =>
-                                                      handleEditExercise(session.id, exercise)
+                                                      handleEditExercise(
+                                                        session.id,
+                                                        exercise
+                                                      )
                                                     }
                                                   >
                                                     <Icon
@@ -1371,7 +1399,10 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                                                     size="sm"
                                                     variant="light"
                                                     onPress={() =>
-                                                      handleDeleteExercise(session.id, exercise)
+                                                      handleDeleteExercise(
+                                                        session.id,
+                                                        exercise
+                                                      )
                                                     }
                                                   >
                                                     <Icon
@@ -1508,6 +1539,7 @@ export default function WorkoutsTab({ clientId, clientName }: WorkoutsTabProps) 
                       key={exercise.id}
                       startContent={
                         exercise.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             alt={exercise.name}
                             className="w-10 h-10 rounded-md object-cover"

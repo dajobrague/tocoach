@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 "use client";
 
 import type {
@@ -523,6 +524,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleEditDay = (dayId: string) => {
     const day = nutritionPlan?.days.find((d) => d.id === dayId);
+
     if (day) {
       setEditingDayName(dayId);
       setEditingDayNameValue(day.day_label);
@@ -535,6 +537,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     // Optimistic update
     setNutritionPlan((prev) => {
       if (!prev) return prev;
+
       return {
         ...prev,
         days: prev.days.map((d) =>
@@ -562,6 +565,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleDeleteDay = (dayId: string) => {
     const day = nutritionPlan?.days.find((d) => d.id === dayId);
+
     setDeleteConfirm({
       isOpen: true,
       type: "day",
@@ -672,13 +676,17 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleEditMeal = (mealId: string) => {
     let foundMeal: NutritionMealWithIngredients | null = null;
+
     nutritionPlan?.days.forEach((day) => {
       const meal = day.meals.find((m) => m.id === mealId);
+
       if (meal) foundMeal = meal;
     });
     if (foundMeal) {
       setEditingMealName(mealId);
-      setEditingMealNameValue((foundMeal as NutritionMealWithIngredients).label);
+      setEditingMealNameValue(
+        (foundMeal as NutritionMealWithIngredients).label
+      );
     }
   };
 
@@ -688,6 +696,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     // Optimistic update
     setNutritionPlan((prev) => {
       if (!prev) return prev;
+
       return {
         ...prev,
         days: prev.days.map((day) => ({
@@ -718,8 +727,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleDeleteMeal = (mealId: string) => {
     let mealLabel = "Comida";
+
     nutritionPlan?.days.forEach((day) => {
       const meal = day.meals.find((m) => m.id === mealId);
+
       if (meal) mealLabel = meal.label;
     });
     setDeleteConfirm({
@@ -763,9 +774,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           meals: day.meals.map((meal) =>
             meal.id === mealId
               ? {
-                ...meal,
-                ingredients: [...meal.ingredients, optimisticIngredient],
-              }
+                  ...meal,
+                  ingredients: [...meal.ingredients, optimisticIngredient],
+                }
               : meal
           ),
         })),
@@ -803,11 +814,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               meals: day.meals.map((meal) =>
                 meal.id === mealId
                   ? {
-                    ...meal,
-                    ingredients: meal.ingredients.map((ing) =>
-                      ing.id === optimisticIngredient.id ? result.data : ing
-                    ),
-                  }
+                      ...meal,
+                      ingredients: meal.ingredients.map((ing) =>
+                        ing.id === optimisticIngredient.id ? result.data : ing
+                      ),
+                    }
                   : meal
               ),
             })),
@@ -840,7 +851,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleSaveEditIngredient = async (
     ingredientId: string,
-    ingredient: NutritionIngredient
+    _ingredient: NutritionIngredient
   ) => {
     // Get the updated values from the form fields
     const nameInput = document.querySelector(
@@ -892,9 +903,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleDeleteIngredient = (ingredientId: string) => {
     let ingredientName = "Ingrediente";
+
     nutritionPlan?.days.forEach((day) => {
       day.meals.forEach((meal) => {
         const ing = meal.ingredients.find((i) => i.id === ingredientId);
+
         if (ing) ingredientName = ing.name;
       });
     });
@@ -913,6 +926,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
     try {
       let endpoint = "";
+
       switch (deleteConfirm.type) {
         case "plan":
           endpoint = `/api/nutrition/plans/${deleteConfirm.id}`;
@@ -930,9 +944,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
       // For ingredient, do optimistic removal
       const previousPlan = nutritionPlan ? { ...nutritionPlan } : null;
+
       if (deleteConfirm.type === "ingredient" && nutritionPlan) {
         setNutritionPlan((prevPlan) => {
           if (!prevPlan) return prevPlan;
+
           return {
             ...prevPlan,
             days: prevPlan.days.map((day) => ({
@@ -1274,12 +1290,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                     ) : (
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {availableTemplates.map((template) => (
+                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                           <div
                             key={template.id}
-                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedTemplateId === template.id
-                              ? "border-slate-500 bg-slate-50"
-                              : "border-gray-200 hover:border-slate-300"
-                              }`}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              selectedTemplateId === template.id
+                                ? "border-slate-500 bg-slate-50"
+                                : "border-gray-200 hover:border-slate-300"
+                            }`}
                             onClick={() => {
                               setSelectedTemplateId(template.id);
                               if (!planForm.name) {
@@ -1573,14 +1591,20 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                       </div>
                       <div className="flex-1">
                         {editingDayName === day.id ? (
-                          <div className="flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => e.preventDefault()}
+                          >
+                            {}
                             <Input
                               autoFocus
                               className="max-w-xs"
                               size="sm"
                               value={editingDayNameValue}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveDayName(day.id);
+                                if (e.key === "Enter")
+                                  handleSaveDayName(day.id);
                                 if (e.key === "Escape") setEditingDayName(null);
                               }}
                               onValueChange={setEditingDayNameValue}
@@ -1719,10 +1743,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
                             <button
                               key={dayNum}
-                              className={`p-3 rounded-lg border-2 transition-all ${weekdaysForm.includes(dayNum)
-                                ? "bg-black border-black text-white"
-                                : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
-                                }`}
+                              className={`p-3 rounded-lg border-2 transition-all ${
+                                weekdaysForm.includes(dayNum)
+                                  ? "bg-black border-black text-white"
+                                  : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
+                              }`}
                               onClick={() => handleToggleWeekday(dayNum)}
                             >
                               <div className="text-xs font-bold">
@@ -1771,8 +1796,8 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                               width={32}
                             />
                             <p className="text-sm text-orange-600 font-medium">
-                              No hay días asignados. Haz clic en "Editar Días"
-                              para asignar.
+                              No hay días asignados. Haz clic en &quot;Editar
+                              Días&quot; para asignar.
                             </p>
                           </div>
                         )}
@@ -1886,11 +1911,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           const mealTotals = calculateMealTotals(day.meals);
                           const displayValues = hasManualMacros
                             ? {
-                              protein: day.protein || 0,
-                              carbs: day.carbs || 0,
-                              fats: day.fats || 0,
-                              calories: day.calories || 0,
-                            }
+                                protein: day.protein || 0,
+                                carbs: day.carbs || 0,
+                                fats: day.fats || 0,
+                                calories: day.calories || 0,
+                              }
                             : mealTotals;
 
                           return (
@@ -1974,14 +1999,17 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 />
                                 {editingMealName === meal.id ? (
                                   <div className="flex items-center gap-2 flex-1">
+                                    {}
                                     <Input
                                       autoFocus
                                       className="max-w-xs"
                                       size="sm"
                                       value={editingMealNameValue}
                                       onKeyDown={(e) => {
-                                        if (e.key === "Enter") handleSaveMealName(meal.id);
-                                        if (e.key === "Escape") setEditingMealName(null);
+                                        if (e.key === "Enter")
+                                          handleSaveMealName(meal.id);
+                                        if (e.key === "Escape")
+                                          setEditingMealName(null);
                                       }}
                                       onValueChange={setEditingMealNameValue}
                                     />
@@ -1990,9 +2018,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                       color="success"
                                       size="sm"
                                       variant="flat"
-                                      onPress={() => handleSaveMealName(meal.id)}
+                                      onPress={() =>
+                                        handleSaveMealName(meal.id)
+                                      }
                                     >
-                                      <Icon icon="solar:check-circle-bold" width={18} />
+                                      <Icon
+                                        icon="solar:check-circle-bold"
+                                        width={18}
+                                      />
                                     </Button>
                                     <Button
                                       isIconOnly
@@ -2000,7 +2033,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                       variant="flat"
                                       onPress={() => setEditingMealName(null)}
                                     >
-                                      <Icon icon="solar:close-circle-bold" width={18} />
+                                      <Icon
+                                        icon="solar:close-circle-bold"
+                                        width={18}
+                                      />
                                     </Button>
                                   </div>
                                 ) : (
@@ -2110,6 +2146,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 </div>
                               </div>
                             ) : (
+                              // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                               <div
                                 className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
                                 onClick={() => handleEditMealMacrosClick(meal)}
@@ -2217,6 +2254,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                       </div>
                                     ) : (
                                       // View mode
+                                      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                                       <div
                                         className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
                                         onClick={() =>
@@ -2263,6 +2301,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 {/* Add new ingredient inline */}
                                 {addingIngredientToMeal === meal.id ? (
                                   <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
+                                    {}
                                     <Input
                                       autoFocus
                                       className="flex-1"
@@ -2444,7 +2483,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                 </p>
                 <p className="text-xs text-gray-500 mb-3">
                   {dayForm.dayLabel &&
-                    detectWeekdaysFromLabel(dayForm.dayLabel).length > 0
+                  detectWeekdaysFromLabel(dayForm.dayLabel).length > 0
                     ? `Auto-detectado: ${formatWeekdays(detectWeekdaysFromLabel(dayForm.dayLabel))}. Puedes personalizar abajo.`
                     : "Selecciona los días de la semana en que este plan aplica"}
                 </p>
@@ -2452,10 +2491,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
                     <button
                       key={dayNum}
-                      className={`p-2 rounded-lg border-2 transition-all ${dayForm.weekdays.includes(dayNum)
-                        ? "bg-black border-black text-white"
-                        : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
-                        }`}
+                      className={`p-2 rounded-lg border-2 transition-all ${
+                        dayForm.weekdays.includes(dayNum)
+                          ? "bg-black border-black text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
+                      }`}
                       type="button"
                       onClick={() => handleToggleWeekdayInForm(dayNum)}
                     >
@@ -2600,12 +2640,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                     ) : (
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {availableTemplates.map((template) => (
+                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                           <div
                             key={template.id}
-                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedTemplateId === template.id
-                              ? "border-slate-500 bg-slate-50"
-                              : "border-gray-200 hover:border-slate-300"
-                              }`}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              selectedTemplateId === template.id
+                                ? "border-slate-500 bg-slate-50"
+                                : "border-gray-200 hover:border-slate-300"
+                            }`}
                             onClick={() => {
                               setSelectedTemplateId(template.id);
                               if (!planForm.name) {
@@ -2984,17 +3026,31 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           <ModalHeader className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-red-100 rounded-full">
-                <Icon className="text-red-600" icon="solar:trash-bin-trash-bold" width={20} />
+                <Icon
+                  className="text-red-600"
+                  icon="solar:trash-bin-trash-bold"
+                  width={20}
+                />
               </div>
               <span>
-                Eliminar {deleteConfirm?.type === "plan" ? "Plan" : deleteConfirm?.type === "day" ? "Día" : deleteConfirm?.type === "meal" ? "Comida" : "Ingrediente"}
+                Eliminar{" "}
+                {deleteConfirm?.type === "plan"
+                  ? "Plan"
+                  : deleteConfirm?.type === "day"
+                    ? "Día"
+                    : deleteConfirm?.type === "meal"
+                      ? "Comida"
+                      : "Ingrediente"}
               </span>
             </div>
           </ModalHeader>
           <ModalBody>
             <p className="text-gray-700">
               ¿Estás seguro de que quieres eliminar{" "}
-              <span className="font-semibold">&quot;{deleteConfirm?.name}&quot;</span>?
+              <span className="font-semibold">
+                &quot;{deleteConfirm?.name}&quot;
+              </span>
+              ?
             </p>
             <p className="text-sm text-gray-500">
               {deleteConfirm?.type === "plan"

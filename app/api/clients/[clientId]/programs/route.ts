@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { WorkoutProgram } from "@/types/training";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -546,7 +547,7 @@ export async function POST(
 // PUT - Update a program
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> }
+  { params: _params }: { params: Promise<{ clientId: string }> }
 ) {
   const supabase = createSupabaseClient();
 

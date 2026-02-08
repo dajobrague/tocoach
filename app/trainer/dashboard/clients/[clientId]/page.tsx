@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -99,10 +100,7 @@ export default function ClientProfilePage() {
             <p className="text-danger text-lg mb-4">
               {error || "Cliente no encontrado"}
             </p>
-            <button
-              className="text-black hover:underline"
-              onClick={handleBack}
-            >
+            <button className="text-black hover:underline" onClick={handleBack}>
               Volver a Clientes
             </button>
           </div>

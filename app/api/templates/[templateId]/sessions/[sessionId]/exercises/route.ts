@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -266,6 +267,7 @@ export async function PUT(
 
     if (readError || !before) {
       console.error("[Exercise Update] Row not found:", readError);
+
       return NextResponse.json(
         { success: false, error: "Ejercicio no encontrado" },
         { status: 404 }
@@ -291,7 +293,11 @@ export async function PUT(
       updatePayload.reps = reps || null;
     }
 
-    if (rest_seconds !== undefined && rest_seconds !== null && rest_seconds !== "") {
+    if (
+      rest_seconds !== undefined &&
+      rest_seconds !== null &&
+      rest_seconds !== ""
+    ) {
       updatePayload.rest_seconds = parseInt(rest_seconds);
     } else if (rest_seconds === "" || rest_seconds === null) {
       updatePayload.rest_seconds = null;
@@ -310,9 +316,16 @@ export async function PUT(
         .eq("session_id", sessionId);
 
       if (updateError) {
-        console.error("[Exercise Update] UPDATE ERROR:", JSON.stringify(updateError));
+        console.error(
+          "[Exercise Update] UPDATE ERROR:",
+          JSON.stringify(updateError)
+        );
+
         return NextResponse.json(
-          { success: false, error: "Error al actualizar: " + updateError.message },
+          {
+            success: false,
+            error: "Error al actualizar: " + updateError.message,
+          },
           { status: 500 }
         );
       }
@@ -328,7 +341,10 @@ export async function PUT(
     console.log("[Exercise Update] AFTER:", JSON.stringify(updated));
 
     if (verifyError) {
-      console.error("[Exercise Update] Verify error:", JSON.stringify(verifyError));
+      console.error(
+        "[Exercise Update] Verify error:",
+        JSON.stringify(verifyError)
+      );
     }
 
     return NextResponse.json({
@@ -337,6 +353,7 @@ export async function PUT(
     });
   } catch (error) {
     console.error("[Exercise Update] Unexpected error:", error);
+
     return NextResponse.json(
       { success: false, error: "Error interno del servidor" },
       { status: 500 }

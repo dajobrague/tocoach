@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -212,7 +213,7 @@ export async function POST(
 export async function PUT(
   request: NextRequest,
   {
-    params,
+    params: _params,
   }: {
     params: Promise<{ clientId: string; programId: string; sessionId: string }>;
   }
@@ -366,7 +367,7 @@ export async function PUT(
 export async function DELETE(
   request: NextRequest,
   {
-    params,
+    params: _params,
   }: {
     params: Promise<{ clientId: string; programId: string; sessionId: string }>;
   }
