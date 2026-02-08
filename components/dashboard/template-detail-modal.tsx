@@ -1663,21 +1663,20 @@ export default function TemplateDetailModal({
       0
     );
 
-    onClose({
+    const payload: Parameters<typeof onClose>[0] = {
       name: formData.name,
-      description: formData.description || undefined,
       type: formData.type,
       category: formData.category as "cardio" | "strength" | "nutrition",
-      division: formData.division || undefined,
-      goal: formData.goal || undefined,
-      sessionsPerWeek: formData.sessionsPerWeek
-        ? parseInt(formData.sessionsPerWeek)
-        : undefined,
       sessionCount: sessions.length,
       exerciseCount: totalExercises,
       dayCount: days.length,
       mealCount: totalMeals,
-    });
+    };
+    if (formData.description != null && formData.description !== "") payload.description = formData.description;
+    if (formData.division != null && formData.division !== "") payload.division = formData.division;
+    if (formData.goal != null && formData.goal !== "") payload.goal = formData.goal;
+    if (formData.sessionsPerWeek != null && formData.sessionsPerWeek !== "") payload.sessionsPerWeek = parseInt(formData.sessionsPerWeek);
+    onClose(payload);
   }, [formData, sessions, days, onClose]);
 
   // DnD sensors

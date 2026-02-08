@@ -463,25 +463,29 @@ export default function TemplatesContent() {
             if (updatedData) {
               // Optimistically update the local templates list with the changes
               setTemplates((prev) =>
-                prev.map((t) =>
-                  t.id === selectedTemplate.id
-                    ? {
-                      ...t,
-                      name: updatedData.name,
-                      description: updatedData.description,
-                      type: updatedData.type,
-                      category: updatedData.category,
-                      division: updatedData.division,
-                      goal: updatedData.goal,
-                      sessionsPerWeek: updatedData.sessionsPerWeek,
-                      sessionCount: updatedData.sessionCount ?? t.sessionCount,
-                      exerciseCount: updatedData.exerciseCount ?? t.exerciseCount,
-                      dayCount: updatedData.dayCount ?? t.dayCount,
-                      mealCount: updatedData.mealCount ?? t.mealCount,
-                      updatedAt: new Date().toISOString(),
-                    }
-                    : t
-                )
+                prev.map((t) => {
+                  if (t.id !== selectedTemplate.id) return t;
+                  const updated: Template = {
+                    ...t,
+                    name: updatedData.name,
+                    category: updatedData.category,
+                    updatedAt: new Date().toISOString(),
+                  };
+                  if (updatedData.description !== undefined) updated.description = updatedData.description;
+                  if (updatedData.type !== undefined) updated.type = updatedData.type;
+                  if (updatedData.division !== undefined) updated.division = updatedData.division;
+                  if (updatedData.goal !== undefined) updated.goal = updatedData.goal;
+                  if (updatedData.sessionsPerWeek !== undefined) updated.sessionsPerWeek = updatedData.sessionsPerWeek;
+                  const sc = updatedData.sessionCount ?? t.sessionCount;
+                  if (sc !== undefined) updated.sessionCount = sc;
+                  const ec = updatedData.exerciseCount ?? t.exerciseCount;
+                  if (ec !== undefined) updated.exerciseCount = ec;
+                  const dc = updatedData.dayCount ?? t.dayCount;
+                  if (dc !== undefined) updated.dayCount = dc;
+                  const mc = updatedData.mealCount ?? t.mealCount;
+                  if (mc !== undefined) updated.mealCount = mc;
+                  return updated;
+                })
               );
             }
             setSelectedTemplate(null);
