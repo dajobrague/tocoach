@@ -84,6 +84,15 @@ export async function POST(
         "[Template Exercises API] Using exercise from library:",
         finalExerciseId
       );
+
+      // If a videoUrl was provided, update the library exercise so the
+      // video is available everywhere this exercise is referenced.
+      if (videoUrl) {
+        await supabase
+          .from("exercises")
+          .update({ video_url: videoUrl })
+          .eq("id", exerciseId);
+      }
     } else {
       // Check if an exercise with this name already exists for this trainer
       const { data: existingExercise } = await supabase
@@ -248,7 +257,15 @@ export async function PUT(
 
     console.log("[Exercise Update] Raw body received:", JSON.stringify(body));
 
-    const { sessionExerciseId, name, sets, reps, rest_seconds, notes } = body;
+    const {
+      sessionExerciseId,
+      name,
+      sets,
+      reps,
+      rest_seconds,
+      notes,
+      videoUrl,
+    } = body;
 
     if (!sessionExerciseId) {
       return NextResponse.json(
@@ -331,7 +348,15 @@ export async function PUT(
       }
     }
 
-    // Step 5: Read back the full row to return
+    // Step 5: If videoUrl was provided, update the exercise library entry
+    if (videoUrl !== undefined && before.exercise_id) {
+      await supabase
+        .from("exercises")
+        .update({ video_url: videoUrl || null })
+        .eq("id", before.exercise_id);
+    }
+
+    // Step 6: Read back the full row to return
     const { data: updated, error: verifyError } = await supabase
       .from("session_exercises")
       .select("*, exercises(*)")

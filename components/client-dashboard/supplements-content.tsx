@@ -2,69 +2,44 @@
 
 import { Card, CardBody, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 
 import { ClientBottomNav } from "./bottom-nav";
+import { useClientData } from "./client-data-provider";
 import { ClientHeader } from "./client-header";
 
-import { ClientSupplementAssignment } from "@/types/supplements";
+import { useSupplements } from "@/lib/hooks/use-client-queries";
 import { useContrastColor } from "@/lib/utils/use-contrast-color";
+import { ClientSupplementAssignment } from "@/types/supplements";
 
-interface SupplementsContentProps {
-  clientId: string;
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  tenantSlug: string;
-}
+export function SupplementsContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
 
-export function SupplementsContent({
-  clientId,
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  tenantSlug,
-}: SupplementsContentProps) {
-  const [assignments, setAssignments] = useState<ClientSupplementAssignment[]>(
-    []
+  // ─── TanStack Query: cached supplement data ────────────────────────────
+  const { data: allAssignments = [], isLoading } = useSupplements();
+
+  // Filter to active only
+  const assignments = useMemo(
+    () =>
+      allAssignments.filter(
+        (a: ClientSupplementAssignment) => a.status === "active"
+      ),
+    [allAssignments]
   );
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Dynamic text colors for proper contrast - similar pattern to nutrition page
+  // Dynamic text colors for proper contrast
   const primaryTextLight = useContrastColor("primary", 0.05, {
     useThemeColor: true,
-  }); // for bg-primary/5
-  const primaryText = useContrastColor("primary", 0.1, { useThemeColor: true }); // for bg-primary/10
-  const warningText = useContrastColor("warning", 0.1, { useThemeColor: true }); // for bg-warning/10
-
-  useEffect(() => {
-    fetchAssignments();
-  }, [clientId]);
-
-  const fetchAssignments = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/client/supplements");
-      const result = await response.json();
-
-      if (result.success) {
-        // Only show active supplements
-        setAssignments(
-          result.data.filter(
-            (a: ClientSupplementAssignment) => a.status === "active"
-          )
-        );
-      } else {
-        console.error("Error fetching assignments:", result.error);
-      }
-    } catch (error) {
-      console.error("Error fetching assignments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  });
+  const primaryText = useContrastColor("primary", 0.1, { useThemeColor: true });
+  const warningText = useContrastColor("warning", 0.1, { useThemeColor: true });
 
   const getTimingIcon = (timing: string) => {
     if (timing.toLowerCase().includes("post")) return "solar:dumbbell-bold";
@@ -132,7 +107,7 @@ export function SupplementsContent({
           {/* Supplements List */}
           {!isLoading && assignments.length > 0 && (
             <div className="space-y-4">
-              {assignments.map((assignment) => {
+              {assignments.map((assignment: ClientSupplementAssignment) => {
                 const supplement = assignment.supplement;
                 const productImage = supplement?.images?.[0];
 

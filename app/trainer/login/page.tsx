@@ -8,14 +8,28 @@ import React from "react";
 export default function TrainerLoginPage() {
   const router = useRouter();
   const [isVisible, setIsVisible] = React.useState(false);
+  const [isConfirmVisible, setIsConfirmVisible] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string>("");
   const [step, setStep] = React.useState<"email" | "password">("email");
   const [email, setEmail] = React.useState("");
   const [isFirstLogin, setIsFirstLogin] = React.useState(false);
   const [trainerName, setTrainerName] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
 
   const toggleVisibility = () => setIsVisible(!isVisible);
+  const toggleConfirmVisibility = () => setIsConfirmVisible(!isConfirmVisible);
+
+  // Password validation for first login
+  const hasMinLength = password.length >= 8;
+  const hasLetter = /[a-zA-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+  const passwordsMatch =
+    password === confirmPassword && confirmPassword.length > 0;
+  const isPasswordValid =
+    hasMinLength && hasLetter && hasNumber && passwordsMatch;
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -59,10 +73,20 @@ export default function TrainerLoginPage() {
     setError("");
 
     const formData = new FormData(event.currentTarget);
-    const password = formData.get("password") as string;
+    const passwordValue = isFirstLogin
+      ? password
+      : (formData.get("password") as string);
 
     try {
       if (isFirstLogin) {
+        // Validate password requirements
+        if (!hasMinLength || !hasLetter || !hasNumber) {
+          throw new Error("La contraseña no cumple con los requisitos mínimos");
+        }
+        if (!passwordsMatch) {
+          throw new Error("Las contraseñas no coinciden");
+        }
+        const password = passwordValue;
         // First login: Update password in Supabase Auth and set password_set_at
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -175,7 +199,7 @@ export default function TrainerLoginPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password: passwordValue }),
         });
 
         const result = await response.json();
@@ -198,6 +222,8 @@ export default function TrainerLoginPage() {
   const handleBack = () => {
     setStep("email");
     setError("");
+    setPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -275,58 +301,229 @@ export default function TrainerLoginPage() {
                 <p className="text-sm text-default-500 font-body">{email}</p>
               </div>
 
-              <Input
-                isRequired
-                autoComplete={
-                  isFirstLogin ? "new-password" : "current-password"
-                }
-                className="font-body"
-                description={
-                  isFirstLogin
-                    ? "Mínimo 8 caracteres, incluye letras y números"
-                    : undefined
-                }
-                endContent={
-                  <button type="button" onClick={toggleVisibility}>
-                    {isVisible ? (
-                      <Icon
-                        className="text-default-400 pointer-events-none text-2xl"
-                        icon="solar:eye-closed-linear"
-                      />
-                    ) : (
-                      <Icon
-                        className="text-default-400 pointer-events-none text-2xl"
-                        icon="solar:eye-bold"
-                      />
-                    )}
-                  </button>
-                }
-                label={isFirstLogin ? "Nueva contraseña" : "Contraseña"}
-                name="password"
-                placeholder={
-                  isFirstLogin
-                    ? "Crea una contraseña segura"
-                    : "Introduce tu contraseña"
-                }
-                type={isVisible ? "text" : "password"}
-                variant="bordered"
-              />
-
-              {!isFirstLogin && (
-                <div className="flex justify-end">
-                  <Link
-                    className="font-body text-slate-700 hover:text-black"
-                    href="/trainer/forgot-password"
-                    size="sm"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </Link>
+              {/* First login instructions */}
+              {isFirstLogin && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      className="text-slate-700"
+                      icon="solar:shield-keyhole-bold"
+                      width={20}
+                    />
+                    <h4 className="text-sm font-semibold text-slate-800 font-heading">
+                      Configura tu contraseña
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-600 font-body leading-relaxed">
+                    Es tu primer acceso. Por seguridad, necesitas crear una
+                    contraseña personal. Esta será tu contraseña para acceder a
+                    tu plataforma de coaching.
+                  </p>
                 </div>
+              )}
+
+              {isFirstLogin ? (
+                <>
+                  {/* New password field */}
+                  <Input
+                    isRequired
+                    autoComplete="new-password"
+                    className="font-body"
+                    endContent={
+                      <button type="button" onClick={toggleVisibility}>
+                        {isVisible ? (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-closed-linear"
+                          />
+                        ) : (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-bold"
+                          />
+                        )}
+                      </button>
+                    }
+                    label="Nueva contraseña"
+                    name="password"
+                    placeholder="Crea una contraseña segura"
+                    type={isVisible ? "text" : "password"}
+                    value={password}
+                    variant="bordered"
+                    onValueChange={setPassword}
+                  />
+
+                  {/* Password strength indicators */}
+                  {password.length > 0 && (
+                    <div className="space-y-1.5 -mt-1">
+                      <div className="flex items-center gap-2">
+                        <Icon
+                          className={
+                            hasMinLength ? "text-green-500" : "text-gray-300"
+                          }
+                          icon={
+                            hasMinLength
+                              ? "solar:check-circle-bold"
+                              : "solar:close-circle-linear"
+                          }
+                          width={16}
+                        />
+                        <span
+                          className={`text-xs font-body ${hasMinLength ? "text-green-700" : "text-gray-500"}`}
+                        >
+                          Mínimo 8 caracteres
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Icon
+                          className={
+                            hasLetter ? "text-green-500" : "text-gray-300"
+                          }
+                          icon={
+                            hasLetter
+                              ? "solar:check-circle-bold"
+                              : "solar:close-circle-linear"
+                          }
+                          width={16}
+                        />
+                        <span
+                          className={`text-xs font-body ${hasLetter ? "text-green-700" : "text-gray-500"}`}
+                        >
+                          Incluye al menos una letra
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Icon
+                          className={
+                            hasNumber ? "text-green-500" : "text-gray-300"
+                          }
+                          icon={
+                            hasNumber
+                              ? "solar:check-circle-bold"
+                              : "solar:close-circle-linear"
+                          }
+                          width={16}
+                        />
+                        <span
+                          className={`text-xs font-body ${hasNumber ? "text-green-700" : "text-gray-500"}`}
+                        >
+                          Incluye al menos un número
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Icon
+                          className={
+                            hasSpecial ? "text-green-500" : "text-gray-300"
+                          }
+                          icon={
+                            hasSpecial
+                              ? "solar:check-circle-bold"
+                              : "solar:close-circle-linear"
+                          }
+                          width={16}
+                        />
+                        <span
+                          className={`text-xs font-body ${hasSpecial ? "text-green-700" : "text-gray-500"}`}
+                        >
+                          Incluye un carácter especial (recomendado)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confirm password field */}
+                  <Input
+                    isRequired
+                    autoComplete="new-password"
+                    className="font-body"
+                    endContent={
+                      <button type="button" onClick={toggleConfirmVisibility}>
+                        {isConfirmVisible ? (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-closed-linear"
+                          />
+                        ) : (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-bold"
+                          />
+                        )}
+                      </button>
+                    }
+                    errorMessage={
+                      confirmPassword.length > 0 && !passwordsMatch
+                        ? "Las contraseñas no coinciden"
+                        : undefined
+                    }
+                    isInvalid={confirmPassword.length > 0 && !passwordsMatch}
+                    label="Confirmar contraseña"
+                    name="confirmPassword"
+                    placeholder="Repite tu contraseña"
+                    type={isConfirmVisible ? "text" : "password"}
+                    value={confirmPassword}
+                    variant="bordered"
+                    onValueChange={setConfirmPassword}
+                  />
+
+                  {/* Match indicator */}
+                  {confirmPassword.length > 0 && passwordsMatch && (
+                    <div className="flex items-center gap-2 -mt-1">
+                      <Icon
+                        className="text-green-500"
+                        icon="solar:check-circle-bold"
+                        width={16}
+                      />
+                      <span className="text-xs font-body text-green-700">
+                        Las contraseñas coinciden
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Regular login password field */}
+                  <Input
+                    isRequired
+                    autoComplete="current-password"
+                    className="font-body"
+                    endContent={
+                      <button type="button" onClick={toggleVisibility}>
+                        {isVisible ? (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-closed-linear"
+                          />
+                        ) : (
+                          <Icon
+                            className="text-default-400 pointer-events-none text-2xl"
+                            icon="solar:eye-bold"
+                          />
+                        )}
+                      </button>
+                    }
+                    label="Contraseña"
+                    name="password"
+                    placeholder="Introduce tu contraseña"
+                    type={isVisible ? "text" : "password"}
+                    variant="bordered"
+                  />
+
+                  <div className="flex justify-end">
+                    <Link
+                      className="font-body text-slate-700 hover:text-black"
+                      href="/trainer/forgot-password"
+                      size="sm"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
+                </>
               )}
 
               <Button
                 className="w-full font-body mt-2 bg-black text-white hover:bg-slate-800"
-                disabled={isLoading}
+                disabled={isLoading || (isFirstLogin && !isPasswordValid)}
                 isLoading={isLoading}
                 size="lg"
                 type="submit"
@@ -336,7 +533,7 @@ export default function TrainerLoginPage() {
                     ? "Configurando..."
                     : "Iniciando sesión..."
                   : isFirstLogin
-                    ? "Configurar contraseña"
+                    ? "Configurar contraseña y comenzar"
                     : "Iniciar sesión"}
               </Button>
             </Form>

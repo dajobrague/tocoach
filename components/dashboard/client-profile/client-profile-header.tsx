@@ -77,11 +77,10 @@ export default function ClientProfileHeader({
             {/* Update Status Button */}
             {onUpdateStatus && (
               <Button
-                className="text-blue-600 border-blue-600"
-                color="primary"
+                className="bg-gray-100 text-gray-700 font-semibold"
                 size="sm"
-                startContent={<Icon icon="solar:refresh-bold" width={18} />}
-                variant="bordered"
+                startContent={<Icon icon="solar:refresh-bold" width={16} />}
+                variant="flat"
                 onPress={onUpdateStatus}
               >
                 Estado
@@ -91,13 +90,12 @@ export default function ClientProfileHeader({
             {/* Delete Button */}
             {onDelete && (
               <Button
-                className="text-red-600 border-red-600"
-                color="danger"
+                className="bg-red-50 text-red-600 font-semibold"
                 size="sm"
                 startContent={
-                  <Icon icon="solar:trash-bin-trash-bold" width={18} />
+                  <Icon icon="solar:trash-bin-trash-bold" width={16} />
                 }
-                variant="bordered"
+                variant="flat"
                 onPress={onDelete}
               >
                 Eliminar

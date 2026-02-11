@@ -2,166 +2,321 @@
 
 import type {
   NutritionDayWithMeals,
+  NutritionMealWithIngredients,
   NutritionPlanWithDays,
 } from "@/types/nutrition";
 
-import { Card, CardBody, Chip, Spinner, Tab, Tabs } from "@heroui/react";
+import { Card, CardBody, Chip, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { useContrastColor } from "@/lib/utils/use-contrast-color";
+import { useNutritionPlan } from "@/lib/hooks/use-client-queries";
 
-interface NutritionContentProps {
-  clientId: string;
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  tenantSlug: string;
+// ─── Weekday helpers ───────────────────────────────────────────────────────
+// Matches JavaScript Date.getDay(): 0 = Sunday, 1 = Monday, …, 6 = Saturday
+
+const WEEKDAY_NAMES: Record<number, string> = {
+  0: "Domingo",
+  1: "Lunes",
+  2: "Martes",
+  3: "Miércoles",
+  4: "Jueves",
+  5: "Viernes",
+  6: "Sábado",
+};
+
+/** Monday-first ordering for sorting: Mon=0 … Sun=6 */
+function mondayFirstIndex(weekdayNum: number): number {
+  // Convert JS getDay (0=Sun) to Monday-first (0=Mon)
+  return weekdayNum === 0 ? 6 : weekdayNum - 1;
 }
 
-export function NutritionContent({
-  clientId,
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  tenantSlug,
-}: NutritionContentProps) {
-  const [nutritionPlan, setNutritionPlan] =
-    useState<NutritionPlanWithDays | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<NutritionDayWithMeals | null>(
-    null
+/** Returns today's weekday number (JS convention: 0=Sun). */
+function getTodayWeekdayNum(): number {
+  const now = new Date();
+  const chicagoTime = new Date(
+    now.toLocaleString("en-US", { timeZone: "America/Chicago" })
   );
-  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
 
-  // ========================================================================
-  // DYNAMIC TEXT CONTRAST SYSTEM
-  // ========================================================================
-  // This ensures text is always readable on colored backgrounds, regardless of theme.
-  //
-  // PATTERN FOR OTHER COMPONENTS:
-  // 1. Import: import { useContrastColor } from "@/lib/utils/use-contrast-color";
-  // 2. Call hook with color name and opacity (e.g., "primary", 0.1 for bg-primary/10)
-  // 3. Use returned style object: style={colorText.style} for primary text
-  //    or style={colorText.secondaryStyle} for less prominent text
-  // 4. Set useThemeColor: true to prefer theme-color variants over black/white
-  //
-  // Example for bg-success/20 background:
-  //   const successText = useContrastColor("success", 0.2, { useThemeColor: true });
-  //   <div className="bg-success/20">
-  //     <p style={successText.style}>This text will be readable!</p>
-  //   </div>
-  // ========================================================================
-  const dangerText = useContrastColor("danger", 0.1, { useThemeColor: true });
-  const primaryText = useContrastColor("primary", 0.1, { useThemeColor: true });
-  const warningText = useContrastColor("warning", 0.1, { useThemeColor: true });
-  const secondaryText = useContrastColor("secondary", 0.1, {
-    useThemeColor: true,
+  return chicagoTime.getDay();
+}
+
+// ─── Weekday entry: one row per weekday a nutrition day applies to ─────────
+
+interface WeekdayEntry {
+  /** Unique key for React (dayId + weekdayNum) */
+  key: string;
+  /** The JS weekday number (0-6) this entry represents */
+  weekdayNum: number;
+  /** Display title, e.g. "Lunes - Día 1" */
+  title: string;
+  /** Whether this weekday is today */
+  isToday: boolean;
+  /** The underlying nutrition day data (meals, macros, etc.) */
+  day: NutritionDayWithMeals;
+}
+
+/**
+ * Expand nutrition days so each weekday in a day's `weekdays` array
+ * gets its own entry. E.g. Día 1 with weekdays [1, 3] becomes two
+ * entries: "Lunes - Día 1" and "Miércoles - Día 1".
+ *
+ * Days without weekdays assigned get a single entry using day_order.
+ * Result is sorted: today first, then Mon → Sun.
+ */
+function buildWeekdayEntries(days: NutritionDayWithMeals[]): WeekdayEntry[] {
+  const todayNum = getTodayWeekdayNum();
+  const entries: WeekdayEntry[] = [];
+
+  for (const day of days) {
+    if (day.weekdays && day.weekdays.length > 0) {
+      for (const wdNum of day.weekdays) {
+        const weekdayName = WEEKDAY_NAMES[wdNum] || "";
+
+        entries.push({
+          key: `${day.id}-${wdNum}`,
+          weekdayNum: wdNum,
+          title: weekdayName
+            ? `${weekdayName} - ${day.day_label}`
+            : day.day_label,
+          isToday: wdNum === todayNum,
+          day,
+        });
+      }
+    } else {
+      // No weekdays assigned — single entry using day_order
+      entries.push({
+        key: day.id,
+        weekdayNum: -1,
+        title: day.day_label,
+        isToday: false,
+        day,
+      });
+    }
+  }
+
+  // Sort: today first, then Monday → Sunday
+  entries.sort((a, b) => {
+    if (a.isToday && !b.isToday) return -1;
+    if (!a.isToday && b.isToday) return 1;
+
+    // Both non-today: sort Mon → Sun
+    const aIdx =
+      a.weekdayNum >= 0 ? mondayFirstIndex(a.weekdayNum) : a.day.day_order;
+    const bIdx =
+      b.weekdayNum >= 0 ? mondayFirstIndex(b.weekdayNum) : b.day.day_order;
+
+    return aIdx - bIdx;
   });
 
-  // Fetch nutrition plan
-  useEffect(() => {
-    const fetchNutritionPlan = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch("/api/client/nutrition");
-        const result = await response.json();
+  return entries;
+}
 
-        if (result.success && result.data && result.data.length > 0) {
-          // Get the active plan or the first plan
-          const activePlan =
-            result.data.find(
-              (p: NutritionPlanWithDays) => p.status === "active"
-            ) || result.data[0];
+// ─── Shopping list helpers ─────────────────────────────────────────────────
 
-          setNutritionPlan(activePlan);
+interface AggregatedIngredient {
+  name: string;
+  entries: { quantity: string; unit: string }[];
+}
 
-          // Set initial selected day
-          if (activePlan.days && activePlan.days.length > 0) {
-            const todayLabel = getTodayDayLabel();
-            const todayDay =
-              activePlan.days.find(
-                (d: NutritionDayWithMeals) => d.day_label === todayLabel
-              ) || activePlan.days[0];
+function aggregateIngredients(
+  days: NutritionDayWithMeals[]
+): AggregatedIngredient[] {
+  const map = new Map<string, Map<string, number>>();
+  const rawMap = new Map<string, { quantity: string; unit: string }[]>();
 
-            setSelectedDay(todayDay);
-          }
+  for (const day of days) {
+    for (const meal of day.meals) {
+      for (const ing of meal.ingredients) {
+        const key = ing.name.trim().toLowerCase();
+        const numericQty = parseFloat(ing.quantity);
+
+        if (!isNaN(numericQty) && numericQty > 0) {
+          if (!map.has(key)) map.set(key, new Map());
+          const unitMap = map.get(key)!;
+          const unitKey = (ing.unit || "").trim().toLowerCase();
+
+          unitMap.set(unitKey, (unitMap.get(unitKey) || 0) + numericQty);
+        } else {
+          if (!rawMap.has(key)) rawMap.set(key, []);
+          rawMap.get(key)!.push({ quantity: ing.quantity, unit: ing.unit });
         }
-      } catch (err) {
-        console.error("Error fetching nutrition plan:", err);
-      } finally {
-        setIsLoading(false);
       }
-    };
+    }
+  }
 
-    fetchNutritionPlan();
-  }, [clientId]);
+  const result: AggregatedIngredient[] = [];
 
-  // Get today's day of the week in Spanish (Chicago timezone)
-  const getTodayDayLabel = (): string => {
-    const daysOfWeek = [
-      "Domingo",
-      "Lunes",
-      "Martes",
-      "Miércoles",
-      "Jueves",
-      "Viernes",
-      "Sábado",
-    ];
-    const now = new Date();
-    const chicagoTime = new Date(
-      now.toLocaleString("en-US", { timeZone: "America/Chicago" })
+  for (const [key, unitMap] of map.entries()) {
+    const entries: { quantity: string; unit: string }[] = [];
+
+    for (const [unit, total] of unitMap.entries()) {
+      const pretty = total % 1 === 0 ? total.toString() : total.toFixed(1);
+
+      entries.push({ quantity: pretty, unit });
+    }
+
+    if (rawMap.has(key)) {
+      entries.push(...rawMap.get(key)!);
+      rawMap.delete(key);
+    }
+
+    const displayName = key.charAt(0).toUpperCase() + key.slice(1);
+
+    result.push({ name: displayName, entries });
+  }
+
+  for (const [key, entries] of rawMap.entries()) {
+    const displayName = key.charAt(0).toUpperCase() + key.slice(1);
+
+    result.push({ name: displayName, entries });
+  }
+
+  result.sort((a, b) => a.name.localeCompare(b.name));
+
+  return result;
+}
+
+// ─── Macro summary (reusable) ─────────────────────────────────────────────
+
+function MacroRow({
+  calories,
+  protein,
+  carbs,
+  fats,
+}: {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      <Chip className="bg-default-100" size="sm" variant="flat">
+        <span className="text-xs text-foreground/70 font-body">
+          <Icon
+            className="text-danger inline-block mr-0.5"
+            icon="solar:fire-bold"
+            width={10}
+          />
+          {Math.round(calories)} kcal
+        </span>
+      </Chip>
+      <Chip className="bg-default-100" size="sm" variant="flat">
+        <span className="text-xs text-foreground/70 font-body">
+          <Icon
+            className="text-primary inline-block mr-0.5"
+            icon="fluent:food-chicken-leg-16-filled"
+            width={10}
+          />
+          {Math.round(protein)}g
+        </span>
+      </Chip>
+      <Chip className="bg-default-100" size="sm" variant="flat">
+        <span className="text-xs text-foreground/70 font-body">
+          <Icon
+            className="text-warning inline-block mr-0.5"
+            icon="fluent:food-toast-24-filled"
+            width={10}
+          />
+          {Math.round(carbs)}g
+        </span>
+      </Chip>
+      <Chip className="bg-default-100" size="sm" variant="flat">
+        <span className="text-xs text-foreground/70 font-body">
+          <Icon
+            className="text-secondary inline-block mr-0.5"
+            icon="fluent:drop-12-filled"
+            width={10}
+          />
+          {Math.round(fats)}g
+        </span>
+      </Chip>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+
+export function NutritionContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
+
+  const { data: nutritionPlans, isLoading } = useNutritionPlan();
+
+  const nutritionPlan = useMemo<NutritionPlanWithDays | null>(() => {
+    if (!nutritionPlans || nutritionPlans.length === 0) return null;
+
+    return (
+      nutritionPlans.find(
+        (p: NutritionPlanWithDays) => p.status === "active"
+      ) || nutritionPlans[0]
     );
+  }, [nutritionPlans]);
 
-    return daysOfWeek[chicagoTime.getDay()] || "Lunes";
-  };
+  // Expand days into one entry per weekday, sorted: today first, Mon → Sun
+  const weekdayEntries = useMemo(() => {
+    if (!nutritionPlan?.days) return [];
 
-  const daysOfWeek = [
-    "Lunes",
-    "Martes",
-    "Miércoles",
-    "Jueves",
-    "Viernes",
-    "Sábado",
-    "Domingo",
-  ];
+    return buildWeekdayEntries(nutritionPlan.days);
+  }, [nutritionPlan]);
+
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
+  const [shoppingListOpen, setShoppingListOpen] = useState(false);
+
+  // Days are collapsed by default — only today's entry starts expanded.
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => {
+    return new Set<string>();
+  });
+
+  // Once entries are built, auto-expand today (runs once when data loads)
+  useEffect(() => {
+    const todayEntry = weekdayEntries.find((e) => e.isToday);
+
+    if (todayEntry) {
+      setExpandedDays(new Set([todayEntry.key]));
+    }
+  }, [weekdayEntries]);
 
   const toggleMeal = (mealId: string) => {
     setExpandedMeals((prev) => {
-      const newSet = new Set(prev);
+      const s = new Set(prev);
 
-      if (newSet.has(mealId)) {
-        newSet.delete(mealId);
-      } else {
-        newSet.add(mealId);
-      }
+      s.has(mealId) ? s.delete(mealId) : s.add(mealId);
 
-      return newSet;
+      return s;
     });
   };
 
-  // Calculate daily totals from meal macros
-  const dayTotals = useMemo(() => {
-    if (!selectedDay || !selectedDay.meals) {
-      return { calories: 0, protein: 0, carbs: 0, fats: 0 };
-    }
+  const toggleDay = (dayKey: string) => {
+    setExpandedDays((prev) => {
+      const s = new Set(prev);
 
-    return selectedDay.meals.reduce(
-      (totals, meal) => ({
-        calories: totals.calories + (meal.calories || 0),
-        protein: totals.protein + (meal.protein || 0),
-        carbs: totals.carbs + (meal.carbs || 0),
-        fats: totals.fats + (meal.fats || 0),
-      }),
-      { calories: 0, protein: 0, carbs: 0, fats: 0 }
-    );
-  }, [selectedDay]);
+      s.has(dayKey) ? s.delete(dayKey) : s.add(dayKey);
 
-  // Show loading state
+      return s;
+    });
+  };
+
+  // Shopping list uses the expanded weekday entries so that a day
+  // repeating on multiple weekdays counts its ingredients each time.
+  const shoppingList = useMemo(() => {
+    const allDays = weekdayEntries.map((e) => e.day);
+
+    return aggregateIngredients(allDays);
+  }, [weekdayEntries]);
+
+  // ─── Loading ─────────────────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <>
@@ -186,8 +341,9 @@ export function NutritionContent({
     );
   }
 
-  // Show empty state
-  if (!nutritionPlan || !selectedDay) {
+  // ─── Empty state ─────────────────────────────────────────────────────────
+
+  if (!nutritionPlan || weekdayEntries.length === 0) {
     return (
       <>
         <div className="min-h-screen bg-background pb-20">
@@ -203,13 +359,13 @@ export function NutritionContent({
             />
             <div className="px-4 py-20 text-center">
               <Icon
-                className="text-6xl text-gray-300 mx-auto mb-4"
+                className="text-6xl text-default-300 mx-auto mb-4"
                 icon="solar:document-text-linear"
               />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
+              <h3 className="text-xl font-bold text-foreground mb-2 font-heading">
                 No hay plan nutricional
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-foreground/60 font-body">
                 Tu entrenador aún no ha creado un plan nutricional para ti.
               </p>
             </div>
@@ -220,11 +376,12 @@ export function NutritionContent({
     );
   }
 
+  // ─── Main render ─────────────────────────────────────────────────────────
+
   return (
     <>
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-lg mx-auto">
-          {/* Top Header - Same as Dashboard and Workouts */}
           <ClientHeader
             clientId={clientId}
             clientProfilePicture={clientProfilePicture}
@@ -235,337 +392,318 @@ export function NutritionContent({
             trainerName={trainerName}
           />
 
-          {/* Day Navigation - Tab Selector */}
-          <div className="px-4 mb-4">
-            <Tabs
-              fullWidth
-              classNames={{
-                tabList: "gap-2",
-                cursor: "w-full",
-                tab: "px-2 h-9",
-              }}
-              color="primary"
-              selectedKey={selectedDay.day_label}
-              size="sm"
-              variant="bordered"
-              onSelectionChange={(key) => {
-                const dayData = nutritionPlan.days.find(
-                  (d) => d.day_label === key
-                );
+          <div className="px-4 space-y-5">
+            {/* ── Day sections (one per weekday) ────────────────────── */}
+            {weekdayEntries.map((entry) => {
+              const { day } = entry;
+              const isDayExpanded = expandedDays.has(entry.key);
 
-                if (dayData) setSelectedDay(dayData);
-              }}
-            >
-              {daysOfWeek.map((day) => {
-                const dayData = nutritionPlan.days.find(
-                  (d) => d.day_label === day
-                );
+              // Day-level totals
+              const dayTotals = day.meals.reduce(
+                (t, m) => ({
+                  calories: t.calories + (m.calories || 0),
+                  protein: t.protein + (m.protein || 0),
+                  carbs: t.carbs + (m.carbs || 0),
+                  fats: t.fats + (m.fats || 0),
+                }),
+                { calories: 0, protein: 0, carbs: 0, fats: 0 }
+              );
 
-                if (!dayData) return null;
-
-                return <Tab key={day} title={day.slice(0, 3)} />;
-              })}
-            </Tabs>
-          </div>
-
-          <div className="px-4 space-y-4">
-            {/* Daily Summary Card */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Icon
-                    className="text-primary text-xl"
-                    icon="solar:chart-2-bold"
-                  />
-                  <h2 className="text-lg font-semibold font-heading text-foreground">
-                    Totales del Día
-                  </h2>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Calories - Dynamic contrast text color */}
-                  <div className="bg-danger/10 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon
-                        className="text-lg"
-                        icon="solar:fire-bold"
-                        style={dangerText.style}
-                      />
-                      <p
-                        className="text-xs font-medium"
-                        style={dangerText.secondaryStyle}
+              return (
+                <section key={entry.key}>
+                  {/* Day Header */}
+                  <div
+                    className={`flex items-center justify-between mb-3 cursor-pointer group rounded-xl px-3 py-2 -mx-3 transition-colors ${
+                      entry.isToday
+                        ? "bg-primary shadow-md"
+                        : "hover:bg-default-100"
+                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleDay(entry.key)}
+                    onKeyDown={(e) => e.key === "Enter" && toggleDay(entry.key)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {entry.isToday ? (
+                        <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full font-body uppercase flex-shrink-0 tracking-widest">
+                          Hoy
+                        </span>
+                      ) : (
+                        <Icon
+                          className="text-primary text-lg flex-shrink-0"
+                          icon="solar:calendar-bold"
+                        />
+                      )}
+                      <h2
+                        className={`text-base font-bold font-heading truncate ${entry.isToday ? "text-white" : "text-foreground"}`}
                       >
-                        Calorías
-                      </p>
+                        {entry.title}
+                      </h2>
+                      <span
+                        className={`text-xs font-body flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/50"}`}
+                      >
+                        · {day.meals.length} comida
+                        {day.meals.length !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                    <p className="text-2xl font-bold" style={dangerText.style}>
-                      {Math.round(dayTotals.calories)}
-                    </p>
-                    <p className="text-xs" style={dangerText.secondaryStyle}>
-                      kcal
-                    </p>
+                    <Icon
+                      className={`text-lg transition-transform flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/40 group-hover:text-foreground/60"}`}
+                      icon={
+                        isDayExpanded
+                          ? "solar:alt-arrow-up-linear"
+                          : "solar:alt-arrow-down-linear"
+                      }
+                    />
                   </div>
 
-                  {/* Protein - Dynamic contrast text color */}
-                  <div className="bg-primary/10 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon
-                        className="text-lg"
-                        icon="fluent:food-chicken-leg-16-filled"
-                        style={primaryText.style}
-                      />
-                      <p
-                        className="text-xs font-medium"
-                        style={primaryText.secondaryStyle}
-                      >
-                        Proteína
-                      </p>
-                    </div>
-                    <p className="text-2xl font-bold" style={primaryText.style}>
-                      {Math.round(dayTotals.protein)}
-                    </p>
-                    <p className="text-xs" style={primaryText.secondaryStyle}>
-                      gramos
-                    </p>
-                  </div>
-
-                  {/* Carbs - Dynamic contrast text color */}
-                  <div className="bg-warning/10 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon
-                        className="text-lg"
-                        icon="fluent:food-toast-24-filled"
-                        style={warningText.style}
-                      />
-                      <p
-                        className="text-xs font-medium"
-                        style={warningText.secondaryStyle}
-                      >
-                        Carbohidratos
-                      </p>
-                    </div>
-                    <p className="text-2xl font-bold" style={warningText.style}>
-                      {Math.round(dayTotals.carbs)}
-                    </p>
-                    <p className="text-xs" style={warningText.secondaryStyle}>
-                      gramos
-                    </p>
-                  </div>
-
-                  {/* Fats - Dynamic contrast text color */}
-                  <div className="bg-secondary/10 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon
-                        className="text-lg"
-                        icon="fluent:drop-12-filled"
-                        style={secondaryText.style}
-                      />
-                      <p
-                        className="text-xs font-medium"
-                        style={secondaryText.secondaryStyle}
-                      >
-                        Grasas
-                      </p>
-                    </div>
-                    <p
-                      className="text-2xl font-bold"
-                      style={secondaryText.style}
-                    >
-                      {Math.round(dayTotals.fats)}
-                    </p>
-                    <p className="text-xs" style={secondaryText.secondaryStyle}>
-                      gramos
-                    </p>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-
-            {/* Meals List */}
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold font-heading text-foreground">
-                Comidas del Día
-              </h2>
-              {selectedDay.meals.map((meal) => {
-                const isExpanded = expandedMeals.has(meal.id);
-                const mealTotals = {
-                  calories: meal.calories || 0,
-                  protein: meal.protein || 0,
-                  carbs: meal.carbs || 0,
-                  fats: meal.fats || 0,
-                };
-
-                return (
-                  <Card key={meal.id}>
-                    <CardBody className="p-4">
-                      {/* Meal Header - Clickable */}
-                      <div
-                        aria-expanded={isExpanded}
-                        className="cursor-pointer"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleMeal(meal.id)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && toggleMeal(meal.id)
-                        }
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="bg-primary/10 p-2 rounded-lg flex-shrink-0">
+                  {isDayExpanded && (
+                    <div className="space-y-3">
+                      {/* Day macro summary */}
+                      <Card className="border border-default-200 shadow-sm">
+                        <CardBody className="p-3">
+                          <div className="grid grid-cols-4 gap-2">
+                            <div className="bg-default-50 rounded-xl p-2.5 text-center">
                               <Icon
-                                className="text-primary text-xl"
-                                icon="solar:dish-bold"
+                                className="text-danger text-base mx-auto mb-0.5"
+                                icon="solar:fire-bold"
                               />
+                              <p className="text-base font-bold text-foreground font-heading">
+                                {Math.round(dayTotals.calories)}
+                              </p>
+                              <p className="text-[10px] text-foreground/50 font-body">
+                                kcal
+                              </p>
                             </div>
-                            <div className="flex-1">
-                              <h3 className="text-base font-bold text-foreground font-heading">
-                                {meal.label}
-                              </h3>
-                              <p className="text-xs text-foreground/60">
-                                {meal.ingredients.length} ingredientes
+                            <div className="bg-default-50 rounded-xl p-2.5 text-center">
+                              <Icon
+                                className="text-primary text-base mx-auto mb-0.5"
+                                icon="fluent:food-chicken-leg-16-filled"
+                              />
+                              <p className="text-base font-bold text-foreground font-heading">
+                                {Math.round(dayTotals.protein)}
+                              </p>
+                              <p className="text-[10px] text-foreground/50 font-body">
+                                proteína
+                              </p>
+                            </div>
+                            <div className="bg-default-50 rounded-xl p-2.5 text-center">
+                              <Icon
+                                className="text-warning text-base mx-auto mb-0.5"
+                                icon="fluent:food-toast-24-filled"
+                              />
+                              <p className="text-base font-bold text-foreground font-heading">
+                                {Math.round(dayTotals.carbs)}
+                              </p>
+                              <p className="text-[10px] text-foreground/50 font-body">
+                                carbos
+                              </p>
+                            </div>
+                            <div className="bg-default-50 rounded-xl p-2.5 text-center">
+                              <Icon
+                                className="text-secondary text-base mx-auto mb-0.5"
+                                icon="fluent:drop-12-filled"
+                              />
+                              <p className="text-base font-bold text-foreground font-heading">
+                                {Math.round(dayTotals.fats)}
+                              </p>
+                              <p className="text-[10px] text-foreground/50 font-body">
+                                grasas
                               </p>
                             </div>
                           </div>
-                          <Icon
-                            className="text-foreground/60 text-xl flex-shrink-0"
-                            icon={
-                              isExpanded
-                                ? "solar:alt-arrow-up-linear"
-                                : "solar:alt-arrow-down-linear"
-                            }
-                          />
-                        </div>
+                        </CardBody>
+                      </Card>
 
-                        {/* Meal Description - Between name and macros */}
-                        {meal.notes && (
-                          <p className="text-sm text-foreground/70 mb-3 px-1">
-                            {meal.notes}
-                          </p>
-                        )}
+                      {/* Meals */}
+                      {day.meals.map((meal) => (
+                        <MealCard
+                          key={`${entry.key}-${meal.id}`}
+                          expandedMeals={expandedMeals}
+                          meal={meal}
+                          onToggle={toggleMeal}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
 
-                        {/* Meal Macros Summary - Dynamic contrast text colors */}
-                        <div className="flex gap-2 flex-wrap">
-                          <Chip
-                            className="bg-danger/10"
-                            size="sm"
-                            variant="flat"
-                          >
-                            <div
-                              className="flex items-center gap-1"
-                              style={dangerText.style}
-                            >
-                              <Icon
-                                className="text-xs"
-                                icon="solar:fire-bold"
-                              />
-                              <span className="text-xs font-semibold">
-                                {Math.round(mealTotals.calories)} kcal
-                              </span>
-                            </div>
-                          </Chip>
-                          <Chip
-                            className="bg-primary/10"
-                            size="sm"
-                            variant="flat"
-                          >
-                            <div
-                              className="flex items-center gap-1"
-                              style={primaryText.style}
-                            >
-                              <Icon
-                                className="text-xs"
-                                icon="fluent:food-chicken-leg-16-filled"
-                              />
-                              <span className="text-xs font-semibold">
-                                {Math.round(mealTotals.protein)}g
-                              </span>
-                            </div>
-                          </Chip>
-                          <Chip
-                            className="bg-warning/10"
-                            size="sm"
-                            variant="flat"
-                          >
-                            <div
-                              className="flex items-center gap-1"
-                              style={warningText.style}
-                            >
-                              <Icon
-                                className="text-xs"
-                                icon="fluent:food-toast-24-filled"
-                              />
-                              <span className="text-xs font-semibold">
-                                {Math.round(mealTotals.carbs)}g
-                              </span>
-                            </div>
-                          </Chip>
-                          <Chip
-                            className="bg-secondary/10"
-                            size="sm"
-                            variant="flat"
-                          >
-                            <div
-                              className="flex items-center gap-1"
-                              style={secondaryText.style}
-                            >
-                              <Icon
-                                className="text-xs"
-                                icon="fluent:drop-12-filled"
-                              />
-                              <span className="text-xs font-semibold">
-                                {Math.round(mealTotals.fats)}g
-                              </span>
-                            </div>
-                          </Chip>
-                        </div>
-                      </div>
+            {/* ── Weekly Shopping List ────────────────────────────────── */}
+            {shoppingList.length > 0 && (
+              <section>
+                <div
+                  className="flex items-center justify-between mb-3 cursor-pointer group"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setShoppingListOpen((o) => !o)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && setShoppingListOpen((o) => !o)
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      className="text-primary text-lg"
+                      icon="solar:cart-large-2-bold"
+                    />
+                    <h2 className="text-base font-bold font-heading text-foreground">
+                      Lista de Compras Semanal
+                    </h2>
+                    <span className="text-xs text-foreground/50 font-body">
+                      · {shoppingList.length} producto
+                      {shoppingList.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <Icon
+                    className="text-foreground/40 text-lg transition-transform group-hover:text-foreground/60"
+                    icon={
+                      shoppingListOpen
+                        ? "solar:alt-arrow-up-linear"
+                        : "solar:alt-arrow-down-linear"
+                    }
+                  />
+                </div>
 
-                      {/* Expanded Content - Ingredients */}
-                      {isExpanded && (
-                        <div className="mt-4 space-y-3">
-                          <div className="border-t border-default-200 pt-3">
-                            <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                {shoppingListOpen && (
+                  <Card className="border border-default-200 shadow-sm">
+                    <CardBody className="p-3">
+                      <div className="space-y-1">
+                        {shoppingList.map((item) => (
+                          <div
+                            key={item.name}
+                            className="flex items-center justify-between bg-default-50 rounded-lg px-3 py-2.5"
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
                               <Icon
-                                className="text-primary"
-                                icon="solar:list-check-bold"
+                                className="text-primary flex-shrink-0"
+                                icon="solar:check-circle-bold"
+                                width={16}
                               />
-                              Ingredientes
-                            </h4>
-                            <div className="space-y-2">
-                              {meal.ingredients &&
-                              meal.ingredients.length > 0 ? (
-                                meal.ingredients.map((ingredient) => (
-                                  <div
-                                    key={ingredient.id}
-                                    className="flex items-start justify-between bg-default-50 rounded-lg p-3"
-                                  >
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-foreground">
-                                        {ingredient.name}
-                                      </p>
-                                      <p className="text-xs text-foreground/60">
-                                        {ingredient.quantity} {ingredient.unit}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-xs text-foreground/60 text-center py-2">
-                                  No hay ingredientes especificados
-                                </p>
-                              )}
+                              <p className="text-sm font-medium text-foreground font-body truncate">
+                                {item.name}
+                              </p>
                             </div>
+                            <p className="text-xs text-foreground/60 font-body flex-shrink-0 ml-3">
+                              {item.entries
+                                .map(
+                                  (e) =>
+                                    `${e.quantity}${e.unit ? ` ${e.unit}` : ""}`
+                                )
+                                .join(" + ")}
+                            </p>
                           </div>
-                        </div>
-                      )}
+                        ))}
+                      </div>
                     </CardBody>
                   </Card>
-                );
-              })}
-            </div>
+                )}
+              </section>
+            )}
           </div>
         </div>
       </div>
       <ClientBottomNav />
     </>
+  );
+}
+
+// ─── Meal card sub-component ───────────────────────────────────────────────
+
+function MealCard({
+  meal,
+  expandedMeals,
+  onToggle,
+}: {
+  meal: NutritionMealWithIngredients;
+  expandedMeals: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const isExpanded = expandedMeals.has(meal.id);
+
+  return (
+    <Card className="border border-default-200 shadow-sm">
+      <CardBody className="p-4">
+        <div
+          aria-expanded={isExpanded}
+          className="cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onClick={() => onToggle(meal.id)}
+          onKeyDown={(e) => e.key === "Enter" && onToggle(meal.id)}
+        >
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="bg-primary/10 p-2.5 rounded-xl flex-shrink-0">
+                <Icon className="text-primary text-lg" icon="solar:dish-bold" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-foreground font-heading">
+                  {meal.label}
+                </h3>
+                <p className="text-xs text-foreground/50 font-body">
+                  {meal.ingredients.length} ingrediente
+                  {meal.ingredients.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <Icon
+              className="text-foreground/40 text-lg flex-shrink-0 mt-1"
+              icon={
+                isExpanded
+                  ? "solar:alt-arrow-up-linear"
+                  : "solar:alt-arrow-down-linear"
+              }
+            />
+          </div>
+
+          {meal.notes && (
+            <p className="text-xs text-foreground/60 mb-2 font-body">
+              {meal.notes}
+            </p>
+          )}
+
+          <MacroRow
+            calories={meal.calories || 0}
+            carbs={meal.carbs || 0}
+            fats={meal.fats || 0}
+            protein={meal.protein || 0}
+          />
+        </div>
+
+        {isExpanded && (
+          <div className="mt-3 pt-3 border-t border-default-200">
+            <h4 className="text-xs font-semibold text-foreground/70 mb-2 flex items-center gap-1.5 font-heading">
+              <Icon
+                className="text-primary"
+                icon="solar:list-check-bold"
+                width={14}
+              />
+              Ingredientes
+            </h4>
+            <div className="space-y-1.5">
+              {meal.ingredients && meal.ingredients.length > 0 ? (
+                meal.ingredients.map((ingredient) => (
+                  <div
+                    key={ingredient.id}
+                    className="flex items-center justify-between bg-default-50 rounded-lg px-3 py-2"
+                  >
+                    <p className="text-sm font-medium text-foreground font-body">
+                      {ingredient.name}
+                    </p>
+                    <p className="text-xs text-foreground/50 font-body flex-shrink-0 ml-2">
+                      {ingredient.quantity} {ingredient.unit}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-foreground/50 text-center py-2 font-body">
+                  No hay ingredientes especificados
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }

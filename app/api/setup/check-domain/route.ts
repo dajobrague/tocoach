@@ -27,25 +27,39 @@ function generateSlugSuggestions(baseSlug: string): string[] {
   ].filter((suggestion) => suggestion !== baseSlug);
 }
 
+// Support both GET (?desired=...) and POST ({ domain: ... })
+export async function GET(request: NextRequest) {
+  const desired = request.nextUrl.searchParams.get("desired");
+
+  if (!desired) {
+    return NextResponse.json({ error: "Slug requerido" }, { status: 400 });
+  }
+
+  return handleCheck(desired);
+}
+
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const slug = body.domain || body.desired;
+
+  if (!slug) {
+    return NextResponse.json({ error: "Slug requerido" }, { status: 400 });
+  }
+
+  return handleCheck(slug);
+}
+
+async function handleCheck(rawSlug: string) {
   const supabase = createSupabaseClient();
 
   try {
-    // Check authentication
     const session = await getTrainerSession();
 
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { domain: slug } = body; // Keep parameter name for backward compatibility
-
-    if (!slug || typeof slug !== "string") {
-      return NextResponse.json({ error: "Slug requerido" }, { status: 400 });
-    }
-
-    const normalizedSlug = slug.toLowerCase().trim();
+    const normalizedSlug = rawSlug.toLowerCase().trim();
 
     // Validate slug format
     if (!validateSlugFormat(normalizedSlug)) {

@@ -1,11 +1,23 @@
-export default function ClientLayout({
+import { ClientDataProvider } from "@/components/client-dashboard/client-data-provider";
+
+/**
+ * Lightweight layout for the client app.
+ *
+ * All data fetching (client profile, tenant context) happens client-side
+ * via the ClientDataProvider which calls /api/client/bootstrap and caches
+ * the result with TanStack Query.
+ *
+ * Authentication is enforced by the middleware — no server-side DB calls
+ * are needed here, which makes page transitions instant.
+ */
+export default async function ClientLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ slug: string }>;
 }) {
-  // Simple layout wrapper for client routes
-  // Individual pages handle their own authentication checks
-  // Bottom nav is conditionally rendered in authenticated pages
+  const { slug } = await params;
 
-  return <>{children}</>;
+  return <ClientDataProvider tenantSlug={slug}>{children}</ClientDataProvider>;
 }

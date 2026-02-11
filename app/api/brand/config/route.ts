@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // Get current tenant info - use trainer_id instead of tenant_id
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("slug, host, theme_slug, theme_json")
+      .select("slug, host, theme_slug, theme_json, logo_url")
       .eq("trainer_id", session.trainer_id)
       .single();
 
@@ -35,11 +35,16 @@ export async function GET(request: NextRequest) {
       host: string;
       theme_slug: string;
       theme_json: Record<string, any>;
+      logo_url: string | null;
     };
+
+    // Resolve logo URL: prefer the direct column, fallback to theme_json
+    const logoUrl =
+      tenantData.logo_url || tenantData.theme_json?.assets?.logo || null;
 
     return NextResponse.json({
       slug: tenantData.slug,
-      logo_url: null, // Not stored in tenants table
+      logo_url: logoUrl,
       brand_name: tenantData.slug,
       theme_json: tenantData.theme_json || {},
       theme_slug: tenantData.theme_slug,
@@ -105,12 +110,20 @@ export async function PATCH(request: NextRequest) {
       }),
     };
 
+    // Build the update payload
+    const updatePayload: Record<string, any> = {
+      theme_json: updatedTheme,
+    };
+
+    // Also update top-level logo_url if provided
+    if (body.logo_url !== undefined) {
+      updatePayload.logo_url = body.logo_url;
+    }
+
     // Update tenant
     const { error: updateError } = await (supabase
       .from("tenants")
-      .update({
-        theme_json: updatedTheme,
-      })
+      .update(updatePayload)
       .eq("trainer_id", session.trainer_id) as any);
 
     if (updateError) {

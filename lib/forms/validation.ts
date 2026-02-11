@@ -1,10 +1,12 @@
 // Validation functions for the dynamic forms system
 
 import {
+  FormConfigData,
   FormResponseSubmission,
   QuestionConfig,
   ValidationError,
   ValidationResult,
+  isStructuredConfig,
 } from "./types";
 
 /**
@@ -119,16 +121,48 @@ export function validateQuestionConfig(question: any): ValidationResult {
 }
 
 /**
- * Validates an array of question configurations
+ * Validates an array of question configurations or the new structured format.
+ * Accepts both legacy QuestionConfig[] and new { pages, questions } format.
  */
-export function validateQuestionsConfig(questions: any[]): ValidationResult {
+export function validateQuestionsConfig(config: any): ValidationResult {
   const errors: ValidationError[] = [];
 
-  if (!Array.isArray(questions)) {
+  // Determine which format we're dealing with
+  let questions: any[];
+
+  if (
+    config &&
+    typeof config === "object" &&
+    !Array.isArray(config) &&
+    "pages" in config &&
+    "questions" in config
+  ) {
+    // New structured format: { pages: FormPage[], questions: QuestionConfig[] }
+    if (!Array.isArray(config.pages)) {
+      return {
+        valid: false,
+        errors: [{ field: "pages", message: "Pages must be an array" }],
+      };
+    }
+    if (!Array.isArray(config.questions)) {
+      return {
+        valid: false,
+        errors: [{ field: "questions", message: "Questions must be an array" }],
+      };
+    }
+    questions = config.questions;
+  } else if (Array.isArray(config)) {
+    // Legacy format: plain array
+    questions = config;
+  } else {
     return {
       valid: false,
       errors: [
-        { field: "questions", message: "Questions config must be an array" },
+        {
+          field: "questions",
+          message:
+            "Questions config must be an array or an object with { pages, questions }",
+        },
       ],
     };
   }
@@ -221,17 +255,25 @@ export function shouldShowQuestion(
 }
 
 /**
- * Validates a form response against its configuration
+ * Validates a form response against its configuration.
+ * Accepts both legacy flat arrays and structured { pages, questions } configs.
  */
 export function validateFormResponse(
   submission: FormResponseSubmission,
-  config: QuestionConfig[]
+  config: QuestionConfig[] | FormConfigData
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const { answers } = submission;
 
+  // Normalize: extract the questions array from either format
+  const questionsArray: QuestionConfig[] = isStructuredConfig(config)
+    ? config.questions
+    : Array.isArray(config)
+      ? config
+      : [];
+
   // Get only enabled questions
-  const enabledQuestions = getEnabledQuestions(config);
+  const enabledQuestions = getEnabledQuestions(questionsArray);
 
   // Check required fields
   enabledQuestions.forEach((question) => {

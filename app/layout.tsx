@@ -193,7 +193,7 @@ export default async function RootLayout({
           rel="preconnect"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Playfair+Display:wght@400;500;600;700&family=Lato:wght@300;400;700&family=Roboto+Slab:wght@400;700&family=Open+Sans:wght@300;400;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&family=Lato:wght@300;400;700&family=Playfair+Display:wght@400;500;600;700&family=Roboto+Slab:wght@300;400;500;700&family=Nunito:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link href={brandCSSUrl} rel="stylesheet" />

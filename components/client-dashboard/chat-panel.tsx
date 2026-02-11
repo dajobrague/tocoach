@@ -165,8 +165,8 @@ export function ChatPanel({
 
       {/* Chat Panel */}
       <div
-        className={`fixed top-0 right-0 h-[calc(100vh-4rem)] w-full md:w-96 bg-background z-50 shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${
-          isOpen ? "translate-x-0" : "translate-x-full"
+        className={`fixed top-0 right-0 h-[calc(100vh-4rem)] w-full md:w-96 bg-background z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+          isOpen ? "translate-x-0 md:shadow-2xl" : "translate-x-full"
         }`}
       >
         {/* Header */}

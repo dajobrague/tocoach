@@ -46,8 +46,7 @@ export default function ReviewSetup() {
               </div>
             </div>
             <Button
-              className="text-white"
-              color="primary"
+              className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
               onPress={() => actions.setStep(1)}
@@ -149,8 +148,7 @@ export default function ReviewSetup() {
               </div>
             </div>
             <Button
-              className="text-white"
-              color="primary"
+              className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
               onPress={() => actions.setStep(2)}
@@ -222,11 +220,10 @@ export default function ReviewSetup() {
               </div>
             </div>
             <Button
-              className="text-white"
-              color="primary"
+              className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
-              onPress={() => actions.setStep(2)}
+              onPress={() => actions.setStep(3)}
             >
               Editar
             </Button>
@@ -260,7 +257,9 @@ export default function ReviewSetup() {
                     </p>
                     <p
                       className="text-xl font-bold"
-                      style={{ fontFamily: state.fonts.heading.family }}
+                      style={{
+                        fontFamily: `'${state.fonts.heading.family}', sans-serif`,
+                      }}
                     >
                       {state.fonts.heading.family}
                     </p>
@@ -271,7 +270,9 @@ export default function ReviewSetup() {
                     </p>
                     <p
                       className="text-base"
-                      style={{ fontFamily: state.fonts.body.family }}
+                      style={{
+                        fontFamily: `'${state.fonts.body.family}', sans-serif`,
+                      }}
                     >
                       {state.fonts.body.family}
                     </p>
@@ -280,11 +281,10 @@ export default function ReviewSetup() {
               </div>
             </div>
             <Button
-              className="text-white"
-              color="primary"
+              className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
-              onPress={() => actions.setStep(2)}
+              onPress={() => actions.setStep(4)}
             >
               Editar
             </Button>

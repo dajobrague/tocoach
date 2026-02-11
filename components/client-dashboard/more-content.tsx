@@ -6,26 +6,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { LogoutButton } from "@/components/client-dashboard/logout-button";
 
-interface MoreContentProps {
-  clientId: string;
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  tenantSlug: string;
-}
-
-export function MoreContent({
-  clientId,
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  tenantSlug,
-}: MoreContentProps) {
+export function MoreContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
   const pathname = usePathname();
 
   // Extract slug from pathname (e.g., /ironfit/mas -> ironfit)

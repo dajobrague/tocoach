@@ -135,21 +135,87 @@ export async function GET(
 
     let config = existingConfig;
 
-    // If config doesn't exist, return success with no config (frontend will handle this gracefully)
+    // If config doesn't exist, auto-create from the tenant's template
     if (!config) {
       console.log(
         "[Forms Configs] No config found for client:",
         clientId,
-        formType
+        formType,
+        "— auto-creating from template"
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No config found",
-        },
-        { status: 404 }
+      // Look for the tenant's active template for this form type
+      const { data: template, error: templateError } = await supabase
+        .from("form_templates")
+        .select("id, questions_config")
+        .eq("tenant_host", tenantHost)
+        .eq("form_type", formType)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (templateError) {
+        console.error(
+          "[Forms Configs] Error fetching template:",
+          templateError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al obtener plantilla" },
+          { status: 500 }
+        );
+      }
+
+      if (!template) {
+        console.log(
+          "[Forms Configs] No template found for tenant:",
+          tenantHost,
+          formType
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No se encontró plantilla para este formulario",
+          },
+          { status: 404 }
+        );
+      }
+
+      // Create the client config from the template
+      const { data: newConfig, error: insertError } = await supabase
+        .from("client_form_configs")
+        .insert({
+          tenant_host: tenantHost,
+          client_id: clientId,
+          form_type: formType,
+          questions_config: template.questions_config,
+          uses_template: true,
+          template_id: template.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error(
+          "[Forms Configs] Error creating config from template:",
+          insertError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Error al crear configuración del formulario",
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        "[Forms Configs] Auto-created config for client:",
+        clientId,
+        formType
       );
+      config = newConfig;
     }
 
     return NextResponse.json({

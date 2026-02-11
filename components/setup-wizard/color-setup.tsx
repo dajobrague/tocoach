@@ -364,11 +364,16 @@ export default function ColorSetup() {
     actions.setShadowColor("dark", palette.shadows.dark);
   };
 
-  const handleHexInput = (color: string, setter: () => void) => {
-    const hexRegex = /^#[0-9A-F]{6}$/i;
+  const handleHexInput = (
+    rawValue: string,
+    onChange: (color: string) => void
+  ) => {
+    // Remove any # prefix since it's shown visually via startContent
+    const cleaned = rawValue.replace(/^#+/, "");
+    const hexRegex = /^[0-9A-F]{6}$/i;
 
-    if (hexRegex.test(color)) {
-      setter();
+    if (hexRegex.test(cleaned)) {
+      onChange(`#${cleaned}`);
     }
   };
 
@@ -386,29 +391,23 @@ export default function ColorSetup() {
     <div className="space-y-3">
       <label className="text-sm font-medium text-black">{label}</label>
       <div className="flex items-center gap-4">
-        <Button
-          className="w-16 h-16 p-1 border-2 border-gray-300 flex-shrink-0"
+        <button
+          className="w-16 h-16 rounded-lg border-2 border-gray-300 flex-shrink-0 cursor-pointer hover:border-gray-400 transition-colors"
           style={{ backgroundColor: color }}
-          onPress={() =>
+          type="button"
+          onClick={() =>
             setActiveColorPicker(
               activeColorPicker === pickerId ? null : pickerId
             )
           }
-        >
-          <div
-            className="w-full h-full rounded-lg"
-            style={{ backgroundColor: color }}
-          />
-        </Button>
+        />
         <Input
           className="font-mono flex-1"
           description="Código hexadecimal"
-          placeholder="#3b82f6"
-          startContent="#"
-          value={color}
-          onValueChange={(value) =>
-            handleHexInput(value, () => onChange(value))
-          }
+          placeholder="3b82f6"
+          startContent={<span className="text-gray-400">#</span>}
+          value={color.replace(/^#/, "")}
+          onValueChange={(value) => handleHexInput(value, onChange)}
         />
       </div>
 
@@ -760,7 +759,7 @@ export default function ColorSetup() {
         </Button>
 
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           endContent={<Icon icon="solar:arrow-right-linear" />}
           size="lg"
           onPress={actions.nextStep}

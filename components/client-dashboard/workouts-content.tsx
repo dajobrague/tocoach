@@ -12,25 +12,27 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalHeader,
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log-modal";
 import { RescheduleModal } from "@/components/client-dashboard/reschedule-modal";
 import { VideoPlayerModal } from "@/components/client-dashboard/video-player-modal";
-
-interface WorkoutsContentProps {
-  clientId: string;
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  tenantSlug: string;
-}
+import {
+  useExerciseLogs,
+  usePrograms,
+  useScheduledSessions,
+} from "@/lib/hooks/use-client-queries";
 
 type SessionStatus = "completed" | "pending" | "rest" | "in-progress";
 
@@ -48,18 +50,33 @@ interface ScheduledSession {
   dayOfWeek: string;
 }
 
-export function WorkoutsContent({
-  clientId,
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  tenantSlug,
-}: WorkoutsContentProps) {
-  const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const activePrograms = programs.filter((p) => p.status === "active");
+export function WorkoutsContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
+  // ─── TanStack Query: cached data, no content flash on refetch ───────────
+  const queryClient = useQueryClient();
+
+  const {
+    data: programs = [],
+    isLoading: isLoadingPrograms,
+    error: programsError,
+    refetch: refetchPrograms,
+  } = usePrograms();
+  const { data: exerciseLogs = [] } = useExerciseLogs(clientId);
+  const { data: scheduledSessionsData = [] } = useScheduledSessions(clientId);
+
+  const isLoading = isLoadingPrograms;
+  const error = programsError ? (programsError as Error).message : null;
+  const activePrograms = programs.filter(
+    (p: WorkoutProgram) => p.status === "active"
+  );
+
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set()
   );
@@ -67,14 +84,11 @@ export function WorkoutsContent({
     new Set()
   );
 
-  // Exercise logs and scheduled sessions data
-  const [exerciseLogs, setExerciseLogs] = useState<any[]>([]);
-  const [scheduledSessionsData, setScheduledSessionsData] = useState<any[]>([]);
-
   // Modal states
   const [isExerciseLogModalOpen, setIsExerciseLogModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Selected items for modals
   const [selectedExercise, setSelectedExercise] = useState<any>(null);
@@ -85,83 +99,9 @@ export function WorkoutsContent({
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
   const [selectedVideoExerciseName, setSelectedVideoExerciseName] =
     useState("");
-
-  const fetchExerciseLogs = async () => {
-    try {
-      // Calculate date range (-14 to +21 days)
-      const today = new Date();
-      const startDate = new Date(today);
-
-      startDate.setDate(today.getDate() - 14);
-      const endDate = new Date(today);
-
-      endDate.setDate(today.getDate() + 21);
-
-      const response = await fetch(
-        `/api/clients/${clientId}/exercise-logs?startDate=${startDate.toISOString().split("T")[0]}&endDate=${endDate.toISOString().split("T")[0]}`
-      );
-      const data = await response.json();
-
-      if (data.success) {
-        setExerciseLogs(data.exerciseLogs || []);
-      }
-    } catch (err) {
-      console.error("[WorkoutsContent] Error fetching exercise logs:", err);
-    }
-  };
-
-  const fetchScheduledSessions = async () => {
-    try {
-      // Calculate date range (-14 to +21 days)
-      const today = new Date();
-      const startDate = new Date(today);
-
-      startDate.setDate(today.getDate() - 14);
-      const endDate = new Date(today);
-
-      endDate.setDate(today.getDate() + 21);
-
-      const response = await fetch(
-        `/api/clients/${clientId}/scheduled-sessions?startDate=${startDate.toISOString().split("T")[0]}&endDate=${endDate.toISOString().split("T")[0]}`
-      );
-      const data = await response.json();
-
-      if (data.success) {
-        setScheduledSessionsData(data.scheduledSessions || []);
-      }
-    } catch (err) {
-      console.error(
-        "[WorkoutsContent] Error fetching scheduled sessions:",
-        err
-      );
-    }
-  };
-
-  const fetchPrograms = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/client/programs");
-      const data = await response.json();
-
-      if (data.success) {
-        setPrograms(data.programs || []);
-        // Also fetch logs and scheduled sessions
-        await Promise.all([fetchExerciseLogs(), fetchScheduledSessions()]);
-      } else {
-        setError(data.error || "Error al cargar programas");
-      }
-    } catch (err) {
-      console.error("[WorkoutsContent] Error fetching programs:", err);
-      setError("Error al cargar programas");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPrograms();
-  }, [clientId]);
+  const [selectedImageUrl, setSelectedImageUrl] = useState("");
+  const [selectedImageExerciseName, setSelectedImageExerciseName] =
+    useState("");
 
   const toggleSession = (sessionId: string) => {
     const newExpanded = new Set(expandedSessions);
@@ -191,7 +131,8 @@ export function WorkoutsContent({
     if (!exerciseId || !date) return false;
 
     return exerciseLogs.some(
-      (log) => log.exercise_id === exerciseId && log.scheduled_date === date
+      (log: any) =>
+        log.exercise_id === exerciseId && log.scheduled_date === date
     );
   };
 
@@ -203,7 +144,8 @@ export function WorkoutsContent({
     if (!exerciseId || !date) return undefined;
 
     return exerciseLogs.find(
-      (log) => log.exercise_id === exerciseId && log.scheduled_date === date
+      (log: any) =>
+        log.exercise_id === exerciseId && log.scheduled_date === date
     );
   };
 
@@ -243,6 +185,13 @@ export function WorkoutsContent({
     setSelectedVideoUrl(videoUrl);
     setSelectedVideoExerciseName(exerciseName);
     setIsVideoModalOpen(true);
+  };
+
+  // Handle image modal
+  const handleOpenImage = (imageUrl: string, exerciseName: string) => {
+    setSelectedImageUrl(imageUrl);
+    setSelectedImageExerciseName(exerciseName);
+    setIsImageModalOpen(true);
   };
 
   const formatDate = (date: Date) => {
@@ -288,10 +237,12 @@ export function WorkoutsContent({
       // Find matching sessions for this day from ALL active programs
       for (const activeProgram of activePrograms) {
         const matchingSession = activeProgram.sessions.find(
-          (s) =>
+          (s: any) =>
             dayOfWeek &&
             Array.isArray(s.dayOfWeek) &&
-            s.dayOfWeek.some((d) => d.startsWith(dayOfWeek.substring(0, 3)))
+            s.dayOfWeek.some((d: string) =>
+              d.startsWith(dayOfWeek.substring(0, 3))
+            )
         );
 
         if (matchingSession) {
@@ -573,16 +524,35 @@ export function WorkoutsContent({
                     className={`p-3 ${isToday ? "bg-white/10 border border-white/20" : "bg-default-50"} rounded-lg hover:${isToday ? "bg-white/15" : "bg-default-100"} transition-colors w-full`}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Exercise Number Badge */}
-                      <div
-                        className={`w-7 h-7 ${isToday ? "bg-white" : "bg-primary"} rounded-full flex items-center justify-center flex-shrink-0`}
-                      >
-                        <span
-                          className={`text-xs font-bold ${isToday ? "text-primary" : "text-white"}`}
+                      {/* Exercise Thumbnail or Number Badge */}
+                      {exercise.imageUrl ? (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative">
+                          <img
+                            alt={exercise.name}
+                            className="w-full h-full object-cover"
+                            src={exercise.imageUrl}
+                          />
+                          <div
+                            className={`absolute bottom-0 right-0 w-4 h-4 ${isToday ? "bg-white" : "bg-primary"} rounded-tl-md flex items-center justify-center`}
+                          >
+                            <span
+                              className={`text-[8px] font-bold ${isToday ? "text-primary" : "text-white"}`}
+                            >
+                              {exercise.order}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className={`w-7 h-7 ${isToday ? "bg-white" : "bg-primary"} rounded-full flex items-center justify-center flex-shrink-0`}
                         >
-                          {exercise.order}
-                        </span>
-                      </div>
+                          <span
+                            className={`text-xs font-bold ${isToday ? "text-primary" : "text-white"}`}
+                          >
+                            {exercise.order}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Exercise Info - Fixed Layout */}
                       <div className="flex-1 min-w-0">
@@ -890,7 +860,7 @@ export function WorkoutsContent({
                                           ? "text-white/60"
                                           : "text-secondary"
                                       }
-                                      icon="solar:speedometer-bold"
+                                      icon="solar:stopwatch-bold"
                                       width={14}
                                     />
                                     <span
@@ -950,6 +920,30 @@ export function WorkoutsContent({
                         className="flex items-start gap-2 flex-shrink-0"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {/* Image Button */}
+                        {exercise.imageUrl && (
+                          <Button
+                            isIconOnly
+                            className={`h-8 w-8 min-w-8 ${isToday ? "bg-white/20" : ""}`}
+                            size="sm"
+                            variant="flat"
+                            onPress={() =>
+                              handleOpenImage(
+                                exercise.imageUrl || "",
+                                exercise.name
+                              )
+                            }
+                          >
+                            <Icon
+                              className={
+                                isToday ? "text-white" : "text-secondary"
+                              }
+                              icon="solar:gallery-bold"
+                              width={18}
+                            />
+                          </Button>
+                        )}
+
                         {/* Video Button */}
                         {exercise.videoUrl && (
                           <Button
@@ -1068,7 +1062,7 @@ export function WorkoutsContent({
                     startContent={
                       <Icon icon="solar:refresh-linear" width={18} />
                     }
-                    onPress={fetchPrograms}
+                    onPress={() => refetchPrograms()}
                   >
                     Reintentar
                   </Button>
@@ -1204,7 +1198,13 @@ export function WorkoutsContent({
         scheduledDate={selectedExercise?.scheduledDate || ""}
         sessionId={selectedExercise?.sessionId || ""}
         onClose={() => setIsExerciseLogModalOpen(false)}
-        onSuccess={fetchPrograms}
+        onSuccess={() => {
+          // Invalidate exercise logs — TanStack Query refetches in the
+          // background while keeping current data visible (no spinner).
+          queryClient.invalidateQueries({
+            queryKey: ["client", "exerciseLogs", clientId],
+          });
+        }}
       />
 
       <RescheduleModal
@@ -1214,7 +1214,11 @@ export function WorkoutsContent({
         scheduledSessionId={selectedScheduledSessionId}
         sessionName={selectedRescheduleSession?.sessionName || ""}
         onClose={() => setIsRescheduleModalOpen(false)}
-        onSuccess={fetchPrograms}
+        onSuccess={() => {
+          queryClient.invalidateQueries({
+            queryKey: ["client", "scheduledSessions", clientId],
+          });
+        }}
       />
 
       <VideoPlayerModal
@@ -1223,6 +1227,49 @@ export function WorkoutsContent({
         videoUrl={selectedVideoUrl}
         onClose={() => setIsVideoModalOpen(false)}
       />
+
+      {/* Image Preview Modal */}
+      <Modal
+        classNames={{
+          base: "max-h-[90vh]",
+          header: "border-b border-default-200",
+          body: "p-0",
+        }}
+        isOpen={isImageModalOpen}
+        placement="center"
+        size="3xl"
+        onClose={() => setIsImageModalOpen(false)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="bg-secondary p-2 rounded-lg">
+                <Icon
+                  className="text-white text-xl"
+                  icon="solar:gallery-bold"
+                />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-heading font-bold text-foreground">
+                  {selectedImageExerciseName}
+                </h3>
+                <p className="text-sm text-foreground/60 font-body font-normal">
+                  Referencia del Ejercicio
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <div className="w-full p-4">
+              <img
+                alt={selectedImageExerciseName}
+                className="w-full h-auto rounded-lg object-contain max-h-[70vh]"
+                src={selectedImageUrl}
+              />
+            </div>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </>
   );
 }

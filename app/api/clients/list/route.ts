@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
           // Mock data for now - will be implemented later
           currentProgram: null,
           totalPrograms: 0,
-          lastLogin: null,
+          lastLogin: client.last_login_at || null,
         };
       }) || [];
 

@@ -2,9 +2,21 @@
 
 import { Button, Card, CardBody, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useSetupWizard } from "@/lib/setup-wizard/context";
+
+// Load Google Fonts for preview
+const ALL_PREVIEW_FONTS = [
+  "Poppins",
+  "Inter",
+  "Roboto",
+  "Open+Sans",
+  "Montserrat",
+  "Lato",
+  "Playfair+Display",
+  "Merriweather",
+];
 
 // Popular Google Fonts for coaching platforms
 const FONT_OPTIONS = [
@@ -98,6 +110,21 @@ export default function TypographySetup() {
   const [customFontTarget, setCustomFontTarget] = useState<"heading" | "body">(
     "heading"
   );
+
+  // Load all preview fonts on mount
+  useEffect(() => {
+    const families = ALL_PREVIEW_FONTS.join("&family=");
+    const href = `https://fonts.googleapis.com/css2?family=${families}:wght@300;400;500;600;700&display=swap`;
+    const existingLink = document.querySelector(`link[href="${href}"]`);
+
+    if (!existingLink) {
+      const link = document.createElement("link");
+
+      link.href = href;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+  }, []);
 
   const handleFontPairingSelect = (pairing: (typeof FONT_PAIRINGS)[0]) => {
     actions.setHeadingFont(pairing.heading.family, pairing.heading.weights);
@@ -230,7 +257,7 @@ export default function TypographySetup() {
 
           <p
             className={`${type === "heading" ? "text-xl font-semibold" : "text-sm"}`}
-            style={{ fontFamily: font.family }}
+            style={{ fontFamily: `'${font.family}', sans-serif` }}
           >
             {font.preview}
           </p>
@@ -278,13 +305,17 @@ export default function TypographySetup() {
                   <div className="space-y-1">
                     <p
                       className="text-sm font-semibold"
-                      style={{ fontFamily: pairing.heading.family }}
+                      style={{
+                        fontFamily: `'${pairing.heading.family}', sans-serif`,
+                      }}
                     >
                       {pairing.heading.family}
                     </p>
                     <p
                       className="text-xs text-gray-600"
-                      style={{ fontFamily: pairing.body.family }}
+                      style={{
+                        fontFamily: `'${pairing.body.family}', sans-serif`,
+                      }}
                     >
                       {pairing.body.family}
                     </p>
@@ -456,7 +487,7 @@ export default function TypographySetup() {
         </Button>
 
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           endContent={<Icon icon="solar:arrow-right-linear" />}
           size="lg"
           onPress={actions.nextStep}

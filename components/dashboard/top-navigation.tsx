@@ -24,6 +24,8 @@ import { type SidebarItem } from "./sidebar";
 export interface TopNavigationProps {
   trainerName?: string;
   trainerEmail?: string;
+  trainerImage?: string;
+  brandLogo?: string;
   onLogout?: () => void;
   items: SidebarItem[];
   activeSection: string;
@@ -34,6 +36,8 @@ export interface TopNavigationProps {
 export default function TopNavigation({
   trainerName,
   trainerEmail,
+  trainerImage,
+  brandLogo,
   onLogout,
   items,
   activeSection,
@@ -64,9 +68,17 @@ export default function TopNavigation({
     >
       {/* Logo/Brand */}
       <NavbarBrand>
-        <div className="bg-black flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">
-          <span className="text-white font-bold text-sm">TC</span>
-        </div>
+        {brandLogo ? (
+          <img
+            alt="Logo"
+            className="h-9 w-9 rounded-lg object-contain"
+            src={brandLogo}
+          />
+        ) : (
+          <div className="bg-black flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">
+            <span className="text-white font-bold text-sm">TC</span>
+          </div>
+        )}
         <div className="hidden sm:flex flex-col">
           <p className="font-bold text-lg text-gray-900 leading-none">
             TOP COACH
@@ -162,6 +174,7 @@ export default function TopNavigation({
                     name={trainerName || ""}
                     radius="lg"
                     size="sm"
+                    src={trainerImage ?? ""}
                   />
                 </Badge>
                 <div className="hidden lg:flex flex-col items-start">
@@ -189,25 +202,6 @@ export default function TopNavigation({
                 }
               }}
             >
-              <DropdownItem
-                key="profile"
-                className="h-14 gap-2"
-                textValue="Profile info"
-              >
-                <div className="flex items-center gap-2">
-                  <Avatar
-                    isBordered
-                    color="primary"
-                    name={trainerName || ""}
-                    radius="lg"
-                    size="sm"
-                  />
-                  <div>
-                    <p className="font-semibold text-sm">{trainerName}</p>
-                    <p className="text-xs text-gray-500">{trainerEmail}</p>
-                  </div>
-                </div>
-              </DropdownItem>
               <DropdownItem
                 key="settings"
                 startContent={<Icon icon="solar:settings-linear" width={18} />}
@@ -254,9 +248,7 @@ export default function TopNavigation({
               startContent={
                 <Icon
                   className={
-                    activeSection === item.key
-                      ? "text-black"
-                      : "text-gray-500"
+                    activeSection === item.key ? "text-black" : "text-gray-500"
                   }
                   icon={item.icon || ""}
                   width={22}

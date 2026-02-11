@@ -6,7 +6,7 @@ import React from "react";
 // Force recompile v3 - Fixed redirect loop with multi-guard system
 
 import AyudaContent from "@/components/dashboard/ayuda-content";
-import BrandSettingsContent from "@/components/dashboard/brand-settings-content";
+import SettingsContent from "@/components/dashboard/settings-content";
 import ClientsContent from "@/components/dashboard/clients-content";
 import ExerciseLibraryContent from "@/components/dashboard/exercise-library-content";
 import FloatingSupportButton from "@/components/dashboard/floating-support-button";
@@ -30,6 +30,8 @@ export default function TrainerDashboard() {
   const [session, setSession] = React.useState<TrainerSession | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [setupJustCompleted, setSetupJustCompleted] = React.useState(false);
+  const [trainerImage, setTrainerImage] = React.useState<string | undefined>();
+  const [brandLogo, setBrandLogo] = React.useState<string | undefined>();
   const [activeSection, setActiveSection] = React.useState(() => {
     // Try to get saved section from localStorage
     if (typeof window !== "undefined") {
@@ -122,6 +124,27 @@ export default function TrainerDashboard() {
         setIsLoading(false);
       });
   }, [router, fetchSession, setupJustCompleted]);
+
+  // Fetch trainer profile picture and brand logo
+  React.useEffect(() => {
+    if (!session) return;
+    fetch("/api/trainer/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.trainer?.profile_picture_url) {
+          setTrainerImage(data.trainer.profile_picture_url);
+        }
+      })
+      .catch(() => {});
+    fetch("/api/brand/config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.logo_url) {
+          setBrandLogo(data.logo_url);
+        }
+      })
+      .catch(() => {});
+  }, [session]);
 
   const handleLogout = async () => {
     try {
@@ -274,7 +297,11 @@ export default function TrainerDashboard() {
       case "ayuda":
         return <AyudaContent />;
       case "brand-settings":
-        return <BrandSettingsContent />;
+        return (
+          <SettingsContent
+            onProfilePictureChange={(url) => setTrainerImage(url)}
+          />
+        );
       default:
         return <MetricasContent />;
     }
@@ -285,8 +312,10 @@ export default function TrainerDashboard() {
       {/* Top Navigation */}
       <TopNavigation
         activeSection={activeSection}
+        brandLogo={brandLogo ?? ""}
         items={filteredSidebarItems}
         trainerEmail={session.email}
+        trainerImage={trainerImage ?? ""}
         trainerName={session.full_name || session.email}
         onHelpClick={handleHelpClick}
         onLogout={handleLogout}

@@ -86,6 +86,15 @@ export async function POST(
     if (existingExercise) {
       exerciseId = existingExercise.id;
       console.log("[Exercises API] Using existing exercise:", exerciseId);
+
+      // If a videoUrl was provided, update the library exercise so the
+      // video is available everywhere this exercise is referenced.
+      if (videoUrl) {
+        await supabase
+          .from("exercises")
+          .update({ video_url: videoUrl })
+          .eq("id", exerciseId);
+      }
     } else {
       // Determine exercise category based on session type
       const exerciseCategory =

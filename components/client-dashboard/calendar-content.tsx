@@ -14,20 +14,12 @@ import { Icon } from "@iconify/react";
 import { useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import {
   getMockCalendarEvents,
   type MockCalendarEvent,
 } from "@/lib/mock-data/client-profile-mock";
-
-interface CalendarContentProps {
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  clientId: string;
-  tenantSlug: string;
-}
 
 const getEventIcon = (type: MockCalendarEvent["type"]) => {
   switch (type) {
@@ -67,14 +59,15 @@ const getEventColor = (type: MockCalendarEvent["type"]) => {
   }
 };
 
-export function CalendarContent({
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  clientId,
-  tenantSlug,
-}: CalendarContentProps) {
+export function CalendarContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
   const allEvents = getMockCalendarEvents("demo-client-id");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

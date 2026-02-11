@@ -39,9 +39,76 @@ async function loadThemeFromDatabase(host: string): Promise<ThemeConfig> {
   }
 }
 
+// Build a Google Fonts @import URL for the heading & body fonts
+function buildGoogleFontsImport(theme: ThemeConfig): string {
+  const headingWeight = theme.fonts.heading.weight;
+  const bodyWeight = theme.fonts.body.weight;
+
+  // System fonts that don't need loading from Google
+  const systemFonts = new Set([
+    "system-ui",
+    "sans-serif",
+    "serif",
+    "monospace",
+    "Arial",
+    "Helvetica",
+    "Times New Roman",
+    "Georgia",
+    "Verdana",
+    "Courier New",
+  ]);
+
+  // Strip CSS fallbacks like "Inter, system-ui, sans-serif" → "Inter"
+  const extractPrimary = (f: string) => (f.split(",")[0] ?? f).trim();
+
+  const hPrimary = extractPrimary(theme.fonts.heading.family);
+  const bPrimary = extractPrimary(theme.fonts.body.family);
+
+  const families: string[] = [];
+
+  if (!systemFonts.has(hPrimary)) {
+    const weights = new Set([400, 500, 600, 700, headingWeight]);
+    const encoded = hPrimary.replace(/ /g, "+");
+    families.push(
+      `family=${encoded}:wght@${[...weights].sort((a, b) => a - b).join(";")}`
+    );
+  }
+
+  if (!systemFonts.has(bPrimary) && bPrimary !== hPrimary) {
+    const weights = new Set([300, 400, 500, 600, 700, bodyWeight]);
+    const encoded = bPrimary.replace(/ /g, "+");
+    families.push(
+      `family=${encoded}:wght@${[...weights].sort((a, b) => a - b).join(";")}`
+    );
+  }
+
+  if (families.length === 0) return "";
+
+  return `@import url('https://fonts.googleapis.com/css2?${families.join("&")}&display=swap');`;
+}
+
+// Format a font-family value for CSS (add quotes and system fallback)
+function cssFontFamily(raw: string): string {
+  // If it already has fallbacks like "Inter, system-ui, sans-serif", quote the primary
+  const parts = raw.split(",").map((p) => p.trim());
+  const primary = (parts[0] ?? raw).replace(/['"]/g, "");
+  // If it has spaces, wrap in quotes
+  const quoted = primary.includes(" ") ? `'${primary}'` : primary;
+  // Add system fallbacks if not already present
+  const hasFallback = parts.length > 1;
+  return hasFallback
+    ? `${quoted}, ${parts.slice(1).join(", ")}`
+    : `${quoted}, system-ui, sans-serif`;
+}
+
 // Generate complete CSS for a theme (same as file-based version)
 function generateThemeCSS(theme: ThemeConfig): string {
+  const fontsImport = buildGoogleFontsImport(theme);
+  const headingFontCSS = cssFontFamily(theme.fonts.heading.family);
+  const bodyFontCSS = cssFontFamily(theme.fonts.body.family);
+
   const css = `
+${fontsImport}
 /* Generated theme CSS for ${theme.meta.name} */
 :root {
   /* Custom theme variables */
@@ -58,8 +125,8 @@ function generateThemeCSS(theme: ThemeConfig): string {
   --color-error: ${theme.semantic?.error || "#ef4444"};
   
   /* Typography */
-  --font-heading: ${theme.fonts.heading.family};
-  --font-body: ${theme.fonts.body.family};
+  --font-heading: ${headingFontCSS};
+  --font-body: ${bodyFontCSS};
   --font-weight-heading: ${theme.fonts.heading.weight};
   --font-weight-body: ${theme.fonts.body.weight};
   
@@ -226,11 +293,11 @@ html .text-secondary {
 
 /* Font family overrides */
 .font-heading {
-  font-family: ${theme.fonts.heading.family} !important;
+  font-family: ${headingFontCSS} !important;
   font-weight: ${theme.fonts.heading.weight} !important;
 }
 .font-body {
-  font-family: ${theme.fonts.body.family} !important;
+  font-family: ${bodyFontCSS} !important;
   font-weight: ${theme.fonts.body.weight} !important;
 }
 
@@ -247,7 +314,7 @@ html body .heroui-chip span,
 html body [role="button"],
 html body .heroui-navbar-item,
 html body .heroui-link {
-  font-family: ${theme.fonts.body.family} !important;
+  font-family: ${bodyFontCSS} !important;
   font-weight: ${theme.fonts.body.weight} !important;
 }
 

@@ -224,7 +224,7 @@ export default function DomainSetup() {
         </Button>
 
         <Button
-          color="primary"
+          className="bg-black text-white hover:bg-slate-800"
           endContent={<Icon icon="solar:arrow-right-linear" />}
           isDisabled={!state.domain.isAvailable || state.domain.isChecking}
           isLoading={state.isLoading}

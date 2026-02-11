@@ -4,25 +4,19 @@ import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 
-interface ProgramsContentProps {
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  clientId: string;
-  tenantSlug: string;
-}
+export function ProgramsContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
 
-export function ProgramsContent({
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  clientId,
-  tenantSlug,
-}: ProgramsContentProps) {
   return (
     <>
       <div className="min-h-screen bg-background pb-20">

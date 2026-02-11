@@ -3,30 +3,105 @@
 import {
   Accordion,
   AccordionItem,
-  Button,
   Card,
   CardBody,
   CardHeader,
   Input,
+  Select,
+  SelectItem,
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React from "react";
 
-export default function AyudaContent() {
-  const [formData, setFormData] = React.useState({
-    name: "",
-    email: "",
-    subject: "",
-    message: "",
-  });
+const priorities = [
+  { key: "low", label: "Baja" },
+  { key: "medium", label: "Media" },
+  { key: "high", label: "Alta" },
+  { key: "urgent", label: "Urgente" },
+];
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Form submitted:", formData);
-    // TODO: Connect to backend API
-    alert("Gracias por contactarnos. Te responderemos pronto.");
-    setFormData({ name: "", email: "", subject: "", message: "" });
+const categories = [
+  { key: "technical", label: "Problema Técnico" },
+  { key: "client", label: "Cliente" },
+  { key: "feature", label: "Solicitud de Función" },
+  { key: "account", label: "Cuenta y Acceso" },
+  { key: "other", label: "Otro" },
+];
+
+export default function AyudaContent() {
+  const [subject, setSubject] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [priority, setPriority] = React.useState("");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitResult, setSubmitResult] = React.useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const canSubmit = subject.trim().length > 0 && description.trim().length > 0;
+
+  const handleSubmit = async () => {
+    if (!subject.trim() || !description.trim()) {
+      setSubmitResult({
+        type: "error",
+        text: "Por favor completa el asunto y la descripción.",
+      });
+
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitResult(null);
+
+    try {
+      const categoryLabel =
+        categories.find((c) => c.key === category)?.label ||
+        category ||
+        "Consulta General";
+      const priorityLabel =
+        priorities.find((p) => p.key === priority)?.label ||
+        priority ||
+        "Media";
+
+      const response = await fetch("/api/support/ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asunto: subject.trim(),
+          categoria: categoryLabel,
+          prioridad: priorityLabel,
+          descripcion: description.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSubmitResult({
+          type: "success",
+          text: "¡Ticket enviado! Te responderemos en las próximas 48 horas.",
+        });
+        setSubject("");
+        setDescription("");
+        setCategory("");
+        setPriority("");
+      } else {
+        setSubmitResult({
+          type: "error",
+          text: data.error || "Error al enviar el mensaje. Intenta de nuevo.",
+        });
+      }
+    } catch (error) {
+      console.error("Error submitting contact form:", error);
+      setSubmitResult({
+        type: "error",
+        text: "Error de conexión. Intenta de nuevo.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const faqs = [
@@ -144,77 +219,109 @@ export default function AyudaContent() {
               </div>
             </CardHeader>
             <CardBody className="p-6">
-              <form className="space-y-4" onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    isRequired
-                    label="Nombre Completo"
-                    labelPlacement="outside"
-                    placeholder="Tu nombre"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:user-linear"
-                        width={20}
-                      />
+              {/* Success/Error Feedback */}
+              {submitResult && (
+                <div
+                  className={`mb-4 px-4 py-3 rounded-lg flex items-center gap-2 ${
+                    submitResult.type === "success"
+                      ? "bg-green-50 text-green-800 border border-green-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  }`}
+                >
+                  <Icon
+                    icon={
+                      submitResult.type === "success"
+                        ? "solar:check-circle-bold"
+                        : "solar:danger-circle-bold"
                     }
-                    value={formData.name}
-                    variant="bordered"
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
+                    width={20}
                   />
-                  <Input
-                    isRequired
-                    label="Correo Electrónico"
-                    labelPlacement="outside"
-                    placeholder="tu@correo.com"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:letter-linear"
-                        width={20}
-                      />
-                    }
-                    type="email"
-                    value={formData.email}
-                    variant="bordered"
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                  />
+                  <p className="text-sm font-medium flex-1">
+                    {submitResult.text}
+                  </p>
+                  <button
+                    className="text-current opacity-60 hover:opacity-100 transition-opacity"
+                    type="button"
+                    onClick={() => setSubmitResult(null)}
+                  >
+                    <Icon icon="solar:close-linear" width={18} />
+                  </button>
                 </div>
+              )}
 
+              <div className="space-y-4">
                 <Input
                   isRequired
+                  isDisabled={isSubmitting}
                   label="Asunto"
                   labelPlacement="outside"
                   placeholder="¿En qué podemos ayudarte?"
                   startContent={
                     <Icon
                       className="text-gray-400"
-                      icon="solar:tag-linear"
+                      icon="solar:document-text-linear"
                       width={20}
                     />
                   }
-                  value={formData.subject}
+                  value={subject}
                   variant="bordered"
-                  onChange={(e) =>
-                    setFormData({ ...formData, subject: e.target.value })
-                  }
+                  onValueChange={setSubject}
                 />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Select
+                    isDisabled={isSubmitting}
+                    label="Categoría"
+                    labelPlacement="outside"
+                    placeholder="Selecciona una categoría"
+                    selectedKeys={category ? [category] : []}
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:tag-linear"
+                        width={20}
+                      />
+                    }
+                    variant="bordered"
+                    onChange={(e) => setCategory(e.target.value)}
+                  >
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.key}>{cat.label}</SelectItem>
+                    ))}
+                  </Select>
+
+                  <Select
+                    isDisabled={isSubmitting}
+                    label="Prioridad"
+                    labelPlacement="outside"
+                    placeholder="Nivel de urgencia"
+                    selectedKeys={priority ? [priority] : []}
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:flag-linear"
+                        width={20}
+                      />
+                    }
+                    variant="bordered"
+                    onChange={(e) => setPriority(e.target.value)}
+                  >
+                    {priorities.map((pri) => (
+                      <SelectItem key={pri.key}>{pri.label}</SelectItem>
+                    ))}
+                  </Select>
+                </div>
 
                 <Textarea
                   isRequired
-                  label="Mensaje"
+                  isDisabled={isSubmitting}
+                  label="Descripción"
                   labelPlacement="outside"
                   minRows={6}
                   placeholder="Describe tu consulta o problema con el mayor detalle posible..."
-                  value={formData.message}
+                  value={description}
                   variant="bordered"
-                  onChange={(e) =>
-                    setFormData({ ...formData, message: e.target.value })
-                  }
+                  onValueChange={setDescription}
                 />
 
                 <div className="flex items-center justify-between pt-2">
@@ -224,20 +331,50 @@ export default function AyudaContent() {
                       icon="solar:clock-circle-linear"
                       width={16}
                     />
-                    Responderemos en menos de 24 horas
+                    Responderemos en menos de 48 horas
                   </p>
-                  <Button
-                    className="px-6"
-                    color="primary"
-                    endContent={
-                      <Icon icon="solar:arrow-right-linear" width={20} />
-                    }
-                    type="submit"
+                  <button
+                    className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      !canSubmit || isSubmitting
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-black text-white hover:bg-slate-800 cursor-pointer"
+                    }`}
+                    disabled={!canSubmit || isSubmitting}
+                    type="button"
+                    onClick={handleSubmit}
                   >
-                    Enviar Mensaje
-                  </Button>
+                    {isSubmitting ? (
+                      <>
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        Enviar Ticket
+                        <Icon icon="solar:arrow-right-linear" width={20} />
+                      </>
+                    )}
+                  </button>
                 </div>
-              </form>
+              </div>
             </CardBody>
           </Card>
         </div>

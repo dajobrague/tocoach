@@ -2,9 +2,11 @@
 
 import { Button, Card, CardBody, Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
@@ -13,120 +15,26 @@ import {
   shouldShowWeeklyCheckIn,
 } from "@/lib/forms/client-helpers";
 import { FormResponse } from "@/lib/forms/types";
+import { useFormResponses, useNeatCards } from "@/lib/hooks/use-client-queries";
 import { ClientNeatCard } from "@/types";
 
-interface DashboardContentProps {
-  firstName: string;
-  logoUrl?: string;
-  trainerName: string;
-  clientProfilePicture?: string;
-  clientId: string;
-  tenantSlug: string;
-}
+export function DashboardContent() {
+  const {
+    clientId,
+    firstName,
+    logoUrl,
+    trainerName,
+    clientProfilePicture,
+    tenantSlug,
+  } = useClientData();
 
-export function DashboardContent({
-  firstName,
-  logoUrl,
-  trainerName,
-  clientProfilePicture,
-  clientId,
-  tenantSlug,
-}: DashboardContentProps) {
+  const queryClient = useQueryClient();
+
   // State
   const [waterIntake, setWaterIntake] = useState(0);
   const [showDailyFormModal, setShowDailyFormModal] = useState(false);
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
-
-  // Form submission tracking
-  const [weeklyResponses, setWeeklyResponses] = useState<FormResponse[]>([]);
-  const [dailyResponses, setDailyResponses] = useState<FormResponse[]>([]);
-  const [isLoadingForms, setIsLoadingForms] = useState(true);
-  const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
-
-  // NEAT cards
-  const [neatCards, setNeatCards] = useState<ClientNeatCard[]>([]);
-  const [hasNeatCards, setHasNeatCards] = useState(false);
-
-  // Check form submission status and fetch NEAT cards
-  useEffect(() => {
-    async function checkFormStatus() {
-      setIsLoadingForms(true);
-      try {
-        // Fetch recent weekly responses (last 2 weeks)
-        const weeklyRes = await fetch(
-          `/api/forms/responses/${clientId}?form_type=checkins&start_date=${getDateDaysAgo(14)}`
-        );
-        const weeklyData = await weeklyRes.json();
-
-        if (weeklyData.success) {
-          setWeeklyResponses(weeklyData.responses || []);
-        }
-
-        // Fetch recent daily responses (last 7 days)
-        const dailyRes = await fetch(
-          `/api/forms/responses/${clientId}?form_type=habits&start_date=${getDateDaysAgo(7)}`
-        );
-        const dailyData = await dailyRes.json();
-
-        if (dailyData.success) {
-          setDailyResponses(dailyData.responses || []);
-        }
-
-        // Fetch NEAT cards
-        const neatRes = await fetch("/api/client/neat");
-        const neatData = await neatRes.json();
-
-        if (neatData.success) {
-          setNeatCards(neatData.cards || []);
-          setHasNeatCards((neatData.cards || []).length > 0);
-        }
-      } catch (error) {
-        console.error("Error checking form status:", error);
-      } finally {
-        setIsLoadingForms(false);
-      }
-    }
-
-    checkFormStatus();
-  }, [clientId]);
-
-  // Fetch metrics data for charts based on selected period
-  useEffect(() => {
-    async function fetchMetricsData() {
-      setIsLoadingMetrics(true);
-      try {
-        const daysToFetch = getDaysForPeriod(selectedPeriod);
-        const startDate = getDateDaysAgo(daysToFetch);
-
-        // Fetch weekly responses for weight data
-        const weeklyRes = await fetch(
-          `/api/forms/responses/${clientId}?form_type=checkins&start_date=${startDate}`
-        );
-        const weeklyData = await weeklyRes.json();
-
-        if (weeklyData.success) {
-          setWeeklyResponses(weeklyData.responses || []);
-        }
-
-        // Fetch daily responses for sleep, calories, steps
-        const dailyRes = await fetch(
-          `/api/forms/responses/${clientId}?form_type=habits&start_date=${startDate}`
-        );
-        const dailyData = await dailyRes.json();
-
-        if (dailyData.success) {
-          setDailyResponses(dailyData.responses || []);
-        }
-      } catch (error) {
-        console.error("Error fetching metrics:", error);
-      } finally {
-        setIsLoadingMetrics(false);
-      }
-    }
-
-    fetchMetricsData();
-  }, [clientId, selectedPeriod]);
 
   // Helper to get date X days ago
   const getDateDaysAgo = (days: number): string => {
@@ -149,6 +57,25 @@ export function DashboardContent({
 
     return daysMap[period] ?? 7;
   };
+
+  // ─── TanStack Query: cached data fetching ─────────────────────────────
+  const daysToFetch = getDaysForPeriod(selectedPeriod);
+
+  const {
+    data: weeklyResponses = [] as FormResponse[],
+    isLoading: isLoadingWeekly,
+  } = useFormResponses(clientId, "checkins", Math.max(daysToFetch, 14));
+
+  const {
+    data: dailyResponses = [] as FormResponse[],
+    isLoading: isLoadingDaily,
+  } = useFormResponses(clientId, "habits", Math.max(daysToFetch, 7));
+
+  const { data: neatCards = [] as ClientNeatCard[] } = useNeatCards();
+  const hasNeatCards = neatCards.length > 0;
+
+  const isLoadingForms = isLoadingWeekly || isLoadingDaily;
+  const isLoadingMetrics = isLoadingWeekly || isLoadingDaily;
 
   // Calculate form display states
   const showWeeklyBanner =
@@ -252,17 +179,22 @@ export function DashboardContent({
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
       // Find response for this date or closest earlier date
-      const response = weeklyResponses.find((r) => {
+      const response = weeklyResponses.find((r: FormResponse) => {
         const responseDate = new Date(r.response_date);
 
         return responseDate.toISOString().split("T")[0] === targetDateStr;
       });
 
-      // Extract weight from response (assuming question id is 'weight' or 'peso')
+      // Extract weight from response
       let weight = 0;
 
       if (response && response.answers) {
-        weight = Number(response.answers.weight || response.answers.peso || 0);
+        weight = Number(
+          response.answers.body_weight ||
+            response.answers.weight ||
+            response.answers.peso ||
+            0
+        );
       }
 
       data.push({ date: dateLabel, weight });
@@ -296,16 +228,17 @@ export function DashboardContent({
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
       // Find daily response for this date
-      const response = dailyResponses.find((r) => {
+      const response = dailyResponses.find((r: FormResponse) => {
         return r.response_date === targetDateStr;
       });
 
-      // Extract sleep hours (assuming question id is 'sleep' or 'sueno' or 'horas_sueno')
+      // Extract sleep hours
       let hours = 0;
 
       if (response && response.answers) {
         hours = Number(
-          response.answers.sleep ||
+          response.answers.sleep_hours ||
+            response.answers.sleep ||
             response.answers.sueno ||
             response.answers.horas_sueno ||
             0
@@ -330,7 +263,7 @@ export function DashboardContent({
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
       // Find daily response for this date
-      const response = dailyResponses.find((r) => {
+      const response = dailyResponses.find((r: FormResponse) => {
         return r.response_date === targetDateStr;
       });
 
@@ -361,7 +294,7 @@ export function DashboardContent({
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
       // Find daily response for this date
-      const response = dailyResponses.find((r) => {
+      const response = dailyResponses.find((r: FormResponse) => {
         return r.response_date === targetDateStr;
       });
 
@@ -411,13 +344,13 @@ export function DashboardContent({
 
     const today = new Date().getDay();
     const applicableCards = neatCards.filter(
-      (card) =>
+      (card: ClientNeatCard) =>
         !card.weekdays ||
         card.weekdays.length === 0 ||
         card.weekdays.includes(today)
     );
     const totalGoal = applicableCards.reduce(
-      (sum, card) => sum + (card.steps_goal || 0),
+      (sum: number, card: ClientNeatCard) => sum + (card.steps_goal || 0),
       0
     );
 
@@ -506,19 +439,12 @@ export function DashboardContent({
             formType="checkins"
             isOpen={showWeeklyFormModal}
             onClose={() => setShowWeeklyFormModal(false)}
-            onSuccess={async () => {
-              // Refresh form responses to update charts
-              const daysToFetch = getDaysForPeriod(selectedPeriod);
-              const startDate = getDateDaysAgo(daysToFetch);
-
-              const weeklyRes = await fetch(
-                `/api/forms/responses/${clientId}?form_type=checkins&start_date=${startDate}`
-              );
-              const weeklyData = await weeklyRes.json();
-
-              if (weeklyData.success) {
-                setWeeklyResponses(weeklyData.responses || []);
-              }
+            onSuccess={() => {
+              // Invalidate weekly form responses — TanStack Query refetches
+              // in the background while keeping current data visible.
+              queryClient.invalidateQueries({
+                queryKey: ["client", "formResponses", clientId, "checkins"],
+              });
             }}
           />
 
@@ -528,19 +454,10 @@ export function DashboardContent({
             formType="habits"
             isOpen={showDailyFormModal}
             onClose={() => setShowDailyFormModal(false)}
-            onSuccess={async () => {
-              // Refresh form responses to update charts
-              const daysToFetch = getDaysForPeriod(selectedPeriod);
-              const startDate = getDateDaysAgo(daysToFetch);
-
-              const dailyRes = await fetch(
-                `/api/forms/responses/${clientId}?form_type=habits&start_date=${startDate}`
-              );
-              const dailyData = await dailyRes.json();
-
-              if (dailyData.success) {
-                setDailyResponses(dailyData.responses || []);
-              }
+            onSuccess={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["client", "formResponses", clientId, "habits"],
+              });
             }}
           />
 
@@ -706,9 +623,9 @@ export function DashboardContent({
                   <p className="text-xs font-semibold text-foreground/70 tracking-wide">
                     SUEÑO
                   </p>
-                  <div className="bg-secondary/10 p-1.5 rounded-full">
+                  <div className="bg-green-100 p-1.5 rounded-full">
                     <Icon
-                      className="text-secondary text-base"
+                      className="text-green-600 text-base"
                       icon="solar:moon-sleep-bold"
                     />
                   </div>

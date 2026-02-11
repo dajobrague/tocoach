@@ -82,9 +82,9 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
         throw new Error(result.error || "Invalid password");
       }
 
-      // Login successful - redirect to slug-based dashboard
-      router.push(`/${tenantSlug}/dashboard`);
-      router.refresh();
+      // Login successful — full page navigation so the TanStack Query
+      // cache is reset and the bootstrap query fetches fresh auth data.
+      window.location.href = `/${tenantSlug}/dashboard`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -121,9 +121,9 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
         throw new Error(result.error || "Failed to set password");
       }
 
-      // Password set, redirect to slug-based dashboard
-      router.push(`/${tenantSlug}/dashboard`);
-      router.refresh();
+      // Password set — full page navigation so the TanStack Query
+      // cache is reset and the bootstrap query fetches fresh auth data.
+      window.location.href = `/${tenantSlug}/dashboard`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set password");
     } finally {

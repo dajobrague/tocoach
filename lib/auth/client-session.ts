@@ -8,10 +8,15 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 const COOKIE_NAME = "client-session"; // Different from trainer-session
+const isProduction = process.env.NODE_ENV === "production";
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "none" as const, // Changed from "lax" to "none" for iframe embedding support
+  secure: isProduction,
+  // SameSite=None requires Secure flag — browsers silently reject the cookie
+  // without it.  Use "lax" in development (localhost) and "none" in production
+  // (needed for iframe embedding).
+  sameSite: isProduction ? ("none" as const) : ("lax" as const),
   path: "/",
   maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
 };
@@ -123,12 +128,19 @@ export async function updateClientLastLogin(clientId: string): Promise<void> {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    // Note: The clients table might not have a last_login_at field
-    // This is a non-critical operation, so we just log if it fails
-    await supabase
+    const { error } = await supabase
       .from("clients")
       .update({ last_login_at: new Date().toISOString() })
       .eq("id", clientId);
+
+    if (error) {
+      console.warn("[Client Session] Failed to update last login:", error);
+    } else {
+      console.log(
+        "[Client Session] Updated last_login_at for client:",
+        clientId
+      );
+    }
   } catch (error) {
     console.warn("[Client Session] Failed to update last login:", error);
   }
