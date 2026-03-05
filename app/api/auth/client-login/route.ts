@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     await setClientSessionCookie(
       response,
-      client.id,
+      String(client.id),
       tenantSlug,
       client.email,
       fullName

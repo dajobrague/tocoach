@@ -96,7 +96,7 @@ export async function GET(
       }
     } else if (clientSession) {
       // Clients can read their own configs
-      if (clientSession.client_id !== clientId.toString()) {
+      if (String(clientSession.client_id) !== String(clientId)) {
         return NextResponse.json(
           { success: false, error: "No autorizado" },
           { status: 403 }

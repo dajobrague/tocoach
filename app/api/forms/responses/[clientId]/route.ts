@@ -67,7 +67,7 @@ export async function GET(
       }
     } else if (clientSession) {
       // Clients can only access their own data
-      if (clientSession.client_id !== clientId.toString()) {
+      if (String(clientSession.client_id) !== String(clientId)) {
         return NextResponse.json(
           { success: false, error: "No autorizado" },
           { status: 403 }
@@ -193,7 +193,7 @@ export async function POST(
       }
     } else if (clientSession) {
       // Clients can only submit their own responses
-      if (clientSession.client_id !== clientId.toString()) {
+      if (String(clientSession.client_id) !== String(clientId)) {
         return NextResponse.json(
           { success: false, error: "No autorizado" },
           { status: 403 }
