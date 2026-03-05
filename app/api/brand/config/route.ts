@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { clearTenantCache } from "@/lib/tenant/loader";
 
 // GET: Fetch current brand configuration
 export async function GET(request: NextRequest) {
@@ -74,7 +75,7 @@ export async function PATCH(request: NextRequest) {
     // Get current tenant
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("theme_json")
+      .select("theme_json, host, slug")
       .eq("trainer_id", session.trainer_id)
       .single();
 
@@ -87,7 +88,11 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const tenantData = tenant as { theme_json: Record<string, any> };
+    const tenantData = tenant as {
+      theme_json: Record<string, any>;
+      host: string;
+      slug: string;
+    };
 
     // Merge the new configuration with existing theme_json
     const currentTheme: Record<string, any> = tenantData.theme_json || {};
@@ -134,6 +139,9 @@ export async function PATCH(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Clear server-side tenant metadata cache so next CSS request gets fresh theme
+    clearTenantCache(tenantData.host ?? tenantData.slug);
 
     return NextResponse.json({ success: true });
   } catch (error) {

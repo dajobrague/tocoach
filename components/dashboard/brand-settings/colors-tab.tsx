@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button } from "@heroui/react";
+import { Alert, Button, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React from "react";
 
@@ -205,6 +205,18 @@ export default function BrandColorsTab() {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   };
 
+  const handleHexInput = (
+    rawValue: string,
+    onChange: (color: string) => void
+  ) => {
+    const cleaned = rawValue.replace(/^#+/, "");
+    const hexRegex = /^[0-9A-F]{6}$/i;
+
+    if (hexRegex.test(cleaned)) {
+      onChange(`#${cleaned}`);
+    }
+  };
+
   const ColorPickerButton = ({
     color,
     label,
@@ -229,9 +241,17 @@ export default function BrandColorsTab() {
             type="button"
             onClick={() => setOpenPicker(isOpen ? null : pickerId)}
           />
-          <span className="text-xs font-mono text-gray-500 uppercase">
-            {color}
-          </span>
+          <Input
+            classNames={{ inputWrapper: "h-9", input: "font-mono text-xs" }}
+            description="Código hexadecimal"
+            placeholder="3b82f6"
+            size="sm"
+            startContent={
+              <span className="text-gray-400 text-xs font-mono">#</span>
+            }
+            value={color.replace(/^#/, "")}
+            onValueChange={(value) => handleHexInput(value, onChange)}
+          />
 
           {isOpen && (
             <div
