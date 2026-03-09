@@ -362,7 +362,7 @@ export default function TemplateDetailModal({
 
   const fetchExerciseLibrary = async () => {
     try {
-      const response = await fetch("/api/exercises");
+      const response = await fetch("/api/exercises?limit=1000");
       const data = await response.json();
 
       if (data.success) {
@@ -2431,6 +2431,7 @@ export default function TemplateDetailModal({
                                             <div className="flex gap-2 items-end">
                                               {}
                                               <Autocomplete
+                                                key={`exercises-${filteredExercises.length}-${exerciseCategoryFilter}`}
                                                 autoFocus
                                                 className="flex-1"
                                                 defaultItems={filteredExercises}
@@ -2527,6 +2528,7 @@ export default function TemplateDetailModal({
                                                         </div>
                                                       )
                                                     }
+                                                    textValue={exercise.name}
                                                   >
                                                     <span className="font-medium text-gray-900">
                                                       {exercise.name}
