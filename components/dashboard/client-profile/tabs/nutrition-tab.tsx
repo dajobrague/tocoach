@@ -446,6 +446,12 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   const handleSaveDay = async () => {
     if (!nutritionPlan) return;
 
+    if (!dayForm.dayLabel.trim()) {
+      alert("El nombre del día es obligatorio");
+
+      return;
+    }
+
     // Auto-detect weekdays from day label if not manually set
     const autoDetectedWeekdays = detectWeekdaysFromLabel(dayForm.dayLabel);
     const weekdaysToUse =

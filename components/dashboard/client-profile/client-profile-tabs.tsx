@@ -2,7 +2,7 @@
 
 import { Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 // import CalendarTab from "./tabs/calendar-tab"; // Hidden temporarily
 import CardioTab from "./tabs/cardio-tab";
@@ -23,6 +23,23 @@ export default function ClientProfileTabs({
   clientName,
 }: ClientProfileTabsProps) {
   const [selectedTab, setSelectedTab] = useState("workouts");
+  // useRef so handleTabChange always reads the latest value without stale
+  // closure issues from React state batching.
+  const formsUnsavedRef = useRef(false);
+
+  const handleTabChange = (key: string) => {
+    if (selectedTab === "forms" && formsUnsavedRef.current && key !== "forms") {
+      if (
+        !window.confirm(
+          "Tienes cambios sin guardar en la configuración de formularios. ¿Quieres descartarlos?"
+        )
+      ) {
+        return;
+      }
+      formsUnsavedRef.current = false;
+    }
+    setSelectedTab(key);
+  };
 
   return (
     <div className="flex flex-col">
@@ -38,7 +55,7 @@ export default function ClientProfileTabs({
             }}
             selectedKey={selectedTab}
             variant="underlined"
-            onSelectionChange={(key) => setSelectedTab(key as string)}
+            onSelectionChange={(key) => handleTabChange(key as string)}
           >
             <Tab
               key="workouts"
@@ -121,14 +138,25 @@ export default function ClientProfileTabs({
       {/* Tab Content */}
       <div className="bg-gray-50">
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-          {selectedTab === "workouts" && <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />}
-          {selectedTab === "cardio" && <CardioTab clientId={clientId} clientName={clientName ?? ""} />}
+          {selectedTab === "workouts" && (
+            <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />
+          )}
+          {selectedTab === "cardio" && (
+            <CardioTab clientId={clientId} clientName={clientName ?? ""} />
+          )}
           {selectedTab === "neat" && <NeatTab clientId={clientId} />}
           {selectedTab === "nutrition" && <NutritionTab clientId={clientId} />}
           {selectedTab === "supplements" && (
             <SupplementsTab clientId={clientId} />
           )}
-          {selectedTab === "forms" && <FormsTab clientId={clientId} />}
+          {selectedTab === "forms" && (
+            <FormsTab
+              clientId={clientId}
+              onConfigDirtyChange={(dirty) => {
+                formsUnsavedRef.current = dirty;
+              }}
+            />
+          )}
           {/* Hidden temporarily - will be finished later */}
           {/* {selectedTab === "gallery" && <GalleryTab clientId={clientId} />} */}
           {/* {selectedTab === "calendar" && <CalendarTab clientId={clientId} />} */}

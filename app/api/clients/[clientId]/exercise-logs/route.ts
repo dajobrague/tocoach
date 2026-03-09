@@ -255,22 +255,51 @@ export async function POST(
       logData.weight_kg = weightKg;
     }
 
-    const { data: exerciseLog, error: createError } = await supabase
+    // Upsert: update existing log for same session+exercise+client, or insert new
+    const { data: existingExerciseLog } = await supabase
       .from("exercise_logs")
-      .insert(logData)
-      .select()
-      .single();
+      .select("id")
+      .eq("scheduled_session_id", scheduledSessionId)
+      .eq("exercise_id", exerciseId)
+      .eq("client_id", parseInt(clientId))
+      .maybeSingle();
+
+    let exerciseLog: any;
+    let createError: any;
+
+    if (existingExerciseLog) {
+      const { data, error } = await supabase
+        .from("exercise_logs")
+        .update({ ...logData, completed_at: new Date().toISOString() })
+        .eq("id", existingExerciseLog.id)
+        .select()
+        .single();
+
+      exerciseLog = data;
+      createError = error;
+      if (!createError)
+        console.log("[Exercise Logs API] Updated:", exerciseLog?.id);
+    } else {
+      const { data, error } = await supabase
+        .from("exercise_logs")
+        .insert(logData)
+        .select()
+        .single();
+
+      exerciseLog = data;
+      createError = error;
+      if (!createError)
+        console.log("[Exercise Logs API] Created:", exerciseLog?.id);
+    }
 
     if (createError || !exerciseLog) {
-      console.error("[Exercise Logs API] Error creating:", createError);
+      console.error("[Exercise Logs API] Error saving:", createError);
 
       return NextResponse.json(
-        { success: false, error: "Error al crear registro de ejercicio" },
+        { success: false, error: "Error al guardar registro de ejercicio" },
         { status: 500 }
       );
     }
-
-    console.log("[Exercise Logs API] Created:", exerciseLog.id);
 
     // Return flattened format for consistency with GET
     const flattenedLog: any = {

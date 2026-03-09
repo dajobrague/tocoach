@@ -36,6 +36,7 @@ interface ExerciseLogModalProps {
   exerciseId: string;
   scheduledDate: string;
   clientId: string;
+  existingLog?: any;
   onSuccess: () => void;
 }
 
@@ -47,6 +48,7 @@ export function ExerciseLogModal({
   exerciseId,
   scheduledDate,
   clientId,
+  existingLog,
   onSuccess,
 }: ExerciseLogModalProps) {
   const [isSaving, setIsSaving] = useState(false);
@@ -72,21 +74,45 @@ export function ExerciseLogModal({
     notes: "",
   });
 
-  // Update form data when exercise changes
+  // Update form data when exercise or existingLog changes
   useEffect(() => {
     if (exercise) {
-      setFormData({
-        setsCompleted: exercise?.sets?.toString() || "",
-        repsCompleted: exercise?.reps || "",
-        weightUsed: "",
-        durationCompleted: exercise?.duration?.toString() || "",
-        distanceCompleted: exercise?.distance?.toString() || "",
-        intensityCompleted: exercise?.intensity || "",
-        avgHeartRate: "",
-        notes: "",
-      });
+      if (existingLog) {
+        // Pre-fill with previously saved values
+        setFormData({
+          setsCompleted:
+            existingLog.sets_completed?.toString() ||
+            exercise?.sets?.toString() ||
+            "",
+          repsCompleted: existingLog.reps_completed || exercise?.reps || "",
+          weightUsed: existingLog.weight_used || "",
+          durationCompleted:
+            existingLog.duration_minutes?.toString() ||
+            exercise?.duration?.toString() ||
+            "",
+          distanceCompleted:
+            existingLog.distance_km?.toString() ||
+            exercise?.distance?.toString() ||
+            "",
+          intensityCompleted:
+            existingLog.intensity || exercise?.intensity || "",
+          avgHeartRate: existingLog.avg_heart_rate?.toString() || "",
+          notes: existingLog.notes || "",
+        });
+      } else {
+        setFormData({
+          setsCompleted: exercise?.sets?.toString() || "",
+          repsCompleted: exercise?.reps || "",
+          weightUsed: "",
+          durationCompleted: exercise?.duration?.toString() || "",
+          distanceCompleted: exercise?.distance?.toString() || "",
+          intensityCompleted: exercise?.intensity || "",
+          avgHeartRate: "",
+          notes: "",
+        });
+      }
     }
-  }, [exercise]);
+  }, [exercise, existingLog]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -151,12 +177,16 @@ export function ExerciseLogModal({
   return (
     <Modal
       classNames={{
+        base: "max-h-[100vh] m-0",
+        wrapper: "items-end sm:items-center",
+        backdrop: "bg-black/80",
         header: "border-b border-default-200",
         footer: "border-t border-default-200",
         body: "py-6",
       }}
       isOpen={isOpen}
-      size="lg"
+      scrollBehavior="inside"
+      size="full"
       onClose={handleClose}
     >
       <ModalContent>
@@ -174,7 +204,13 @@ export function ExerciseLogModal({
             </div>
             <div>
               <h3 className="text-xl font-heading font-bold text-foreground">
-                {isCardio ? "Registrar Cardio" : "Registrar Ejercicio"}
+                {existingLog
+                  ? isCardio
+                    ? "Editar Cardio"
+                    : "Editar Registro"
+                  : isCardio
+                    ? "Registrar Cardio"
+                    : "Registrar Ejercicio"}
               </h3>
               <p className="text-sm text-foreground/60 font-body font-normal">
                 {exercise.name}
@@ -285,6 +321,7 @@ export function ExerciseLogModal({
                 <>
                   <div className="grid grid-cols-2 gap-4">
                     <Input
+                      classNames={{ input: "text-base" }}
                       label="Duración (min)"
                       placeholder="Ej: 30"
                       startContent={
@@ -301,6 +338,7 @@ export function ExerciseLogModal({
                       }
                     />
                     <Input
+                      classNames={{ input: "text-base" }}
                       label="Distancia (km)"
                       placeholder="Ej: 5.2"
                       startContent={
@@ -321,6 +359,7 @@ export function ExerciseLogModal({
 
                   <div className="grid grid-cols-2 gap-4">
                     <Select
+                      classNames={{ value: "text-base" }}
                       label="Intensidad"
                       placeholder="Selecciona"
                       selectedKeys={
@@ -353,6 +392,7 @@ export function ExerciseLogModal({
                     </Select>
 
                     <Input
+                      classNames={{ input: "text-base" }}
                       label="FC Promedio (bpm)"
                       placeholder="Ej: 145"
                       startContent={
@@ -371,6 +411,7 @@ export function ExerciseLogModal({
                   </div>
 
                   <Textarea
+                    classNames={{ input: "text-base" }}
                     label="Notas (Opcional)"
                     minRows={2}
                     placeholder="Ej: Me sentí muy bien, ritmo constante"
@@ -393,6 +434,7 @@ export function ExerciseLogModal({
                   <div className="grid grid-cols-2 gap-4">
                     <Input
                       isRequired
+                      classNames={{ input: "text-base" }}
                       label="Series Completadas"
                       placeholder="Ej: 4"
                       startContent={
@@ -410,6 +452,7 @@ export function ExerciseLogModal({
                     />
                     <Input
                       isRequired
+                      classNames={{ input: "text-base" }}
                       label="Repeticiones"
                       placeholder="Ej: 10 o 8-10"
                       startContent={
@@ -428,6 +471,7 @@ export function ExerciseLogModal({
 
                   <Input
                     isRequired
+                    classNames={{ input: "text-base" }}
                     label="Peso Utilizado"
                     placeholder="Ej: 20kg, BW, 15lbs, BW+10kg"
                     startContent={
@@ -444,6 +488,7 @@ export function ExerciseLogModal({
                   />
 
                   <Textarea
+                    classNames={{ input: "text-base" }}
                     label="Notas (Opcional)"
                     minRows={2}
                     placeholder="Ej: Me sentí fuerte, podría subir peso la próxima vez"
@@ -478,7 +523,11 @@ export function ExerciseLogModal({
             }
             onPress={handleSave}
           >
-            {isSaving ? "Guardando..." : "Guardar Registro"}
+            {isSaving
+              ? "Guardando..."
+              : existingLog
+                ? "Actualizar Registro"
+                : "Guardar Registro"}
           </Button>
         </ModalFooter>
       </ModalContent>

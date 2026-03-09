@@ -113,12 +113,15 @@ interface FormConfigEditorProps {
   onChange: (config: FormConfigData) => void;
   /** Called with true when there are unsaved changes, false when clean */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called after a question is added (e.g. to show save reminder toast) */
+  onQuestionAdded?: () => void;
 }
 
 export default function FormConfigEditor({
   initialConfig,
   onChange,
   onDirtyChange,
+  onQuestionAdded,
 }: FormConfigEditorProps) {
   // Normalize once and keep as "saved" snapshot
   const savedRef = useRef<FormConfigData>(normalizeFormConfig(initialConfig));
@@ -406,6 +409,7 @@ export default function FormConfigEditor({
       icon: "solar:question-circle-bold",
     });
     onAddClose();
+    onQuestionAdded?.();
   };
 
   // ── DnD handlers ──────────────────────────────────────────────────

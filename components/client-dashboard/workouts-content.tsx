@@ -153,7 +153,8 @@ export function WorkoutsContent() {
   const handleOpenExerciseLog = (
     exercise: any,
     sessionId: string,
-    scheduledDate: string
+    scheduledDate: string,
+    existingLog?: any
   ) => {
     if (!exercise.exercise_id) {
       console.error(
@@ -166,6 +167,7 @@ export function WorkoutsContent() {
       ...exercise,
       sessionId,
       scheduledDate,
+      existingLog: existingLog || null,
     });
     setIsExerciseLogModalOpen(true);
   };
@@ -895,6 +897,24 @@ export function WorkoutsContent() {
                                       </span>
                                     </span>
                                   </div>
+                                  {exercise.notes && (
+                                    <div className="flex items-start gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-secondary"
+                                        }
+                                        icon="solar:notes-bold"
+                                        width={14}
+                                      />
+                                      <span
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body flex-1`}
+                                      >
+                                        {exercise.notes}
+                                      </span>
+                                    </div>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -978,14 +998,17 @@ export function WorkoutsContent() {
                             const dateStr = session.date
                               .toISOString()
                               .split("T")[0] as string;
+                            const existingLog = getExerciseLog(
+                              exerciseId,
+                              dateStr
+                            );
 
-                            if (!isExerciseLogged(exerciseId, dateStr)) {
-                              handleOpenExerciseLog(
-                                exercise,
-                                session.sessionId,
-                                dateStr
-                              );
-                            }
+                            handleOpenExerciseLog(
+                              exercise,
+                              session.sessionId,
+                              dateStr,
+                              existingLog
+                            );
                           }}
                         >
                           {isExerciseLogged(
@@ -1194,6 +1217,7 @@ export function WorkoutsContent() {
         clientId={clientId}
         exercise={selectedExercise}
         exerciseId={selectedExercise?.exercise_id || ""}
+        existingLog={selectedExercise?.existingLog || null}
         isOpen={isExerciseLogModalOpen}
         scheduledDate={selectedExercise?.scheduledDate || ""}
         sessionId={selectedExercise?.sessionId || ""}

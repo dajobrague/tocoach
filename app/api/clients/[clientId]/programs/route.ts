@@ -304,6 +304,17 @@ export async function POST(
     }
 
     const { clientId } = await params;
+
+    // Validate clientId is a valid number
+    const clientIdNum = parseInt(clientId);
+
+    if (isNaN(clientIdNum)) {
+      return NextResponse.json(
+        { success: false, error: "ID de cliente inválido" },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const {
       name,
@@ -316,6 +327,21 @@ export async function POST(
       goal,
       templateId, // NEW: Optional template ID to clone from
     } = body;
+
+    // Server-side validation of required fields
+    if (!name || !name.trim()) {
+      return NextResponse.json(
+        { success: false, error: "El nombre del programa es obligatorio" },
+        { status: 400 }
+      );
+    }
+
+    if (!startDate) {
+      return NextResponse.json(
+        { success: false, error: "La fecha de inicio es obligatoria" },
+        { status: 400 }
+      );
+    }
 
     console.log("[Programs API] Creating program for client:", clientId, body);
 
@@ -455,9 +481,12 @@ export async function POST(
       console.log("[Programs API] Program cloned from template successfully");
     } else {
       // Create a new program from scratch (existing behavior)
+      const parsedSessionsPerWeek = parseInt(sessionsPerWeek);
       const metadata: any = {
         type,
-        sessions_per_week: parseInt(sessionsPerWeek),
+        sessions_per_week: isNaN(parsedSessionsPerWeek)
+          ? 3
+          : parsedSessionsPerWeek,
       };
 
       // Add category and category-specific fields
@@ -505,7 +534,7 @@ export async function POST(
       .from("client_programs")
       .insert({
         tenant_host: tenant.host,
-        client_id: parseInt(clientId), // Convert string to integer
+        client_id: clientIdNum,
         program_id: program.id,
         trainer_id: session.trainer_id,
         start_date: startDate,

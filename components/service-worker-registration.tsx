@@ -17,7 +17,9 @@ export function ServiceWorkerRegistration() {
             registration.scope
           );
 
-          // Check for updates
+          // Force check for updates on every page load
+          registration.update();
+
           registration.addEventListener("updatefound", () => {
             const newWorker = registration.installing;
 
@@ -25,15 +27,9 @@ export function ServiceWorkerRegistration() {
               newWorker.addEventListener("statechange", () => {
                 if (newWorker.state === "installed") {
                   if (navigator.serviceWorker.controller) {
-                    // New update available
-                    console.log(
-                      "[SW] New content is available; please refresh."
-                    );
-
-                    // You could show a toast notification here
-                    // asking the user to refresh the page
+                    console.warn("[SW] New content is available — reloading.");
+                    window.location.reload();
                   } else {
-                    // Content is cached for the first time
                     console.log("[SW] Content is cached for offline use.");
                   }
                 }

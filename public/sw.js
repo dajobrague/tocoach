@@ -2,8 +2,8 @@
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
 
-const CACHE_NAME = "topcoach-v3";
-const STATIC_CACHE_NAME = "topcoach-static-v3";
+const CACHE_NAME = "topcoach-v4";
+const STATIC_CACHE_NAME = "topcoach-static-v4";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -76,19 +76,65 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Skip caching for dynamic pages that need fresh data
-  // Also skip root path to allow proper redirects
   const url = new URL(event.request.url);
-  if (
-    url.pathname === "/" ||
-    url.pathname.startsWith("/trainer") ||
-    event.request.url.includes("/trainer/dashboard") ||
-    event.request.url.includes("/_next/data/")
-  ) {
+
+  // Network-first for ALL navigation requests (HTML pages).
+  // This prevents stale cached HTML from referencing old JS bundles after deployments.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Cache the fresh navigation response for offline fallback
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+          return response;
+        })
+        .catch(() => {
+          // Offline: try cache, then offline fallback
+          return caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            return new Response(
+              `<!DOCTYPE html>
+              <html>
+              <head>
+                <title>TopCoach - Offline</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                  body { font-family: system-ui, sans-serif; text-align: center; padding: 2rem; color: #333; }
+                  .offline-message { max-width: 400px; margin: 2rem auto; }
+                  .icon { font-size: 4rem; margin-bottom: 1rem; }
+                  button { padding: 0.5rem 1.5rem; font-size: 1rem; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; }
+                </style>
+              </head>
+              <body>
+                <div class="offline-message">
+                  <div class="icon">📱</div>
+                  <h1>You're offline</h1>
+                  <p>TopCoach needs an internet connection to work properly. Please check your connection and try again.</p>
+                  <button onclick="window.location.reload()">Try Again</button>
+                </div>
+              </body>
+              </html>`,
+              { headers: { "Content-Type": "text/html" } }
+            );
+          });
+        })
+    );
+    return;
+  }
+
+  // Skip caching for _next/data (RSC/data fetches)
+  if (url.pathname.startsWith("/_next/data/")) {
     event.respondWith(fetch(event.request));
     return;
   }
 
+  // Cache-first for static assets (_next/static, fonts, images, etc.)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -97,7 +143,6 @@ self.addEventListener("fetch", (event) => {
 
       return fetch(event.request)
         .then((response) => {
-          // Don't cache non-successful responses
           if (
             !response ||
             response.status !== 200 ||
@@ -106,9 +151,7 @@ self.addEventListener("fetch", (event) => {
             return response;
           }
 
-          // Clone the response for caching
           const responseToCache = response.clone();
-
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           });
@@ -116,46 +159,8 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          // Return offline fallback for navigation requests
-          if (event.request.mode === "navigate") {
-            return (
-              caches.match("/offline.html") ||
-              new Response(
-                `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <title>TopCoach - Offline</title>
-                  <meta charset="utf-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1">
-                  <style>
-                    body { 
-                      font-family: system-ui, sans-serif; 
-                      text-align: center; 
-                      padding: 2rem;
-                      color: #333;
-                    }
-                    .offline-message {
-                      max-width: 400px;
-                      margin: 2rem auto;
-                    }
-                    .icon { font-size: 4rem; margin-bottom: 1rem; }
-                  </style>
-                </head>
-                <body>
-                  <div class="offline-message">
-                    <div class="icon">📱</div>
-                    <h1>You're offline</h1>
-                    <p>TopCoach needs an internet connection to work properly. Please check your connection and try again.</p>
-                    <button onclick="window.location.reload()">Try Again</button>
-                  </div>
-                </body>
-                </html>
-                `,
-                { headers: { "Content-Type": "text/html" } }
-              )
-            );
-          }
+          // Static asset not available offline — nothing to return
+          return new Response("", { status: 503 });
         });
     })
   );

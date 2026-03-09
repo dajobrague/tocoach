@@ -32,9 +32,14 @@ import {
 
 interface FormsTabProps {
   clientId: string;
+  /** Called when config dirty state changes (for parent tab guard) */
+  onConfigDirtyChange?: (dirty: boolean) => void;
 }
 
-export default function FormsTab({ clientId }: FormsTabProps) {
+export default function FormsTab({
+  clientId,
+  onConfigDirtyChange,
+}: FormsTabProps) {
   const [selectedFormType, setSelectedFormType] = useState<
     "checkins" | "habits"
   >("checkins");
@@ -53,6 +58,14 @@ export default function FormsTab({ clientId }: FormsTabProps) {
   // Dirty tracking for the config editor
   const [isConfigDirty, setIsConfigDirty] = useState(false);
 
+  const handleDirtyChange = useCallback(
+    (dirty: boolean) => {
+      setIsConfigDirty(dirty);
+      onConfigDirtyChange?.(dirty);
+    },
+    [onConfigDirtyChange]
+  );
+
   // Guard function: warns user before losing unsaved changes
   const guardUnsaved = useCallback(
     (action: () => void) => {
@@ -63,13 +76,15 @@ export default function FormsTab({ clientId }: FormsTabProps) {
           )
         ) {
           setIsConfigDirty(false);
+          onConfigDirtyChange?.(false);
+          pendingConfigRef.current = null;
           action();
         }
       } else {
         action();
       }
     },
-    [isConfigDirty]
+    [isConfigDirty, onConfigDirtyChange]
   );
 
   // Warn before closing the browser tab with unsaved changes
@@ -657,93 +672,130 @@ export default function FormsTab({ clientId }: FormsTabProps) {
   );
   const [responses, setResponses] = useState<FormResponseType[]>([]);
 
-  // Structured config data for the editor (habits + checkins)
+  // "Saved" config — loaded from server / last saved. Passed as initialConfig
+  // to FormConfigEditor so the editor only resets when we intentionally reload.
   const [checkinConfigData, setCheckinConfigData] =
     useState<FormConfigData | null>(null);
   const [habitConfigData, setHabitConfigData] = useState<FormConfigData | null>(
     null
   );
 
+  // "Live" config — reflects every editor change, used for the preview modal.
+  const [checkinLiveConfig, setCheckinLiveConfig] =
+    useState<FormConfigData | null>(null);
+  const [habitLiveConfig, setHabitLiveConfig] = useState<FormConfigData | null>(
+    null
+  );
+
   // Track pending unsaved changes from the editor
   const pendingConfigRef = useRef<FormConfigData | null>(null);
 
+  // Only update live config — NOT the saved config. Updating checkinConfigData
+  // here would change the initialConfig prop to FormConfigEditor, which resets
+  // its internal isDirty and defeats dirty tracking.
   const handleEditorChange = useCallback(
     (data: FormConfigData) => {
       pendingConfigRef.current = data;
       if (selectedFormType === "checkins") {
-        setCheckinConfigData(data);
+        setCheckinLiveConfig(data);
       } else {
-        setHabitConfigData(data);
+        setHabitLiveConfig(data);
       }
     },
     [selectedFormType]
   );
 
-  // Fetch form configuration when clientId or formType changes
-  useEffect(() => {
-    async function fetchConfig() {
-      setIsLoadingConfig(true);
-      try {
-        const response = await fetch(
-          `/api/forms/configs/${clientId}?form_type=${selectedFormType}`
-        );
-        const data = await response.json();
+  // Fetch form configuration — extracted for reuse (initial load + discard)
+  const fetchConfig = useCallback(async () => {
+    pendingConfigRef.current = null;
+    setIsLoadingConfig(true);
+    try {
+      const response = await fetch(
+        `/api/forms/configs/${clientId}?form_type=${selectedFormType}`
+      );
+      const data = await response.json();
 
-        if (data.success && data.config) {
-          const raw = data.config.questions_config;
+      if (data.success && data.config) {
+        const raw = data.config.questions_config;
 
-          // Handle both legacy (array) and new (structured) formats
-          if (isStructuredConfig(raw)) {
-            // New format: { pages, questions }
-            if (selectedFormType === "checkins") {
-              setCheckinConfigData(raw);
-              setCheckinQuestions(raw.questions);
-            } else {
-              setHabitConfigData(raw);
-              setHabitQuestions(raw.questions);
-            }
-          } else if (Array.isArray(raw) && raw.length > 0) {
-            // Legacy format: flat array
-            const normalized = normalizeFormConfig(raw);
-
-            if (selectedFormType === "checkins") {
-              setCheckinConfigData(normalized);
-              setCheckinQuestions(raw);
-            } else {
-              setHabitConfigData(normalized);
-              setHabitQuestions(raw);
-            }
+        if (isStructuredConfig(raw)) {
+          if (selectedFormType === "checkins") {
+            setCheckinConfigData(raw);
+            setCheckinLiveConfig(raw);
+            setCheckinQuestions(raw.questions);
           } else {
-            // Empty config — use structured defaults
-            if (selectedFormType === "checkins") {
-              setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
-            } else {
-              setHabitConfigData(DEFAULT_HABIT_CONFIG);
-            }
+            setHabitConfigData(raw);
+            setHabitLiveConfig(raw);
+            setHabitQuestions(raw.questions);
+          }
+        } else if (Array.isArray(raw) && raw.length > 0) {
+          const normalized = normalizeFormConfig(raw);
+
+          if (selectedFormType === "checkins") {
+            setCheckinConfigData(normalized);
+            setCheckinLiveConfig(normalized);
+            setCheckinQuestions(raw);
+          } else {
+            setHabitConfigData(normalized);
+            setHabitLiveConfig(normalized);
+            setHabitQuestions(raw);
           }
         } else {
-          // Config not found — use structured defaults
           if (selectedFormType === "checkins") {
             setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
+            setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
+            setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
           } else {
             setHabitConfigData(DEFAULT_HABIT_CONFIG);
+            setHabitLiveConfig(DEFAULT_HABIT_CONFIG);
+            setHabitQuestions(DEFAULT_HABIT_CONFIG.questions);
           }
         }
-      } catch (error) {
-        // Silently handle errors for missing configs (normal for new clients)
-        console.debug("Form config fetch:", error);
+      } else {
         if (selectedFormType === "checkins") {
           setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
+          setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
+          setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
         } else {
           setHabitConfigData(DEFAULT_HABIT_CONFIG);
+          setHabitLiveConfig(DEFAULT_HABIT_CONFIG);
+          setHabitQuestions(DEFAULT_HABIT_CONFIG.questions);
         }
-      } finally {
-        setIsLoadingConfig(false);
       }
+    } catch (error) {
+      console.debug("Form config fetch:", error);
+      if (selectedFormType === "checkins") {
+        setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
+        setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
+        setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
+      } else {
+        setHabitConfigData(DEFAULT_HABIT_CONFIG);
+        setHabitLiveConfig(DEFAULT_HABIT_CONFIG);
+        setHabitQuestions(DEFAULT_HABIT_CONFIG.questions);
+      }
+    } finally {
+      setIsLoadingConfig(false);
     }
-
-    fetchConfig();
   }, [clientId, selectedFormType]);
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  const handleDiscardChanges = useCallback(() => {
+    if (
+      !isConfigDirty ||
+      !window.confirm(
+        "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
+      )
+    ) {
+      return;
+    }
+    setIsConfigDirty(false);
+    onConfigDirtyChange?.(false);
+    pendingConfigRef.current = null;
+    fetchConfig();
+  }, [isConfigDirty, onConfigDirtyChange, fetchConfig]);
 
   // Fetch responses when viewing responses tab
   useEffect(() => {
@@ -804,8 +856,15 @@ export default function FormsTab({ clientId }: FormsTabProps) {
       const data = await response.json();
 
       if (data.success) {
+        // Sync saved config so initialConfig to FormConfigEditor stays current
+        if (selectedFormType === "checkins" && checkinLiveConfig) {
+          setCheckinConfigData(checkinLiveConfig);
+        } else if (selectedFormType === "habits" && habitLiveConfig) {
+          setHabitConfigData(habitLiveConfig);
+        }
         pendingConfigRef.current = null;
         setIsConfigDirty(false);
+        onConfigDirtyChange?.(false);
         addToast({
           title: "Configuración guardada",
           description: "Los cambios se han guardado exitosamente.",
@@ -999,7 +1058,9 @@ export default function FormsTab({ clientId }: FormsTabProps) {
 
   // Build preview sections from the structured config (page-aware)
   const previewConfig =
-    selectedFormType === "checkins" ? checkinConfigData : habitConfigData;
+    selectedFormType === "checkins"
+      ? (checkinLiveConfig ?? checkinConfigData)
+      : (habitLiveConfig ?? habitConfigData);
   const previewSections = (() => {
     if (!previewConfig) {
       // Fallback: one flat list
@@ -1143,8 +1204,11 @@ export default function FormsTab({ clientId }: FormsTabProps) {
     );
   };
 
+  const showStickySaveBar =
+    selectedView === "configuration" && isConfigDirty && !isLoadingConfig;
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className={`flex flex-col gap-6 ${showStickySaveBar ? "pb-24" : ""}`}>
       {/* Tabs de tipos de formularios */}
       <div className="bg-white rounded-lg border border-gray-200">
         <Tabs
@@ -1346,7 +1410,15 @@ export default function FormsTab({ clientId }: FormsTabProps) {
                         : habitConfigData!
                     }
                     onChange={handleEditorChange}
-                    onDirtyChange={setIsConfigDirty}
+                    onDirtyChange={handleDirtyChange}
+                    onQuestionAdded={() =>
+                      addToast({
+                        title: "Pregunta agregada",
+                        description:
+                          "No olvides hacer clic en Guardar Configuración para guardar los cambios.",
+                        color: "warning",
+                      })
+                    }
                   />
                 )}
 
@@ -1405,6 +1477,44 @@ export default function FormsTab({ clientId }: FormsTabProps) {
             )}
           </CardBody>
         </Card>
+      )}
+
+      {/* Sticky save bar — appears when there are unsaved changes in configuration */}
+      {showStickySaveBar && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-amber-50 border-t border-amber-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Chip color="warning" size="sm" variant="flat">
+                Sin guardar
+              </Chip>
+              <span className="text-sm text-amber-800 font-medium">
+                Tienes cambios sin guardar
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                color="default"
+                variant="bordered"
+                onPress={handleDiscardChanges}
+              >
+                Descartar cambios
+              </Button>
+              <Button
+                className="text-white font-semibold"
+                color="primary"
+                isLoading={isSavingConfig}
+                startContent={
+                  !isSavingConfig && (
+                    <Icon icon="solar:diskette-bold" width={18} />
+                  )
+                }
+                onPress={handleSaveConfiguration}
+              >
+                {isSavingConfig ? "Guardando..." : "Guardar Configuración"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Preview Modal — paginated, one page at a time */}
@@ -1720,8 +1830,8 @@ export default function FormsTab({ clientId }: FormsTabProps) {
             if (!viewingResponse) return null;
             const configData =
               selectedFormType === "checkins"
-                ? checkinConfigData
-                : habitConfigData;
+                ? (checkinLiveConfig ?? checkinConfigData)
+                : (habitLiveConfig ?? habitConfigData);
             // Build page-aware sections from config
             const allQuestions =
               configData?.questions ||

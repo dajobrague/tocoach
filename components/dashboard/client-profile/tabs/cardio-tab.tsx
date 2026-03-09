@@ -662,6 +662,18 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   };
 
   const handleSaveProgram = async () => {
+    if (!programForm.name.trim()) {
+      alert("El nombre del programa es obligatorio");
+
+      return;
+    }
+
+    if (!programForm.startDate) {
+      alert("La fecha de inicio es obligatoria");
+
+      return;
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/clients/${clientId}/programs`, {

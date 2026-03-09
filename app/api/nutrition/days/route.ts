@@ -119,6 +119,21 @@ export async function POST(request: NextRequest) {
 
     console.log("[Nutrition Days API] Creating day:", body);
 
+    // Validate required fields
+    if (!nutrition_plan_id) {
+      return NextResponse.json(
+        { success: false, error: "El ID del plan nutricional es obligatorio" },
+        { status: 400 }
+      );
+    }
+
+    if (!day_label || !day_label.trim()) {
+      return NextResponse.json(
+        { success: false, error: "El nombre del día es obligatorio" },
+        { status: 400 }
+      );
+    }
+
     // Verify the plan belongs to this trainer and get tenant_host
     const { data: plan, error: planError } = await supabase
       .from("nutrition_plans")
