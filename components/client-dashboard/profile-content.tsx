@@ -12,6 +12,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 
+import { TenantLogo } from "@/components/tenant-logo";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { LogoutButton } from "@/components/client-dashboard/logout-button";
@@ -219,7 +220,13 @@ export function ProfileContent() {
           {/* Logo Header */}
           {logoUrl && (
             <div className="pt-6 flex justify-center">
-              <img alt={trainerName} className="h-12 w-auto" src={logoUrl} />
+              <TenantLogo
+                alt={trainerName}
+                className="h-12 w-auto object-contain"
+                height={48}
+                src={logoUrl}
+                width={96}
+              />
             </div>
           )}
 

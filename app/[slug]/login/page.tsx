@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { TenantLogo } from "@/components/tenant-logo";
 import { ClientLoginForm } from "@/components/client-login-form";
 import { getClientSession } from "@/lib/auth/client-session";
 import { loadTenantContext } from "@/lib/tenant/loader";
@@ -45,7 +46,13 @@ export default async function ClientLoginPage({
         {/* Branded Header */}
         <div className="flex flex-col items-center pb-8">
           {logoUrl && (
-            <img alt={trainerName} className="h-16 w-auto mb-4" src={logoUrl} />
+            <TenantLogo
+              alt={trainerName}
+              className="h-16 w-auto mb-4 object-contain"
+              height={64}
+              src={logoUrl}
+              width={128}
+            />
           )}
           <h1 className="text-3xl font-heading font-bold mb-4">
             {trainerName}

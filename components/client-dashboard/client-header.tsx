@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { ChatPanel } from "./chat-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 
+import { TenantLogo } from "@/components/tenant-logo";
+
 interface ClientHeaderProps {
   firstName: string;
   logoUrl?: string | undefined;
@@ -76,10 +78,12 @@ export function ClientHeader({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             {logoUrl ? (
-              <img
+              <TenantLogo
                 alt={trainerName}
                 className="h-10 w-auto object-contain"
+                height={40}
                 src={logoUrl}
+                width={80}
               />
             ) : (
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">

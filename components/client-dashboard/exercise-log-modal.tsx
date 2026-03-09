@@ -13,7 +13,7 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ExerciseLogModalProps {
   isOpen: boolean;
@@ -113,6 +113,41 @@ export function ExerciseLogModal({
       }
     }
   }, [exercise, existingLog]);
+
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  const scrollToFocused = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = document.activeElement as HTMLElement | null;
+
+      if (el && bodyRef.current?.contains(el)) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const vv = window.visualViewport;
+
+    if (!vv) return;
+
+    const onResize = () => {
+      const threshold = window.innerHeight * 0.75;
+      const isKb = vv.height < threshold;
+
+      setKeyboardOpen(isKb);
+      if (isKb) {
+        setTimeout(scrollToFocused, 120);
+      }
+    };
+
+    vv.addEventListener("resize", onResize);
+
+    return () => vv.removeEventListener("resize", onResize);
+  }, [isOpen, scrollToFocused]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -219,7 +254,11 @@ export function ExerciseLogModal({
           </div>
         </ModalHeader>
         <ModalBody>
-          <div className="flex flex-col gap-6">
+          <div
+            ref={bodyRef}
+            className={`flex flex-col gap-6 ${keyboardOpen ? "pb-[40vh]" : ""}`}
+            onFocus={() => setTimeout(scrollToFocused, 200)}
+          >
             {/* Exercise Details */}
             <div className="bg-default-50 p-4 rounded-lg space-y-2">
               <p className="text-xs text-foreground/60 font-body uppercase font-semibold">

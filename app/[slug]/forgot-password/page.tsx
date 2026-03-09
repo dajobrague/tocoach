@@ -1,3 +1,4 @@
+import { TenantLogo } from "@/components/tenant-logo";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
@@ -17,7 +18,13 @@ export default async function ForgotPasswordPage({
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center pb-8">
           {logoUrl && (
-            <img alt={trainerName} className="h-16 w-auto mb-4" src={logoUrl} />
+            <TenantLogo
+              alt={trainerName}
+              className="h-16 w-auto mb-4 object-contain"
+              height={64}
+              src={logoUrl}
+              width={128}
+            />
           )}
           <h1 className="text-3xl font-heading font-bold mb-4">
             Reset Password
