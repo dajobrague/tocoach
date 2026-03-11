@@ -178,12 +178,21 @@ export function DashboardContent() {
       targetDate.setDate(targetDate.getDate() - daysAgo);
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
-      // Find response for this date or closest earlier date
-      const response = weeklyResponses.find((r: FormResponse) => {
-        const responseDate = new Date(r.response_date);
-
-        return responseDate.toISOString().split("T")[0] === targetDateStr;
+      // Check daily habits first, fall back to weekly check-ins
+      const dailyWeightResponse = dailyResponses.find((r: FormResponse) => {
+        return (
+          new Date(r.response_date).toISOString().split("T")[0] ===
+          targetDateStr
+        );
       });
+      const response =
+        dailyWeightResponse ||
+        weeklyResponses.find((r: FormResponse) => {
+          return (
+            new Date(r.response_date).toISOString().split("T")[0] ===
+            targetDateStr
+          );
+        });
 
       // Extract weight from response
       let weight = 0;

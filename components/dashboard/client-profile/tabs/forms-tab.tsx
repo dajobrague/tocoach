@@ -407,6 +407,17 @@ export default function FormsTab({
     questions: [
       // ── Page: Bienestar ──
       {
+        id: "body_weight",
+        label: "Peso Corporal",
+        fullQuestion: "¿Cuánto pesas hoy?",
+        icon: "solar:scale-bold",
+        type: "number",
+        unit: "kg",
+        enabled: true,
+        required: false,
+        pageId: "habit_wellbeing",
+      },
+      {
         id: "energy_levels",
         label: "Niveles de Energía",
         fullQuestion: "Niveles de energía durante el día",

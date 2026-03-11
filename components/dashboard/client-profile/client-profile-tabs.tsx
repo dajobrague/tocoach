@@ -10,6 +10,7 @@ import FormsTab from "./tabs/forms-tab";
 // import GalleryTab from "./tabs/gallery-tab"; // Hidden temporarily
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
+import ProgressTab from "./tabs/progress-tab";
 import SupplementsTab from "./tabs/supplements-tab";
 import WorkoutsTab from "./tabs/workouts-tab";
 
@@ -22,7 +23,7 @@ export default function ClientProfileTabs({
   clientId,
   clientName,
 }: ClientProfileTabsProps) {
-  const [selectedTab, setSelectedTab] = useState("workouts");
+  const [selectedTab, setSelectedTab] = useState("progress");
   // useRef so handleTabChange always reads the latest value without stale
   // closure issues from React state batching.
   const formsUnsavedRef = useRef(false);
@@ -57,6 +58,15 @@ export default function ClientProfileTabs({
             variant="underlined"
             onSelectionChange={(key) => handleTabChange(key as string)}
           >
+            <Tab
+              key="progress"
+              title={
+                <div className="flex items-center gap-2">
+                  <Icon icon="solar:chart-line-duotone" width={20} />
+                  <span className="font-medium">Progreso</span>
+                </div>
+              }
+            />
             <Tab
               key="workouts"
               title={
@@ -138,6 +148,7 @@ export default function ClientProfileTabs({
       {/* Tab Content */}
       <div className="bg-gray-50">
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
+          {selectedTab === "progress" && <ProgressTab clientId={clientId} />}
           {selectedTab === "workouts" && (
             <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />
           )}
