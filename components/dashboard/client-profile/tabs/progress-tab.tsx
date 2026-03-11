@@ -900,7 +900,7 @@ function ExerciseLineChart({
           <YAxis
             axisLine={false}
             tick={{ fontSize: 11, fill: "#6b7280" }}
-            tickFormatter={yFormatter}
+            {...(yFormatter ? { tickFormatter: yFormatter } : {})}
             tickLine={false}
             width={55}
           />
