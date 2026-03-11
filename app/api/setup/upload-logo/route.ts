@@ -70,12 +70,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get public URL
+    // Get public URL with a cache-busting version param so re-uploads with the
+    // same filename are not served from the browser/CDN cache.
     const { data: urlData } = supabase.storage
       .from("trainer-logos")
       .getPublicUrl(fileName);
 
-    const logoUrl = urlData.publicUrl;
+    const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
     // Update tenant record with logo URL
     const { error: updateError } = await supabase
@@ -85,8 +86,11 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error("[Logo Upload] Database update error:", updateError);
-      // Don't fail the upload if database update fails
-      console.warn("[Logo Upload] Logo uploaded but database update failed");
+
+      return NextResponse.json(
+        { error: "Logo subido pero no se pudo guardar en la base de datos" },
+        { status: 500 }
+      );
     }
 
     console.log(
