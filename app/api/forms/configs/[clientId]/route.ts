@@ -141,7 +141,7 @@ export async function GET(
         "[Forms Configs] No config found for client:",
         clientId,
         formType,
-        "â€” auto-creating from template"
+        "âÿÿ auto-creating from template"
       );
 
       // Look for the tenant's active template for this form type
@@ -350,50 +350,20 @@ export async function PUT(
       );
     }
 
-    // Check if config exists
-    const { data: existingConfig } = await supabase
+    const { data: config, error } = await supabase
       .from("client_form_configs")
-      .select("id")
-      .eq("client_id", clientId)
-      .eq("form_type", form_type)
-      .single();
-
-    let config;
-    let error;
-
-    if (existingConfig) {
-      // Update existing config
-      const result = await supabase
-        .from("client_form_configs")
-        .update({
-          questions_config,
-          uses_template: uses_template !== undefined ? uses_template : true,
-        })
-        .eq("client_id", clientId)
-        .eq("form_type", form_type)
-        .eq("tenant_host", tenantHost)
-        .select()
-        .single();
-
-      config = result.data;
-      error = result.error;
-    } else {
-      // Create new config
-      const result = await supabase
-        .from("client_form_configs")
-        .insert({
+      .upsert(
+        {
           tenant_host: tenantHost,
           client_id: clientId,
           form_type,
           questions_config,
           uses_template: uses_template !== undefined ? uses_template : false,
-        })
-        .select()
-        .single();
-
-      config = result.data;
-      error = result.error;
-    }
+        },
+        { onConflict: "client_id,form_type,tenant_host" }
+      )
+      .select()
+      .single();
 
     if (error) {
       console.error("[Forms Configs] Error saving config:", error);

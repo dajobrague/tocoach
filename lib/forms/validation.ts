@@ -105,15 +105,6 @@ export function validateQuestionConfig(question: any): ValidationResult {
     }
   }
 
-  // Number type validation
-  if (question.type === "number" && !question.unit) {
-    errors.push({
-      field: "unit",
-      message:
-        'Number type questions should have a unit (e.g., "kg", "cm", "pasos")',
-    });
-  }
-
   return {
     valid: errors.length === 0,
     errors,

@@ -831,10 +831,11 @@ export default function FormsTab({
   const handleSaveConfiguration = async () => {
     setIsSavingConfig(true);
     try {
-      // Use pending editor data if available, otherwise fall back to state
+      // Prefer the live editor state (always current), fall back to saved snapshot
       const configData =
-        pendingConfigRef.current ||
-        (selectedFormType === "checkins" ? checkinConfigData : habitConfigData);
+        selectedFormType === "checkins"
+          ? checkinLiveConfig || checkinConfigData
+          : habitLiveConfig || habitConfigData;
 
       // Determine what to send: structured or legacy
       const payload = configData
