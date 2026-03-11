@@ -2,7 +2,6 @@
 
 import {
   Button,
-  DatePicker,
   Modal,
   ModalBody,
   ModalContent,
@@ -10,7 +9,6 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { parseDate } from "@internationalized/date";
 import { useEffect, useState } from "react";
 
 interface RescheduleModalProps {
@@ -23,6 +21,15 @@ interface RescheduleModalProps {
   onSuccess: () => void;
 }
 
+function getTodayStr(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export function RescheduleModal({
   isOpen,
   onClose,
@@ -33,34 +40,10 @@ export function RescheduleModal({
   onSuccess,
 }: RescheduleModalProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [newDate, setNewDate] = useState(() => {
-    // Only parse if we have a valid date, otherwise use today
-    if (currentDate && currentDate !== "") {
-      try {
-        return parseDate(currentDate);
-      } catch (e) {
-        // Fallback to today if parsing fails
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, "0");
-        const day = String(today.getDate()).padStart(2, "0");
-
-        return parseDate(`${year}-${month}-${day}`);
-      }
-    }
-    // Default to today
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-
-    return parseDate(`${year}-${month}-${day}`);
-  });
+  const [newDate, setNewDate] = useState<string>(currentDate || getTodayStr());
 
   const handleReschedule = async () => {
-    const newDateStr = newDate.toString();
-
-    if (!newDateStr || !currentDate || newDateStr === currentDate) {
+    if (!newDate || !currentDate || newDate === currentDate) {
       alert("Por favor selecciona una nueva fecha");
 
       return;
@@ -74,7 +57,7 @@ export function RescheduleModal({
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            scheduledDate: newDateStr,
+            scheduledDate: newDate,
           }),
         }
       );
@@ -98,11 +81,7 @@ export function RescheduleModal({
   // Update date when modal opens with new data
   useEffect(() => {
     if (isOpen && currentDate && currentDate !== "") {
-      try {
-        setNewDate(parseDate(currentDate));
-      } catch (e) {
-        console.error("[RescheduleModal] Error parsing date:", e);
-      }
+      setNewDate(currentDate);
     }
   }, [isOpen, currentDate]);
 
@@ -152,26 +131,26 @@ export function RescheduleModal({
             <p className="font-medium">{formatDisplayDate(currentDate)}</p>
           </div>
 
-          {/* New Date Picker */}
-          <DatePicker
-            isRequired
-            showMonthAndYearPickers
-            calendarProps={{
-              color: "foreground",
-            }}
-            className="w-full"
-            description="Selecciona cualquier fecha sin restricciones"
-            label="Nueva Fecha"
-            value={newDate}
-            variant="flat"
-            onChange={(value) => value && setNewDate(value)}
-          />
+          {/* New Date Picker — native input avoids HeroUI DatePicker bug where
+              day numbers like 21 or 30 cannot be typed due to premature
+              segment validation against the current real-world month */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-foreground/70 font-medium">
+              Nueva Fecha
+            </label>
+            <input
+              className="w-full rounded-xl border border-default-200 bg-default-100 px-3 py-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+              type="date"
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+            />
+          </div>
 
-          {/* Info Alert */}
-          {newDate && currentDate && newDate.toString() !== currentDate && (
+          {/* Preview of selected date */}
+          {newDate && currentDate && newDate !== currentDate && (
             <div className="text-sm text-default-500">
               <p className="font-medium mb-1">Nueva fecha:</p>
-              <p>{formatDisplayDate(newDate.toString())}</p>
+              <p>{formatDisplayDate(newDate)}</p>
             </div>
           )}
         </ModalBody>
@@ -182,7 +161,7 @@ export function RescheduleModal({
           <Button
             color="primary"
             isDisabled={
-              isSaving || (!!currentDate && newDate.toString() === currentDate)
+              isSaving || (!!currentDate && newDate === currentDate) || !newDate
             }
             isLoading={isSaving}
             onPress={handleReschedule}
