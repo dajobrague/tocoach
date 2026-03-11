@@ -141,7 +141,7 @@ export async function GET(
         "[Forms Configs] No config found for client:",
         clientId,
         formType,
-        "âÿÿ auto-creating from template"
+        "auto-creating from template"
       );
 
       // Look for the tenant's active template for this form type
