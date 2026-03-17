@@ -86,11 +86,11 @@ export async function GET(
         : null;
 
     // Get the trainer's tenant slug from the tenants table
-    const { data: tenant } = await supabase
+    const { data: tenant } = (await supabase
       .from("tenants")
       .select("slug")
       .eq("trainer_id", session.trainer_id)
-      .single();
+      .single()) as { data: { slug: string } | null };
 
     // Return formatted client data
     return NextResponse.json({
