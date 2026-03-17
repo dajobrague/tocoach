@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardBody, Tab, Tabs } from "@heroui/react";
+import { Card, CardBody, Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -11,11 +11,23 @@ import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
 import {
+  CaloriesChart,
+  MacrosRing,
+  ProteinChart,
+  SleepChart,
+  TrainingActivityChart,
+  WeightChart,
+} from "@/components/client-dashboard/progress-charts";
+import {
   isDailyHabitsSubmittedToday,
   shouldShowWeeklyCheckIn,
 } from "@/lib/forms/client-helpers";
 import { FormResponse } from "@/lib/forms/types";
-import { useFormResponses, useNeatCards } from "@/lib/hooks/use-client-queries";
+import {
+  useExerciseLogs,
+  useFormResponses,
+  useNeatCards,
+} from "@/lib/hooks/use-client-queries";
 import { ClientNeatCard } from "@/types";
 
 export function DashboardContent() {
@@ -31,19 +43,9 @@ export function DashboardContent() {
   const queryClient = useQueryClient();
 
   // State
-  const [waterIntake, setWaterIntake] = useState(0);
   const [showDailyFormModal, setShowDailyFormModal] = useState(false);
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
-
-  // Helper to get date X days ago
-  const getDateDaysAgo = (days: number): string => {
-    const date = new Date();
-
-    date.setDate(date.getDate() - days);
-
-    return date.toISOString().split("T")[0] || "";
-  };
 
   // Helper to get days needed for a period
   const getDaysForPeriod = (period: string): number => {
@@ -71,19 +73,18 @@ export function DashboardContent() {
     isLoading: isLoadingDaily,
   } = useFormResponses(clientId, "habits", Math.max(daysToFetch, 7));
 
+  const { data: exerciseLogs = [] } = useExerciseLogs(clientId);
+
   const { data: neatCards = [] as ClientNeatCard[] } = useNeatCards();
   const hasNeatCards = neatCards.length > 0;
 
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
-  const isLoadingMetrics = isLoadingWeekly || isLoadingDaily;
 
   // Calculate form display states
   const showWeeklyBanner =
     !isLoadingForms && shouldShowWeeklyCheckIn(weeklyResponses);
   const showDailyButton =
     !isLoadingForms && !isDailyHabitsSubmittedToday(dailyResponses);
-
-  const waterGoal = 3;
 
   // Helper functions for data generation
   const getDataPointsCount = (period: string): number => {
@@ -347,6 +348,112 @@ export function DashboardContent() {
 
   const todaySteps = stepsHistory[stepsHistory.length - 1]?.steps || 0;
 
+  // Protein data from daily habits
+  const proteinHistory = useMemo(() => {
+    const points = getDataPointsCount(selectedPeriod);
+    const data: { date: string; protein: number }[] = [];
+
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, selectedPeriod);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
+
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      const response = dailyResponses.find(
+        (r: FormResponse) => r.response_date === targetDateStr
+      );
+
+      let protein = 0;
+
+      if (response && response.answers) {
+        protein = Number(
+          response.answers.protein || response.answers.proteina || 0
+        );
+      }
+      data.push({ date: dateLabel, protein });
+    }
+
+    return data;
+  }, [selectedPeriod, dailyResponses]);
+
+  // Average macros for the donut ring
+  const avgMacros = useMemo(() => {
+    const withData = dailyResponses.filter((r: FormResponse) => {
+      if (!r.answers) return false;
+      const p = Number(r.answers.protein || r.answers.proteina || 0);
+      const c = Number(r.answers.carbs || r.answers.carbohidratos || 0);
+      const f = Number(r.answers.fats || r.answers.grasas || 0);
+
+      return p > 0 || c > 0 || f > 0;
+    });
+
+    if (withData.length === 0) return { protein: 0, carbs: 0, fats: 0 };
+
+    const totals = withData.reduce(
+      (
+        acc: { protein: number; carbs: number; fats: number },
+        r: FormResponse
+      ) => {
+        acc.protein += Number(r.answers.protein || r.answers.proteina || 0);
+        acc.carbs += Number(r.answers.carbs || r.answers.carbohidratos || 0);
+        acc.fats += Number(r.answers.fats || r.answers.grasas || 0);
+
+        return acc;
+      },
+      { protein: 0, carbs: 0, fats: 0 }
+    );
+
+    return {
+      protein: Math.round(totals.protein / withData.length),
+      carbs: Math.round(totals.carbs / withData.length),
+      fats: Math.round(totals.fats / withData.length),
+    };
+  }, [dailyResponses]);
+
+  // Training activity from exercise logs
+  const trainingActivity = useMemo(() => {
+    const points = getDataPointsCount(selectedPeriod);
+    const data: { date: string; strength: number; cardio: number }[] = [];
+
+    for (let i = 0; i < points; i++) {
+      const dateLabel = formatDateForPeriod(i, points, selectedPeriod);
+      const daysAgo = points - 1 - i;
+      const targetDate = new Date();
+
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      let strength = 0;
+      let cardio = 0;
+
+      exerciseLogs.forEach((log: any) => {
+        if (log.scheduled_date === targetDateStr) {
+          const cat = log.exercises?.category;
+
+          if (cat === "cardio") cardio++;
+          else strength++;
+        }
+      });
+      data.push({ date: dateLabel, strength, cardio });
+    }
+
+    return data;
+  }, [selectedPeriod, exerciseLogs]);
+
+  const trainingWeekTotal = useMemo(() => {
+    const now = new Date();
+    const weekAgo = new Date();
+
+    weekAgo.setDate(now.getDate() - 7);
+    const weekAgoStr = weekAgo.toISOString().split("T")[0]!;
+
+    return exerciseLogs.filter(
+      (log: any) => log.scheduled_date && log.scheduled_date >= weekAgoStr
+    ).length;
+  }, [exerciseLogs]);
+
   // Check if we should show NEAT chart (has cards and applicable today)
   const shouldShowNeatChart = useMemo(() => {
     if (!hasNeatCards || neatCards.length === 0) return false;
@@ -365,20 +472,6 @@ export function DashboardContent() {
 
     return applicableCards.length > 0 && totalGoal > 0;
   }, [hasNeatCards, neatCards]);
-
-  const handleWaterIncrement = () => {
-    if (waterIntake < waterGoal) {
-      setWaterIntake((prev) => Math.round((prev + 0.25) * 100) / 100);
-    }
-  };
-
-  const handleWaterDecrement = () => {
-    if (waterIntake > 0) {
-      setWaterIntake((prev) => Math.round((prev - 0.25) * 100) / 100);
-    }
-  };
-
-  const waterPercentage = Math.min((waterIntake / waterGoal) * 100, 100);
 
   return (
     <>
@@ -499,228 +592,88 @@ export function DashboardContent() {
               <Tab key="12m" title="12 Meses" />
             </Tabs>
 
-            {/* Weight Tracker - Full Width */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                    PESO
-                  </p>
-                  <div className="bg-warning/10 p-1.5 rounded-full">
-                    <Icon
-                      className="text-warning text-base"
-                      icon="solar:body-bold"
-                    />
-                  </div>
-                </div>
-                <p className="text-5xl font-bold mb-1 text-foreground">
-                  {weightHistory[weightHistory.length - 1]?.weight || 0}
-                </p>
-                <p className="text-sm text-foreground/70 mb-4">kg hoy</p>
-                <div className="flex items-end justify-between gap-2 h-24">
-                  {weightHistory.map((day, index) => {
-                    const minWeight =
-                      Math.min(
-                        ...weightHistory
-                          .map((d) => d.weight)
-                          .filter((w) => w > 0)
-                      ) || 0;
-                    const maxWeight = Math.max(
-                      ...weightHistory.map((d) => d.weight)
-                    );
-                    const range = maxWeight - minWeight || 1;
-                    const height =
-                      day.weight > 0
-                        ? ((day.weight - minWeight) / range) * 70 + 30
-                        : 0;
-                    const isToday = index === weightHistory.length - 1;
-
-                    return (
-                      <div
-                        key={`weight-${index}`}
-                        className="flex-1 flex flex-col items-center gap-2"
-                      >
-                        <div
-                          className="w-full relative"
-                          style={{ height: "80px" }}
-                        >
-                          <div
-                            className={`absolute bottom-0 left-0 right-0 ${isToday ? "bg-warning" : "bg-default-200"} rounded-t-lg transition-all`}
-                            style={{ height: `${height}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-foreground/60">
-                          {day.date}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
-
-            {/* Water Tracker - Hidden for now */}
-            {false && (
+            {/* Weight Tracker */}
+            {weightHistory.some((d) => d.weight > 0) && (
               <Card>
                 <CardBody className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                      CONTADOR DE AGUA
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        isIconOnly
-                        className="rounded-full"
-                        size="sm"
-                        variant="flat"
-                        onPress={handleWaterDecrement}
-                      >
-                        <Icon
-                          className="text-base"
-                          icon="solar:minus-circle-bold"
-                        />
-                      </Button>
-                      <Button
-                        isIconOnly
-                        className="rounded-full"
-                        size="sm"
-                        variant="flat"
-                        onPress={handleWaterIncrement}
-                      >
-                        <Icon
-                          className="text-base"
-                          icon="solar:add-circle-bold"
-                        />
-                      </Button>
-                      <div className="bg-primary p-1.5 rounded-full">
-                        <Icon
-                          className="text-white text-base"
-                          icon="solar:bottle-bold"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-5xl font-bold mb-1 text-foreground">
-                    <span className="tabular-nums">
-                      {waterIntake.toFixed(2)}
-                    </span>
-                  </p>
-                  <p className="text-sm text-foreground/70 mb-4">
-                    L de {waterGoal} L
-                  </p>
-                  <div className="relative h-3 bg-default-100 rounded-full overflow-hidden">
-                    <div
-                      className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-primary to-primary-400 rounded-full transition-all duration-500"
-                      style={{ width: `${waterPercentage}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-2">
-                    <span className="text-xs text-foreground/50">0%</span>
-                    <span className="text-xs text-foreground/70 font-semibold">
-                      {waterPercentage.toFixed(0)}%
-                    </span>
-                    <span className="text-xs text-foreground/50">100%</span>
-                  </div>
+                  <WeightChart
+                    currentValue={
+                      weightHistory[weightHistory.length - 1]?.weight || 0
+                    }
+                    data={weightHistory}
+                  />
                 </CardBody>
               </Card>
             )}
 
-            {/* Sleep Tracker - Full Width */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                    SUEÑO
-                  </p>
-                  <div className="bg-green-100 p-1.5 rounded-full">
-                    <Icon
-                      className="text-green-600 text-base"
-                      icon="solar:moon-sleep-bold"
-                    />
-                  </div>
-                </div>
-                <p className="text-5xl font-bold mb-1 text-foreground">
-                  {sleepHistory[sleepHistory.length - 1]?.hours || 0}
-                </p>
-                <p className="text-sm text-foreground/70 mb-4">Horas anoche</p>
-                <div className="flex items-end justify-between gap-2 h-24">
-                  {sleepHistory.map((day, index) => {
-                    const maxHours = 10;
-                    const height = (day.hours / maxHours) * 100;
-                    const isToday = index === sleepHistory.length - 1;
+            {/* Sleep Tracker */}
+            {sleepHistory.some((d) => d.hours > 0) && (
+              <Card>
+                <CardBody className="p-4">
+                  <SleepChart
+                    currentValue={
+                      sleepHistory[sleepHistory.length - 1]?.hours || 0
+                    }
+                    data={sleepHistory}
+                  />
+                </CardBody>
+              </Card>
+            )}
 
-                    return (
-                      <div
-                        key={`sleep-${index}`}
-                        className="flex-1 flex flex-col items-center gap-2"
-                      >
-                        <div
-                          className="w-full relative"
-                          style={{ height: "80px" }}
-                        >
-                          <div
-                            className={`absolute bottom-0 left-0 right-0 ${isToday ? "bg-secondary" : "bg-default-200"} rounded-t-lg transition-all`}
-                            style={{ height: `${height}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-foreground/60">
-                          {day.date}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
+            {/* Calories Tracker */}
+            {calorieHistory.some((d) => d.calories > 0) && (
+              <Card>
+                <CardBody className="p-4">
+                  <CaloriesChart
+                    currentValue={
+                      calorieHistory[calorieHistory.length - 1]?.calories || 0
+                    }
+                    data={calorieHistory}
+                  />
+                </CardBody>
+              </Card>
+            )}
 
-            {/* Calories Tracker - Full Width */}
-            <Card>
-              <CardBody className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                    CALORÍAS
-                  </p>
-                  <div className="bg-danger/10 p-1.5 rounded-full">
-                    <Icon
-                      className="text-danger text-base"
-                      icon="solar:fire-bold"
-                    />
-                  </div>
-                </div>
-                <p className="text-5xl font-bold mb-1 text-foreground">
-                  {calorieHistory[calorieHistory.length - 1]?.calories || 0}
-                </p>
-                <p className="text-sm text-foreground/70 mb-4">Hoy</p>
-                <div className="flex items-end justify-between gap-2 h-24">
-                  {calorieHistory.map((day, index) => {
-                    const maxCals =
-                      Math.max(...calorieHistory.map((d) => d.calories)) || 1;
-                    const height = (day.calories / maxCals) * 100;
-                    const isToday = index === calorieHistory.length - 1;
+            {/* Protein Tracker */}
+            {proteinHistory.some((d) => d.protein > 0) && (
+              <Card>
+                <CardBody className="p-4">
+                  <ProteinChart
+                    currentValue={
+                      proteinHistory[proteinHistory.length - 1]?.protein || 0
+                    }
+                    data={proteinHistory}
+                  />
+                </CardBody>
+              </Card>
+            )}
 
-                    return (
-                      <div
-                        key={`calorie-${index}`}
-                        className="flex-1 flex flex-col items-center gap-2"
-                      >
-                        <div
-                          className="w-full relative"
-                          style={{ height: "80px" }}
-                        >
-                          <div
-                            className={`absolute bottom-0 left-0 right-0 ${isToday ? "bg-danger" : "bg-default-200"} rounded-t-lg transition-all`}
-                            style={{ height: `${height}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-foreground/60">
-                          {day.date}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
+            {/* Macros Distribution */}
+            {(avgMacros.protein > 0 ||
+              avgMacros.carbs > 0 ||
+              avgMacros.fats > 0) && (
+              <Card>
+                <CardBody className="p-4">
+                  <MacrosRing
+                    carbs={avgMacros.carbs}
+                    fats={avgMacros.fats}
+                    protein={avgMacros.protein}
+                  />
+                </CardBody>
+              </Card>
+            )}
+
+            {/* Training Activity */}
+            {trainingActivity.some((d) => d.strength > 0 || d.cardio > 0) && (
+              <Card>
+                <CardBody className="p-4">
+                  <TrainingActivityChart
+                    data={trainingActivity}
+                    weekTotal={trainingWeekTotal}
+                  />
+                </CardBody>
+              </Card>
+            )}
 
             {/* NEAT Tracker - Only show if NEAT cards configured and applicable today */}
             {shouldShowNeatChart && (

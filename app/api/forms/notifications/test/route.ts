@@ -21,16 +21,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Get tenant_host for this client
-    const { data: tenantHost } = await supabase
-      .rpc("get_tenant_host_for_client", { p_client_id: client_id })
+    const { data: clientData } = await supabase
+      .from("clients")
+      .select("tenant")
+      .eq("id", client_id)
       .single();
 
-    if (!tenantHost) {
+    if (!clientData) {
       return NextResponse.json(
         { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
     }
+
+    const { data: tenantRecord } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", clientData.tenant)
+      .single();
+
+    if (!tenantRecord) {
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const tenantHost = tenantRecord.host;
 
     const title =
       form_type === "checkins"

@@ -1,18 +1,27 @@
 "use client";
 
-import { Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
-// import CalendarTab from "./tabs/calendar-tab"; // Hidden temporarily
+import AccessTab from "./tabs/access-tab";
 import CardioTab from "./tabs/cardio-tab";
 import FormsTab from "./tabs/forms-tab";
-// import GalleryTab from "./tabs/gallery-tab"; // Hidden temporarily
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
 import ProgressTab from "./tabs/progress-tab";
 import SupplementsTab from "./tabs/supplements-tab";
 import WorkoutsTab from "./tabs/workouts-tab";
+
+const TAB_ITEMS = [
+  { key: "progress", label: "Progreso", icon: "solar:chart-line-duotone" },
+  { key: "workouts", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
+  { key: "cardio", label: "Cardio", icon: "solar:heart-pulse-bold" },
+  { key: "neat", label: "NEAT", icon: "solar:walking-bold" },
+  { key: "nutrition", label: "Nutrición", icon: "fluent:food-20-filled" },
+  { key: "supplements", label: "Suplementos", icon: "solar:health-bold" },
+  { key: "forms", label: "Formularios", icon: "solar:clipboard-list-bold" },
+  { key: "access", label: "Acceso", icon: "solar:key-bold" },
+] as const;
 
 interface ClientProfileTabsProps {
   clientId: string;
@@ -24,8 +33,6 @@ export default function ClientProfileTabs({
   clientName,
 }: ClientProfileTabsProps) {
   const [selectedTab, setSelectedTab] = useState("progress");
-  // useRef so handleTabChange always reads the latest value without stale
-  // closure issues from React state batching.
   const formsUnsavedRef = useRef(false);
 
   const handleTabChange = (key: string) => {
@@ -47,101 +54,32 @@ export default function ClientProfileTabs({
       {/* Tabs Navigation */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-          <Tabs
-            classNames={{
-              tabList: "gap-6",
-              cursor: "bg-blue-600",
-              tab: "h-14",
-              tabContent: "group-data-[selected=true]:text-blue-600",
-            }}
-            selectedKey={selectedTab}
-            variant="underlined"
-            onSelectionChange={(key) => handleTabChange(key as string)}
+          <div
+            className="flex overflow-x-auto scrollbar-hide -mb-px"
+            role="tablist"
           >
-            <Tab
-              key="progress"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:chart-line-duotone" width={20} />
-                  <span className="font-medium">Progreso</span>
-                </div>
-              }
-            />
-            <Tab
-              key="workouts"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:dumbbell-bold" width={20} />
-                  <span className="font-medium">Entrenamientos</span>
-                </div>
-              }
-            />
-            <Tab
-              key="cardio"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:heart-pulse-bold" width={20} />
-                  <span className="font-medium">Cardio</span>
-                </div>
-              }
-            />
-            <Tab
-              key="neat"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:walking-bold" width={20} />
-                  <span className="font-medium">NEAT</span>
-                </div>
-              }
-            />
-            <Tab
-              key="nutrition"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="fluent:food-20-filled" width={20} />
-                  <span className="font-medium">Nutrición</span>
-                </div>
-              }
-            />
-            <Tab
-              key="supplements"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:health-bold" width={20} />
-                  <span className="font-medium">Suplementos</span>
-                </div>
-              }
-            />
-            <Tab
-              key="forms"
-              title={
-                <div className="flex items-center gap-2">
-                  <Icon icon="solar:clipboard-list-bold" width={20} />
-                  <span className="font-medium">Formularios</span>
-                </div>
-              }
-            />
-            {/* Hidden temporarily - will be finished later */}
-            {/* <Tab
-                            key="gallery"
-                            title={
-                                <div className="flex items-center gap-2">
-                                    <Icon icon="solar:camera-bold" width={20} />
-                                    <span className="font-medium">Galería</span>
-                                </div>
-                            }
-                        /> */}
-            {/* Hidden temporarily - will be finished later */}
-            {/* <Tab
-                            key="calendar"
-                            title={
-                                <div className="flex items-center gap-2">
-                                    <Icon icon="solar:calendar-bold" width={20} />
-                                    <span className="font-medium">Calendario</span>
-                                </div>
-                            }
-                        /> */}
-          </Tabs>
+            {TAB_ITEMS.map((tab) => {
+              const isSelected = selectedTab === tab.key;
+
+              return (
+                <button
+                  key={tab.key}
+                  aria-selected={isSelected}
+                  className={`relative flex items-center gap-1.5 px-3 h-12 whitespace-nowrap text-sm font-medium transition-colors flex-shrink-0 outline-none border-b-2 ${
+                    isSelected
+                      ? "text-blue-600 border-blue-600"
+                      : "text-gray-500 hover:text-gray-700 border-transparent"
+                  }`}
+                  role="tab"
+                  type="button"
+                  onClick={() => handleTabChange(tab.key)}
+                >
+                  <Icon icon={tab.icon} width={18} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -168,9 +106,9 @@ export default function ClientProfileTabs({
               }}
             />
           )}
-          {/* Hidden temporarily - will be finished later */}
-          {/* {selectedTab === "gallery" && <GalleryTab clientId={clientId} />} */}
-          {/* {selectedTab === "calendar" && <CalendarTab clientId={clientId} />} */}
+          {selectedTab === "access" && (
+            <AccessTab clientId={clientId} clientName={clientName ?? ""} />
+          )}
         </div>
       </div>
     </div>

@@ -34,6 +34,7 @@ export default function AyudaContent() {
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("");
   const [priority, setPriority] = React.useState("");
+  const [videoUrl, setVideoUrl] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitResult, setSubmitResult] = React.useState<{
     type: "success" | "error";
@@ -73,6 +74,7 @@ export default function AyudaContent() {
           categoria: categoryLabel,
           prioridad: priorityLabel,
           descripcion: description.trim(),
+          video_url: videoUrl.trim() || undefined,
         }),
       });
 
@@ -87,6 +89,7 @@ export default function AyudaContent() {
         setDescription("");
         setCategory("");
         setPriority("");
+        setVideoUrl("");
       } else {
         setSubmitResult({
           type: "error",
@@ -322,6 +325,25 @@ export default function AyudaContent() {
                   value={description}
                   variant="bordered"
                   onValueChange={setDescription}
+                />
+
+                <Input
+                  description="Opcional — añade un enlace a un vídeo que quieras que revisemos"
+                  isDisabled={isSubmitting}
+                  label="Video URL"
+                  labelPlacement="outside"
+                  placeholder="https://drive.google.com/..."
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:video-library-linear"
+                      width={20}
+                    />
+                  }
+                  type="url"
+                  value={videoUrl}
+                  variant="bordered"
+                  onValueChange={setVideoUrl}
                 />
 
                 <div className="flex items-center justify-between pt-2">

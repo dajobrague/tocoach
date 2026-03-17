@@ -85,6 +85,13 @@ export async function GET(
           }
         : null;
 
+    // Get the trainer's tenant slug from the tenants table
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("slug")
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
     // Return formatted client data
     return NextResponse.json({
       id: client.id,
@@ -103,6 +110,7 @@ export async function GET(
       dob: client.dob,
       nationalId: client.national_id,
       location,
+      tenantSlug: tenant?.slug || session.tenant_host || "",
     });
   } catch (error) {
     console.error("[Client Profile API] Error:", error);

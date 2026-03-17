@@ -1489,6 +1489,11 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                                                         </span>
                                                       )}
                                                   </div>
+                                                  {exercise.description && (
+                                                    <p className="text-gray-500 mt-1 text-xs">
+                                                      {exercise.description}
+                                                    </p>
+                                                  )}
                                                   {exercise.notes && (
                                                     <p className="text-gray-500 mt-1 text-xs italic">
                                                       Notas: {exercise.notes}

@@ -33,6 +33,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
 import SaveNutritionTemplateModal from "@/components/dashboard/save-nutrition-template-modal";
+import { NutritionProgressView } from "@/components/dashboard/client-profile/tabs/progress/nutrition-section";
 
 interface NutritionTabProps {
   clientId: string;
@@ -88,6 +89,9 @@ const formatWeekdays = (weekdays: number[]): string => {
 };
 
 export default function NutritionTab({ clientId }: NutritionTabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<"setup" | "progress">(
+    "setup"
+  );
   const [nutritionPlan, setNutritionPlan] =
     useState<NutritionPlanWithDays | null>(null);
   const [allPlans, setAllPlans] = useState<NutritionPlanWithDays[]>([]);
@@ -1191,23 +1195,71 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
+  const subTabSelector = (
+    <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit mb-6">
+      <button
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          activeSubTab === "setup"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+        type="button"
+        onClick={() => setActiveSubTab("setup")}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon icon="solar:dish-bold" width={16} />
+          Plan Nutricional
+        </span>
+      </button>
+      <button
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          activeSubTab === "progress"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+        type="button"
+        onClick={() => setActiveSubTab("progress")}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon icon="solar:chart-line-duotone" width={16} />
+          Progreso
+        </span>
+      </button>
+    </div>
+  );
+
+  if (activeSubTab === "progress") {
+    return (
+      <div>
+        {subTabSelector}
+        <NutritionProgressView clientId={clientId} />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Spinner color="default" size="lg" />
+      <div>
+        {subTabSelector}
+        <div className="flex justify-center items-center py-20">
+          <Spinner color="default" size="lg" />
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Icon
-          className="text-red-500 mb-4"
-          icon="solar:danger-circle-bold"
-          width={48}
-        />
-        <p className="text-red-600 text-lg">{error}</p>
+      <div>
+        {subTabSelector}
+        <div className="flex flex-col items-center justify-center py-20">
+          <Icon
+            className="text-red-500 mb-4"
+            icon="solar:danger-circle-bold"
+            width={48}
+          />
+          <p className="text-red-600 text-lg">{error}</p>
+        </div>
       </div>
     );
   }
@@ -1215,6 +1267,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   if (!nutritionPlan) {
     return (
       <>
+        {subTabSelector}
         <div className="flex flex-col items-center justify-center py-20">
           <Icon
             className="text-gray-300 mb-4"
@@ -1429,6 +1482,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      {subTabSelector}
       {/* Plan Selector and New Plan Button */}
       <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
         <div className="flex items-center gap-3">

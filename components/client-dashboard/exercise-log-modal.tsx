@@ -21,6 +21,7 @@ interface ExerciseLogModalProps {
   exercise: {
     id: string;
     name: string;
+    category?: string;
     sets?: number;
     reps?: string;
     tempo?: string;
@@ -53,12 +54,9 @@ export function ExerciseLogModal({
 }: ExerciseLogModalProps) {
   const [isSaving, setIsSaving] = useState(false);
 
-  // Detect if this is a cardio exercise
-  const isCardio = !!(
-    exercise?.duration ||
-    exercise?.distance ||
-    exercise?.cardioType
-  );
+  const isCardio =
+    exercise?.category === "cardio" ||
+    !!(exercise?.duration || exercise?.distance || exercise?.cardioType);
 
   const [formData, setFormData] = useState({
     // Strength fields

@@ -219,15 +219,6 @@ export function WorkoutsContent() {
 
     const sessions: ScheduledSession[] = [];
     const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-    const dayMap: { [key: string]: number } = {
-      Lun: 1,
-      Mar: 2,
-      Mie: 3,
-      Jue: 4,
-      Vie: 5,
-      Sab: 6,
-      Dom: 0,
-    };
 
     // Create sessions for the past 2 weeks and next 3 weeks
     for (let dayOffset = -14; dayOffset <= 21; dayOffset++) {
@@ -248,19 +239,37 @@ export function WorkoutsContent() {
         );
 
         if (matchingSession) {
-          // Use deterministic values based on dayOffset to avoid hydration errors
-          const seed = Math.abs(dayOffset);
+          const dateStr = sessionDate.toISOString().split("T")[0];
+          const exercises: any[] = matchingSession.exercises || [];
+          const exerciseIdsWithSlot = exercises.map((e: any, idx: number) => ({
+            eid: e.exercise_id || null,
+            slot: idx,
+          }));
+          const trackableExercises = exerciseIdsWithSlot.filter((e) => e.eid);
+          const totalExercises = trackableExercises.length;
+
+          const loggedSet = new Set(
+            exerciseLogs
+              .filter((log: any) => log.scheduled_date === dateStr)
+              .map((log: any) => log.exercise_id)
+          );
+          const loggedCount = trackableExercises.filter((e) =>
+            loggedSet.has(e.eid)
+          ).length;
+
           let status: SessionStatus = "pending";
           let progress = 0;
 
-          if (dayOffset < 0) {
-            // Past sessions - mostly completed
-            status = seed % 5 === 0 ? "pending" : "completed";
-            progress = status === "completed" ? 100 : 0;
-          } else if (dayOffset === 0) {
-            // Today - could be in progress or pending
-            status = seed % 2 === 0 ? "pending" : "in-progress";
-            progress = status === "in-progress" ? 45 : 0;
+          if (dayOffset > 0) {
+            status = "pending";
+          } else if (totalExercises > 0 && loggedCount > 0) {
+            if (loggedCount >= totalExercises) {
+              status = "completed";
+              progress = 100;
+            } else {
+              status = "in-progress";
+              progress = Math.round((loggedCount / totalExercises) * 100);
+            }
           }
 
           let dayLabel = "";
@@ -389,9 +398,7 @@ export function WorkoutsContent() {
               <Icon
                 className={`${isToday ? "text-white" : "text-primary"} mt-1`}
                 icon={
-                  session.exercises.some(
-                    (ex: any) => ex.duration || ex.distance || ex.cardioType
-                  )
+                  session.exercises.some((ex: any) => ex.category === "cardio")
                     ? "solar:heart-pulse-bold"
                     : "solar:dumbbell-bold"
                 }
@@ -478,36 +485,46 @@ export function WorkoutsContent() {
                 />
               )}
 
-              {/* Session Actions Menu */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <Dropdown placement="bottom-end">
-                  <DropdownTrigger>
-                    <Button
-                      isIconOnly
-                      className={
-                        isToday
-                          ? "text-white bg-transparent hover:bg-white/10 data-[hover=true]:bg-white/10"
-                          : "text-foreground"
-                      }
-                      size="sm"
-                      variant="light"
-                    >
-                      <Icon icon="solar:menu-dots-bold" width={20} />
-                    </Button>
-                  </DropdownTrigger>
-                  <DropdownMenu aria-label="Session actions">
-                    <DropdownItem
-                      key="reschedule"
-                      startContent={
-                        <Icon icon="solar:calendar-mark-linear" width={18} />
-                      }
-                      onPress={() => handleOpenReschedule(session, session.id)}
-                    >
-                      Reprogramar
-                    </DropdownItem>
-                  </DropdownMenu>
-                </Dropdown>
-              </div>
+              {/* Session Actions Menu — only for today or future */}
+              {(() => {
+                const now = new Date();
+
+                now.setHours(0, 0, 0, 0);
+
+                return session.date >= now;
+              })() && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Dropdown placement="bottom-end">
+                    <DropdownTrigger>
+                      <Button
+                        isIconOnly
+                        className={
+                          isToday
+                            ? "text-white bg-transparent hover:bg-white/10 data-[hover=true]:bg-white/10"
+                            : "text-foreground"
+                        }
+                        size="sm"
+                        variant="light"
+                      >
+                        <Icon icon="solar:menu-dots-bold" width={20} />
+                      </Button>
+                    </DropdownTrigger>
+                    <DropdownMenu aria-label="Session actions">
+                      <DropdownItem
+                        key="reschedule"
+                        startContent={
+                          <Icon icon="solar:calendar-mark-linear" width={18} />
+                        }
+                        onPress={() =>
+                          handleOpenReschedule(session, session.id)
+                        }
+                      >
+                        Reprogramar
+                      </DropdownItem>
+                    </DropdownMenu>
+                  </Dropdown>
+                </div>
+              )}
             </div>
           </div>
 
@@ -535,24 +552,44 @@ export function WorkoutsContent() {
                             src={exercise.imageUrl}
                           />
                           <div
-                            className={`absolute bottom-0 right-0 w-4 h-4 ${isToday ? "bg-white" : "bg-primary"} rounded-tl-md flex items-center justify-center`}
+                            className={`absolute bottom-0 right-0 w-4 h-4 ${isToday ? "bg-white" : exercise.category === "cardio" ? "bg-red-500" : "bg-primary"} rounded-tl-md flex items-center justify-center`}
                           >
-                            <span
-                              className={`text-[8px] font-bold ${isToday ? "text-primary" : "text-white"}`}
-                            >
-                              {exercise.order}
-                            </span>
+                            {exercise.category === "cardio" ? (
+                              <Icon
+                                className={
+                                  isToday ? "text-primary" : "text-white"
+                                }
+                                icon="solar:heart-pulse-bold"
+                                width={10}
+                              />
+                            ) : (
+                              <span
+                                className={`text-[8px] font-bold ${isToday ? "text-primary" : "text-white"}`}
+                              >
+                                {exercise.order}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ) : (
                         <div
-                          className={`w-7 h-7 ${isToday ? "bg-white" : "bg-primary"} rounded-full flex items-center justify-center flex-shrink-0`}
+                          className={`w-7 h-7 ${isToday ? "bg-white" : exercise.category === "cardio" ? "bg-red-500" : "bg-primary"} rounded-full flex items-center justify-center flex-shrink-0`}
                         >
-                          <span
-                            className={`text-xs font-bold ${isToday ? "text-primary" : "text-white"}`}
-                          >
-                            {exercise.order}
-                          </span>
+                          {exercise.category === "cardio" ? (
+                            <Icon
+                              className={
+                                isToday ? "text-red-500" : "text-white"
+                              }
+                              icon="solar:heart-pulse-bold"
+                              width={14}
+                            />
+                          ) : (
+                            <span
+                              className={`text-xs font-bold ${isToday ? "text-primary" : "text-white"}`}
+                            >
+                              {exercise.order}
+                            </span>
+                          )}
                         </div>
                       )}
 
@@ -574,10 +611,7 @@ export function WorkoutsContent() {
                           </div>
 
                           {/* Basic Stats - Always Visible */}
-                          {/* Check if this is a cardio exercise */}
-                          {exercise.duration ||
-                          exercise.distance ||
-                          exercise.cardioType ? (
+                          {exercise.category === "cardio" ? (
                             // Cardio exercise rendering
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               {exercise.duration && (
@@ -785,9 +819,7 @@ export function WorkoutsContent() {
                               className={`mt-3 pt-3 ${isToday ? "border-t border-white/10" : "border-t border-default-200"} space-y-2`}
                             >
                               {/* Cardio exercise expanded details */}
-                              {exercise.duration ||
-                              exercise.distance ||
-                              exercise.cardioType ? (
+                              {exercise.category === "cardio" ? (
                                 <>
                                   {exercise.cardioType && (
                                     <div className="flex items-center gap-2">
@@ -809,6 +841,24 @@ export function WorkoutsContent() {
                                         >
                                           {exercise.cardioType}
                                         </span>
+                                      </span>
+                                    </div>
+                                  )}
+                                  {exercise.description && (
+                                    <div className="flex items-start gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-secondary"
+                                        }
+                                        icon="solar:document-text-bold"
+                                        width={14}
+                                      />
+                                      <span
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body flex-1`}
+                                      >
+                                        {exercise.description}
                                       </span>
                                     </div>
                                   )}
@@ -834,69 +884,93 @@ export function WorkoutsContent() {
                               ) : (
                                 // Strength exercise expanded details (existing code)
                                 <>
-                                  <div className="flex items-center gap-2">
-                                    <Icon
-                                      className={
-                                        isToday
-                                          ? "text-white/60"
-                                          : "text-primary"
-                                      }
-                                      icon="solar:graph-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
-                                    >
-                                      Sistema:{" "}
+                                  {exercise.trainingSystem && (
+                                    <div className="flex items-center gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-primary"
+                                        }
+                                        icon="solar:graph-bold"
+                                        width={14}
+                                      />
                                       <span
-                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
                                       >
-                                        {exercise.trainingSystem}
+                                        Sistema:{" "}
+                                        <span
+                                          className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        >
+                                          {exercise.trainingSystem}
+                                        </span>
                                       </span>
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Icon
-                                      className={
-                                        isToday
-                                          ? "text-white/60"
-                                          : "text-secondary"
-                                      }
-                                      icon="solar:stopwatch-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
-                                    >
-                                      Tempo:{" "}
+                                    </div>
+                                  )}
+                                  {exercise.tempo && (
+                                    <div className="flex items-center gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-secondary"
+                                        }
+                                        icon="solar:stopwatch-bold"
+                                        width={14}
+                                      />
                                       <span
-                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
                                       >
-                                        {exercise.tempo}
+                                        Tempo:{" "}
+                                        <span
+                                          className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        >
+                                          {exercise.tempo}
+                                        </span>
                                       </span>
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Icon
-                                      className={
-                                        isToday
-                                          ? "text-white/60"
-                                          : "text-warning"
-                                      }
-                                      icon="solar:clock-circle-bold"
-                                      width={14}
-                                    />
-                                    <span
-                                      className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
-                                    >
-                                      Descanso:{" "}
+                                    </div>
+                                  )}
+                                  {exercise.rest && (
+                                    <div className="flex items-center gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-warning"
+                                        }
+                                        icon="solar:clock-circle-bold"
+                                        width={14}
+                                      />
                                       <span
-                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
                                       >
-                                        {exercise.rest}
+                                        Descanso:{" "}
+                                        <span
+                                          className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                        >
+                                          {exercise.rest}
+                                        </span>
                                       </span>
-                                    </span>
-                                  </div>
+                                    </div>
+                                  )}
+                                  {exercise.description && (
+                                    <div className="flex items-start gap-2">
+                                      <Icon
+                                        className={
+                                          isToday
+                                            ? "text-white/60"
+                                            : "text-secondary"
+                                        }
+                                        icon="solar:document-text-bold"
+                                        width={14}
+                                      />
+                                      <span
+                                        className={`text-xs ${isToday ? "text-white/80" : "text-foreground/60"} font-body flex-1`}
+                                      >
+                                        {exercise.description}
+                                      </span>
+                                    </div>
+                                  )}
                                   {exercise.notes && (
                                     <div className="flex items-start gap-2">
                                       <Icon
@@ -1127,23 +1201,6 @@ export function WorkoutsContent() {
               </div>
             )}
 
-            {/* Yesterday's Training */}
-            {!isLoading && !error && yesterdaySession && (
-              <div className="w-full">
-                <div className="flex items-center gap-2 mb-3 mt-8">
-                  <Icon
-                    className="text-foreground/70"
-                    icon="solar:history-bold"
-                    width={18}
-                  />
-                  <h3 className="text-lg font-heading font-semibold text-foreground">
-                    Ayer
-                  </h3>
-                </div>
-                {renderSessionCard(yesterdaySession)}
-              </div>
-            )}
-
             {/* Upcoming Sessions */}
             {!isLoading && !error && upcomingSessions.length > 0 && (
               <div className="w-full">
@@ -1162,6 +1219,23 @@ export function WorkoutsContent() {
                     renderSessionCard(session)
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Yesterday's Training */}
+            {!isLoading && !error && yesterdaySession && (
+              <div className="w-full">
+                <div className="flex items-center gap-2 mb-3 mt-8">
+                  <Icon
+                    className="text-foreground/70"
+                    icon="solar:history-bold"
+                    width={18}
+                  />
+                  <h3 className="text-lg font-heading font-semibold text-foreground">
+                    Ayer
+                  </h3>
+                </div>
+                {renderSessionCard(yesterdaySession)}
               </div>
             )}
 

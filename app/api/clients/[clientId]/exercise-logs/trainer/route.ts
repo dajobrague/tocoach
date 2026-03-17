@@ -25,13 +25,35 @@ export async function GET(
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
+    // Verify the client belongs to the trainer's tenant
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id, tenant")
+      .eq("id", clientId)
+      .single();
+
+    if (clientError || !client || client.tenant !== session.trainer_id) {
+      console.warn(
+        "[Trainer Exercise Logs API] Client not found or not owned by trainer:",
+        {
+          clientId,
+          trainerId: session.trainer_id,
+          clientTenant: client?.tenant,
+        }
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Cliente no encontrado" },
+        { status: 404 }
+      );
+    }
+
     let query = supabase
       .from("exercise_logs")
       .select(
         `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date)`
       )
       .eq("client_id", clientId)
-      .eq("tenant_host", session.tenant_host)
       .order("completed_at", { ascending: true });
 
     if (startDate) {

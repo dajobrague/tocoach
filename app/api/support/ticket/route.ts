@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { asunto, categoria, prioridad, descripcion } = body;
+    const { asunto, categoria, prioridad, descripcion, video_url } = body;
 
     if (!asunto || !descripcion) {
       return NextResponse.json(
@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
     // Build trainer name from session
     const trainerName = session.full_name || session.email || "Desconocido";
 
+    // Build Airtable fields — only include Video URL if provided
+    const fields: Record<string, string> = {
+      asunto,
+      categoria: categoria || "Consulta General",
+      prioridad: prioridad || "Media",
+      descripcion,
+      trainer: trainerName,
+    };
+
+    if (video_url && video_url.trim()) {
+      fields["Video URL"] = video_url.trim();
+    }
+
     // Create record in Airtable via REST API
     const airtableUrl = `https://api.airtable.com/v0/${baseId}/${tableId}`;
     const airtableRes = await fetch(airtableUrl, {
@@ -49,15 +62,7 @@ export async function POST(request: NextRequest) {
         Authorization: `Bearer ${pat}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        fields: {
-          asunto,
-          categoria: categoria || "Consulta General",
-          prioridad: prioridad || "Media",
-          descripcion,
-          trainer: trainerName,
-        },
-      }),
+      body: JSON.stringify({ fields }),
     });
 
     if (!airtableRes.ok) {

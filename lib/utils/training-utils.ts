@@ -116,6 +116,7 @@ export function transformToWorkoutProgram(
           const cardioExercise: WorkoutExercise = {
             order: se.exercise_order,
             name: se.exercise?.name || "Ejercicio sin nombre",
+            category: se.exercise?.category || "cardio",
             sets: 0,
             reps: "",
             tempo: "",
@@ -133,15 +134,16 @@ export function transformToWorkoutProgram(
               : {}),
             ...(se.metadata?.heart_rate_min && se.metadata?.heart_rate_max
               ? {
-                heartRateZone: {
-                  min: se.metadata.heart_rate_min,
-                  max: se.metadata.heart_rate_max,
-                },
-              }
+                  heartRateZone: {
+                    min: se.metadata.heart_rate_min,
+                    max: se.metadata.heart_rate_max,
+                  },
+                }
               : {}),
             ...(se.metadata?.cardio_type
               ? { cardioType: se.metadata.cardio_type }
               : {}),
+            description: se.exercise?.description || undefined,
             notes: se.notes || undefined,
             ...(se.exercise?.video_url
               ? { videoUrl: se.exercise.video_url }
@@ -159,11 +161,13 @@ export function transformToWorkoutProgram(
           return {
             order: se.exercise_order,
             name: se.exercise?.name || "Ejercicio sin nombre",
+            category: se.exercise?.category || "strength",
             sets: se.sets || 0,
             reps: se.reps || "0",
             tempo: se.metadata?.tempo || "",
             rest: se.metadata?.rest_description || "",
             trainingSystem: se.metadata?.training_system || "",
+            description: se.exercise?.description || undefined,
             notes: se.notes || undefined,
             videoUrl: se.exercise?.video_url,
             imageUrl: se.exercise?.image_url,

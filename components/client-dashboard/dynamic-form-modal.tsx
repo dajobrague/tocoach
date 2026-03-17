@@ -537,7 +537,6 @@ export function DynamicFormModal({
                 fileInputRefs.current[question.id] = el;
               }}
               accept="image/png,image/jpeg,image/jpg,image/webp"
-              capture="environment"
               className="hidden"
               type="file"
               onChange={(e) => {
@@ -754,7 +753,6 @@ export function DynamicFormModal({
                                 fileInputRefs.current[sub.id] = el;
                               }}
                               accept="image/png,image/jpeg,image/jpg,image/webp"
-                              capture="environment"
                               className="hidden"
                               type="file"
                               onChange={(e) => {

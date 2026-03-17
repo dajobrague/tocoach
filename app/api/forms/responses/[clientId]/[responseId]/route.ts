@@ -34,25 +34,35 @@ export async function PUT(
     }
 
     // Get tenant_host for this client
-    const { data: tenantHost, error: tenantError } = await supabase
-      .rpc("get_tenant_host_for_client", { p_client_id: clientId })
+    const { data: clientData, error: clientError } = await supabase
+      .from("clients")
+      .select("tenant")
+      .eq("id", clientId)
       .single();
 
-    if (tenantError || !tenantHost) {
+    if (clientError || !clientData) {
       return NextResponse.json(
-        { success: false, error: "Cliente o tenant no encontrado" },
+        { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
     }
 
-    // Verify this tenant belongs to the logged-in trainer
-    const { data: tenant } = await supabase
+    const { data: tenantData, error: tenantError } = await supabase
       .from("tenants")
       .select("host, trainer_id")
-      .eq("host", tenantHost)
+      .eq("trainer_id", clientData.tenant)
       .single();
 
-    if (!tenant || tenant.trainer_id !== session.trainer_id) {
+    if (tenantError || !tenantData) {
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const tenantHost = tenantData.host;
+
+    if (tenantData.trainer_id !== session.trainer_id) {
       return NextResponse.json(
         { success: false, error: "No autorizado para este cliente" },
         { status: 403 }
@@ -143,25 +153,35 @@ export async function DELETE(
     }
 
     // Get tenant_host for this client
-    const { data: tenantHost, error: tenantError } = await supabase
-      .rpc("get_tenant_host_for_client", { p_client_id: clientId })
+    const { data: clientData, error: clientError } = await supabase
+      .from("clients")
+      .select("tenant")
+      .eq("id", clientId)
       .single();
 
-    if (tenantError || !tenantHost) {
+    if (clientError || !clientData) {
       return NextResponse.json(
-        { success: false, error: "Cliente o tenant no encontrado" },
+        { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
     }
 
-    // Verify this tenant belongs to the logged-in trainer
-    const { data: tenant } = await supabase
+    const { data: tenantData, error: tenantError } = await supabase
       .from("tenants")
       .select("host, trainer_id")
-      .eq("host", tenantHost)
+      .eq("trainer_id", clientData.tenant)
       .single();
 
-    if (!tenant || tenant.trainer_id !== session.trainer_id) {
+    if (tenantError || !tenantData) {
+      return NextResponse.json(
+        { success: false, error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const tenantHost = tenantData.host;
+
+    if (tenantData.trainer_id !== session.trainer_id) {
       return NextResponse.json(
         { success: false, error: "No autorizado para este cliente" },
         { status: 403 }

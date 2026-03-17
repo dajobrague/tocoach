@@ -15,12 +15,14 @@ export default function FloatingSupportButton() {
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("");
   const [priority, setPriority] = React.useState("");
+  const [videoUrl, setVideoUrl] = React.useState("");
 
   const resetForm = () => {
     setSubject("");
     setDescription("");
     setCategory("");
     setPriority("");
+    setVideoUrl("");
     setSubmitResult(null);
   };
 
@@ -72,6 +74,7 @@ export default function FloatingSupportButton() {
           categoria: categoryLabel,
           prioridad: priorityLabel,
           descripcion: description.trim(),
+          video_url: videoUrl.trim() || undefined,
         }),
       });
 
@@ -88,6 +91,7 @@ export default function FloatingSupportButton() {
         setDescription("");
         setCategory("");
         setPriority("");
+        setVideoUrl("");
         setTimeout(() => {
           setIsOpen(false);
           setSubmitResult(null);
@@ -276,6 +280,25 @@ export default function FloatingSupportButton() {
                   value={description}
                   variant="bordered"
                   onValueChange={setDescription}
+                />
+
+                <Input
+                  isDisabled={isSubmitting}
+                  label="Video URL"
+                  labelPlacement="outside"
+                  placeholder="https://drive.google.com/... (opcional)"
+                  size="sm"
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:video-library-linear"
+                      width={18}
+                    />
+                  }
+                  type="url"
+                  value={videoUrl}
+                  variant="bordered"
+                  onValueChange={setVideoUrl}
                 />
 
                 <div className="bg-slate-100 border border-slate-200 rounded-lg p-3">

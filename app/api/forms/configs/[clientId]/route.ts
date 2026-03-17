@@ -360,7 +360,7 @@ export async function PUT(
           questions_config,
           uses_template: uses_template !== undefined ? uses_template : false,
         },
-        { onConflict: "client_id,form_type,tenant_host" }
+        { onConflict: "client_id,form_type" }
       )
       .select()
       .single();

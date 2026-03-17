@@ -15,14 +15,14 @@ export interface Program {
   tags?: string[];
   metadata: {
     type?:
-    | "Strength"
-    | "HIIT"
-    | "Functional"
-    | "Hypertrophy"
-    | "Endurance"
-    | "Fat Loss"
-    | "Mixed"
-    | string;
+      | "Strength"
+      | "HIIT"
+      | "Functional"
+      | "Hypertrophy"
+      | "Endurance"
+      | "Fat Loss"
+      | "Mixed"
+      | string;
     division?: string; // "Full Body", "Upper/Lower", "Push/Pull/Legs"
     sessions_per_week?: number;
     category?: "cardio" | "strength"; // Distinguishes cardio from strength programs
@@ -60,12 +60,12 @@ export interface Session {
   session_order?: number;
   duration_minutes?: number;
   session_type?:
-  | "strength"
-  | "cardio"
-  | "flexibility"
-  | "sports"
-  | "recovery"
-  | "other";
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "sports"
+    | "recovery"
+    | "other";
   intensity_level?: "low" | "moderate" | "high";
   equipment_needed?: string[];
   notes?: string;
@@ -84,15 +84,15 @@ export interface Exercise {
   name: string;
   description?: string;
   category?:
-  | "strength"
-  | "cardio"
-  | "flexibility"
-  | "balance"
-  | "plyometric"
-  | "olympic"
-  | "powerlifting"
-  | "bodyweight"
-  | "other";
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
   muscle_groups?: string[];
   equipment?: string[];
   movement_pattern?: string;
@@ -165,6 +165,16 @@ export interface ScheduledSession {
 export interface WorkoutExercise {
   order: number;
   name: string;
+  category?:
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
   // Strength training fields
   sets: number;
   reps: string;
@@ -179,15 +189,16 @@ export interface WorkoutExercise {
   intensity?: "Low" | "Moderate" | "High" | "Interval" | string;
   heartRateZone?: { min: number; max: number }; // Target heart rate zone
   cardioType?:
-  | "Running"
-  | "Cycling"
-  | "Swimming"
-  | "Walking"
-  | "Rowing"
-  | "HIIT"
-  | "Elliptical"
-  | "Stairmaster"
-  | string;
+    | "Running"
+    | "Cycling"
+    | "Swimming"
+    | "Walking"
+    | "Rowing"
+    | "HIIT"
+    | "Elliptical"
+    | "Stairmaster"
+    | string;
+  description?: string;
   notes?: string | undefined; // Trainer notes for the exercise
   // Database IDs for updates
   id?: string;
@@ -270,15 +281,15 @@ export interface CreateExerciseLibraryRequest {
   name: string;
   description?: string;
   category:
-  | "strength"
-  | "cardio"
-  | "flexibility"
-  | "balance"
-  | "plyometric"
-  | "olympic"
-  | "powerlifting"
-  | "bodyweight"
-  | "other";
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
   muscle_groups?: string[];
   equipment?: string[];
   movement_pattern?: string;
@@ -298,15 +309,15 @@ export interface UpdateExerciseLibraryRequest {
   name?: string;
   description?: string;
   category?:
-  | "strength"
-  | "cardio"
-  | "flexibility"
-  | "balance"
-  | "plyometric"
-  | "olympic"
-  | "powerlifting"
-  | "bodyweight"
-  | "other";
+    | "strength"
+    | "cardio"
+    | "flexibility"
+    | "balance"
+    | "plyometric"
+    | "olympic"
+    | "powerlifting"
+    | "bodyweight"
+    | "other";
   muscle_groups?: string[];
   equipment?: string[];
   movement_pattern?: string;

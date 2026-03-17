@@ -16,6 +16,7 @@ export interface MockClient {
   phone?: string;
   dob?: string;
   nationalId?: string;
+  tenantSlug?: string;
   location?: {
     city?: string;
     state?: string;

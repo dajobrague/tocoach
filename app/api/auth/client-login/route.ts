@@ -14,60 +14,87 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { clientId, password, tenantSlug } = body;
 
-    // Validate required fields
     if (!clientId || !password || !tenantSlug) {
       return NextResponse.json(
-        { error: "Client ID, password, and tenant slug are required" },
+        { error: "Todos los campos son requeridos" },
         { status: 400 }
       );
     }
 
-    // Get client from database
+    // Resolve tenant slug → trainer_id for validation
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("trainer_id")
+      .eq("slug", tenantSlug)
+      .eq("status", "active")
+      .single();
+
+    if (tenantError || !tenant?.trainer_id) {
+      console.warn("[Client Login] Tenant not found:", {
+        slug: tenantSlug,
+        error: tenantError?.message,
+      });
+
+      return NextResponse.json(
+        { error: "Sitio del entrenador no encontrado." },
+        { status: 404 }
+      );
+    }
+
+    // Get client and verify they belong to this tenant
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id, email, name, last_name, password, status, tenant")
       .eq("id", clientId)
+      .eq("tenant", tenant.trainer_id)
       .single();
 
     if (clientError || !client) {
-      console.error("[Client Login] Client not found:", clientError);
+      console.warn("[Client Login] Client not found or wrong tenant:", {
+        clientId,
+        tenantSlug,
+        error: clientError?.message,
+      });
 
       return NextResponse.json(
-        { error: "Invalid credentials" },
+        { error: "Credenciales inválidas" },
         { status: 401 }
       );
     }
 
-    // Check if password is set
     if (!client.password || client.password.trim() === "") {
       return NextResponse.json(
-        { error: "Password not set. Please set up your password first." },
+        {
+          error: "Contraseña no configurada. Configura tu contraseña primero.",
+        },
         { status: 400 }
       );
     }
 
-    // Verify password (plain text comparison)
     if (client.password !== password) {
       console.warn("[Client Login] Invalid password for:", client.email);
 
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Contraseña incorrecta" },
+        { status: 401 }
+      );
     }
 
-    // Check if client account is active
     if (
       client.status !== "Activo" &&
       client.status !== "Onboarding Completado"
     ) {
       return NextResponse.json(
-        { error: "Your account is inactive. Please contact your trainer." },
+        {
+          error:
+            "Tu cuenta está inactiva. Contacta a tu entrenador para más información.",
+        },
         { status: 403 }
       );
     }
 
-    // Update last login timestamp (non-blocking)
     updateClientLastLogin(client.id).catch(console.warn);
 
-    // Create session and set cookie
     const fullName = `${client.name} ${client.last_name || ""}`.trim();
     const response = NextResponse.json(
       {
@@ -91,7 +118,7 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(
-      `[Client Login] Successfully authenticated client: ${client.email} for tenant slug: ${tenantSlug}`
+      `[Client Login] Authenticated: ${client.email} for tenant: ${tenantSlug}`
     );
 
     return response;
@@ -99,7 +126,7 @@ export async function POST(request: NextRequest) {
     console.error("[Client Login] Unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Error interno del servidor. Intenta de nuevo." },
       { status: 500 }
     );
   }

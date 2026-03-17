@@ -7,22 +7,27 @@ import {
 } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// Password validation
 function validatePassword(password: string): {
   valid: boolean;
   error?: string;
 } {
   if (password.length < 8) {
-    return { valid: false, error: "Password must be at least 8 characters" };
+    return {
+      valid: false,
+      error: "La contraseña debe tener al menos 8 caracteres",
+    };
   }
   if (!/[A-Z]/.test(password)) {
     return {
       valid: false,
-      error: "Password must contain at least one capital letter",
+      error: "La contraseña debe contener al menos una letra mayúscula",
     };
   }
   if (!/[0-9]/.test(password)) {
-    return { valid: false, error: "Password must contain at least one number" };
+    return {
+      valid: false,
+      error: "La contraseña debe contener al menos un número",
+    };
   }
 
   return { valid: true };
@@ -37,72 +42,98 @@ export async function POST(request: NextRequest) {
 
     if (!clientId || !password || !confirmPassword || !tenantSlug) {
       return NextResponse.json(
-        { error: "All fields are required" },
+        { error: "Todos los campos son requeridos" },
         { status: 400 }
       );
     }
 
-    // Validate passwords match
     if (password !== confirmPassword) {
       return NextResponse.json(
-        { error: "Passwords do not match" },
+        { error: "Las contraseñas no coinciden" },
         { status: 400 }
       );
     }
 
-    // Validate password requirements
     const validation = validatePassword(password);
 
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    // Get client to verify they exist and don't already have a password
+    // Resolve tenant slug → trainer_id for validation
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("trainer_id")
+      .eq("slug", tenantSlug)
+      .eq("status", "active")
+      .single();
+
+    if (tenantError || !tenant?.trainer_id) {
+      console.warn("[Setup Password] Tenant not found:", {
+        slug: tenantSlug,
+        error: tenantError?.message,
+      });
+
+      return NextResponse.json(
+        { error: "Sitio del entrenador no encontrado." },
+        { status: 404 }
+      );
+    }
+
+    // Get client scoped to this tenant
     const { data: client, error: fetchError } = await supabase
       .from("clients")
       .select("id, email, name, last_name, password, status, tenant")
       .eq("id", clientId)
+      .eq("tenant", tenant.trainer_id)
       .single();
 
     if (fetchError || !client) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+      console.warn("[Setup Password] Client not found or wrong tenant:", {
+        clientId,
+        tenantSlug,
+        error: fetchError?.message,
+      });
+
+      return NextResponse.json(
+        { error: "Cliente no encontrado." },
+        { status: 404 }
+      );
     }
 
-    // Check if password already set
     if (client.password && client.password.trim() !== "") {
       return NextResponse.json(
-        { error: "Password already set for this account" },
+        { error: "La contraseña ya fue configurada para esta cuenta." },
         { status: 400 }
       );
     }
 
-    // Update password in database (plain text as per requirements)
     const { error: updateError } = await supabase
       .from("clients")
       .update({ password: password })
-      .eq("id", clientId);
+      .eq("id", clientId)
+      .eq("tenant", tenant.trainer_id);
 
     if (updateError) {
       console.error("[Setup Password] Database update error:", updateError);
 
       return NextResponse.json(
-        { error: "Failed to set password" },
+        { error: "Error al guardar la contraseña. Intenta de nuevo." },
         { status: 500 }
       );
     }
 
-    // Update last login timestamp (non-blocking)
     updateClientLastLogin(clientId).catch(console.warn);
 
-    // Create session and set cookie
+    const fullName = `${client.name} ${client.last_name || ""}`.trim();
     const response = NextResponse.json(
       {
         success: true,
-        message: "Password set successfully",
+        message: "Contraseña configurada correctamente",
         client: {
           id: client.id,
           email: client.email,
-          fullName: `${client.name} ${client.last_name || ""}`.trim(),
+          fullName,
           tenantSlug: tenantSlug,
         },
       },
@@ -114,17 +145,19 @@ export async function POST(request: NextRequest) {
       client.id,
       tenantSlug,
       client.email,
-      `${client.name} ${client.last_name || ""}`.trim()
+      fullName
     );
 
-    console.log(`[Setup Password] Password set for client: ${client.email}`);
+    console.log(
+      `[Setup Password] Password set for client: ${client.email} in tenant: ${tenantSlug}`
+    );
 
     return response;
   } catch (error) {
     console.error("[Setup Password] Unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Error interno del servidor. Intenta de nuevo." },
       { status: 500 }
     );
   }

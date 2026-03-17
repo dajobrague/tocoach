@@ -2,8 +2,8 @@
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
 
-const CACHE_NAME = "topcoach-v4";
-const STATIC_CACHE_NAME = "topcoach-static-v4";
+const CACHE_NAME = "topcoach-v5";
+const STATIC_CACHE_NAME = "topcoach-static-v5";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -134,35 +134,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for static assets (_next/static, fonts, images, etc.)
+  // Network-first for static assets — ensures fresh code after deploys/rebuilds,
+  // with cache fallback for offline use
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request)
-        .then((response) => {
-          if (
-            !response ||
-            response.status !== 200 ||
-            response.type !== "basic"
-          ) {
-            return response;
-          }
-
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === "basic") {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           });
-
-          return response;
-        })
-        .catch(() => {
-          // Static asset not available offline — nothing to return
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
           return new Response("", { status: 503 });
         });
-    })
+      })
   );
 });
 
