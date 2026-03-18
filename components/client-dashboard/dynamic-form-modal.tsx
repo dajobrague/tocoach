@@ -536,7 +536,7 @@ export function DynamicFormModal({
               ref={(el) => {
                 fileInputRefs.current[question.id] = el;
               }}
-              accept="image/png,image/jpeg,image/jpg,image/webp"
+              accept="image/*"
               className="hidden"
               type="file"
               onChange={(e) => {
@@ -625,7 +625,7 @@ export function DynamicFormModal({
                     key={sub.id}
                     className="bg-default-50 border border-default-200 rounded-xl p-4"
                   >
-                    <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-start gap-3 mb-3">
                       <div className="bg-primary/10 p-1.5 rounded-lg flex-shrink-0">
                         <Icon
                           className="text-primary"
@@ -634,7 +634,7 @@ export function DynamicFormModal({
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground font-heading">
+                        <p className="text-sm font-semibold text-foreground font-heading leading-relaxed break-words">
                           {sub.fullQuestion || sub.label}
                           {sub.required && !isViewMode && (
                             <span className="text-danger ml-1">*</span>
@@ -752,7 +752,7 @@ export function DynamicFormModal({
                               ref={(el) => {
                                 fileInputRefs.current[sub.id] = el;
                               }}
-                              accept="image/png,image/jpeg,image/jpg,image/webp"
+                              accept="image/*"
                               className="hidden"
                               type="file"
                               onChange={(e) => {
@@ -949,9 +949,9 @@ export function DynamicFormModal({
                                 icon={question.icon}
                               />
                             </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="text-base font-bold text-foreground font-heading">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start gap-2 mb-1">
+                                <h3 className="text-base font-bold text-foreground font-heading leading-relaxed break-words flex-1 min-w-0">
                                   {question.fullQuestion || question.label}
                                   {question.required && !isViewMode && (
                                     <span className="text-danger ml-1">*</span>
@@ -959,7 +959,7 @@ export function DynamicFormModal({
                                 </h3>
                                 {question.required && !isViewMode && (
                                   <Chip
-                                    className="h-5"
+                                    className="h-5 flex-shrink-0"
                                     color="danger"
                                     size="sm"
                                     variant="flat"
@@ -1061,30 +1061,37 @@ export function DynamicFormModal({
                           icon="solar:alt-arrow-right-bold"
                         />
                       }
-                      isDisabled={isSubmitting}
+                      isDisabled={isSubmitting || uploadingPhotos.size > 0}
                       size="lg"
                       onPress={handleNext}
                     >
-                      Siguiente
+                      {uploadingPhotos.size > 0
+                        ? "Subiendo fotos..."
+                        : "Siguiente"}
                     </Button>
                   ) : (
                     <Button
                       className="flex-1 text-white"
                       color="success"
                       endContent={
-                        !isSubmitting && (
+                        !isSubmitting &&
+                        uploadingPhotos.size === 0 && (
                           <Icon
                             className="text-xl"
                             icon="solar:check-circle-bold"
                           />
                         )
                       }
-                      isDisabled={isSubmitting}
+                      isDisabled={isSubmitting || uploadingPhotos.size > 0}
                       isLoading={isSubmitting}
                       size="lg"
                       onPress={handleNext}
                     >
-                      {isSubmitting ? "Enviando..." : "Enviar"}
+                      {uploadingPhotos.size > 0
+                        ? "Espera, subiendo fotos..."
+                        : isSubmitting
+                          ? "Enviando..."
+                          : "Enviar"}
                     </Button>
                   )}
                 </div>

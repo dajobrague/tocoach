@@ -16,7 +16,10 @@ interface RescheduleModalProps {
   onClose: () => void;
   sessionName: string;
   currentDate: string;
+  /** UUID from scheduled_sessions when a row exists; empty when template-only */
   scheduledSessionId: string;
+  /** Program session ID (sessions table) - needed when creating a new scheduled_session */
+  sessionId: string;
   clientId: string;
   onSuccess: () => void;
 }
@@ -36,6 +39,7 @@ export function RescheduleModal({
   sessionName,
   currentDate,
   scheduledSessionId,
+  sessionId,
   clientId,
   onSuccess,
 }: RescheduleModalProps) {
@@ -51,18 +55,38 @@ export function RescheduleModal({
 
     setIsSaving(true);
     try {
-      const response = await fetch(
-        `/api/clients/${clientId}/scheduled-sessions/${scheduledSessionId}`,
-        {
-          method: "PUT",
+      let response: Response;
+      let data: { success?: boolean; error?: string };
+
+      if (scheduledSessionId) {
+        // Update existing scheduled_session
+        response = await fetch(
+          `/api/clients/${clientId}/scheduled-sessions/${scheduledSessionId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scheduledDate: newDate }),
+          }
+        );
+        data = await response.json();
+      } else if (sessionId) {
+        // Create new scheduled_session for the new date
+        response = await fetch(`/api/clients/${clientId}/scheduled-sessions`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            sessionId,
             scheduledDate: newDate,
+            status: "scheduled",
           }),
-        }
-      );
+        });
+        data = await response.json();
+      } else {
+        alert("Error: no se puede reprogramar esta sesión");
+        setIsSaving(false);
 
-      const data = await response.json();
+        return;
+      }
 
       if (data.success) {
         onSuccess();

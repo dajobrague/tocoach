@@ -94,8 +94,6 @@ export function WorkoutsContent() {
   const [selectedExercise, setSelectedExercise] = useState<any>(null);
   const [selectedRescheduleSession, setSelectedRescheduleSession] =
     useState<any>(null);
-  const [selectedScheduledSessionId, setSelectedScheduledSessionId] =
-    useState<string>("");
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
   const [selectedVideoExerciseName, setSelectedVideoExerciseName] =
     useState("");
@@ -173,12 +171,13 @@ export function WorkoutsContent() {
   };
 
   // Handle reschedule modal
-  const handleOpenReschedule = (session: any, scheduledSessionId: string) => {
+  const handleOpenReschedule = (session: any) => {
     setSelectedRescheduleSession({
       sessionName: session.sessionName,
       currentDate: session.date.toISOString().split("T")[0],
+      scheduledSessionId: session.scheduledSessionId ?? null,
+      sessionId: session.sessionId,
     });
-    setSelectedScheduledSessionId(scheduledSessionId);
     setIsRescheduleModalOpen(true);
   };
 
@@ -279,9 +278,17 @@ export function WorkoutsContent() {
           else if (dayOffset === 1) dayLabel = "Mañana";
           else dayLabel = dayOfWeek || "";
 
+          // Match real scheduled_session from API (for reschedule)
+          const realScheduled = (scheduledSessionsData as any[]).find(
+            (ss: any) =>
+              ss.session_id === matchingSession.id &&
+              ss.scheduled_date === dateStr
+          );
+
           const sessionData: any = {
             id: `${matchingSession.id}-${dayOffset}`,
-            sessionId: matchingSession.id, // Original session ID from database
+            sessionId: matchingSession.id, // Program session ID (sessions table)
+            scheduledSessionId: realScheduled?.id ?? null, // UUID from scheduled_sessions, or null
             date: sessionDate,
             dayLabel,
             sessionName: matchingSession.name,
@@ -515,9 +522,7 @@ export function WorkoutsContent() {
                         startContent={
                           <Icon icon="solar:calendar-mark-linear" width={18} />
                         }
-                        onPress={() =>
-                          handleOpenReschedule(session, session.id)
-                        }
+                        onPress={() => handleOpenReschedule(session)}
                       >
                         Reprogramar
                       </DropdownItem>
@@ -1309,12 +1314,16 @@ export function WorkoutsContent() {
         clientId={clientId}
         currentDate={selectedRescheduleSession?.currentDate || ""}
         isOpen={isRescheduleModalOpen}
-        scheduledSessionId={selectedScheduledSessionId}
+        scheduledSessionId={selectedRescheduleSession?.scheduledSessionId ?? ""}
+        sessionId={selectedRescheduleSession?.sessionId ?? ""}
         sessionName={selectedRescheduleSession?.sessionName || ""}
         onClose={() => setIsRescheduleModalOpen(false)}
         onSuccess={() => {
           queryClient.invalidateQueries({
             queryKey: ["client", "scheduledSessions", clientId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["client", "programs"],
           });
         }}
       />

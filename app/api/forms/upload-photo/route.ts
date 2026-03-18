@@ -47,14 +47,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    // Validate file type (include HEIC for iOS gallery)
+    const allowedTypes = [
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "image/webp",
+      "image/heic",
+    ];
 
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Formato no válido. Usa PNG, JPG o WebP.",
+          error: "Formato no válido. Usa PNG, JPG, WebP o HEIC.",
         },
         { status: 400 }
       );
