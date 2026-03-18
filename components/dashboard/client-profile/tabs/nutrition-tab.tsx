@@ -29,6 +29,23 @@ import {
   Tabs,
   Textarea,
 } from "@heroui/react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
@@ -87,6 +104,39 @@ const formatWeekdays = (weekdays: number[]): string => {
 
   return sorted.map((day) => getWeekdayName(day, true)).join(", ");
 };
+
+function SortableMealItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (dragHandleProps: {
+    attributes: Record<string, any>;
+    listeners: Record<string, any> | undefined;
+  }) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners })}
+    </div>
+  );
+}
 
 export default function NutritionTab({ clientId }: NutritionTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<"setup" | "progress">(
@@ -191,6 +241,71 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     quantity: "",
     unit: "",
   });
+
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
+
+  const toggleMealCollapse = (mealId: string) => {
+    setExpandedMeals((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(mealId)) {
+        next.delete(mealId);
+      } else {
+        next.add(mealId);
+      }
+
+      return next;
+    });
+  };
+
+  // Drag-and-drop sensors for meal reordering
+  const mealDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleMealDragEnd = (dayId: string, event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id || !nutritionPlan) return;
+
+    const day = nutritionPlan.days.find((d) => d.id === dayId);
+
+    if (!day) return;
+
+    const oldIndex = day.meals.findIndex((m) => m.id === active.id);
+    const newIndex = day.meals.findIndex((m) => m.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reorderedMeals = arrayMove(day.meals, oldIndex, newIndex);
+
+    setNutritionPlan((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, meals: reorderedMeals } : d
+        ),
+      };
+    });
+
+    const reorderPayload = reorderedMeals.map((m, i) => ({
+      id: m.id,
+      meal_order: i,
+    }));
+
+    fetch("/api/nutrition/meals", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reorder: reorderPayload }),
+    }).catch((err) =>
+      console.error("[Nutrition] Failed to persist meal reorder:", err)
+    );
+  };
 
   // Fetch nutrition plans for this client
   useEffect(() => {
@@ -2044,425 +2159,519 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                           </Button>
                         </div>
                       ) : (
-                        day.meals.map((meal) => (
-                          <div
-                            key={meal.id}
-                            className="bg-white rounded-lg border border-gray-200 p-4"
+                        <DndContext
+                          collisionDetection={closestCenter}
+                          sensors={mealDndSensors}
+                          onDragEnd={(event) =>
+                            handleMealDragEnd(day.id, event)
+                          }
+                        >
+                          <SortableContext
+                            items={day.meals.map((m) => m.id)}
+                            strategy={verticalListSortingStrategy}
                           >
-                            {/* Meal Header */}
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-2 flex-1">
-                                <Icon
-                                  className="text-slate-600"
-                                  icon="solar:dish-bold"
-                                  width={20}
-                                />
-                                {editingMealName === meal.id ? (
-                                  <div className="flex items-center gap-2 flex-1">
-                                    {}
-                                    <Input
-                                      autoFocus
-                                      className="max-w-xs"
-                                      size="sm"
-                                      value={editingMealNameValue}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter")
-                                          handleSaveMealName(meal.id);
-                                        if (e.key === "Escape")
-                                          setEditingMealName(null);
-                                      }}
-                                      onValueChange={setEditingMealNameValue}
-                                    />
-                                    <Button
-                                      isIconOnly
-                                      color="success"
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() =>
-                                        handleSaveMealName(meal.id)
-                                      }
-                                    >
-                                      <Icon
-                                        icon="solar:check-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                    <Button
-                                      isIconOnly
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() => setEditingMealName(null)}
-                                    >
-                                      <Icon
-                                        icon="solar:close-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <h4 className="font-bold text-gray-900">
-                                    {meal.label}
-                                  </h4>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  isIconOnly
-                                  size="sm"
-                                  variant="flat"
-                                  onPress={() => handleEditMeal(meal.id)}
-                                >
-                                  <Icon
-                                    className="text-gray-600"
-                                    icon="solar:pen-linear"
-                                    width={16}
-                                  />
-                                </Button>
-                                <Button
-                                  isIconOnly
-                                  size="sm"
-                                  variant="flat"
-                                  onPress={() => handleDeleteMeal(meal.id)}
-                                >
-                                  <Icon
-                                    className="text-gray-600"
-                                    icon="solar:trash-bin-trash-linear"
-                                    width={16}
-                                  />
-                                </Button>
-                              </div>
-                            </div>
-
-                            {/* Meal Macros - Prominent Display */}
-                            {editingMealMacros === meal.id ? (
-                              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <div className="grid grid-cols-4 gap-2 mb-2">
-                                  <Input
-                                    label="Proteína (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={macrosForm.protein}
-                                    onValueChange={(value) =>
-                                      setMacrosForm({
-                                        ...macrosForm,
-                                        protein: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Carbohidratos (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={macrosForm.carbs}
-                                    onValueChange={(value) =>
-                                      setMacrosForm({
-                                        ...macrosForm,
-                                        carbs: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Grasas (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={macrosForm.fats}
-                                    onValueChange={(value) =>
-                                      setMacrosForm({
-                                        ...macrosForm,
-                                        fats: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Calorías"
-                                    size="sm"
-                                    type="number"
-                                    value={macrosForm.calories}
-                                    onValueChange={(value) =>
-                                      setMacrosForm({
-                                        ...macrosForm,
-                                        calories: value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                                <div className="flex gap-2 justify-end">
-                                  <Button
-                                    className="bg-black text-white hover:bg-slate-800"
-                                    size="sm"
-                                    onPress={() =>
-                                      handleSaveMealMacros(meal.id)
-                                    }
-                                  >
-                                    Guardar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() => setEditingMealMacros(null)}
-                                  >
-                                    Cancelar
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                              <div
-                                className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
-                                onClick={() => handleEditMealMacrosClick(meal)}
-                              >
-                                <div className="bg-slate-50 px-3 py-1.5 rounded-lg">
-                                  <span className="text-xs text-gray-600">
-                                    Proteína:
-                                  </span>
-                                  <span className="text-sm font-bold text-gray-900 ml-1">
-                                    {meal.protein || 0}g
-                                  </span>
-                                </div>
-                                <div className="bg-green-50 px-3 py-1.5 rounded-lg">
-                                  <span className="text-xs text-gray-600">
-                                    Carbohidratos:
-                                  </span>
-                                  <span className="text-sm font-bold text-gray-900 ml-1">
-                                    {meal.carbs || 0}g
-                                  </span>
-                                </div>
-                                <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
-                                  <span className="text-xs text-gray-600">
-                                    Grasas:
-                                  </span>
-                                  <span className="text-sm font-bold text-gray-900 ml-1">
-                                    {meal.fats || 0}g
-                                  </span>
-                                </div>
-                                <div className="bg-red-50 px-3 py-1.5 rounded-lg">
-                                  <span className="text-xs text-gray-600">
-                                    Calorías:
-                                  </span>
-                                  <span className="text-sm font-bold text-gray-900 ml-1">
-                                    {meal.calories || 0} kcal
-                                  </span>
-                                </div>
-                                <Icon
-                                  className="text-gray-400 ml-auto"
-                                  icon="solar:pen-linear"
-                                  width={16}
-                                />
-                              </div>
-                            )}
-
-                            {/* Ingredients Table */}
-                            <div className="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
-                              <div className="space-y-2">
-                                {meal.ingredients.map((ingredient) => (
-                                  <div key={ingredient.id}>
-                                    {editingIngredient === ingredient.id ? (
-                                      // Edit mode
-                                      <div className="flex items-center gap-2 py-2 border-b border-gray-100">
-                                        <Input
-                                          className="flex-1"
-                                          data-field="name"
-                                          data-ingredient-id={ingredient.id}
-                                          defaultValue={ingredient.name}
-                                          placeholder="Ingrediente"
-                                          size="sm"
-                                        />
-                                        <Input
-                                          className="w-24"
-                                          data-field="quantity"
-                                          data-ingredient-id={ingredient.id}
-                                          defaultValue={ingredient.quantity}
-                                          placeholder="Cantidad"
-                                          size="sm"
-                                        />
-                                        <Input
-                                          className="w-24"
-                                          data-field="unit"
-                                          data-ingredient-id={ingredient.id}
-                                          defaultValue={ingredient.unit}
-                                          placeholder="Unidad"
-                                          size="sm"
-                                        />
-                                        <Button
-                                          isIconOnly
-                                          color="success"
-                                          size="sm"
-                                          variant="flat"
-                                          onPress={() =>
-                                            handleSaveEditIngredient(
-                                              ingredient.id,
-                                              ingredient
-                                            )
+                            {day.meals.map((meal) => (
+                              <SortableMealItem key={meal.id} id={meal.id}>
+                                {({ attributes, listeners }) => (
+                                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    {/* Meal Header */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <button
+                                          className="cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-600 p-0.5 -ml-1 flex-shrink-0"
+                                          type="button"
+                                          {...attributes}
+                                          {...listeners}
+                                        >
+                                          <Icon
+                                            icon="solar:hamburger-menu-linear"
+                                            width={18}
+                                          />
+                                        </button>
+                                        <button
+                                          className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                                          type="button"
+                                          onClick={() =>
+                                            toggleMealCollapse(meal.id)
                                           }
                                         >
                                           <Icon
-                                            icon="solar:check-circle-bold"
-                                            width={18}
+                                            className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${expandedMeals.has(meal.id) ? "rotate-90" : ""}`}
+                                            icon="solar:alt-arrow-right-bold"
+                                            width={16}
+                                          />
+                                          <Icon
+                                            className="text-slate-600 flex-shrink-0"
+                                            icon="solar:dish-bold"
+                                            width={20}
+                                          />
+                                          {editingMealName === meal.id ? (
+                                            <div
+                                              className="flex items-center gap-2 flex-1"
+                                              onClick={(e) =>
+                                                e.stopPropagation()
+                                              }
+                                            >
+                                              {}
+                                              <Input
+                                                autoFocus
+                                                className="max-w-xs"
+                                                size="sm"
+                                                value={editingMealNameValue}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter")
+                                                    handleSaveMealName(meal.id);
+                                                  if (e.key === "Escape")
+                                                    setEditingMealName(null);
+                                                }}
+                                                onValueChange={
+                                                  setEditingMealNameValue
+                                                }
+                                              />
+                                              <Button
+                                                isIconOnly
+                                                color="success"
+                                                size="sm"
+                                                variant="flat"
+                                                onPress={() =>
+                                                  handleSaveMealName(meal.id)
+                                                }
+                                              >
+                                                <Icon
+                                                  icon="solar:check-circle-bold"
+                                                  width={18}
+                                                />
+                                              </Button>
+                                              <Button
+                                                isIconOnly
+                                                size="sm"
+                                                variant="flat"
+                                                onPress={() =>
+                                                  setEditingMealName(null)
+                                                }
+                                              >
+                                                <Icon
+                                                  icon="solar:close-circle-bold"
+                                                  width={18}
+                                                />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <h4 className="font-bold text-gray-900 truncate">
+                                              {meal.label}
+                                            </h4>
+                                          )}
+                                        </button>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        {!expandedMeals.has(meal.id) && (
+                                          <span className="text-xs text-gray-400 hidden sm:inline">
+                                            {meal.protein || 0}P ·{" "}
+                                            {meal.carbs || 0}C ·{" "}
+                                            {meal.fats || 0}G ·{" "}
+                                            {meal.calories || 0} kcal
+                                          </span>
+                                        )}
+                                        <Button
+                                          isIconOnly
+                                          size="sm"
+                                          variant="flat"
+                                          onPress={() =>
+                                            handleEditMeal(meal.id)
+                                          }
+                                        >
+                                          <Icon
+                                            className="text-gray-600"
+                                            icon="solar:pen-linear"
+                                            width={16}
                                           />
                                         </Button>
                                         <Button
                                           isIconOnly
                                           size="sm"
                                           variant="flat"
-                                          onPress={handleCancelEditIngredient}
+                                          onPress={() =>
+                                            handleDeleteMeal(meal.id)
+                                          }
                                         >
                                           <Icon
-                                            icon="solar:close-circle-bold"
-                                            width={18}
+                                            className="text-gray-600"
+                                            icon="solar:trash-bin-trash-linear"
+                                            width={16}
                                           />
                                         </Button>
                                       </div>
-                                    ) : (
-                                      // View mode
-                                      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                                      <div
-                                        className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
-                                        onClick={() =>
-                                          handleEditIngredientClick(
-                                            ingredient.id
-                                          )
-                                        }
-                                      >
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <span className="text-sm text-gray-900">
-                                            {ingredient.name}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <div className="text-sm text-gray-600">
-                                            <span className="font-semibold text-gray-900">
-                                              {ingredient.quantity}
-                                            </span>{" "}
-                                            {ingredient.unit}
+                                    </div>
+
+                                    {/* Collapsible meal body */}
+                                    {expandedMeals.has(meal.id) && (
+                                      <div className="mt-3">
+                                        {/* Meal Macros - Prominent Display */}
+                                        {editingMealMacros === meal.id ? (
+                                          <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="grid grid-cols-4 gap-2 mb-2">
+                                              <Input
+                                                label="Proteína (g)"
+                                                size="sm"
+                                                type="number"
+                                                value={macrosForm.protein}
+                                                onValueChange={(value) =>
+                                                  setMacrosForm({
+                                                    ...macrosForm,
+                                                    protein: value,
+                                                  })
+                                                }
+                                              />
+                                              <Input
+                                                label="Carbohidratos (g)"
+                                                size="sm"
+                                                type="number"
+                                                value={macrosForm.carbs}
+                                                onValueChange={(value) =>
+                                                  setMacrosForm({
+                                                    ...macrosForm,
+                                                    carbs: value,
+                                                  })
+                                                }
+                                              />
+                                              <Input
+                                                label="Grasas (g)"
+                                                size="sm"
+                                                type="number"
+                                                value={macrosForm.fats}
+                                                onValueChange={(value) =>
+                                                  setMacrosForm({
+                                                    ...macrosForm,
+                                                    fats: value,
+                                                  })
+                                                }
+                                              />
+                                              <Input
+                                                label="Calorías"
+                                                size="sm"
+                                                type="number"
+                                                value={macrosForm.calories}
+                                                onValueChange={(value) =>
+                                                  setMacrosForm({
+                                                    ...macrosForm,
+                                                    calories: value,
+                                                  })
+                                                }
+                                              />
+                                            </div>
+                                            <div className="flex gap-2 justify-end">
+                                              <Button
+                                                className="bg-black text-white hover:bg-slate-800"
+                                                size="sm"
+                                                onPress={() =>
+                                                  handleSaveMealMacros(meal.id)
+                                                }
+                                              >
+                                                Guardar
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="flat"
+                                                onPress={() =>
+                                                  setEditingMealMacros(null)
+                                                }
+                                              >
+                                                Cancelar
+                                              </Button>
+                                            </div>
                                           </div>
-                                          <Button
-                                            isIconOnly
-                                            size="sm"
-                                            variant="light"
-                                            onPress={(e: any) => {
-                                              e?.stopPropagation?.();
-                                              handleDeleteIngredient(
-                                                ingredient.id
-                                              );
-                                            }}
+                                        ) : (
+                                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                                          <div
+                                            className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                                            onClick={() =>
+                                              handleEditMealMacrosClick(meal)
+                                            }
                                           >
+                                            <div className="bg-slate-50 px-3 py-1.5 rounded-lg">
+                                              <span className="text-xs text-gray-600">
+                                                Proteína:
+                                              </span>
+                                              <span className="text-sm font-bold text-gray-900 ml-1">
+                                                {meal.protein || 0}g
+                                              </span>
+                                            </div>
+                                            <div className="bg-green-50 px-3 py-1.5 rounded-lg">
+                                              <span className="text-xs text-gray-600">
+                                                Carbohidratos:
+                                              </span>
+                                              <span className="text-sm font-bold text-gray-900 ml-1">
+                                                {meal.carbs || 0}g
+                                              </span>
+                                            </div>
+                                            <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
+                                              <span className="text-xs text-gray-600">
+                                                Grasas:
+                                              </span>
+                                              <span className="text-sm font-bold text-gray-900 ml-1">
+                                                {meal.fats || 0}g
+                                              </span>
+                                            </div>
+                                            <div className="bg-red-50 px-3 py-1.5 rounded-lg">
+                                              <span className="text-xs text-gray-600">
+                                                Calorías:
+                                              </span>
+                                              <span className="text-sm font-bold text-gray-900 ml-1">
+                                                {meal.calories || 0} kcal
+                                              </span>
+                                            </div>
                                             <Icon
-                                              className="text-gray-400 hover:text-red-600"
-                                              icon="solar:trash-bin-trash-linear"
+                                              className="text-gray-400 ml-auto"
+                                              icon="solar:pen-linear"
                                               width={16}
                                             />
-                                          </Button>
+                                          </div>
+                                        )}
+
+                                        {/* Ingredients Table */}
+                                        <div className="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
+                                          <div className="space-y-2">
+                                            {meal.ingredients.map(
+                                              (ingredient) => (
+                                                <div key={ingredient.id}>
+                                                  {editingIngredient ===
+                                                  ingredient.id ? (
+                                                    // Edit mode
+                                                    <div className="flex items-center gap-2 py-2 border-b border-gray-100">
+                                                      <Input
+                                                        className="flex-1"
+                                                        data-field="name"
+                                                        data-ingredient-id={
+                                                          ingredient.id
+                                                        }
+                                                        defaultValue={
+                                                          ingredient.name
+                                                        }
+                                                        placeholder="Ingrediente"
+                                                        size="sm"
+                                                      />
+                                                      <Input
+                                                        className="w-24"
+                                                        data-field="quantity"
+                                                        data-ingredient-id={
+                                                          ingredient.id
+                                                        }
+                                                        defaultValue={
+                                                          ingredient.quantity
+                                                        }
+                                                        placeholder="Cantidad"
+                                                        size="sm"
+                                                      />
+                                                      <Input
+                                                        className="w-24"
+                                                        data-field="unit"
+                                                        data-ingredient-id={
+                                                          ingredient.id
+                                                        }
+                                                        defaultValue={
+                                                          ingredient.unit
+                                                        }
+                                                        placeholder="Unidad"
+                                                        size="sm"
+                                                      />
+                                                      <Button
+                                                        isIconOnly
+                                                        color="success"
+                                                        size="sm"
+                                                        variant="flat"
+                                                        onPress={() =>
+                                                          handleSaveEditIngredient(
+                                                            ingredient.id,
+                                                            ingredient
+                                                          )
+                                                        }
+                                                      >
+                                                        <Icon
+                                                          icon="solar:check-circle-bold"
+                                                          width={18}
+                                                        />
+                                                      </Button>
+                                                      <Button
+                                                        isIconOnly
+                                                        size="sm"
+                                                        variant="flat"
+                                                        onPress={
+                                                          handleCancelEditIngredient
+                                                        }
+                                                      >
+                                                        <Icon
+                                                          icon="solar:close-circle-bold"
+                                                          width={18}
+                                                        />
+                                                      </Button>
+                                                    </div>
+                                                  ) : (
+                                                    // View mode
+                                                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                                                    <div
+                                                      className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
+                                                      onClick={() =>
+                                                        handleEditIngredientClick(
+                                                          ingredient.id
+                                                        )
+                                                      }
+                                                    >
+                                                      <div className="flex items-center gap-3 flex-1">
+                                                        <span className="text-sm text-gray-900">
+                                                          {ingredient.name}
+                                                        </span>
+                                                      </div>
+                                                      <div className="flex items-center gap-3">
+                                                        <div className="text-sm text-gray-600">
+                                                          <span className="font-semibold text-gray-900">
+                                                            {
+                                                              ingredient.quantity
+                                                            }
+                                                          </span>{" "}
+                                                          {ingredient.unit}
+                                                        </div>
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="light"
+                                                          onPress={(e: any) => {
+                                                            e?.stopPropagation?.();
+                                                            handleDeleteIngredient(
+                                                              ingredient.id
+                                                            );
+                                                          }}
+                                                        >
+                                                          <Icon
+                                                            className="text-gray-400 hover:text-red-600"
+                                                            icon="solar:trash-bin-trash-linear"
+                                                            width={16}
+                                                          />
+                                                        </Button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            )}
+
+                                            {/* Add new ingredient inline */}
+                                            {addingIngredientToMeal ===
+                                            meal.id ? (
+                                              <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
+                                                {}
+                                                <Input
+                                                  autoFocus
+                                                  className="flex-1"
+                                                  placeholder="Nombre del ingrediente"
+                                                  size="sm"
+                                                  value={newIngredient.name}
+                                                  onValueChange={(value) =>
+                                                    setNewIngredient({
+                                                      ...newIngredient,
+                                                      name: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Input
+                                                  className="w-24"
+                                                  placeholder="Cantidad"
+                                                  size="sm"
+                                                  value={newIngredient.quantity}
+                                                  onValueChange={(value) =>
+                                                    setNewIngredient({
+                                                      ...newIngredient,
+                                                      quantity: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Input
+                                                  className="w-24"
+                                                  placeholder="Unidad"
+                                                  size="sm"
+                                                  value={newIngredient.unit}
+                                                  onValueChange={(value) =>
+                                                    setNewIngredient({
+                                                      ...newIngredient,
+                                                      unit: value,
+                                                    })
+                                                  }
+                                                />
+                                                <Button
+                                                  isIconOnly
+                                                  color="success"
+                                                  size="sm"
+                                                  variant="flat"
+                                                  onPress={() =>
+                                                    handleSaveNewIngredient(
+                                                      meal.id
+                                                    )
+                                                  }
+                                                >
+                                                  <Icon
+                                                    icon="solar:check-circle-bold"
+                                                    width={18}
+                                                  />
+                                                </Button>
+                                                <Button
+                                                  isIconOnly
+                                                  size="sm"
+                                                  variant="flat"
+                                                  onPress={
+                                                    handleCancelNewIngredient
+                                                  }
+                                                >
+                                                  <Icon
+                                                    icon="solar:close-circle-bold"
+                                                    width={18}
+                                                  />
+                                                </Button>
+                                              </div>
+                                            ) : (
+                                              <Button
+                                                className="w-full mt-2"
+                                                size="sm"
+                                                startContent={
+                                                  <Icon
+                                                    icon="solar:add-circle-linear"
+                                                    width={16}
+                                                  />
+                                                }
+                                                variant="light"
+                                                onPress={() =>
+                                                  handleAddIngredientClick(
+                                                    meal.id
+                                                  )
+                                                }
+                                              >
+                                                Añadir Ingrediente
+                                              </Button>
+                                            )}
+                                          </div>
                                         </div>
+
+                                        {/* Meal Notes */}
+                                        {meal.notes && (
+                                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <div className="flex items-start gap-2">
+                                              <Icon
+                                                className="text-slate-600 mt-0.5 flex-shrink-0"
+                                                icon="solar:notes-bold"
+                                                width={16}
+                                              />
+                                              <p className="text-sm text-slate-700">
+                                                {meal.notes}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
-                                ))}
-
-                                {/* Add new ingredient inline */}
-                                {addingIngredientToMeal === meal.id ? (
-                                  <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
-                                    {}
-                                    <Input
-                                      autoFocus
-                                      className="flex-1"
-                                      placeholder="Nombre del ingrediente"
-                                      size="sm"
-                                      value={newIngredient.name}
-                                      onValueChange={(value) =>
-                                        setNewIngredient({
-                                          ...newIngredient,
-                                          name: value,
-                                        })
-                                      }
-                                    />
-                                    <Input
-                                      className="w-24"
-                                      placeholder="Cantidad"
-                                      size="sm"
-                                      value={newIngredient.quantity}
-                                      onValueChange={(value) =>
-                                        setNewIngredient({
-                                          ...newIngredient,
-                                          quantity: value,
-                                        })
-                                      }
-                                    />
-                                    <Input
-                                      className="w-24"
-                                      placeholder="Unidad"
-                                      size="sm"
-                                      value={newIngredient.unit}
-                                      onValueChange={(value) =>
-                                        setNewIngredient({
-                                          ...newIngredient,
-                                          unit: value,
-                                        })
-                                      }
-                                    />
-                                    <Button
-                                      isIconOnly
-                                      color="success"
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() =>
-                                        handleSaveNewIngredient(meal.id)
-                                      }
-                                    >
-                                      <Icon
-                                        icon="solar:check-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                    <Button
-                                      isIconOnly
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={handleCancelNewIngredient}
-                                    >
-                                      <Icon
-                                        icon="solar:close-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <Button
-                                    className="w-full mt-2"
-                                    size="sm"
-                                    startContent={
-                                      <Icon
-                                        icon="solar:add-circle-linear"
-                                        width={16}
-                                      />
-                                    }
-                                    variant="light"
-                                    onPress={() =>
-                                      handleAddIngredientClick(meal.id)
-                                    }
-                                  >
-                                    Añadir Ingrediente
-                                  </Button>
                                 )}
-                              </div>
-                            </div>
-
-                            {/* Meal Notes */}
-                            {meal.notes && (
-                              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div className="flex items-start gap-2">
-                                  <Icon
-                                    className="text-slate-600 mt-0.5 flex-shrink-0"
-                                    icon="solar:notes-bold"
-                                    width={16}
-                                  />
-                                  <p className="text-sm text-slate-700">
-                                    {meal.notes}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))
+                              </SortableMealItem>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
                       )}
                     </div>
                   </div>

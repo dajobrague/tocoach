@@ -1,7 +1,69 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+
+// PATCH - Reorder nutrition meals
+export async function PATCH(request: NextRequest) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { reorder } = body;
+
+    if (!reorder || !Array.isArray(reorder)) {
+      return NextResponse.json(
+        { success: false, error: "Se requiere un array de reorder" },
+        { status: 400 }
+      );
+    }
+
+    const updatePromises = reorder.map(
+      (item: { id: string; meal_order: number }) =>
+        supabase
+          .from("nutrition_meals")
+          .update({ meal_order: item.meal_order })
+          .eq("id", item.id)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some((r) => r.error);
+
+    if (hasError) {
+      console.error(
+        "[Nutrition Meals API] Error reordering meals:",
+        results.filter((r) => r.error).map((r) => r.error)
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar comidas" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Comidas reordenadas exitosamente",
+    });
+  } catch (error) {
+    console.error("[Nutrition Meals API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error inesperado" },
+      { status: 500 }
+    );
+  }
+}
 
 // POST - Create a new nutrition meal
 export async function POST(request: NextRequest) {
