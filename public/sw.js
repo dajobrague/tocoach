@@ -2,8 +2,8 @@
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
 
-const CACHE_NAME = "topcoach-v5";
-const STATIC_CACHE_NAME = "topcoach-static-v5";
+const CACHE_NAME = "topcoach-v6";
+const STATIC_CACHE_NAME = "topcoach-static-v6";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -78,52 +78,37 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
-  // Network-first for ALL navigation requests (HTML pages).
-  // This prevents stale cached HTML from referencing old JS bundles after deployments.
+  // Network-only for ALL navigation requests (HTML pages).
+  // Never cache HTML to avoid stale pages referencing old JS bundles after deployments.
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // Cache the fresh navigation response for offline fallback
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-          return response;
-        })
-        .catch(() => {
-          // Offline: try cache, then offline fallback
-          return caches.match(event.request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            return new Response(
-              `<!DOCTYPE html>
-              <html>
-              <head>
-                <title>TopCoach - Offline</title>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <style>
-                  body { font-family: system-ui, sans-serif; text-align: center; padding: 2rem; color: #333; }
-                  .offline-message { max-width: 400px; margin: 2rem auto; }
-                  .icon { font-size: 4rem; margin-bottom: 1rem; }
-                  button { padding: 0.5rem 1.5rem; font-size: 1rem; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; }
-                </style>
-              </head>
-              <body>
-                <div class="offline-message">
-                  <div class="icon">📱</div>
-                  <h1>You're offline</h1>
-                  <p>TopCoach needs an internet connection to work properly. Please check your connection and try again.</p>
-                  <button onclick="window.location.reload()">Try Again</button>
-                </div>
-              </body>
-              </html>`,
-              { headers: { "Content-Type": "text/html" } }
-            );
-          });
-        })
+      fetch(event.request).catch(() => {
+        return new Response(
+          `<!DOCTYPE html>
+            <html>
+            <head>
+              <title>TopCoach - Sin conexión</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { font-family: system-ui, sans-serif; text-align: center; padding: 2rem; color: #333; }
+                .offline-message { max-width: 400px; margin: 2rem auto; }
+                .icon { font-size: 4rem; margin-bottom: 1rem; }
+                button { padding: 0.5rem 1.5rem; font-size: 1rem; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; }
+              </style>
+            </head>
+            <body>
+              <div class="offline-message">
+                <div class="icon">📱</div>
+                <h1>Sin conexión</h1>
+                <p>TopCoach necesita conexión a internet para funcionar. Verifica tu conexión e intenta de nuevo.</p>
+                <button onclick="window.location.reload()">Intentar de nuevo</button>
+              </div>
+            </body>
+            </html>`,
+          { headers: { "Content-Type": "text/html" } }
+        );
+      })
     );
     return;
   }

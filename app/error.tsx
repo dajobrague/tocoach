@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export default function Error({
   error,
@@ -9,23 +9,74 @@ export default function Error({
   error: Error;
   reset: () => void;
 }) {
+  const [clearing, setClearing] = useState(false);
+
   useEffect(() => {
-    // Log the error to an error reporting service
     /* eslint-disable no-console */
     console.error(error);
   }, [error]);
 
+  const handleRetry = useCallback(async () => {
+    setClearing(true);
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+
+        await Promise.all(registrations.map((r) => r.unregister()));
+      }
+      const keys = await caches.keys();
+
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    } catch {
+      // Proceed even if cache clearing fails
+    }
+    setClearing(false);
+    reset();
+  }, [reset]);
+
   return (
-    <div>
-      <h2>Something went wrong!</h2>
-      <button
-        onClick={
-          // Attempt to recover by trying to re-render the segment
-          () => reset()
-        }
-      >
-        Try again
-      </button>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100vh",
+        padding: "2rem",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <div style={{ textAlign: "center", maxWidth: "400px" }}>
+        <h2
+          style={{ fontSize: "1.25rem", fontWeight: 600, marginBottom: "1rem" }}
+        >
+          Algo salió mal
+        </h2>
+        <p
+          style={{
+            fontSize: "0.875rem",
+            color: "#6b7280",
+            marginBottom: "1.5rem",
+          }}
+        >
+          Ocurrió un error inesperado. Intenta de nuevo.
+        </p>
+        <button
+          disabled={clearing}
+          style={{
+            padding: "0.625rem 1.5rem",
+            fontSize: "0.875rem",
+            fontWeight: 500,
+            cursor: clearing ? "wait" : "pointer",
+            borderRadius: "8px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#fff",
+            color: "#111827",
+          }}
+          onClick={handleRetry}
+        >
+          {clearing ? "Limpiando caché..." : "Intentar de nuevo"}
+        </button>
+      </div>
     </div>
   );
 }

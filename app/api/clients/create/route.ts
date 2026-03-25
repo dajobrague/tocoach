@@ -33,13 +33,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedEmail = body.email.toLowerCase().trim();
+
     // Prepare client data for insertion into clients table
     const clientData = {
       tenant: session.trainer_id, // clients.tenant contains the trainer UUID
       name: body.firstName,
       last_name: body.lastName,
       nick_name: body.nickName || null,
-      email: body.email,
+      email: normalizedEmail,
       phone: body.phone || null,
       occupation: body.occupation || null,
       dob: body.dob,

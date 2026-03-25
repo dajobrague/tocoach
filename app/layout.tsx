@@ -66,10 +66,14 @@ export async function generateMetadata(): Promise<Metadata> {
     }
   }
 
+  const manifestUrl = tenantSlug
+    ? `/${tenantSlug}/manifest.json`
+    : "/manifest.json";
+
   return {
     title: pageTitle,
     description: siteConfig.description,
-    manifest: "/manifest.json",
+    manifest: manifestUrl,
     icons: {
       icon: "/favicon.ico",
       apple: "/icons/icon-192x192.png",

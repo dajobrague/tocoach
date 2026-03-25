@@ -635,11 +635,16 @@ export function DynamicFormModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground font-heading leading-relaxed break-words">
-                          {sub.fullQuestion || sub.label}
+                          {sub.label}
                           {sub.required && !isViewMode && (
                             <span className="text-danger ml-1">*</span>
                           )}
                         </p>
+                        {sub.fullQuestion && sub.fullQuestion !== sub.label && (
+                          <p className="text-xs text-foreground/60 font-body mt-0.5 break-words">
+                            {sub.fullQuestion}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -951,12 +956,23 @@ export function DynamicFormModal({
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start gap-2 mb-1">
-                                <h3 className="text-base font-bold text-foreground font-heading leading-relaxed break-words flex-1 min-w-0">
-                                  {question.fullQuestion || question.label}
-                                  {question.required && !isViewMode && (
-                                    <span className="text-danger ml-1">*</span>
-                                  )}
-                                </h3>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-base font-bold text-foreground font-heading leading-relaxed break-words">
+                                    {question.label}
+                                    {question.required && !isViewMode && (
+                                      <span className="text-danger ml-1">
+                                        *
+                                      </span>
+                                    )}
+                                  </h3>
+                                  {question.fullQuestion &&
+                                    question.fullQuestion !==
+                                      question.label && (
+                                      <p className="text-xs text-foreground/60 font-body mt-0.5 break-words">
+                                        {question.fullQuestion}
+                                      </p>
+                                    )}
+                                </div>
                                 {question.required && !isViewMode && (
                                   <Chip
                                     className="h-5 flex-shrink-0"

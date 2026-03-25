@@ -43,10 +43,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up client scoped to this tenant (trainer)
+    // Use ilike for case-insensitive match to handle legacy un-normalized emails
     const { data: clients, error } = await supabase
       .from("clients")
       .select("id, email, name, last_name, password, status, tenant")
-      .eq("email", normalizedEmail)
+      .ilike("email", normalizedEmail)
       .eq("tenant", tenant.trainer_id);
 
     if (error) {
@@ -126,7 +127,10 @@ export async function POST(request: NextRequest) {
     console.error("[Check Client Email] Unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Error interno del servidor. Intenta de nuevo." },
+      {
+        exists: false,
+        message: "Error interno del servidor. Intenta de nuevo.",
+      },
       { status: 500 }
     );
   }
