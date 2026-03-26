@@ -18,65 +18,82 @@ export function VerticalVideoPlayerModal({
   exerciseName,
 }: VerticalVideoPlayerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [muted, setMuted] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const videoTouchStartY = useRef<number | null>(null);
   const lastTapMs = useRef(0);
 
   const hideControlsAfterDelay = useCallback(() => {
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
-    }, 3000);
-  }, [isPlaying]);
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+  }, []);
 
-  const tryPlay = useCallback(() => {
+  const attemptPlay = useCallback(() => {
     const el = videoRef.current;
 
     if (!el) return;
-    el.play()
-      .then(() => {
-        setIsPlaying(true);
-      })
-      .catch(() => {
-        setIsPlaying(false);
-      });
-  }, []);
 
-  const togglePlayPause = useCallback(() => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      void videoRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-      hideControlsAfterDelay();
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setShowControls(true);
-      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    // Force muted on the DOM element directly — React's muted prop
+    // does NOT reliably set the HTML attribute on iOS Safari.
+    el.defaultMuted = true;
+    el.muted = true;
+
+    const promise = el.play();
+
+    if (promise) {
+      promise
+        .then(() => {
+          setIsPlaying(true);
+          hideControlsAfterDelay();
+        })
+        .catch(() => {
+          setIsPlaying(false);
+          setShowControls(true);
+        });
     }
   }, [hideControlsAfterDelay]);
 
+  // Ref callback: runs once when the <video> mounts into the DOM.
+  // Sets muted directly on the element so Safari sees the attribute.
+  const setVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current =
+      node;
+    if (node) {
+      node.defaultMuted = true;
+      node.muted = true;
+    }
+  }, []);
+
   useEffect(() => {
-    if (!isOpen) return;
-    setMuted(true);
-    setIsPlaying(true);
-    hideControlsAfterDelay();
+    if (!isOpen) {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      }
+      setIsPlaying(false);
+      setProgress(0);
+
+      return;
+    }
+
+    setIsMuted(true);
+    setShowControls(true);
+    // Small delay lets the DOM settle after AnimatePresence mounts the element
+    const id = setTimeout(() => attemptPlay(), 120);
 
     return () => {
+      clearTimeout(id);
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-  }, [isOpen, videoUrl, hideControlsAfterDelay]);
+  }, [isOpen, videoUrl, attemptPlay]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
       if (e.key === " ") {
         e.preventDefault();
@@ -84,89 +101,99 @@ export function VerticalVideoPlayerModal({
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKey);
 
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, togglePlayPause]);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isOpen, onClose]);
 
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const { currentTime, duration } = videoRef.current;
+  const togglePlayPause = useCallback(() => {
+    const el = videoRef.current;
 
-    if (duration > 0) setProgress((currentTime / duration) * 100);
-  };
+    if (!el) return;
+    if (el.paused) {
+      el.muted = isMuted;
+      el.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+      hideControlsAfterDelay();
+    } else {
+      el.pause();
+      setIsPlaying(false);
+      setShowControls(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    }
+  }, [isMuted, hideControlsAfterDelay]);
 
-  const handleScreenTap = () => {
+  const handleTap = useCallback(() => {
     const now = Date.now();
 
-    if (now - lastTapMs.current < 380) return;
+    if (now - lastTapMs.current < 350) return;
     lastTapMs.current = now;
     setShowControls(true);
     hideControlsAfterDelay();
     togglePlayPause();
+  }, [togglePlayPause, hideControlsAfterDelay]);
+
+  const handleTimeUpdate = () => {
+    const el = videoRef.current;
+
+    if (!el) return;
+    if (el.duration > 0) setProgress((el.currentTime / el.duration) * 100);
   };
 
-  const handleVideoTap = (e: React.MouseEvent) => {
+  const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
-    handleScreenTap();
+    const next = !isMuted;
+
+    setIsMuted(next);
+    if (videoRef.current) videoRef.current.muted = next;
   };
 
-  const handleVideoTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-
-    if (touch) videoTouchStartY.current = touch.clientY;
-  };
-
-  const handleVideoTouchEnd = (e: React.TouchEvent) => {
-    if (videoTouchStartY.current === null) return;
-    const touch = e.changedTouches[0];
-
-    if (!touch) return;
-    const dy = touch.clientY - videoTouchStartY.current;
-
-    videoTouchStartY.current = null;
-    if (Math.abs(dy) < 14) {
-      handleScreenTap();
-    }
-  };
-
+  // Touch handling: short swipe = tap, long swipe down = close
   const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
+    const t = e.touches[0];
 
-    if (touch) touchStartY.current = touch.clientY;
+    if (t) touchStartY.current = t.clientY;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
-    const touch = e.changedTouches[0];
+    const t = e.changedTouches[0];
 
-    if (touch) {
-      const deltaY = touch.clientY - touchStartY.current;
+    if (!t) {
+      touchStartY.current = null;
 
-      if (deltaY > 100) onClose();
+      return;
     }
+    const dy = t.clientY - touchStartY.current;
+
     touchStartY.current = null;
+    if (dy > 100) {
+      onClose();
+    } else if (Math.abs(dy) < 20) {
+      handleTap();
+    }
   };
+
+  if (!isOpen) return null;
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
           animate={{ opacity: 1 }}
-          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+          className="fixed inset-0 z-[9999] bg-black"
           exit={{ opacity: 0 }}
           initial={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          onClick={handleScreenTap}
+          transition={{ duration: 0.2 }}
           onTouchEnd={handleTouchEnd}
           onTouchStart={handleTouchStart}
         >
-          {/* Progress bar at top */}
-          <div className="absolute top-0 left-0 right-0 z-10 h-1 bg-white/20">
-            <motion.div
-              className="h-full bg-white"
+          {/* Progress bar */}
+          <div className="absolute top-0 left-0 right-0 z-20 h-1 bg-white/20">
+            <div
+              className="h-full bg-white transition-[width] duration-200"
               style={{ width: `${progress}%` }}
-              transition={{ duration: 0.1 }}
             />
           </div>
 
@@ -175,9 +202,10 @@ export function VerticalVideoPlayerModal({
             {showControls && (
               <motion.button
                 animate={{ opacity: 1 }}
-                className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/40 backdrop-blur-sm"
+                className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm"
                 exit={{ opacity: 0 }}
                 initial={{ opacity: 0 }}
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose();
@@ -192,70 +220,78 @@ export function VerticalVideoPlayerModal({
             )}
           </AnimatePresence>
 
-          {/* Sound: always visible; muted default enables autoplay on iOS / Android */}
+          {/* Sound toggle — always visible */}
           <button
-            className="absolute top-4 left-4 z-20 p-2 rounded-full bg-black/40 backdrop-blur-sm"
+            className="absolute top-4 left-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm"
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMuted((m) => !m);
-            }}
+            onClick={handleToggleMute}
           >
             <Icon
               className="text-white"
               icon={
-                muted ? "solar:volume-cross-bold" : "solar:volume-loud-bold"
+                isMuted ? "solar:volume-cross-bold" : "solar:volume-loud-bold"
               }
               width={26}
             />
           </button>
 
-          {/* Play/Pause indicator */}
+          {/* Play indicator */}
           <AnimatePresence>
             {showControls && !isPlaying && (
               <motion.div
                 animate={{ opacity: 1, scale: 1 }}
-                className="absolute z-10 p-4 rounded-full bg-black/40 backdrop-blur-sm pointer-events-none"
+                className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
                 exit={{ opacity: 0, scale: 0.8 }}
                 initial={{ opacity: 0, scale: 0.8 }}
               >
-                <Icon
-                  className="text-white"
-                  icon="solar:play-bold"
-                  width={48}
-                />
+                <div className="p-5 rounded-full bg-black/50 backdrop-blur-sm">
+                  <Icon
+                    className="text-white"
+                    icon="solar:play-bold"
+                    width={48}
+                  />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Video: playsInline + muted allow autoplay on mobile Safari / Chrome */}
+          {/*
+            Video element:
+            - ref callback forces .muted=true on the DOM node (React bug workaround)
+            - muted HTML attribute written via dangerouslySetInnerHTML is not needed
+              because we use the ref callback + attemptPlay
+            - playsInline is critical for iOS (prevents fullscreen takeover)
+            - preload="auto" helps Safari buffer
+            - onCanPlayThrough is more reliable than onLoadedData on mobile
+          */}
           <video
             key={videoUrl}
-            ref={videoRef}
+            ref={setVideoRef}
             autoPlay
             loop
+            muted
             playsInline
-            className="absolute inset-0 z-0 w-full h-full object-cover"
-            muted={muted}
+            className="absolute inset-0 z-10 w-full h-full object-cover"
             preload="auto"
             src={videoUrl}
-            onClick={handleVideoTap}
-            onLoadedData={() => tryPlay()}
+            onCanPlayThrough={() => {
+              if (isOpen && videoRef.current?.paused) attemptPlay();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleTap();
+            }}
             onPause={() => setIsPlaying(false)}
             onPlay={() => setIsPlaying(true)}
             onTimeUpdate={handleTimeUpdate}
-            onTouchEnd={handleVideoTouchEnd}
-            onTouchStart={handleVideoTouchStart}
-          >
-            <track kind="captions" label="Spanish" srcLang="es" />
-          </video>
+          />
 
           {/* Bottom gradient + exercise name */}
           <AnimatePresence>
             {showControls && (
               <motion.div
                 animate={{ opacity: 1 }}
-                className="absolute bottom-0 left-0 right-0 z-10"
+                className="absolute bottom-0 left-0 right-0 z-20"
                 exit={{ opacity: 0 }}
                 initial={{ opacity: 0 }}
               >
@@ -264,8 +300,7 @@ export function VerticalVideoPlayerModal({
                     {exerciseName}
                   </h3>
                   <p className="text-white/60 text-sm mt-1">
-                    Toca para pausar · Sonido arriba a la izquierda · Desliza
-                    abajo para cerrar
+                    Toca para pausar · Desliza abajo para cerrar
                   </p>
                 </div>
               </motion.div>
