@@ -40,7 +40,28 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
 
-    if (scheduledDate !== undefined) updateData.scheduled_date = scheduledDate;
+    // When rescheduling, persist the original template date so the UI can
+    // suppress the old template slot and show the card on the new date.
+    if (scheduledDate !== undefined) {
+      const { data: existing } = await supabase
+        .from("scheduled_sessions")
+        .select("scheduled_date, metadata")
+        .eq("id", sessionId)
+        .eq("client_id", clientId)
+        .single();
+
+      if (existing) {
+        const prevMeta = (existing.metadata as Record<string, any>) || {};
+
+        if (!prevMeta.original_plan_date) {
+          prevMeta.original_plan_date = existing.scheduled_date;
+        }
+        updateData.metadata = prevMeta;
+      }
+
+      updateData.scheduled_date = scheduledDate;
+    }
+
     if (status !== undefined) updateData.status = status;
     if (completedAt !== undefined) updateData.completed_at = completedAt;
     if (notes !== undefined) updateData.notes = notes;

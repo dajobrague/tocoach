@@ -148,6 +148,9 @@ export function transformToWorkoutProgram(
             ...(se.exercise?.video_url
               ? { videoUrl: se.exercise.video_url }
               : {}),
+            ...(se.exercise?.uploaded_video_url
+              ? { uploadedVideoUrl: se.exercise.uploaded_video_url }
+              : {}),
             ...(se.exercise?.image_url
               ? { imageUrl: se.exercise.image_url }
               : {}),
@@ -170,6 +173,7 @@ export function transformToWorkoutProgram(
             description: se.exercise?.description || undefined,
             notes: se.notes || undefined,
             videoUrl: se.exercise?.video_url,
+            uploadedVideoUrl: se.exercise?.uploaded_video_url,
             imageUrl: se.exercise?.image_url,
             id: se.id,
             exercise_id: se.exercise_id,

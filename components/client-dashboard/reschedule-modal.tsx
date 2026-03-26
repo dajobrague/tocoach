@@ -77,6 +77,7 @@ export function RescheduleModal({
           body: JSON.stringify({
             sessionId,
             scheduledDate: newDate,
+            originalPlanDate: currentDate,
             status: "scheduled",
           }),
         });

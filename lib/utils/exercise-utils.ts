@@ -179,6 +179,100 @@ export async function deleteExerciseImage(
 }
 
 /**
+ * Upload exercise video to Supabase storage
+ */
+export async function uploadExerciseVideo(
+  file: File
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    const response = await fetch("/api/exercises/upload-video", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || "Error al subir video",
+      };
+    }
+
+    return {
+      success: true,
+      url: data.url,
+    };
+  } catch (error) {
+    console.error("[Exercise Utils] Error uploading video:", error);
+
+    return {
+      success: false,
+      error: "Error inesperado al subir video",
+    };
+  }
+}
+
+/**
+ * Delete exercise video from Supabase storage
+ */
+export async function deleteExerciseVideo(
+  videoPath: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `/api/exercises/upload-video?path=${encodeURIComponent(videoPath)}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || "Error al eliminar video",
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("[Exercise Utils] Error deleting video:", error);
+
+    return {
+      success: false,
+      error: "Error inesperado al eliminar video",
+    };
+  }
+}
+
+/**
+ * Extract video path from Supabase URL
+ */
+export function extractVideoPathFromUrl(url: string): string | null {
+  try {
+    const parts = url.split("/exercise-videos/");
+
+    if (parts.length === 2 && parts[1]) {
+      return parts[1];
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[Exercise Utils] Error extracting video path:", error);
+
+    return null;
+  }
+}
+
+/**
  * Extract image path from Supabase URL
  */
 export function extractImagePathFromUrl(url: string): string | null {

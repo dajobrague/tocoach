@@ -92,7 +92,7 @@ export async function POST(
 
     const { clientId } = await params;
     const body = await request.json();
-    const { sessionId, scheduledDate, status } = body;
+    const { sessionId, scheduledDate, status, originalPlanDate } = body;
 
     // Verify client is creating for themselves
     if (session.client_id.toString() !== clientId) {
@@ -121,7 +121,13 @@ export async function POST(
       );
     }
 
-    // Create scheduled session
+    // Create scheduled session with original_plan_date anchor for reschedule tracking
+    const metadata: Record<string, string> = {};
+
+    if (originalPlanDate) {
+      metadata.original_plan_date = originalPlanDate;
+    }
+
     const { data: scheduledSession, error: createError } = await supabase
       .from("scheduled_sessions")
       .insert({
@@ -131,6 +137,7 @@ export async function POST(
         trainer_id: sessionData.trainer_id,
         scheduled_date: scheduledDate,
         status: status || "pending",
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       })
       .select()
       .single();

@@ -27,6 +27,7 @@ import { useClientData } from "@/components/client-dashboard/client-data-provide
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log-modal";
 import { RescheduleModal } from "@/components/client-dashboard/reschedule-modal";
+import { VerticalVideoPlayerModal } from "@/components/client-dashboard/vertical-video-player-modal";
 import { VideoPlayerModal } from "@/components/client-dashboard/video-player-modal";
 import {
   useExerciseLogs,
@@ -88,6 +89,7 @@ export function WorkoutsContent() {
   const [isExerciseLogModalOpen, setIsExerciseLogModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isVerticalVideoOpen, setIsVerticalVideoOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Selected items for modals
@@ -95,6 +97,7 @@ export function WorkoutsContent() {
   const [selectedRescheduleSession, setSelectedRescheduleSession] =
     useState<any>(null);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
+  const [selectedUploadedVideoUrl, setSelectedUploadedVideoUrl] = useState("");
   const [selectedVideoExerciseName, setSelectedVideoExerciseName] =
     useState("");
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
@@ -188,6 +191,12 @@ export function WorkoutsContent() {
     setIsVideoModalOpen(true);
   };
 
+  const handleOpenVerticalVideo = (videoUrl: string, exerciseName: string) => {
+    setSelectedUploadedVideoUrl(videoUrl);
+    setSelectedVideoExerciseName(exerciseName);
+    setIsVerticalVideoOpen(true);
+  };
+
   // Handle image modal
   const handleOpenImage = (imageUrl: string, exerciseName: string) => {
     setSelectedImageUrl(imageUrl);
@@ -208,7 +217,9 @@ export function WorkoutsContent() {
     return Math.ceil(diff / oneWeek);
   };
 
-  // Generate scheduled sessions from ALL active programs
+  // Generate scheduled sessions from ALL active programs, merging with
+  // rescheduled rows from scheduled_sessions so moved workouts appear on
+  // the correct date and vanish from the original template slot.
   const getScheduledSessions = (): ScheduledSession[] => {
     if (!activePrograms || activePrograms.length === 0) return [];
 
@@ -219,16 +230,110 @@ export function WorkoutsContent() {
     const sessions: ScheduledSession[] = [];
     const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
-    // Create sessions for the past 2 weeks and next 3 weeks
+    // Template slots that were rescheduled away — keyed as "sessionId::YYYY-MM-DD"
+    const rescheduledAwaySlots = new Set<string>();
+
+    for (const ss of scheduledSessionsData as any[]) {
+      const origDate = ss.metadata?.original_plan_date;
+
+      if (origDate && ss.session_id) {
+        rescheduledAwaySlots.add(`${ss.session_id}::${origDate}`);
+      }
+    }
+
+    // Track slots the template loop already covers so the injection pass
+    // only adds truly missing entries.
+    const coveredSlots = new Set<string>();
+
+    // Lookup: session_id → program session (for the injection pass)
+    const sessionLookup = new Map<string, any>();
+
+    for (const prog of activePrograms) {
+      for (const s of (prog as any).sessions) {
+        sessionLookup.set(s.id, s);
+      }
+    }
+
+    // Shared helper: compute status & progress for a session on a given date
+    const buildCard = (
+      templateSession: any,
+      sessionDate: Date,
+      dayOffset: number,
+      dateStr: string,
+      dayOfWeek: string,
+      scheduledSessionId: string | null
+    ) => {
+      const exercises: any[] = templateSession.exercises || [];
+      const trackableExercises = exercises
+        .map((e: any, idx: number) => ({
+          eid: e.exercise_id || null,
+          slot: idx,
+        }))
+        .filter((e) => e.eid);
+      const totalExercises = trackableExercises.length;
+
+      const loggedSet = new Set(
+        exerciseLogs
+          .filter((log: any) => log.scheduled_date === dateStr)
+          .map((log: any) => log.exercise_id)
+      );
+      const loggedCount = trackableExercises.filter((e) =>
+        loggedSet.has(e.eid)
+      ).length;
+
+      let status: SessionStatus = "pending";
+      let progress = 0;
+
+      if (dayOffset > 0) {
+        status = "pending";
+      } else if (totalExercises > 0 && loggedCount > 0) {
+        if (loggedCount >= totalExercises) {
+          status = "completed";
+          progress = 100;
+        } else {
+          status = "in-progress";
+          progress = Math.round((loggedCount / totalExercises) * 100);
+        }
+      }
+
+      let dayLabel = "";
+
+      if (dayOffset === 0) dayLabel = "Hoy";
+      else if (dayOffset === -1) dayLabel = "Ayer";
+      else if (dayOffset === 1) dayLabel = "Mañana";
+      else dayLabel = dayOfWeek || "";
+
+      const sessionData: any = {
+        id: `${templateSession.id}-${dayOffset}`,
+        sessionId: templateSession.id,
+        scheduledSessionId,
+        date: sessionDate,
+        dayLabel,
+        sessionName: templateSession.name,
+        status,
+        exercises: templateSession.exercises,
+        progress,
+        dayOfWeek: dayOfWeek || "",
+      };
+
+      if (status === "completed") {
+        sessionData.completedAt = new Date(
+          sessionDate.getTime() + 2 * 60 * 60 * 1000
+        );
+      }
+
+      return sessionData;
+    };
+
+    // ── Pass 1: template-driven slots ────────────────────────────────────
     for (let dayOffset = -14; dayOffset <= 21; dayOffset++) {
       const sessionDate = new Date(today);
 
       sessionDate.setDate(today.getDate() + dayOffset);
-      const dayOfWeek = dayNames[sessionDate.getDay()];
+      const dayOfWeek = dayNames[sessionDate.getDay()] ?? "";
 
-      // Find matching sessions for this day from ALL active programs
       for (const activeProgram of activePrograms) {
-        const matchingSession = activeProgram.sessions.find(
+        const matchingSession = (activeProgram as any).sessions.find(
           (s: any) =>
             dayOfWeek &&
             Array.isArray(s.dayOfWeek) &&
@@ -238,75 +343,64 @@ export function WorkoutsContent() {
         );
 
         if (matchingSession) {
-          const dateStr = sessionDate.toISOString().split("T")[0];
-          const exercises: any[] = matchingSession.exercises || [];
-          const exerciseIdsWithSlot = exercises.map((e: any, idx: number) => ({
-            eid: e.exercise_id || null,
-            slot: idx,
-          }));
-          const trackableExercises = exerciseIdsWithSlot.filter((e) => e.eid);
-          const totalExercises = trackableExercises.length;
+          const dateStr = sessionDate.toISOString().slice(0, 10);
 
-          const loggedSet = new Set(
-            exerciseLogs
-              .filter((log: any) => log.scheduled_date === dateStr)
-              .map((log: any) => log.exercise_id)
-          );
-          const loggedCount = trackableExercises.filter((e) =>
-            loggedSet.has(e.eid)
-          ).length;
-
-          let status: SessionStatus = "pending";
-          let progress = 0;
-
-          if (dayOffset > 0) {
-            status = "pending";
-          } else if (totalExercises > 0 && loggedCount > 0) {
-            if (loggedCount >= totalExercises) {
-              status = "completed";
-              progress = 100;
-            } else {
-              status = "in-progress";
-              progress = Math.round((loggedCount / totalExercises) * 100);
-            }
+          // If this slot was rescheduled to another date, skip it
+          if (rescheduledAwaySlots.has(`${matchingSession.id}::${dateStr}`)) {
+            continue;
           }
 
-          let dayLabel = "";
+          coveredSlots.add(`${matchingSession.id}::${dateStr}`);
 
-          if (dayOffset === 0) dayLabel = "Hoy";
-          else if (dayOffset === -1) dayLabel = "Ayer";
-          else if (dayOffset === 1) dayLabel = "Mañana";
-          else dayLabel = dayOfWeek || "";
-
-          // Match real scheduled_session from API (for reschedule)
           const realScheduled = (scheduledSessionsData as any[]).find(
             (ss: any) =>
               ss.session_id === matchingSession.id &&
               ss.scheduled_date === dateStr
           );
 
-          const sessionData: any = {
-            id: `${matchingSession.id}-${dayOffset}`,
-            sessionId: matchingSession.id, // Program session ID (sessions table)
-            scheduledSessionId: realScheduled?.id ?? null, // UUID from scheduled_sessions, or null
-            date: sessionDate,
-            dayLabel,
-            sessionName: matchingSession.name,
-            status,
-            exercises: matchingSession.exercises,
-            progress,
-            dayOfWeek: dayOfWeek || "",
-          };
-
-          if (status === "completed") {
-            sessionData.completedAt = new Date(
-              sessionDate.getTime() + 2 * 60 * 60 * 1000
-            );
-          }
-
-          sessions.push(sessionData);
+          sessions.push(
+            buildCard(
+              matchingSession,
+              sessionDate,
+              dayOffset,
+              dateStr,
+              dayOfWeek,
+              realScheduled?.id ?? null
+            )
+          );
         }
       }
+    }
+
+    // ── Pass 2: inject rescheduled sessions that landed on non-template days ─
+    for (const ss of scheduledSessionsData as any[]) {
+      if (!ss.session_id || !ss.scheduled_date) continue;
+      if (!ss.metadata?.original_plan_date) continue;
+
+      const slotKey = `${ss.session_id}::${ss.scheduled_date}`;
+
+      if (coveredSlots.has(slotKey)) continue;
+
+      const templateSession = sessionLookup.get(ss.session_id);
+
+      if (!templateSession) continue;
+
+      const sessionDate = new Date(ss.scheduled_date + "T00:00:00");
+      const dayDiff = Math.round(
+        (sessionDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const dayOfWeek = dayNames[sessionDate.getDay()] || "";
+
+      sessions.push(
+        buildCard(
+          templateSession,
+          sessionDate,
+          dayDiff,
+          ss.scheduled_date,
+          dayOfWeek,
+          ss.id
+        )
+      );
     }
 
     return sessions.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -1043,7 +1137,31 @@ export function WorkoutsContent() {
                           </Button>
                         )}
 
-                        {/* Video Button */}
+                        {/* Uploaded Vertical Video Button */}
+                        {exercise.uploadedVideoUrl && (
+                          <Button
+                            isIconOnly
+                            className={`h-8 w-8 min-w-8 ${isToday ? "bg-white/20" : ""}`}
+                            size="sm"
+                            variant="flat"
+                            onPress={() =>
+                              handleOpenVerticalVideo(
+                                exercise.uploadedVideoUrl || "",
+                                exercise.name
+                              )
+                            }
+                          >
+                            <Icon
+                              className={
+                                isToday ? "text-white" : "text-primary"
+                              }
+                              icon="solar:clapperboard-play-bold"
+                              width={18}
+                            />
+                          </Button>
+                        )}
+
+                        {/* YouTube/External Video Button */}
                         {exercise.videoUrl && (
                           <Button
                             isIconOnly
@@ -1333,6 +1451,13 @@ export function WorkoutsContent() {
         isOpen={isVideoModalOpen}
         videoUrl={selectedVideoUrl}
         onClose={() => setIsVideoModalOpen(false)}
+      />
+
+      <VerticalVideoPlayerModal
+        exerciseName={selectedVideoExerciseName}
+        isOpen={isVerticalVideoOpen}
+        videoUrl={selectedUploadedVideoUrl}
+        onClose={() => setIsVerticalVideoOpen(false)}
       />
 
       {/* Image Preview Modal */}

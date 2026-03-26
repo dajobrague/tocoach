@@ -334,6 +334,21 @@ export default function ExerciseLibraryContent() {
                             Patrón: {exercise.movement_pattern}
                           </Chip>
                         )}
+                        {exercise.uploaded_video_url && (
+                          <Chip
+                            className="bg-blue-100 text-blue-700 border border-blue-200"
+                            size="sm"
+                            startContent={
+                              <Icon
+                                icon="solar:videocamera-record-bold"
+                                width={14}
+                              />
+                            }
+                            variant="flat"
+                          >
+                            Video
+                          </Chip>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -742,7 +757,9 @@ export default function ExerciseLibraryContent() {
             <ModalBody>
               <div className="flex flex-col gap-6">
                 {/* Image/Video Section */}
-                {(viewingExercise.image_url || viewingExercise.video_url) && (
+                {(viewingExercise.image_url ||
+                  viewingExercise.video_url ||
+                  viewingExercise.uploaded_video_url) && (
                   <div className="space-y-3">
                     {viewingExercise.image_url && (
                       <div className="relative w-full h-64 rounded-lg overflow-hidden border-2 border-gray-200">
@@ -751,6 +768,31 @@ export default function ExerciseLibraryContent() {
                           className="w-full h-full object-cover"
                           src={viewingExercise.image_url}
                         />
+                      </div>
+                    )}
+                    {viewingExercise.uploaded_video_url && (
+                      <div className="flex flex-col items-center">
+                        <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                          <Icon icon="solar:smartphone-bold" width={14} />
+                          Vista previa del cliente
+                        </p>
+                        <div
+                          className="rounded-2xl overflow-hidden border-2 border-gray-300 bg-black shadow-lg"
+                          style={{ width: 192, height: 341 }}
+                        >
+                          <video
+                            controls
+                            playsInline
+                            className="w-full h-full object-cover"
+                            src={viewingExercise.uploaded_video_url}
+                          >
+                            <track
+                              kind="captions"
+                              label="Spanish"
+                              srcLang="es"
+                            />
+                          </video>
+                        </div>
                       </div>
                     )}
                     {viewingExercise.video_url && (

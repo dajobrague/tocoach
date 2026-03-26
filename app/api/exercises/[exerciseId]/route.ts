@@ -136,6 +136,8 @@ export async function PUT(
       updateData.movement_pattern = body.movement_pattern || null;
     if (body.video_url !== undefined)
       updateData.video_url = body.video_url || null;
+    if (body.uploaded_video_url !== undefined)
+      updateData.uploaded_video_url = body.uploaded_video_url || null;
     if (body.image_url !== undefined)
       updateData.image_url = body.image_url || null;
     if (body.instructions !== undefined)

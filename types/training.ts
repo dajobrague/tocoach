@@ -97,6 +97,7 @@ export interface Exercise {
   equipment?: string[];
   movement_pattern?: string;
   video_url?: string;
+  uploaded_video_url?: string;
   image_url?: string;
   instructions?: string[];
   tips?: string[];
@@ -182,6 +183,7 @@ export interface WorkoutExercise {
   rest: string;
   trainingSystem: string;
   videoUrl?: string;
+  uploadedVideoUrl?: string;
   imageUrl?: string;
   // Cardio-specific fields
   duration?: number; // Duration in minutes
@@ -294,6 +296,7 @@ export interface CreateExerciseLibraryRequest {
   equipment?: string[];
   movement_pattern?: string;
   video_url?: string;
+  uploaded_video_url?: string;
   image_url?: string;
   instructions?: string[];
   tips?: string[];
@@ -322,6 +325,7 @@ export interface UpdateExerciseLibraryRequest {
   equipment?: string[];
   movement_pattern?: string;
   video_url?: string;
+  uploaded_video_url?: string;
   image_url?: string;
   instructions?: string[];
   tips?: string[];
