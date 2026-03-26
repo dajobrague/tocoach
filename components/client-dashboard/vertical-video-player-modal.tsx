@@ -25,6 +25,7 @@ export const VerticalVideoPlayerModal = forwardRef<
 >(function VerticalVideoPlayerModal({ onClose }, ref) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [videoSrc, setVideoSrc] = useState("");
   const [exerciseName, setExerciseName] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -39,7 +40,6 @@ export const VerticalVideoPlayerModal = forwardRef<
     controlsTimer.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
 
-  // Force muted attribute on the DOM node (React bug workaround for Safari)
   const setVideoNode = useCallback((node: HTMLVideoElement | null) => {
     videoRef.current = node;
     if (node) {
@@ -48,7 +48,6 @@ export const VerticalVideoPlayerModal = forwardRef<
     }
   }, []);
 
-  // Called synchronously from the parent's click handler — within user gesture.
   useImperativeHandle(
     ref,
     () => ({
@@ -58,11 +57,11 @@ export const VerticalVideoPlayerModal = forwardRef<
         if (!el) return;
 
         setExerciseName(name);
+        setVideoSrc(url);
         setProgress(0);
         setShowControls(true);
         setIsMuted(false);
 
-        // Set src and unmute SYNCHRONOUSLY in the user gesture call stack.
         el.src = url;
         el.muted = false;
         el.currentTime = 0;
@@ -73,7 +72,6 @@ export const VerticalVideoPlayerModal = forwardRef<
             scheduleHideControls();
           })
           .catch(() => {
-            // Unmuted play blocked — retry muted
             el.muted = true;
             setIsMuted(true);
             el.play()
@@ -95,9 +93,7 @@ export const VerticalVideoPlayerModal = forwardRef<
   const close = useCallback(() => {
     const el = videoRef.current;
 
-    if (el) {
-      el.pause();
-    }
+    if (el) el.pause();
     setIsOpen(false);
     setIsPlaying(false);
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -189,39 +185,50 @@ export const VerticalVideoPlayerModal = forwardRef<
 
   return (
     <>
-      {/* Hidden video — always in the DOM so play() works in user gesture */}
-      {!isOpen && (
-        <video
-          ref={setVideoNode}
-          loop
-          muted
-          playsInline
-          preload="none"
-          style={{
-            position: "fixed",
-            width: 0,
-            height: 0,
-            opacity: 0,
-            pointerEvents: "none",
-          }}
-        >
-          <track kind="captions" label="Spanish" srcLang="es" />
-        </video>
-      )}
+      {/* Single video element — always in the DOM, CSS toggles visibility */}
+      <video
+        ref={setVideoNode}
+        loop
+        muted
+        playsInline
+        className={
+          isOpen
+            ? "fixed inset-0 z-[9999] w-full h-full object-cover"
+            : "fixed top-0 left-0 w-0 h-0 opacity-0 pointer-events-none"
+        }
+        preload="none"
+        src={videoSrc || undefined}
+        onClick={(e) => {
+          if (!isOpen) return;
+          e.stopPropagation();
+          handleTap();
+        }}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+        onTimeUpdate={handleTimeUpdate}
+      >
+        <track kind="captions" label="Spanish" srcLang="es" />
+      </video>
 
+      {/* Overlay UI */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-[9999] bg-black"
+            className="fixed inset-0 z-[10000] pointer-events-none"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onTouchEnd={handleTouchEnd}
-            onTouchStart={handleTouchStart}
           >
+            {/* Touch layer for swipe/tap — sits behind buttons */}
+            <div
+              className="absolute inset-0 z-0 pointer-events-auto"
+              onTouchEnd={handleTouchEnd}
+              onTouchStart={handleTouchStart}
+            />
+
             {/* Progress bar */}
-            <div className="absolute top-0 left-0 right-0 z-20 h-1 bg-white/20">
+            <div className="absolute top-0 left-0 right-0 z-20 h-1 bg-white/20 pointer-events-none">
               <div
                 className="h-full bg-white transition-[width] duration-200"
                 style={{ width: `${progress}%` }}
@@ -233,7 +240,7 @@ export const VerticalVideoPlayerModal = forwardRef<
               {showControls && (
                 <motion.button
                   animate={{ opacity: 1 }}
-                  className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm"
+                  className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
                   exit={{ opacity: 0 }}
                   initial={{ opacity: 0 }}
                   type="button"
@@ -253,7 +260,7 @@ export const VerticalVideoPlayerModal = forwardRef<
 
             {/* Sound toggle */}
             <button
-              className="absolute top-4 left-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm"
+              className="absolute top-4 left-4 z-30 p-2 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
               type="button"
               onClick={handleToggleMute}
             >
@@ -286,31 +293,12 @@ export const VerticalVideoPlayerModal = forwardRef<
               )}
             </AnimatePresence>
 
-            {/* Visible video */}
-            <video
-              ref={setVideoNode}
-              loop
-              playsInline
-              className="absolute inset-0 z-10 w-full h-full object-cover"
-              muted={isMuted}
-              preload="auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleTap();
-              }}
-              onPause={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-              onTimeUpdate={handleTimeUpdate}
-            >
-              <track kind="captions" label="Spanish" srcLang="es" />
-            </video>
-
             {/* Bottom gradient */}
             <AnimatePresence>
               {showControls && (
                 <motion.div
                   animate={{ opacity: 1 }}
-                  className="absolute bottom-0 left-0 right-0 z-20"
+                  className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none"
                   exit={{ opacity: 0 }}
                   initial={{ opacity: 0 }}
                 >
