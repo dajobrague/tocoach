@@ -19,7 +19,7 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -27,7 +27,10 @@ import { useClientData } from "@/components/client-dashboard/client-data-provide
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log-modal";
 import { RescheduleModal } from "@/components/client-dashboard/reschedule-modal";
-import { VerticalVideoPlayerModal } from "@/components/client-dashboard/vertical-video-player-modal";
+import {
+  VerticalVideoPlayerModal,
+  type VerticalVideoPlayerHandle,
+} from "@/components/client-dashboard/vertical-video-player-modal";
 import { VideoPlayerModal } from "@/components/client-dashboard/video-player-modal";
 import {
   useExerciseLogs,
@@ -89,15 +92,14 @@ export function WorkoutsContent() {
   const [isExerciseLogModalOpen, setIsExerciseLogModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
-  const [isVerticalVideoOpen, setIsVerticalVideoOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const verticalPlayerRef = useRef<VerticalVideoPlayerHandle>(null);
 
   // Selected items for modals
   const [selectedExercise, setSelectedExercise] = useState<any>(null);
   const [selectedRescheduleSession, setSelectedRescheduleSession] =
     useState<any>(null);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
-  const [selectedUploadedVideoUrl, setSelectedUploadedVideoUrl] = useState("");
   const [selectedVideoExerciseName, setSelectedVideoExerciseName] =
     useState("");
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
@@ -192,9 +194,7 @@ export function WorkoutsContent() {
   };
 
   const handleOpenVerticalVideo = (videoUrl: string, exerciseName: string) => {
-    setSelectedUploadedVideoUrl(videoUrl);
-    setSelectedVideoExerciseName(exerciseName);
-    setIsVerticalVideoOpen(true);
+    verticalPlayerRef.current?.open(videoUrl, exerciseName);
   };
 
   // Handle image modal
@@ -1453,12 +1453,7 @@ export function WorkoutsContent() {
         onClose={() => setIsVideoModalOpen(false)}
       />
 
-      <VerticalVideoPlayerModal
-        exerciseName={selectedVideoExerciseName}
-        isOpen={isVerticalVideoOpen}
-        videoUrl={selectedUploadedVideoUrl}
-        onClose={() => setIsVerticalVideoOpen(false)}
-      />
+      <VerticalVideoPlayerModal ref={verticalPlayerRef} />
 
       {/* Image Preview Modal */}
       <Modal
