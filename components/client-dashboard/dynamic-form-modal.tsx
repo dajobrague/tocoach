@@ -16,14 +16,16 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getScheduleOrDefault } from "@/lib/forms/schedule";
 import {
   QuestionConfig,
   FormPage,
   FormConfigData,
   isStructuredConfig,
   normalizeFormConfig,
+  type CheckInSchedule,
 } from "@/lib/forms/types";
 
 interface DynamicFormModalProps {
@@ -31,6 +33,8 @@ interface DynamicFormModalProps {
   onClose: () => void;
   clientId: string;
   formType: "checkins" | "habits";
+  /** Resolved from dashboard; merged with API schedule when modal opens. */
+  schedule?: CheckInSchedule | null;
   onSuccess?: () => void;
 }
 
@@ -39,6 +43,7 @@ export function DynamicFormModal({
   onClose,
   clientId,
   formType,
+  schedule: scheduleProp,
   onSuccess,
 }: DynamicFormModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -163,6 +168,16 @@ export function DynamicFormModal({
 
   const [configError, setConfigError] = useState<string | null>(null);
   const [pages, setPages] = useState<FormPage[]>([]);
+  const [fetchedCheckinSchedule, setFetchedCheckinSchedule] =
+    useState<CheckInSchedule | null>(null);
+
+  const effectiveCheckinSchedule = useMemo(() => {
+    if (formType !== "checkins") {
+      return null;
+    }
+
+    return getScheduleOrDefault(scheduleProp ?? fetchedCheckinSchedule ?? null);
+  }, [formType, scheduleProp, fetchedCheckinSchedule]);
 
   const fetchFormConfig = async () => {
     setIsLoading(true);
@@ -174,6 +189,14 @@ export function DynamicFormModal({
       const data = await response.json();
 
       if (data.success && data.config) {
+        if (formType === "checkins") {
+          setFetchedCheckinSchedule(
+            getScheduleOrDefault(data.schedule ?? null)
+          );
+        } else {
+          setFetchedCheckinSchedule(null);
+        }
+
         const raw = data.config.questions_config;
 
         // Normalize into structured format
@@ -196,16 +219,30 @@ export function DynamicFormModal({
         setQuestions(enabledQuestions);
         setPages(structured.pages.sort((a, b) => a.order - b.order));
       } else if (response.status === 404) {
+        if (formType === "checkins") {
+          setFetchedCheckinSchedule(getScheduleOrDefault(null));
+        }
+
         setConfigError(
           "Tu entrenador aún no ha configurado este formulario. Contacta con tu entrenador para activarlo."
         );
       } else {
+        if (formType === "checkins") {
+          setFetchedCheckinSchedule(
+            getScheduleOrDefault(data.schedule ?? null)
+          );
+        }
+
         setConfigError(
           data.error || "Error al cargar la configuración del formulario."
         );
       }
     } catch (error) {
       console.error("Error fetching form config:", error);
+      if (formType === "checkins") {
+        setFetchedCheckinSchedule(getScheduleOrDefault(null));
+      }
+
       setConfigError("Error de conexión al cargar el formulario.");
     } finally {
       setIsLoading(false);
@@ -883,7 +920,7 @@ export function DynamicFormModal({
                   <h2 className="text-xl font-bold font-heading text-foreground">
                     {isViewMode
                       ? formType === "checkins"
-                        ? "Seguimiento Semanal"
+                        ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
                         : "Registro Diario"
                       : currentSection.title || "Formulario"}
                     {isViewMode && <span className="text-success"> ✓</span>}

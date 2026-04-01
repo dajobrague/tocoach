@@ -1,49 +1,69 @@
 // Client-side form helpers for status checking and timezone handling
 
+import {
+  DEFAULT_CHECKIN_SCHEDULE,
+  getCheckInPeriodEnd,
+  getCheckInPeriodStart,
+  getCheckInStatus,
+  getEffectiveSubmissionDeadline,
+  isCheckInDue,
+} from "./schedule";
 import { FormResponse, FormType } from "./types";
 
+/** Maps stored responses to the shape expected by {@link isCheckInDue} / {@link getCheckInStatus}. */
+export function formResponsesToSubmittedAtPayload(responses: FormResponse[]): {
+  submitted_at: string;
+}[] {
+  return responses.map((r) => ({
+    submitted_at:
+      typeof r.submitted_at === "string" && r.submitted_at.trim().length > 0
+        ? r.submitted_at
+        : `${r.response_date}T12:00:00.000Z`,
+  }));
+}
+
 /**
- * Get the start of the current week (Monday) in client timezone
+ * @deprecated Use {@link getCheckInPeriodStart} from `./schedule` with the client’s
+ * {@link import("./types").CheckInSchedule}. This wrapper uses {@link DEFAULT_CHECKIN_SCHEDULE}
+ * (Europe/Madrid, Monday 12:00) and may differ from the old browser-local Monday 00:00 week.
+ *
+ * @example
+ * ```ts
+ * // Prefer:
+ * getCheckInPeriodStart(clientSchedule, new Date());
+ * ```
  */
 export function getWeekStartDate(date: Date = new Date()): Date {
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-  const monday = new Date(date.setDate(diff));
-
-  monday.setHours(0, 0, 0, 0);
-
-  return monday;
+  return getCheckInPeriodStart(DEFAULT_CHECKIN_SCHEDULE, date);
 }
 
 /**
- * Get the end of the current week (Sunday 23:59:59)
+ * @deprecated Use {@link getCheckInPeriodEnd} from `./schedule` with a real schedule.
+ * Delegates to {@link DEFAULT_CHECKIN_SCHEDULE}.
+ *
+ * @example
+ * ```ts
+ * const start = getCheckInPeriodStart(schedule, new Date());
+ * const end = getCheckInPeriodEnd(schedule, start);
+ * ```
  */
 export function getWeekEndDate(date: Date = new Date()): Date {
-  const monday = getWeekStartDate(date);
-  const sunday = new Date(monday);
+  const periodStart = getCheckInPeriodStart(DEFAULT_CHECKIN_SCHEDULE, date);
 
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  return sunday;
+  return getCheckInPeriodEnd(DEFAULT_CHECKIN_SCHEDULE, periodStart);
 }
 
 /**
- * Check if weekly check-in was submitted this week
+ * @deprecated Use {@link isCheckInDue} from `./schedule` with the client’s real schedule.
+ * This helper always uses the **system** {@link DEFAULT_CHECKIN_SCHEDULE}
+ * ({@link import("./types").DEFAULT_CHECKIN_SCHEDULE} — Monday 12:00, Europe/Madrid), not per-client config.
  */
 export function isWeeklyCheckInDue(responses: FormResponse[]): boolean {
-  const now = new Date();
-  const weekStart = getWeekStartDate(now);
-
-  // Check if there's a response from this week (Monday onwards)
-  const thisWeekResponse = responses.find((r) => {
-    const responseDate = new Date(r.response_date);
-
-    return responseDate >= weekStart;
-  });
-
-  // Return true if not submitted yet (show entire week until submitted)
-  return !thisWeekResponse;
+  return isCheckInDue(
+    DEFAULT_CHECKIN_SCHEDULE,
+    formResponsesToSubmittedAtPayload(responses),
+    new Date()
+  );
 }
 
 /**
@@ -58,23 +78,18 @@ export function isDailyHabitsSubmittedToday(
 }
 
 /**
- * Check if form is expired (with grace period)
+ * @deprecated For check-ins, use {@link getCheckInStatus} from `./schedule` with responses.
+ * This implementation treats “expired” as {@link getCheckInStatus} === `"expired"` with
+ * {@link DEFAULT_CHECKIN_SCHEDULE} and no responses supplied for the status check.
  */
 export function isFormExpired(
   formType: FormType,
-  submissionDate?: string
+  _submissionDate?: string
 ): boolean {
   const now = new Date();
 
   if (formType === "checkins") {
-    // Weekly check-in expires Tuesday 00:00 (24h grace period after Sunday)
-    const weekStart = getWeekStartDate(now);
-    const gracePeriodEnd = new Date(weekStart);
-
-    gracePeriodEnd.setDate(weekStart.getDate() + 8); // Monday of next week
-    gracePeriodEnd.setHours(0, 0, 0, 0);
-
-    return now >= gracePeriodEnd;
+    return getCheckInStatus(DEFAULT_CHECKIN_SCHEDULE, [], now) === "expired";
   } else {
     // Daily habits expires at end of day (no grace period for simplicity)
     const todayEnd = new Date(now);
@@ -85,9 +100,7 @@ export function isFormExpired(
   }
 }
 
-/**
- * Check if it's Monday (for weekly check-in display)
- */
+/** @returns Whether `date` is Monday in the browser’s local calendar. */
 export function isMonday(date: Date = new Date()): boolean {
   return date.getDay() === 1;
 }
@@ -102,17 +115,17 @@ export function shouldShowWeeklyCheckIn(responses: FormResponse[]): boolean {
 }
 
 /**
- * Calculate deadline for a form in client timezone
+ * @deprecated Use {@link getCheckInDeadline} from `./schedule` with
+ * `getCheckInPeriodStart(schedule, now)` for check-ins.
  */
 export function getDeadlineForForm(
   formType: FormType,
-  clientTimezone: string = "America/Chicago"
+  _clientTimezone: string = "America/Chicago"
 ): Date {
   const now = new Date();
 
   if (formType === "checkins") {
-    // Weekly: Sunday 23:59 of current week
-    return getWeekEndDate(now);
+    return getEffectiveSubmissionDeadline(DEFAULT_CHECKIN_SCHEDULE, now);
   } else {
     // Daily: Today 23:59
     const todayEnd = new Date(now);
@@ -142,20 +155,24 @@ export function formatDeadline(formType: FormType): string {
 }
 
 /**
- * Get form status for display
+ * @deprecated Use {@link getCheckInStatus} from `./schedule` with the client’s schedule for check-ins.
+ * Check-ins use **only** {@link DEFAULT_CHECKIN_SCHEDULE} (system default), not per-client DB config.
+ * Maps `"disabled"` to `"not_due"` so the return type stays unchanged for legacy callers.
  */
 export function getFormStatus(
   formType: FormType,
   responses: FormResponse[]
 ): "pending" | "completed" | "expired" | "not_due" {
   if (formType === "checkins") {
-    const isDue = isWeeklyCheckInDue(responses);
-    const isExpired = isFormExpired("checkins");
+    const status = getCheckInStatus(
+      DEFAULT_CHECKIN_SCHEDULE,
+      formResponsesToSubmittedAtPayload(responses),
+      new Date()
+    );
 
-    if (!isDue) return "completed";
-    if (isExpired) return "expired";
+    if (status === "disabled") return "not_due";
 
-    return "pending";
+    return status;
   } else {
     const isSubmittedToday = isDailyHabitsSubmittedToday(responses);
 

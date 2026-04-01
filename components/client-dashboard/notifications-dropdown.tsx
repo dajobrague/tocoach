@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  addToast,
   Badge,
   Button,
   Dropdown,
@@ -12,7 +13,13 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  useRealtimeNotifications,
+  RealtimeNotification,
+} from "@/lib/hooks/use-realtime-notifications";
+import { RealtimeStatusIndicator } from "@/components/realtime-status-indicator";
 
 interface Notification {
   id: string;
@@ -44,6 +51,29 @@ export function NotificationsDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const loadNotificationsRef = useRef<() => void>();
+
+  const handleNewNotification = useCallback(
+    (notification: RealtimeNotification) => {
+      addToast({
+        title: notification.title,
+        description: notification.message,
+        color: "primary",
+      });
+    },
+    []
+  );
+
+  const {
+    isConnected: realtimeConnected,
+    hasAttempted: realtimeAttempted,
+    refreshTrigger,
+  } = useRealtimeNotifications({
+    userId: clientId,
+    userType: "client",
+    onNewNotification: handleNewNotification,
+    onRefreshNeeded: () => loadNotificationsRef.current?.(),
+  });
 
   // Load notifications
   const loadNotifications = async () => {
@@ -163,15 +193,25 @@ export function NotificationsDropdown({
     return date.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
   };
 
+  // Keep ref in sync so the realtime hook can trigger reloads
+  loadNotificationsRef.current = loadNotifications;
+
   // Load notifications on mount and when pathname changes
   useEffect(() => {
     loadNotifications();
 
-    // Poll for new notifications every 30 seconds
-    const interval = setInterval(loadNotifications, 30000);
+    // Fallback poll every 5 minutes (Realtime handles instant updates)
+    const interval = setInterval(loadNotifications, 300_000);
 
     return () => clearInterval(interval);
   }, [pathname]);
+
+  // Reload when a realtime event arrives
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      loadNotifications();
+    }
+  }, [refreshTrigger]);
 
   // Load when dropdown opens
   useEffect(() => {
@@ -196,6 +236,10 @@ export function NotificationsDropdown({
           size="sm"
           variant="light"
         >
+          <RealtimeStatusIndicator
+            hasAttempted={realtimeAttempted}
+            isConnected={realtimeConnected}
+          />
           {unreadCount > 0 && (
             <Badge
               classNames={{
@@ -314,6 +358,7 @@ export function NotificationsDropdown({
                             : "text-foreground/70"
                         }`}
                       >
+                        {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
                         {notification.title}
                       </p>
                       {!notification.read_at && (

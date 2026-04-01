@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Form, Input } from "@heroui/react";
+import { Button, Form, Input, Link } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import React from "react";
@@ -210,6 +210,16 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
               type={isVisible ? "text" : "password"}
               variant="bordered"
             />
+
+            <div className="flex justify-end">
+              <Link
+                className="font-body text-sm text-primary"
+                href={`/${tenantSlug}/forgot-password`}
+                size="sm"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
 
             <div className="flex gap-2 w-full">
               <Button

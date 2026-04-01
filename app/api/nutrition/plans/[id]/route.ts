@@ -80,30 +80,67 @@ export async function GET(
               return { ...day, meals: [] };
             }
 
-            // For each meal, get ingredients
-            const mealsWithIngredients = await Promise.all(
+            const mealsWithOptions = await Promise.all(
               (meals || []).map(async (meal) => {
-                const { data: ingredients, error: ingredientsError } =
-                  await supabase
-                    .from("nutrition_ingredients")
-                    .select("*")
-                    .eq("nutrition_meal_id", meal.id)
-                    .order("ingredient_order", { ascending: true });
+                const { data: options, error: optionsError } = await supabase
+                  .from("nutrition_meal_options")
+                  .select("*")
+                  .eq("meal_id", meal.id)
+                  .order("option_order", { ascending: true });
 
-                if (ingredientsError) {
+                if (optionsError) {
                   console.error(
-                    "[Nutrition Plans API] Error fetching ingredients:",
-                    ingredientsError
+                    "[Nutrition Plans API] Error fetching meal options:",
+                    optionsError
                   );
 
-                  return { ...meal, ingredients: [] };
+                  return {
+                    ...meal,
+                    has_alternatives: meal.has_alternatives ?? false,
+                    options: [],
+                    ingredients: [],
+                  };
                 }
 
-                return { ...meal, ingredients: ingredients || [] };
+                const optionsWithIngredients = await Promise.all(
+                  (options || []).map(async (opt) => {
+                    const { data: ingredients, error: ingredientsError } =
+                      await supabase
+                        .from("nutrition_ingredients")
+                        .select("*")
+                        .eq("option_id", opt.id)
+                        .order("ingredient_order", { ascending: true });
+
+                    if (ingredientsError) {
+                      console.error(
+                        "[Nutrition Plans API] Error fetching ingredients:",
+                        ingredientsError
+                      );
+
+                      return { ...opt, ingredients: [] };
+                    }
+
+                    return {
+                      ...opt,
+                      ingredients: ingredients || [],
+                    };
+                  })
+                );
+
+                const ingredients = optionsWithIngredients.flatMap(
+                  (opt) => opt.ingredients
+                );
+
+                return {
+                  ...meal,
+                  has_alternatives: meal.has_alternatives ?? false,
+                  options: optionsWithIngredients,
+                  ingredients,
+                };
               })
             );
 
-            return { ...day, meals: mealsWithIngredients };
+            return { ...day, meals: mealsWithOptions };
           })
         );
 
@@ -145,7 +182,8 @@ export async function PATCH(
 
     const { id: planId } = await params;
     const body = await request.json();
-    const { name, start_date, status, notes } = body;
+    const { name, start_date, status, notes, show_meal_images, plan_mode } =
+      body;
 
     console.log("[Nutrition Plans API] Updating plan:", planId, body);
 
@@ -176,6 +214,25 @@ export async function PATCH(
     if (start_date !== undefined) updateData.start_date = start_date;
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
+    if (show_meal_images !== undefined)
+      updateData.show_meal_images = Boolean(show_meal_images);
+
+    if (plan_mode !== undefined) {
+      if (!["structured", "pdf", "hybrid"].includes(plan_mode)) {
+        return NextResponse.json(
+          { success: false, error: "Modo de plan no válido" },
+          { status: 400 }
+        );
+      }
+      updateData.plan_mode = plan_mode;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: "No hay campos para actualizar" },
+        { status: 400 }
+      );
+    }
 
     const { data: plan, error: updateError } = await supabase
       .from("nutrition_plans")

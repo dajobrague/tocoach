@@ -3,6 +3,148 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
+async function assertMealTrainerAccess(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  trainerId: string,
+  mealId: string
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const { data: existingMeal, error: checkError } = await supabase
+    .from("nutrition_meals")
+    .select("id, nutrition_day_id")
+    .eq("id", mealId)
+    .single();
+
+  if (checkError || !existingMeal) {
+    return { ok: false, status: 404, error: "Comida no encontrada" };
+  }
+
+  const { data: day, error: dayError } = await supabase
+    .from("nutrition_days")
+    .select("nutrition_plan_id")
+    .eq("id", existingMeal.nutrition_day_id)
+    .single();
+
+  if (dayError || !day) {
+    return { ok: false, status: 404, error: "Día no encontrado" };
+  }
+
+  const { data: plan, error: planError } = await supabase
+    .from("nutrition_plans")
+    .select("id")
+    .eq("id", day.nutrition_plan_id)
+    .eq("trainer_id", trainerId)
+    .single();
+
+  if (planError || !plan) {
+    return { ok: false, status: 403, error: "No autorizado" };
+  }
+
+  return { ok: true };
+}
+
+// GET - Meal with options and nested ingredients (+ flattened ingredients)
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ mealId: string }> }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { mealId } = await params;
+    const access = await assertMealTrainerAccess(
+      supabase,
+      session.trainer_id,
+      mealId
+    );
+
+    if (!access.ok) {
+      return NextResponse.json(
+        { success: false, error: access.error },
+        { status: access.status }
+      );
+    }
+
+    const { data: meal, error: mealError } = await supabase
+      .from("nutrition_meals")
+      .select("*")
+      .eq("id", mealId)
+      .single();
+
+    if (mealError || !meal) {
+      return NextResponse.json(
+        { success: false, error: "Comida no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    const { data: options, error: optionsError } = await supabase
+      .from("nutrition_meal_options")
+      .select("*")
+      .eq("meal_id", mealId)
+      .order("option_order", { ascending: true });
+
+    if (optionsError) {
+      console.error(
+        "[Nutrition Meals API] Error fetching options:",
+        optionsError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al obtener opciones de la comida" },
+        { status: 500 }
+      );
+    }
+
+    const optionsWithIngredients = await Promise.all(
+      (options || []).map(async (opt) => {
+        const { data: ingredients, error: ingError } = await supabase
+          .from("nutrition_ingredients")
+          .select("*")
+          .eq("option_id", opt.id)
+          .order("ingredient_order", { ascending: true });
+
+        if (ingError) {
+          console.error(
+            "[Nutrition Meals API] Error fetching ingredients:",
+            ingError
+          );
+
+          return { ...opt, ingredients: [] };
+        }
+
+        return { ...opt, ingredients: ingredients || [] };
+      })
+    );
+
+    const ingredients = optionsWithIngredients.flatMap((o) => o.ingredients);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...meal,
+        options: optionsWithIngredients,
+        ingredients,
+      },
+    });
+  } catch (error) {
+    console.error("[Nutrition Meals API] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error inesperado" },
+      { status: 500 }
+    );
+  }
+}
+
 // PATCH - Update a nutrition meal (including macros)
 export async function PATCH(
   request: NextRequest,
@@ -27,54 +169,16 @@ export async function PATCH(
 
     console.log("[Nutrition Meals API] Updating meal:", mealId, body);
 
-    // Verify the meal belongs to a day/plan owned by this trainer
-    const { data: existingMeal, error: checkError } = await supabase
-      .from("nutrition_meals")
-      .select("id, nutrition_day_id")
-      .eq("id", mealId)
-      .single();
+    const access = await assertMealTrainerAccess(
+      supabase,
+      session.trainer_id,
+      mealId
+    );
 
-    if (checkError || !existingMeal) {
-      console.error("[Nutrition Meals API] Meal not found:", checkError);
-
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: "Comida no encontrada" },
-        { status: 404 }
-      );
-    }
-
-    // Verify through day -> plan -> trainer
-    const { data: day, error: dayError } = await supabase
-      .from("nutrition_days")
-      .select("nutrition_plan_id")
-      .eq("id", existingMeal.nutrition_day_id)
-      .single();
-
-    if (dayError || !day) {
-      console.error("[Nutrition Meals API] Day not found:", dayError);
-
-      return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", day.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Meals API] Plan not found or unauthorized:",
-        planError
-      );
-
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
+        { success: false, error: access.error },
+        { status: access.status }
       );
     }
 
@@ -141,58 +245,20 @@ export async function DELETE(
 
     console.log("[Nutrition Meals API] Deleting meal:", mealId);
 
-    // Verify the meal belongs to a day/plan owned by this trainer
-    const { data: existingMeal, error: checkError } = await supabase
-      .from("nutrition_meals")
-      .select("id, nutrition_day_id")
-      .eq("id", mealId)
-      .single();
+    const access = await assertMealTrainerAccess(
+      supabase,
+      session.trainer_id,
+      mealId
+    );
 
-    if (checkError || !existingMeal) {
-      console.error("[Nutrition Meals API] Meal not found:", checkError);
-
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: "Comida no encontrada" },
-        { status: 404 }
+        { success: false, error: access.error },
+        { status: access.status }
       );
     }
 
-    // Verify through day -> plan -> trainer
-    const { data: day, error: dayError } = await supabase
-      .from("nutrition_days")
-      .select("nutrition_plan_id")
-      .eq("id", existingMeal.nutrition_day_id)
-      .single();
-
-    if (dayError || !day) {
-      console.error("[Nutrition Meals API] Day not found:", dayError);
-
-      return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", day.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Meals API] Plan not found or unauthorized:",
-        planError
-      );
-
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
-      );
-    }
-
-    // Delete the meal (cascades to ingredients)
+    // Delete the meal (cascades to options and ingredients)
     const { error: deleteError } = await supabase
       .from("nutrition_meals")
       .delete()

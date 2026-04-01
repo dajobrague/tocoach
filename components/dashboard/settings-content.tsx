@@ -2,6 +2,7 @@
 
 import { Card, CardBody, Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import Link from "next/link";
 import React from "react";
 
 import BrandColorsTab from "./brand-settings/colors-tab";
@@ -87,6 +88,32 @@ export default function SettingsContent({
             Marca
           </button>
         </div>
+
+        <Card
+          isPressable
+          as={Link}
+          className="border border-gray-200 transition-colors hover:bg-gray-50"
+          href="/trainer/settings/checkin-defaults"
+        >
+          <CardBody className="flex flex-row items-center gap-4 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-900 text-white">
+              <Icon icon="solar:calendar-mark-bold" width={26} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-gray-900">
+                Configuración de Check-in
+              </h2>
+              <p className="mt-0.5 text-sm text-gray-600">
+                Horario por defecto para nuevos clientes y aplicación masiva
+              </p>
+            </div>
+            <Icon
+              className="shrink-0 text-gray-400"
+              icon="solar:alt-arrow-right-linear"
+              width={22}
+            />
+          </CardBody>
+        </Card>
 
         {/* Content */}
         {mainSection === "profile" ? (

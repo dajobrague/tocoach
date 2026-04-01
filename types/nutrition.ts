@@ -1,5 +1,7 @@
 // TypeScript types for nutrition management system
-// Matches database schema in supabase/migrations/018_create_nutrition_tables.sql
+// Matches database schema (nutrition tables + meal options migration)
+
+export type NutritionPlanMode = "structured" | "pdf" | "hybrid";
 
 export interface NutritionPlan {
   id: string;
@@ -11,6 +13,12 @@ export interface NutritionPlan {
   status: "active" | "completed" | "paused" | "cancelled";
   notes?: string;
   is_template: boolean; // Whether this is a reusable template
+  /** When false, clients do not see meal images (trainer can still manage them). */
+  show_meal_images?: boolean;
+  /** structured: solo comidas; pdf: solo PDF; hybrid: ambos */
+  plan_mode?: NutritionPlanMode;
+  pdf_url?: string | null;
+  pdf_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +48,9 @@ export interface NutritionMeal {
   label: string;
   meal_order: number;
   notes?: string;
+  image_url?: string | null;
+  /** True when the meal has more than one nutrition_meal_options row. */
+  has_alternatives: boolean;
   // Meal-level macros
   protein: number; // grams
   carbs: number; // grams
@@ -49,9 +60,24 @@ export interface NutritionMeal {
   updated_at: string;
 }
 
+export interface NutritionMealOption {
+  id: string;
+  meal_id: string;
+  name: string;
+  option_order: number;
+  protein: number | null;
+  carbs: number | null;
+  fats: number | null;
+  calories: number | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface NutritionIngredient {
   id: string;
   nutrition_meal_id: string;
+  option_id: string;
   tenant_host: string;
   name: string;
   quantity: string;
@@ -71,7 +97,14 @@ export interface NutritionDayWithMeals extends NutritionDay {
   meals: NutritionMealWithIngredients[];
 }
 
+export interface NutritionMealOptionWithIngredients
+  extends NutritionMealOption {
+  ingredients: NutritionIngredient[];
+}
+
 export interface NutritionMealWithIngredients extends NutritionMeal {
+  options: NutritionMealOptionWithIngredients[];
+  /** Flattened from all options; backwards compatibility for clients that read meal.ingredients only. */
   ingredients: NutritionIngredient[];
 }
 
@@ -111,6 +144,8 @@ export interface UpdateNutritionPlanRequest {
   start_date?: string;
   status?: "active" | "completed" | "paused" | "cancelled";
   notes?: string;
+  show_meal_images?: boolean;
+  plan_mode?: NutritionPlanMode;
 }
 
 export interface CreateNutritionDayRequest {
@@ -149,10 +184,31 @@ export interface UpdateNutritionMealRequest {
   carbs?: number;
   fats?: number;
   calories?: number;
+  has_alternatives?: boolean;
+}
+
+export interface CreateNutritionMealOptionRequest {
+  mealId: string;
+  name: string;
+}
+
+export interface UpdateNutritionMealOptionRequest {
+  name?: string;
+  option_order?: number;
+  protein?: number | null;
+  carbs?: number | null;
+  fats?: number | null;
+  calories?: number | null;
+  image_url?: string | null;
 }
 
 export interface CreateNutritionIngredientRequest {
-  nutrition_meal_id: string;
+  /** Preferred: create under this option. */
+  option_id?: string;
+  optionId?: string;
+  /** Legacy: uses the first option of the meal by option_order. */
+  nutrition_meal_id?: string;
+  mealId?: string;
   name: string;
   quantity: string;
   unit: string;
@@ -188,5 +244,7 @@ export interface NutritionDayResponse
   extends NutritionApiResponse<NutritionDay> {}
 export interface NutritionMealResponse
   extends NutritionApiResponse<NutritionMeal> {}
+export interface NutritionMealOptionResponse
+  extends NutritionApiResponse<NutritionMealOption> {}
 export interface NutritionIngredientResponse
   extends NutritionApiResponse<NutritionIngredient> {}

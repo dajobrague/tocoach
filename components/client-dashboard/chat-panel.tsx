@@ -2,7 +2,12 @@
 
 import { Button, Input, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  useRealtimeMessages,
+  RealtimeMessage,
+} from "@/lib/hooks/use-realtime-messages";
 
 interface Message {
   id: string;
@@ -34,6 +39,21 @@ export function ChatPanel({
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleRealtimeMessage = useCallback((msg: RealtimeMessage) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === msg.id)) return prev;
+
+      return [...prev, msg as unknown as Message];
+    });
+  }, []);
+
+  useRealtimeMessages({
+    clientId: isOpen ? clientId : null,
+    userId: clientId,
+    userType: "client",
+    onNewMessage: handleRealtimeMessage,
+  });
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -110,8 +130,8 @@ export function ChatPanel({
       // Focus input
       setTimeout(() => inputRef.current?.focus(), 300);
 
-      // Auto-refresh messages every 10 seconds when chat is open
-      const interval = setInterval(loadMessages, 10000);
+      // Fallback poll every 60s (Realtime handles instant updates)
+      const interval = setInterval(loadMessages, 60_000);
 
       return () => clearInterval(interval);
     }

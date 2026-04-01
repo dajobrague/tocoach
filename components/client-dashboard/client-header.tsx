@@ -8,6 +8,7 @@ import { ChatPanel } from "./chat-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 
 import { TenantLogo } from "@/components/tenant-logo";
+import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface ClientHeaderProps {
   firstName: string;
@@ -35,7 +36,14 @@ export function ClientHeader({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Load unread message count
+  const { newMessageCount: realtimeUnread, clearNewMessages } =
+    useRealtimeMessages({
+      clientId,
+      userId: clientId,
+      userType: "client",
+    });
+
+  // Load unread message count (fallback)
   const loadUnreadCount = async () => {
     try {
       const response = await fetch(
@@ -56,19 +64,23 @@ export function ClientHeader({
     }
   };
 
-  // Load unread count on mount and periodically
+  // Load unread count on mount and fallback poll every 60s
   useEffect(() => {
     loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 30000); // Check every 30 seconds
+    const interval = setInterval(loadUnreadCount, 60_000);
 
     return () => clearInterval(interval);
   }, [clientId, tenantSlug]);
 
+  // Combine polled count with realtime count
+  const totalUnread = unreadCount + realtimeUnread;
+
   // Refresh unread count when chat closes
   const handleChatClose = () => {
     setIsChatOpen(false);
-    setUnreadCount(0); // Reset count when closing chat
-    loadUnreadCount(); // Reload to ensure sync
+    setUnreadCount(0);
+    clearNewMessages();
+    loadUnreadCount();
   };
 
   return (
@@ -103,8 +115,8 @@ export function ClientHeader({
           <div className="flex items-center gap-2">
             <Badge
               color="danger"
-              content={unreadCount}
-              isInvisible={unreadCount === 0}
+              content={totalUnread}
+              isInvisible={totalUnread === 0}
               shape="circle"
               size="sm"
             >

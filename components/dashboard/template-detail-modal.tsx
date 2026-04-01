@@ -38,6 +38,7 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
+import { MealImageTrainerField } from "./nutrition-trainer-meal-image-field";
 
 interface TemplateDetailModalProps {
   isOpen: boolean;
@@ -572,6 +573,7 @@ export default function TemplateDetailModal({
       carbs: 0,
       fats: 0,
       calories: 0,
+      image_url: null as string | null,
       ingredients: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -3324,53 +3326,75 @@ export default function TemplateDetailModal({
                                             key={meal.id}
                                             className="p-4 bg-white rounded-lg border border-gray-200"
                                           >
-                                            <div className="flex items-center justify-between mb-3">
-                                              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                                              <div
-                                                className="flex items-center gap-2 cursor-pointer flex-1"
-                                                onClick={() => {
-                                                  setExpandedMeals((prev) => {
-                                                    const next = new Set(prev);
-
-                                                    if (next.has(meal.id)) {
-                                                      next.delete(meal.id);
-                                                    } else {
-                                                      next.add(meal.id);
-                                                    }
-
-                                                    return next;
-                                                  });
-                                                }}
-                                              >
-                                                <Icon
-                                                  className={`transition-transform text-gray-400 ${expandedMeals.has(meal.id) ? "rotate-180" : ""}`}
-                                                  icon="solar:alt-arrow-down-linear"
-                                                  width={16}
-                                                />
-                                                <h5 className="font-semibold text-gray-900">
-                                                  {meal.label}
-                                                </h5>
-                                                <span className="text-xs text-gray-400 ml-1">
-                                                  (
-                                                  {meal.ingredients?.length ||
-                                                    0}{" "}
-                                                  ingredientes)
-                                                </span>
-                                              </div>
-                                              <Button
-                                                isIconOnly
-                                                color="danger"
-                                                size="sm"
-                                                variant="light"
-                                                onPress={() =>
-                                                  handleDeleteMeal(meal.id)
+                                            <div className="flex gap-3 items-start mb-3">
+                                              <MealImageTrainerField
+                                                disabled={String(
+                                                  meal.id
+                                                ).startsWith("temp-")}
+                                                imageUrl={meal.image_url}
+                                                mealId={meal.id}
+                                                onAfterChange={
+                                                  fetchTemplateDetails
                                                 }
-                                              >
-                                                <Icon
-                                                  icon="solar:trash-bin-trash-bold"
-                                                  width={18}
-                                                />
-                                              </Button>
+                                              />
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                                                  <div
+                                                    className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+                                                    onClick={() => {
+                                                      setExpandedMeals(
+                                                        (prev) => {
+                                                          const next = new Set(
+                                                            prev
+                                                          );
+
+                                                          if (
+                                                            next.has(meal.id)
+                                                          ) {
+                                                            next.delete(
+                                                              meal.id
+                                                            );
+                                                          } else {
+                                                            next.add(meal.id);
+                                                          }
+
+                                                          return next;
+                                                        }
+                                                      );
+                                                    }}
+                                                  >
+                                                    <Icon
+                                                      className={`transition-transform text-gray-400 flex-shrink-0 ${expandedMeals.has(meal.id) ? "rotate-180" : ""}`}
+                                                      icon="solar:alt-arrow-down-linear"
+                                                      width={16}
+                                                    />
+                                                    <h5 className="font-semibold text-gray-900 truncate">
+                                                      {meal.label}
+                                                    </h5>
+                                                    <span className="text-xs text-gray-400 ml-1 flex-shrink-0">
+                                                      (
+                                                      {meal.ingredients
+                                                        ?.length || 0}{" "}
+                                                      ingredientes)
+                                                    </span>
+                                                  </div>
+                                                  <Button
+                                                    isIconOnly
+                                                    color="danger"
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      handleDeleteMeal(meal.id)
+                                                    }
+                                                  >
+                                                    <Icon
+                                                      icon="solar:trash-bin-trash-bold"
+                                                      width={18}
+                                                    />
+                                                  </Button>
+                                                </div>
+                                              </div>
                                             </div>
 
                                             {/* Meal-level Macros */}

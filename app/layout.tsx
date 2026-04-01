@@ -25,6 +25,7 @@ function isNoNavbarRoute(pathname: string): boolean {
     "/trainer/forgot-password",
     "/trainer/reset-password",
     "/trainer/dashboard",
+    "/trainer/settings",
     "/admin", // All admin routes
   ];
 

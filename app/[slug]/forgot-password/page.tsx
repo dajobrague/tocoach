@@ -27,10 +27,11 @@ export default async function ForgotPasswordPage({
             />
           )}
           <h1 className="text-3xl font-heading font-bold mb-4">
-            Reset Password
+            Recuperar contraseña
           </h1>
-          <p className="text-default-500 font-body text-center">
-            Enter your email and we&apos;ll send you a reset link
+          <p className="text-default-500 font-body text-center text-sm sm:text-base max-w-sm mx-auto leading-relaxed">
+            Te enviaremos un código de verificación a tu correo para que puedas
+            crear una nueva contraseña de forma segura
           </p>
         </div>
 

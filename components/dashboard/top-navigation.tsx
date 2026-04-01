@@ -21,11 +21,14 @@ import React from "react";
 
 import { type SidebarItem } from "./sidebar";
 
+import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
+
 export interface TopNavigationProps {
   trainerName?: string;
   trainerEmail?: string;
   trainerImage?: string;
   brandLogo?: string;
+  trainerId?: string;
   onLogout?: () => void;
   items: SidebarItem[];
   activeSection: string;
@@ -38,6 +41,7 @@ export default function TopNavigation({
   trainerEmail,
   trainerImage,
   brandLogo,
+  trainerId,
   onLogout,
   items,
   activeSection,
@@ -142,18 +146,24 @@ export default function TopNavigation({
               >
                 {item.title}
               </span>
-              {item.endContent && (
-                <span className="absolute -top-1 -right-1">
-                  {item.endContent}
-                </span>
-              )}
             </Button>
+            {item.endContent && (
+              <span className="absolute -top-1 -right-1 z-10">
+                {item.endContent}
+              </span>
+            )}
           </NavbarItem>
         ))}
       </NavbarContent>
 
       {/* User Menu */}
       <NavbarContent justify="end">
+        {/* Notification Bell */}
+        {trainerId && (
+          <NavbarItem>
+            <TrainerNotificationsDropdown trainerId={trainerId} />
+          </NavbarItem>
+        )}
         {/* User Dropdown */}
         <NavbarItem>
           <Dropdown placement="bottom-end">

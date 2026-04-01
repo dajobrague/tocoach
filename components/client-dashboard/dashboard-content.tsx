@@ -2,7 +2,7 @@
 
 import { Card, CardBody, Tab, Tabs } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -19,10 +19,32 @@ import {
   WeightChart,
 } from "@/components/client-dashboard/progress-charts";
 import {
+  formResponsesToSubmittedAtPayload,
   isDailyHabitsSubmittedToday,
-  shouldShowWeeklyCheckIn,
 } from "@/lib/forms/client-helpers";
-import { FormResponse } from "@/lib/forms/types";
+import { aggregateWeightByCheckInPeriods } from "@/lib/forms/checkin-chart-periods";
+import {
+  chartPeriodCountForRange,
+  daysToFetchForChartRange,
+  formatPeriodTooltipSpan,
+  generatePeriodLabels,
+  getChartDateRange,
+  groupResponsesByPeriod,
+  responseTimestampMs,
+  toYmdInTimezone,
+} from "@/lib/forms/chart-helpers";
+import { getScheduleOrDefault, isCheckInDue } from "@/lib/forms/schedule";
+import {
+  DEFAULT_CHECKIN_SCHEDULE,
+  FormResponse,
+  type CheckInSchedule,
+} from "@/lib/forms/types";
+
+/** Weekly default schedule if parsing or chart math fails (Monday 12:00 Europe/Madrid). */
+const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
+  ...DEFAULT_CHECKIN_SCHEDULE,
+};
+
 import {
   useExerciseLogs,
   useFormResponses,
@@ -42,36 +64,81 @@ export function DashboardContent() {
 
   const queryClient = useQueryClient();
 
+  const { data: checkinsConfigJson, isPending: isCheckinConfigLoading } =
+    useQuery({
+      queryKey: ["client", "formConfig", clientId, "checkins"],
+      queryFn: async () => {
+        try {
+          const res = await fetch(
+            `/api/forms/configs/${clientId}?form_type=checkins`,
+            { cache: "no-store" }
+          );
+
+          return (await res.json()) as {
+            success?: boolean;
+            schedule?: unknown;
+          };
+        } catch {
+          return { success: false as const };
+        }
+      },
+      enabled: Boolean(clientId),
+    });
+
+  const checkinSchedule = useMemo((): CheckInSchedule => {
+    try {
+      return getScheduleOrDefault(
+        (checkinsConfigJson?.schedule ?? null) as CheckInSchedule | null
+      );
+    } catch {
+      return { ...FALLBACK_CHECKIN_SCHEDULE };
+    }
+  }, [checkinsConfigJson?.schedule]);
+
   // State
   const [showDailyFormModal, setShowDailyFormModal] = useState(false);
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
 
-  // Helper to get days needed for a period
-  const getDaysForPeriod = (period: string): number => {
-    const daysMap: Record<string, number> = {
-      "7d": 7,
-      "30d": 30,
-      "3m": 90,
-      "6m": 180,
-      "12m": 365,
-    };
+  const chartPeriodCount = useMemo(() => {
+    try {
+      return chartPeriodCountForRange(
+        selectedPeriod,
+        checkinSchedule.frequency
+      );
+    } catch {
+      return chartPeriodCountForRange(
+        selectedPeriod,
+        FALLBACK_CHECKIN_SCHEDULE.frequency
+      );
+    }
+  }, [selectedPeriod, checkinSchedule.frequency]);
 
-    return daysMap[period] ?? 7;
-  };
+  const fetchDays = useMemo(() => {
+    try {
+      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
 
-  // ─── TanStack Query: cached data fetching ─────────────────────────────
-  const daysToFetch = getDaysForPeriod(selectedPeriod);
+      return Math.max(14, daysToFetchForChartRange(from), 7);
+    } catch {
+      const { from } = getChartDateRange(
+        FALLBACK_CHECKIN_SCHEDULE,
+        chartPeriodCount
+      );
 
+      return Math.max(14, daysToFetchForChartRange(from), 7);
+    }
+  }, [checkinSchedule, chartPeriodCount]);
+
+  // ─── TanStack Query: cached data fetching (range from schedule periods) ─
   const {
     data: weeklyResponses = [] as FormResponse[],
     isLoading: isLoadingWeekly,
-  } = useFormResponses(clientId, "checkins", Math.max(daysToFetch, 14));
+  } = useFormResponses(clientId, "checkins", fetchDays);
 
   const {
     data: dailyResponses = [] as FormResponse[],
     isLoading: isLoadingDaily,
-  } = useFormResponses(clientId, "habits", Math.max(daysToFetch, 7));
+  } = useFormResponses(clientId, "habits", fetchDays);
 
   const { data: exerciseLogs = [] } = useExerciseLogs(clientId);
 
@@ -80,379 +147,297 @@ export function DashboardContent() {
 
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
 
-  // Calculate form display states
-  const showWeeklyBanner =
-    !isLoadingForms && shouldShowWeeklyCheckIn(weeklyResponses);
+  const showWeeklyBanner = useMemo(() => {
+    if (isLoadingForms || isCheckinConfigLoading || !checkinSchedule.enabled) {
+      return false;
+    }
+
+    try {
+      return isCheckInDue(
+        checkinSchedule,
+        formResponsesToSubmittedAtPayload(weeklyResponses)
+      );
+    } catch {
+      return false;
+    }
+  }, [
+    isLoadingForms,
+    isCheckinConfigLoading,
+    checkinSchedule,
+    weeklyResponses,
+  ]);
   const showDailyButton =
     !isLoadingForms && !isDailyHabitsSubmittedToday(dailyResponses);
 
-  // Helper functions for data generation
-  const getDataPointsCount = (period: string): number => {
-    const counts: Record<string, number> = {
-      "7d": 7,
-      "30d": 30,
-      "3m": 12, // 12 weeks (approx 3 months)
-      "6m": 6, // 6 months - one point per month
-      "12m": 12, // 12 months - one point per month
-    };
-
-    return counts[period] || 7;
-  };
-
-  const formatDateForPeriod = (
-    index: number,
-    totalPoints: number,
-    period: string
-  ): string => {
-    const now = new Date();
-    let date = new Date(now);
-
-    if (period === "7d") {
-      // Last 7 days
-      date.setDate(date.getDate() - (6 - index));
-
-      return date.toLocaleDateString("es-ES", {
-        day: "numeric",
-        month: "short",
-      });
-    } else if (period === "30d") {
-      // Last 30 days
-      date.setDate(date.getDate() - (29 - index));
-
-      return date.toLocaleDateString("es-ES", {
-        day: "numeric",
-        month: "short",
-      });
-    } else if (period === "3m") {
-      // Last 12 weeks
-      const weeksBack = (11 - index) * 7;
-
-      date.setDate(date.getDate() - weeksBack);
-
-      return date.toLocaleDateString("es-ES", {
-        day: "numeric",
-        month: "short",
-      });
-    } else if (period === "6m") {
-      // Last 6 months - show month name
-      date.setMonth(date.getMonth() - (5 - index));
-      const monthFormat = date.toLocaleDateString("es-ES", { month: "short" });
-      const year = date.getFullYear();
-      const currentYear = now.getFullYear();
-
-      if (year !== currentYear) {
-        return `${monthFormat} '${year.toString().slice(-2)}`;
-      }
-
-      return monthFormat;
-    } else if (period === "12m") {
-      // Last 12 months - show month name
-      date.setMonth(date.getMonth() - (11 - index));
-      const monthFormat = date.toLocaleDateString("es-ES", { month: "short" });
-      const year = date.getFullYear();
-      const currentYear = now.getFullYear();
-
-      if (year !== currentYear) {
-        return `${monthFormat} '${year.toString().slice(-2)}`;
-      }
-
-      return monthFormat;
-    } else {
-      date.setDate(date.getDate() - (totalPoints - 1 - index));
-
-      return date.toLocaleDateString("es-ES", {
-        day: "numeric",
-        month: "short",
-      });
+  const periodLabels = useMemo(() => {
+    try {
+      return generatePeriodLabels(checkinSchedule, chartPeriodCount);
+    } catch {
+      return generatePeriodLabels(FALLBACK_CHECKIN_SCHEDULE, chartPeriodCount);
     }
-  };
+  }, [checkinSchedule, chartPeriodCount]);
 
-  const generateWeightData = (points: number, period: string) => {
-    // Create date range for the period
-    const data: { date: string; weight: number }[] = [];
-
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, period);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      // Check daily habits first, fall back to weekly check-ins
-      const dailyWeightResponse = dailyResponses.find((r: FormResponse) => {
-        return (
-          new Date(r.response_date).toISOString().split("T")[0] ===
-          targetDateStr
-        );
-      });
-      const response =
-        dailyWeightResponse ||
-        weeklyResponses.find((r: FormResponse) => {
-          return (
-            new Date(r.response_date).toISOString().split("T")[0] ===
-            targetDateStr
-          );
-        });
-
-      // Extract weight from response
-      let weight = 0;
-
-      if (response && response.answers) {
-        weight = Number(
-          response.answers.body_weight ||
-            response.answers.weight ||
-            response.answers.peso ||
-            0
-        );
-      }
-
-      data.push({ date: dateLabel, weight });
+  const habitGroups = useMemo(() => {
+    try {
+      return groupResponsesByPeriod(dailyResponses, checkinSchedule);
+    } catch {
+      return groupResponsesByPeriod(dailyResponses, FALLBACK_CHECKIN_SCHEDULE);
     }
+  }, [dailyResponses, checkinSchedule]);
 
-    // Fill missing values with last known value or 0
-    let lastKnownWeight = 0;
+  const weightLookbackDays = useMemo(() => {
+    try {
+      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
 
-    for (let i = data.length - 1; i >= 0; i--) {
-      const item = data[i];
-
-      if (item && item.weight > 0) {
-        lastKnownWeight = item.weight;
-      } else if (item) {
-        item.weight = lastKnownWeight;
-      }
-    }
-
-    return data;
-  };
-
-  const generateSleepData = (points: number, period: string) => {
-    const data: { date: string; hours: number }[] = [];
-
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, period);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      // Find daily response for this date
-      const response = dailyResponses.find((r: FormResponse) => {
-        return r.response_date === targetDateStr;
-      });
-
-      // Extract sleep hours
-      let hours = 0;
-
-      if (response && response.answers) {
-        hours = Number(
-          response.answers.sleep_hours ||
-            response.answers.sleep ||
-            response.answers.sueno ||
-            response.answers.horas_sueno ||
-            0
-        );
-      }
-
-      data.push({ date: dateLabel, hours });
-    }
-
-    return data;
-  };
-
-  const generateCalorieData = (points: number, period: string) => {
-    const data: { date: string; calories: number }[] = [];
-
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, period);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      // Find daily response for this date
-      const response = dailyResponses.find((r: FormResponse) => {
-        return r.response_date === targetDateStr;
-      });
-
-      // Extract calories (assuming question id is 'calories' or 'calorias')
-      let calories = 0;
-
-      if (response && response.answers) {
-        calories = Number(
-          response.answers.calories || response.answers.calorias || 0
-        );
-      }
-
-      data.push({ date: dateLabel, calories });
-    }
-
-    return data;
-  };
-
-  const generateStepsData = (points: number, period: string) => {
-    const data: { date: string; steps: number }[] = [];
-
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, period);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      // Find daily response for this date
-      const response = dailyResponses.find((r: FormResponse) => {
-        return r.response_date === targetDateStr;
-      });
-
-      // Extract steps (assuming question id is 'steps' or 'pasos')
-      let steps = 0; // default to 0 if no data
-
-      if (response && response.answers) {
-        steps = response.answers.steps || response.answers.pasos || 0;
-      }
-
-      data.push({ date: dateLabel, steps });
-    }
-
-    return data;
-  };
-
-  // Dynamic data based on selected period
-  const weightHistory = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-
-    return generateWeightData(points, selectedPeriod);
-  }, [selectedPeriod, weeklyResponses]);
-
-  const sleepHistory = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-
-    return generateSleepData(points, selectedPeriod);
-  }, [selectedPeriod, dailyResponses]);
-
-  const calorieHistory = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-
-    return generateCalorieData(points, selectedPeriod);
-  }, [selectedPeriod, dailyResponses]);
-
-  const stepsHistory = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-
-    return generateStepsData(points, selectedPeriod);
-  }, [selectedPeriod, dailyResponses]);
-
-  const todaySteps = stepsHistory[stepsHistory.length - 1]?.steps || 0;
-
-  // Protein data from daily habits
-  const proteinHistory = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-    const data: { date: string; protein: number }[] = [];
-
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, selectedPeriod);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      const response = dailyResponses.find(
-        (r: FormResponse) => r.response_date === targetDateStr
+      return Math.max(
+        1,
+        Math.ceil((Date.now() - from.getTime()) / 86400000) + 1
+      );
+    } catch {
+      const { from } = getChartDateRange(
+        FALLBACK_CHECKIN_SCHEDULE,
+        chartPeriodCount
       );
 
-      let protein = 0;
-
-      if (response && response.answers) {
-        protein = Number(
-          response.answers.protein || response.answers.proteina || 0
-        );
-      }
-      data.push({ date: dateLabel, protein });
+      return Math.max(
+        1,
+        Math.ceil((Date.now() - from.getTime()) / 86400000) + 1
+      );
     }
+  }, [checkinSchedule, chartPeriodCount]);
 
-    return data;
-  }, [selectedPeriod, dailyResponses]);
+  const weightHistory = useMemo(() => {
+    try {
+      return aggregateWeightByCheckInPeriods(
+        checkinSchedule,
+        weeklyResponses,
+        dailyResponses,
+        selectedPeriod,
+        weightLookbackDays
+      );
+    } catch {
+      return aggregateWeightByCheckInPeriods(
+        FALLBACK_CHECKIN_SCHEDULE,
+        weeklyResponses,
+        dailyResponses,
+        selectedPeriod,
+        weightLookbackDays
+      );
+    }
+  }, [
+    checkinSchedule,
+    weeklyResponses,
+    dailyResponses,
+    selectedPeriod,
+    weightLookbackDays,
+  ]);
 
-  // Average macros for the donut ring
-  const avgMacros = useMemo(() => {
-    const withData = dailyResponses.filter((r: FormResponse) => {
-      if (!r.answers) return false;
-      const p = Number(r.answers.protein || r.answers.proteina || 0);
-      const c = Number(r.answers.carbs || r.answers.carbohidratos || 0);
-      const f = Number(r.answers.fats || r.answers.grasas || 0);
+  const sleepHistory = useMemo(() => {
+    try {
+      const tz = checkinSchedule.timezone;
 
-      return p > 0 || c > 0 || f > 0;
-    });
+      return periodLabels.map((p) => {
+        const match = habitGroups.find(
+          (g) =>
+            g.periodStart.getTime() === p.start.getTime() &&
+            g.periodEnd.getTime() === p.end.getTime()
+        );
+        const list = match?.responses ?? [];
+        const hours =
+          list.length === 0
+            ? 0
+            : list.reduce((s, r) => {
+                const h = Number(
+                  r.answers?.sleep_hours ||
+                    r.answers?.sleep ||
+                    r.answers?.sueno ||
+                    r.answers?.horas_sueno ||
+                    0
+                );
 
-    if (withData.length === 0) return { protein: 0, carbs: 0, fats: 0 };
+                return s + h;
+              }, 0) / list.length;
 
-    const totals = withData.reduce(
-      (
-        acc: { protein: number; carbs: number; fats: number },
-        r: FormResponse
-      ) => {
-        acc.protein += Number(r.answers.protein || r.answers.proteina || 0);
-        acc.carbs += Number(r.answers.carbs || r.answers.carbohidratos || 0);
-        acc.fats += Number(r.answers.fats || r.answers.grasas || 0);
+        return {
+          date: p.label,
+          hours,
+          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
+        };
+      });
+    } catch {
+      return [] as { date: string; hours: number; periodTooltip: string }[];
+    }
+  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
 
-        return acc;
-      },
-      { protein: 0, carbs: 0, fats: 0 }
-    );
+  const calorieHistory = useMemo(() => {
+    try {
+      const tz = checkinSchedule.timezone;
 
-    return {
-      protein: Math.round(totals.protein / withData.length),
-      carbs: Math.round(totals.carbs / withData.length),
-      fats: Math.round(totals.fats / withData.length),
-    };
+      return periodLabels.map((p) => {
+        const match = habitGroups.find(
+          (g) =>
+            g.periodStart.getTime() === p.start.getTime() &&
+            g.periodEnd.getTime() === p.end.getTime()
+        );
+        const list = match?.responses ?? [];
+        const calories =
+          list.length === 0
+            ? 0
+            : list.reduce((s, r) => {
+                const c = Number(
+                  r.answers?.calories || r.answers?.calorias || 0
+                );
+
+                return s + c;
+              }, 0) / list.length;
+
+        return {
+          date: p.label,
+          calories,
+          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
+        };
+      });
+    } catch {
+      return [] as {
+        date: string;
+        calories: number;
+        periodTooltip: string;
+      }[];
+    }
+  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
+
+  const proteinHistory = useMemo(() => {
+    try {
+      const tz = checkinSchedule.timezone;
+
+      return periodLabels.map((p) => {
+        const match = habitGroups.find(
+          (g) =>
+            g.periodStart.getTime() === p.start.getTime() &&
+            g.periodEnd.getTime() === p.end.getTime()
+        );
+        const list = match?.responses ?? [];
+        const protein =
+          list.length === 0
+            ? 0
+            : list.reduce((s, r) => {
+                const v = Number(
+                  r.answers?.protein || r.answers?.proteina || 0
+                );
+
+                return s + v;
+              }, 0) / list.length;
+
+        return {
+          date: p.label,
+          protein,
+          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
+        };
+      });
+    } catch {
+      return [] as {
+        date: string;
+        protein: number;
+        periodTooltip: string;
+      }[];
+    }
+  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
+
+  const todaySteps = useMemo(() => {
+    const t = new Date().toISOString().split("T")[0] ?? "";
+    const row = dailyResponses.find((r: FormResponse) => r.response_date === t);
+
+    return Number(row?.answers?.steps ?? row?.answers?.pasos ?? 0) || 0;
   }, [dailyResponses]);
 
-  // Training activity from exercise logs
-  const trainingActivity = useMemo(() => {
-    const points = getDataPointsCount(selectedPeriod);
-    const data: { date: string; strength: number; cardio: number }[] = [];
+  const avgMacros = useMemo(() => {
+    try {
+      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
+      const fromMs = from.getTime();
+      const scoped = dailyResponses.filter(
+        (r: FormResponse) => responseTimestampMs(r) >= fromMs
+      );
+      const withData = scoped.filter((r: FormResponse) => {
+        if (!r.answers) return false;
+        const p = Number(r.answers.protein || r.answers.proteina || 0);
+        const c = Number(r.answers.carbs || r.answers.carbohidratos || 0);
+        const f = Number(r.answers.fats || r.answers.grasas || 0);
 
-    for (let i = 0; i < points; i++) {
-      const dateLabel = formatDateForPeriod(i, points, selectedPeriod);
-      const daysAgo = points - 1 - i;
-      const targetDate = new Date();
-
-      targetDate.setDate(targetDate.getDate() - daysAgo);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
-
-      let strength = 0;
-      let cardio = 0;
-
-      exerciseLogs.forEach((log: any) => {
-        if (log.scheduled_date === targetDateStr) {
-          const cat = log.exercises?.category;
-
-          if (cat === "cardio") cardio++;
-          else strength++;
-        }
+        return p > 0 || c > 0 || f > 0;
       });
-      data.push({ date: dateLabel, strength, cardio });
+
+      if (withData.length === 0) return { protein: 0, carbs: 0, fats: 0 };
+
+      const totals = withData.reduce(
+        (
+          acc: { protein: number; carbs: number; fats: number },
+          r: FormResponse
+        ) => {
+          acc.protein += Number(r.answers.protein || r.answers.proteina || 0);
+          acc.carbs += Number(r.answers.carbs || r.answers.carbohidratos || 0);
+          acc.fats += Number(r.answers.fats || r.answers.grasas || 0);
+
+          return acc;
+        },
+        { protein: 0, carbs: 0, fats: 0 }
+      );
+
+      return {
+        protein: Math.round(totals.protein / withData.length),
+        carbs: Math.round(totals.carbs / withData.length),
+        fats: Math.round(totals.fats / withData.length),
+      };
+    } catch {
+      return { protein: 0, carbs: 0, fats: 0 };
     }
+  }, [dailyResponses, checkinSchedule, chartPeriodCount]);
 
-    return data;
-  }, [selectedPeriod, exerciseLogs]);
+  const trainingActivity = useMemo(() => {
+    try {
+      const tz = checkinSchedule.timezone;
 
-  const trainingWeekTotal = useMemo(() => {
-    const now = new Date();
-    const weekAgo = new Date();
+      return periodLabels.map((p) => {
+        const ymdStart = toYmdInTimezone(p.start, tz);
+        const ymdEnd = toYmdInTimezone(p.end, tz);
+        let strength = 0;
+        let cardio = 0;
 
-    weekAgo.setDate(now.getDate() - 7);
-    const weekAgoStr = weekAgo.toISOString().split("T")[0]!;
+        exerciseLogs.forEach(
+          (log: {
+            scheduled_date?: string;
+            exercises?: { category?: string };
+          }) => {
+            const d = log.scheduled_date;
 
-    return exerciseLogs.filter(
-      (log: any) => log.scheduled_date && log.scheduled_date >= weekAgoStr
-    ).length;
-  }, [exerciseLogs]);
+            if (!d || d < ymdStart || d > ymdEnd) return;
+            if (log.exercises?.category === "cardio") cardio++;
+            else strength++;
+          }
+        );
+
+        return {
+          date: p.label,
+          strength,
+          cardio,
+          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
+        };
+      });
+    } catch {
+      return [] as {
+        date: string;
+        strength: number;
+        cardio: number;
+        periodTooltip: string;
+      }[];
+    }
+  }, [periodLabels, exerciseLogs, checkinSchedule.timezone]);
+
+  const trainingPeriodTotal = useMemo(() => {
+    if (trainingActivity.length === 0) return 0;
+    const last = trainingActivity[trainingActivity.length - 1];
+
+    return (last?.strength ?? 0) + (last?.cardio ?? 0);
+  }, [trainingActivity]);
 
   // Check if we should show NEAT chart (has cards and applicable today)
   const shouldShowNeatChart = useMemo(() => {
@@ -489,11 +474,11 @@ export function DashboardContent() {
             onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
           />
 
-          {/* Weekly Check-in Banner - Shows on Mondays or when pending */}
+          {/* Check-in banner when schedule is enabled and current window is due */}
           {showWeeklyBanner && (
             <div className="mb-4">
               <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
-                Seguimiento Semanal
+                {checkinSchedule.custom_name}
               </h2>
               <button
                 className="bg-warning cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
@@ -501,7 +486,7 @@ export function DashboardContent() {
               >
                 <div className="max-w-lg mx-auto flex items-center justify-between">
                   <span className="text-white text-xl font-medium">
-                    Completa tu check-in semanal
+                    {`Completa tu ${checkinSchedule.custom_name}`}
                   </span>
                   <Icon
                     className="text-white text-3xl"
@@ -535,17 +520,21 @@ export function DashboardContent() {
             </div>
           )}
 
-          {/* Weekly Check-in Modal */}
+          {/* Check-in modal */}
           <DynamicFormModal
             clientId={clientId}
             formType="checkins"
             isOpen={showWeeklyFormModal}
+            schedule={checkinSchedule}
             onClose={() => setShowWeeklyFormModal(false)}
             onSuccess={() => {
               // Invalidate weekly form responses — TanStack Query refetches
               // in the background while keeping current data visible.
               queryClient.invalidateQueries({
                 queryKey: ["client", "formResponses", clientId, "checkins"],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["client", "formConfig", clientId, "checkins"],
               });
             }}
           />
@@ -596,11 +585,17 @@ export function DashboardContent() {
             {weightHistory.some((d) => d.weight > 0) && (
               <Card>
                 <CardBody className="p-4">
+                  {checkinSchedule.enabled && (
+                    <p className="text-xs font-semibold text-foreground/70 tracking-wide mb-2">
+                      {checkinSchedule.custom_name}
+                    </p>
+                  )}
                   <WeightChart
                     currentValue={
                       weightHistory[weightHistory.length - 1]?.weight || 0
                     }
                     data={weightHistory}
+                    schedule={checkinSchedule}
                   />
                 </CardBody>
               </Card>
@@ -615,6 +610,7 @@ export function DashboardContent() {
                       sleepHistory[sleepHistory.length - 1]?.hours || 0
                     }
                     data={sleepHistory}
+                    schedule={checkinSchedule}
                   />
                 </CardBody>
               </Card>
@@ -629,6 +625,7 @@ export function DashboardContent() {
                       calorieHistory[calorieHistory.length - 1]?.calories || 0
                     }
                     data={calorieHistory}
+                    schedule={checkinSchedule}
                   />
                 </CardBody>
               </Card>
@@ -643,6 +640,7 @@ export function DashboardContent() {
                       proteinHistory[proteinHistory.length - 1]?.protein || 0
                     }
                     data={proteinHistory}
+                    schedule={checkinSchedule}
                   />
                 </CardBody>
               </Card>
@@ -669,7 +667,8 @@ export function DashboardContent() {
                 <CardBody className="p-4">
                   <TrainingActivityChart
                     data={trainingActivity}
-                    weekTotal={trainingWeekTotal}
+                    periodTotal={trainingPeriodTotal}
+                    schedule={checkinSchedule}
                   />
                 </CardBody>
               </Card>

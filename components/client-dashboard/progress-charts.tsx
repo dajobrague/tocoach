@@ -1,5 +1,7 @@
 "use client";
 
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { Icon } from "@iconify/react";
 import {
   Area,
@@ -16,16 +18,15 @@ import {
   YAxis,
 } from "recharts";
 
-const tooltipStyle = {
-  contentStyle: {
-    borderRadius: "10px",
-    border: "none",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-    fontSize: "12px",
-    color: "#111827",
-    padding: "8px 12px",
-  },
-};
+const tooltipBoxClass =
+  "rounded-[10px] border-0 shadow-md text-xs text-gray-900 px-3 py-2 bg-white";
+
+function xAxisInterval(dataLen: number): number {
+  if (dataLen <= 8) return 0;
+  if (dataLen <= 16) return 1;
+
+  return Math.floor(dataLen / 8);
+}
 
 function ChartHeader({
   label,
@@ -65,10 +66,14 @@ function ChartHeader({
 export function WeightChart({
   data,
   currentValue,
+  schedule: _schedule,
 }: {
-  data: { date: string; weight: number }[];
+  data: { date: string; weight: number; periodTooltip?: string }[];
   currentValue: number;
+  /** Schedule used for period bucketing (reserved / consistency with other charts). */
+  schedule: CheckInSchedule;
 }) {
+  void _schedule;
   const hasData = data.some((d) => d.weight > 0);
 
   if (!hasData) return <EmptyState label="Sin datos de peso" />;
@@ -91,7 +96,7 @@ export function WeightChart({
       <ResponsiveContainer height={160} width="100%">
         <AreaChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: -20, bottom: 4 }}
         >
           <defs>
             <linearGradient id="weightGrad" x1="0" x2="0" y1="0" y2="1">
@@ -105,9 +110,13 @@ export function WeightChart({
             vertical={false}
           />
           <XAxis
+            angle={data.length > 10 ? -28 : 0}
             axisLine={false}
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            height={data.length > 10 ? 46 : 24}
+            interval={xAxisInterval(data.length)}
+            textAnchor={data.length > 10 ? "end" : "middle"}
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
             tickLine={false}
           />
           <YAxis
@@ -117,8 +126,29 @@ export function WeightChart({
             tickLine={false}
           />
           <Tooltip
-            {...tooltipStyle}
-            formatter={(v: number) => [`${v} kg`, "Peso"]}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                date?: string;
+                weight?: number;
+                periodTooltip?: string;
+              };
+
+              return (
+                <div className={tooltipBoxClass}>
+                  {row.periodTooltip ? (
+                    <p className="text-[10px] text-gray-500 mb-1 leading-snug">
+                      {row.periodTooltip}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-gray-600 mb-0.5">{row.date}</p>
+                  <p className="text-sm font-semibold">
+                    {Number(row.weight)} kg
+                  </p>
+                </div>
+              );
+            }}
+            cursor={{ stroke: "#e5e7eb" }}
           />
           <Area
             connectNulls
@@ -145,10 +175,13 @@ export function WeightChart({
 export function SleepChart({
   data,
   currentValue,
+  schedule: _schedule,
 }: {
-  data: { date: string; hours: number }[];
+  data: { date: string; hours: number; periodTooltip?: string }[];
   currentValue: number;
+  schedule: CheckInSchedule;
 }) {
+  void _schedule;
   const hasData = data.some((d) => d.hours > 0);
 
   if (!hasData) return <EmptyState label="Sin datos de sueño" />;
@@ -166,7 +199,7 @@ export function SleepChart({
       <ResponsiveContainer height={160} width="100%">
         <BarChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: -20, bottom: 4 }}
         >
           <CartesianGrid
             stroke="#f3f4f6"
@@ -174,9 +207,13 @@ export function SleepChart({
             vertical={false}
           />
           <XAxis
+            angle={data.length > 10 ? -28 : 0}
             axisLine={false}
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            height={data.length > 10 ? 46 : 24}
+            interval={xAxisInterval(data.length)}
+            textAnchor={data.length > 10 ? "end" : "middle"}
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
             tickLine={false}
           />
           <YAxis
@@ -186,8 +223,29 @@ export function SleepChart({
             tickLine={false}
           />
           <Tooltip
-            {...tooltipStyle}
-            formatter={(v: number) => [`${v}h`, "Sueño"]}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                date?: string;
+                hours?: number;
+                periodTooltip?: string;
+              };
+
+              return (
+                <div className={tooltipBoxClass}>
+                  {row.periodTooltip ? (
+                    <p className="text-[10px] text-gray-500 mb-1 leading-snug">
+                      {row.periodTooltip}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-gray-600 mb-0.5">{row.date}</p>
+                  <p className="text-sm font-semibold">
+                    {Number(row.hours)}h sueño (media del periodo)
+                  </p>
+                </div>
+              );
+            }}
+            cursor={{ fill: "rgba(243,244,246,0.6)" }}
           />
           <ReferenceLine
             stroke="#86efac"
@@ -232,10 +290,13 @@ export function SleepChart({
 export function CaloriesChart({
   data,
   currentValue,
+  schedule: _schedule,
 }: {
-  data: { date: string; calories: number }[];
+  data: { date: string; calories: number; periodTooltip?: string }[];
   currentValue: number;
+  schedule: CheckInSchedule;
 }) {
+  void _schedule;
   const hasData = data.some((d) => d.calories > 0);
 
   if (!hasData) return <EmptyState label="Sin datos de calorías" />;
@@ -253,14 +314,16 @@ export function CaloriesChart({
         iconColor="text-danger"
         label="CALORÍAS"
         subtitle={
-          avg > 0 ? `media: ${avg.toLocaleString("es-ES")} kcal` : "hoy"
+          avg > 0
+            ? `media en el periodo: ${avg.toLocaleString("es-ES")} kcal`
+            : "por periodo"
         }
         value={currentValue ? currentValue.toLocaleString("es-ES") : 0}
       />
       <ResponsiveContainer height={160} width="100%">
         <ComposedChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: -20, bottom: 4 }}
         >
           <defs>
             <linearGradient id="calBarGrad" x1="0" x2="0" y1="0" y2="1">
@@ -274,9 +337,13 @@ export function CaloriesChart({
             vertical={false}
           />
           <XAxis
+            angle={data.length > 10 ? -28 : 0}
             axisLine={false}
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            height={data.length > 10 ? 46 : 24}
+            interval={xAxisInterval(data.length)}
+            textAnchor={data.length > 10 ? "end" : "middle"}
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
             tickLine={false}
           />
           <YAxis
@@ -285,13 +352,30 @@ export function CaloriesChart({
             tickLine={false}
           />
           <Tooltip
-            {...tooltipStyle}
-            formatter={(v: number, name: string) => [
-              name === "Media"
-                ? `${v} kcal`
-                : `${v.toLocaleString("es-ES")} kcal`,
-              name === "Media" ? "Media" : "Calorías",
-            ]}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                date?: string;
+                calories?: number;
+                periodTooltip?: string;
+              };
+              const v = Number(row.calories);
+
+              return (
+                <div className={tooltipBoxClass}>
+                  {row.periodTooltip ? (
+                    <p className="text-[10px] text-gray-500 mb-1 leading-snug">
+                      {row.periodTooltip}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-gray-600 mb-0.5">{row.date}</p>
+                  <p className="text-sm font-semibold">
+                    {v.toLocaleString("es-ES")} kcal (media del periodo)
+                  </p>
+                </div>
+              );
+            }}
+            cursor={{ stroke: "#e5e7eb" }}
           />
           {avg > 0 && (
             <ReferenceLine
@@ -323,10 +407,13 @@ export function CaloriesChart({
 export function ProteinChart({
   data,
   currentValue,
+  schedule: _schedule,
 }: {
-  data: { date: string; protein: number }[];
+  data: { date: string; protein: number; periodTooltip?: string }[];
   currentValue: number;
+  schedule: CheckInSchedule;
 }) {
+  void _schedule;
   const hasData = data.some((d) => d.protein > 0);
 
   if (!hasData) return null;
@@ -343,13 +430,13 @@ export function ProteinChart({
         iconBg="bg-indigo-100"
         iconColor="text-indigo-500"
         label="PROTEÍNA"
-        subtitle={avg > 0 ? `media: ${avg}g / día` : "hoy"}
+        subtitle={avg > 0 ? `media en el periodo: ${avg}g` : "por periodo"}
         value={`${currentValue || 0}g`}
       />
       <ResponsiveContainer height={160} width="100%">
         <AreaChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: -20, bottom: 4 }}
         >
           <defs>
             <linearGradient id="protChartGrad" x1="0" x2="0" y1="0" y2="1">
@@ -363,9 +450,13 @@ export function ProteinChart({
             vertical={false}
           />
           <XAxis
+            angle={data.length > 10 ? -28 : 0}
             axisLine={false}
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            height={data.length > 10 ? 46 : 24}
+            interval={xAxisInterval(data.length)}
+            textAnchor={data.length > 10 ? "end" : "middle"}
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
             tickLine={false}
           />
           <YAxis
@@ -375,8 +466,29 @@ export function ProteinChart({
             unit="g"
           />
           <Tooltip
-            {...tooltipStyle}
-            formatter={(v: number) => [`${v}g`, "Proteína"]}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                date?: string;
+                protein?: number;
+                periodTooltip?: string;
+              };
+
+              return (
+                <div className={tooltipBoxClass}>
+                  {row.periodTooltip ? (
+                    <p className="text-[10px] text-gray-500 mb-1 leading-snug">
+                      {row.periodTooltip}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-gray-600 mb-0.5">{row.date}</p>
+                  <p className="text-sm font-semibold">
+                    {Number(row.protein)}g proteína (media del periodo)
+                  </p>
+                </div>
+              );
+            }}
+            cursor={{ stroke: "#e5e7eb" }}
           />
           {avg > 0 && (
             <ReferenceLine
@@ -521,11 +633,20 @@ export function MacrosRing({
 
 export function TrainingActivityChart({
   data,
-  weekTotal,
+  periodTotal,
+  schedule: _schedule,
 }: {
-  data: { date: string; strength: number; cardio: number }[];
-  weekTotal: number;
+  data: {
+    date: string;
+    strength: number;
+    cardio: number;
+    periodTooltip?: string;
+  }[];
+  /** Total sessions in the most recent chart period (for header). */
+  periodTotal: number;
+  schedule: CheckInSchedule;
 }) {
+  void _schedule;
   const hasData = data.some((d) => d.strength > 0 || d.cardio > 0);
 
   if (!hasData) return null;
@@ -537,13 +658,13 @@ export function TrainingActivityChart({
         iconBg="bg-blue-100"
         iconColor="text-blue-500"
         label="ACTIVIDAD DE ENTRENAMIENTO"
-        subtitle="ejercicios esta semana"
-        value={weekTotal}
+        subtitle="ejercicios en el periodo actual"
+        value={periodTotal}
       />
       <ResponsiveContainer height={160} width="100%">
         <BarChart
           data={data}
-          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+          margin={{ top: 5, right: 5, left: -20, bottom: 4 }}
         >
           <CartesianGrid
             stroke="#f3f4f6"
@@ -551,9 +672,13 @@ export function TrainingActivityChart({
             vertical={false}
           />
           <XAxis
+            angle={data.length > 10 ? -28 : 0}
             axisLine={false}
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            height={data.length > 10 ? 46 : 24}
+            interval={xAxisInterval(data.length)}
+            textAnchor={data.length > 10 ? "end" : "middle"}
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
             tickLine={false}
           />
           <YAxis
@@ -563,11 +688,31 @@ export function TrainingActivityChart({
             tickLine={false}
           />
           <Tooltip
-            {...tooltipStyle}
-            formatter={(v: number, name: string) => [
-              `${v}`,
-              name === "strength" ? "Fuerza" : "Cardio",
-            ]}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                date?: string;
+                strength?: number;
+                cardio?: number;
+                periodTooltip?: string;
+              };
+              const s = Number(row.strength ?? 0);
+              const c = Number(row.cardio ?? 0);
+
+              return (
+                <div className={tooltipBoxClass}>
+                  {row.periodTooltip ? (
+                    <p className="text-[10px] text-gray-500 mb-1 leading-snug">
+                      {row.periodTooltip}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-gray-600 mb-1">{row.date}</p>
+                  <p className="text-sm">Fuerza: {s}</p>
+                  <p className="text-sm">Cardio: {c}</p>
+                </div>
+              );
+            }}
+            cursor={{ fill: "rgba(243,244,246,0.6)" }}
           />
           <Bar
             barSize={12}

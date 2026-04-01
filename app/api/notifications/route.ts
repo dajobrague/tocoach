@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import { getTrainerSession } from "@/lib/auth/session";
 
-// Lazy Supabase client initialization
 function getSupabaseClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,20 +11,57 @@ function getSupabaseClient() {
   );
 }
 
-// GET - Fetch notifications for a client
+// GET - Fetch notifications for a client or trainer
 export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
+    const { searchParams } = new URL(request.url);
+    const trainerId = searchParams.get("trainerId");
+    const limit = parseInt(searchParams.get("limit") || "20");
+
+    // Trainer-mode: filter by trainer_id
+    if (trainerId) {
+      const trainerSession = await getTrainerSession();
+
+      if (!trainerSession || trainerSession.trainer_id !== trainerId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const { data: notifications, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("trainer_id", trainerId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Error fetching trainer notifications:", error);
+
+        return NextResponse.json(
+          { error: "Failed to fetch notifications" },
+          { status: 500 }
+        );
+      }
+
+      const unreadCount = (notifications || []).filter(
+        (n) => !n.read_at
+      ).length;
+
+      return NextResponse.json({
+        notifications: notifications || [],
+        unreadCount,
+      });
+    }
+
+    // Client-mode: existing behaviour
     const session = await getClientSession();
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
     const tenantSlug = searchParams.get("tenantSlug");
-    const limit = parseInt(searchParams.get("limit") || "20");
 
     if (!clientId || !tenantSlug) {
       return NextResponse.json(
@@ -33,8 +70,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Note: session.client_id could be different format than clients table id
-    // For now, we trust the session and just verify tenantSlug matches
     if (session.tenant_slug !== tenantSlug) {
       return NextResponse.json(
         { error: "Forbidden - wrong tenant" },
@@ -42,7 +77,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch notifications
     const { data: notifications, error } = await supabase
       .from("notifications")
       .select("*")
@@ -60,7 +94,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Count unread notifications
     const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
 
     return NextResponse.json({
@@ -77,16 +110,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH - Mark notifications as read
+// PATCH - Mark notifications as read (client or trainer)
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
-    const session = await getClientSession();
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const { notificationIds } = body;
 
@@ -101,12 +128,39 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Update notifications
+    // Try trainer session first, then client session
+    const trainerSession = await getTrainerSession();
+
+    if (trainerSession) {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .in("id", notificationIds)
+        .eq("trainer_id", trainerSession.trainer_id);
+
+      if (error) {
+        console.error("Error marking trainer notifications as read:", error);
+
+        return NextResponse.json(
+          { error: "Failed to mark notifications as read" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    const clientSession = await getClientSession();
+
+    if (!clientSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { error } = await supabase
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
       .in("id", notificationIds)
-      .eq("client_id", session.client_id);
+      .eq("client_id", clientSession.client_id);
 
     if (error) {
       console.error("Error marking notifications as read:", error);

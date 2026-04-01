@@ -1,9 +1,8 @@
 "use client";
 
+import { Chip } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import React from "react";
-
-// Force recompile v3 - Fixed redirect loop with multi-guard system
 
 import AyudaContent from "@/components/dashboard/ayuda-content";
 import SettingsContent from "@/components/dashboard/settings-content";
@@ -16,6 +15,7 @@ import MetricasContent from "@/components/dashboard/metricas-content";
 import dashboardSidebarItems from "@/components/dashboard/sidebar-items";
 import TemplatesContent from "@/components/dashboard/templates-content";
 import TopNavigation from "@/components/dashboard/top-navigation";
+import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface TrainerSession {
   trainer_id: string;
@@ -241,6 +241,23 @@ export default function TrainerDashboard() {
     }
   }, [activeSection, isLoading, session, router, setupJustCompleted]);
 
+  // Global realtime messages subscription for unread badge
+  // Must be called unconditionally (before any early returns) per Rules of Hooks
+  const { newMessageCount: globalUnreadMessages, clearNewMessages } =
+    useRealtimeMessages({
+      clientId: null,
+      tenantSlug: session?.tenant_host ?? null,
+      userId: session?.trainer_id ?? "",
+      userType: "trainer",
+    });
+
+  // Clear the badge when the trainer opens the messaging section
+  React.useEffect(() => {
+    if (activeSection === "messaging") {
+      clearNewMessages();
+    }
+  }, [activeSection, clearNewMessages]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -258,15 +275,34 @@ export default function TrainerDashboard() {
     return null; // Will redirect to login
   }
 
-  // Filter sidebar items based on onboarding status
-  const filteredSidebarItems = dashboardSidebarItems.filter((item) => {
-    // Hide setup/onboarding if already completed
-    if (item.key === "setup" && session.onboarding_completed) {
-      return false;
-    }
+  // Filter sidebar items based on onboarding status + add messaging badge
+  const filteredSidebarItems = dashboardSidebarItems
+    .filter((item) => {
+      if (item.key === "setup" && session.onboarding_completed) {
+        return false;
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .map((item) => {
+      if (item.key === "messaging" && globalUnreadMessages > 0) {
+        return {
+          ...item,
+          endContent: (
+            <Chip
+              className="h-5 min-w-5 px-1"
+              color="primary"
+              size="sm"
+              variant="solid"
+            >
+              {globalUnreadMessages > 99 ? "99+" : globalUnreadMessages}
+            </Chip>
+          ),
+        };
+      }
+
+      return item;
+    });
 
   const renderContent = () => {
     switch (activeSection) {
@@ -315,6 +351,7 @@ export default function TrainerDashboard() {
         brandLogo={brandLogo ?? ""}
         items={filteredSidebarItems}
         trainerEmail={session.email}
+        trainerId={session.trainer_id}
         trainerImage={trainerImage ?? ""}
         trainerName={session.full_name || session.email}
         onHelpClick={handleHelpClick}

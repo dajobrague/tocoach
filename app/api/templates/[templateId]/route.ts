@@ -124,24 +124,45 @@ export async function GET(
             .eq("nutrition_day_id", day.id)
             .order("meal_order", { ascending: true });
 
-          const mealsWithIngredients = await Promise.all(
+          const mealsWithOptions = await Promise.all(
             (meals || []).map(async (meal: any) => {
-              const { data: ingredients } = await supabase
-                .from("nutrition_ingredients")
+              const { data: options } = await supabase
+                .from("nutrition_meal_options")
                 .select("*")
-                .eq("nutrition_meal_id", meal.id)
-                .order("ingredient_order", { ascending: true });
+                .eq("meal_id", meal.id)
+                .order("option_order", { ascending: true });
+
+              const optionsWithIngredients = await Promise.all(
+                (options || []).map(async (opt: any) => {
+                  const { data: ingredients } = await supabase
+                    .from("nutrition_ingredients")
+                    .select("*")
+                    .eq("option_id", opt.id)
+                    .order("ingredient_order", { ascending: true });
+
+                  return {
+                    ...opt,
+                    ingredients: ingredients || [],
+                  };
+                })
+              );
+
+              const ingredients = optionsWithIngredients.flatMap(
+                (opt: { ingredients: unknown[] }) => opt.ingredients
+              );
 
               return {
                 ...meal,
-                ingredients: ingredients || [],
+                has_alternatives: meal.has_alternatives ?? false,
+                options: optionsWithIngredients,
+                ingredients,
               };
             })
           );
 
           return {
             ...day,
-            meals: mealsWithIngredients,
+            meals: mealsWithOptions,
           };
         })
       );

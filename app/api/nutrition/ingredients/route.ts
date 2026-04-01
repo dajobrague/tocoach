@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// POST - Create a new nutrition ingredient
+// POST - Create a new nutrition ingredient (under an option)
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
 
   try {
-    // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
@@ -20,7 +19,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      optionId,
+      option_id: option_id_snake,
       nutrition_meal_id,
+      mealId,
       name,
       quantity,
       unit,
@@ -31,67 +33,162 @@ export async function POST(request: NextRequest) {
       calories,
     } = body;
 
-    console.log("[Nutrition Ingredients API] Creating ingredient:", body);
+    const explicitOptionId = optionId ?? option_id_snake;
+    const legacyMealId = nutrition_meal_id ?? mealId;
 
-    // Verify the meal belongs to a day/plan owned by this trainer and get tenant_host
-    const { data: meal, error: mealError } = await supabase
-      .from("nutrition_meals")
-      .select("id, nutrition_day_id, tenant_host")
-      .eq("id", nutrition_meal_id)
-      .single();
-
-    if (mealError || !meal) {
-      console.error("[Nutrition Ingredients API] Meal not found:", mealError);
-
+    if (!explicitOptionId && !legacyMealId) {
       return NextResponse.json(
-        { success: false, error: "Comida no encontrada" },
-        { status: 404 }
+        {
+          success: false,
+          error: "Se requiere optionId o nutrition_meal_id",
+        },
+        { status: 400 }
       );
     }
 
-    // Verify through day -> plan -> trainer
-    const { data: day, error: dayError } = await supabase
-      .from("nutrition_days")
-      .select("nutrition_plan_id")
-      .eq("id", meal.nutrition_day_id)
-      .single();
+    let resolvedOptionId: string;
+    let mealIdForIngredient: string;
+    let tenantHost: string;
 
-    if (dayError || !day) {
-      console.error("[Nutrition Ingredients API] Day not found:", dayError);
+    if (explicitOptionId) {
+      const { data: optionRow, error: optError } = await supabase
+        .from("nutrition_meal_options")
+        .select("id, meal_id")
+        .eq("id", explicitOptionId)
+        .single();
 
-      return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
-      );
+      if (optError || !optionRow) {
+        return NextResponse.json(
+          { success: false, error: "Opción no encontrada" },
+          { status: 404 }
+        );
+      }
+
+      const { data: meal, error: mealError } = await supabase
+        .from("nutrition_meals")
+        .select("id, nutrition_day_id, tenant_host")
+        .eq("id", optionRow.meal_id)
+        .single();
+
+      if (mealError || !meal) {
+        return NextResponse.json(
+          { success: false, error: "Comida no encontrada" },
+          { status: 404 }
+        );
+      }
+
+      const { data: day, error: dayError } = await supabase
+        .from("nutrition_days")
+        .select("nutrition_plan_id")
+        .eq("id", meal.nutrition_day_id)
+        .single();
+
+      if (dayError || !day) {
+        return NextResponse.json(
+          { success: false, error: "Día no encontrado" },
+          { status: 404 }
+        );
+      }
+
+      const { data: plan, error: planError } = await supabase
+        .from("nutrition_plans")
+        .select("id")
+        .eq("id", day.nutrition_plan_id)
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      if (planError || !plan) {
+        return NextResponse.json(
+          { success: false, error: "No autorizado" },
+          { status: 403 }
+        );
+      }
+
+      resolvedOptionId = optionRow.id;
+      mealIdForIngredient = meal.id;
+      tenantHost = meal.tenant_host;
+    } else {
+      const { data: meal, error: mealError } = await supabase
+        .from("nutrition_meals")
+        .select("id, nutrition_day_id, tenant_host")
+        .eq("id", legacyMealId)
+        .single();
+
+      if (mealError || !meal) {
+        return NextResponse.json(
+          { success: false, error: "Comida no encontrada" },
+          { status: 404 }
+        );
+      }
+
+      const { data: day, error: dayError } = await supabase
+        .from("nutrition_days")
+        .select("nutrition_plan_id")
+        .eq("id", meal.nutrition_day_id)
+        .single();
+
+      if (dayError || !day) {
+        return NextResponse.json(
+          { success: false, error: "Día no encontrado" },
+          { status: 404 }
+        );
+      }
+
+      const { data: plan, error: planError } = await supabase
+        .from("nutrition_plans")
+        .select("id")
+        .eq("id", day.nutrition_plan_id)
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      if (planError || !plan) {
+        return NextResponse.json(
+          { success: false, error: "No autorizado" },
+          { status: 403 }
+        );
+      }
+
+      const { data: firstOptions, error: foError } = await supabase
+        .from("nutrition_meal_options")
+        .select("id")
+        .eq("meal_id", legacyMealId)
+        .order("option_order", { ascending: true })
+        .limit(1);
+
+      if (foError || !firstOptions?.length) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "La comida no tiene ninguna opción",
+          },
+          { status: 404 }
+        );
+      }
+
+      const firstOpt = firstOptions[0];
+
+      if (!firstOpt) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "La comida no tiene ninguna opción",
+          },
+          { status: 404 }
+        );
+      }
+
+      resolvedOptionId = firstOpt.id;
+      mealIdForIngredient = meal.id;
+      tenantHost = meal.tenant_host;
     }
 
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", day.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Ingredients API] Plan not found or unauthorized:",
-        planError
-      );
-
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
-      );
-    }
-
-    // Get the current max ingredient_order for this meal if not provided
     let orderToUse = ingredient_order;
 
     if (orderToUse === undefined) {
       const { data: existingIngredients } = await supabase
         .from("nutrition_ingredients")
         .select("ingredient_order")
-        .eq("nutrition_meal_id", nutrition_meal_id)
+        .eq("option_id", resolvedOptionId)
         .order("ingredient_order", { ascending: false })
         .limit(1);
 
@@ -103,12 +200,12 @@ export async function POST(request: NextRequest) {
           : 0;
     }
 
-    // Create the nutrition ingredient
     const { data: ingredient, error: ingredientError } = await supabase
       .from("nutrition_ingredients")
       .insert({
-        nutrition_meal_id,
-        tenant_host: meal.tenant_host,
+        nutrition_meal_id: mealIdForIngredient,
+        option_id: resolvedOptionId,
+        tenant_host: tenantHost,
         name,
         quantity,
         unit,

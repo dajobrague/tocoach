@@ -1,6 +1,131 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  getScheduleOrDefault,
+  getSpanishWeekdayLabelForInstant,
+  getWallClockWeekdayInTimezone,
+  isDueNow,
+} from "@/lib/forms/schedule";
+
+const ACTIVE_CLIENT_STATUSES = ["Activo", "Onboarding Completado"] as const;
+
+const MS_23H = 23 * 60 * 60 * 1000;
+
+type CheckinConfigRow = {
+  client_id: number;
+  tenant_host: string;
+  schedule: unknown;
+  clients: {
+    id: number;
+    status: string;
+    name: string | null;
+    email: string | null;
+  };
+};
+
+type NotificationInsert = {
+  tenant_slug: string;
+  client_id: number;
+  trainer_id?: string | undefined;
+  type: "form_weekly_available" | "form_daily_available";
+  title: string;
+  message: string;
+  icon: string;
+  metadata: Record<string, unknown>;
+};
+
+async function fetchCheckinConfigsWithClients(
+  supabase: SupabaseClient
+): Promise<{ rows: CheckinConfigRow[]; error: Error | null }> {
+  const embedded = await supabase
+    .from("client_form_configs")
+    .select(
+      "client_id, tenant_host, schedule, clients!inner(id, status, name, email)"
+    )
+    .eq("form_type", "checkins")
+    .or("status.eq.Activo,status.eq.Onboarding Completado", {
+      foreignTable: "clients",
+    });
+
+  if (!embedded.error && Array.isArray(embedded.data)) {
+    return {
+      rows: embedded.data as unknown as CheckinConfigRow[],
+      error: null,
+    };
+  }
+
+  const { data: configs, error: cfgErr } = await supabase
+    .from("client_form_configs")
+    .select("client_id, tenant_host, schedule")
+    .eq("form_type", "checkins");
+
+  if (cfgErr) {
+    return { rows: [], error: cfgErr };
+  }
+
+  if (!configs?.length) {
+    return { rows: [], error: null };
+  }
+
+  const ids = [...new Set(configs.map((c) => c.client_id))];
+  const { data: clients, error: clErr } = await supabase
+    .from("clients")
+    .select("id, status, name, email")
+    .in("id", ids)
+    .in("status", [...ACTIVE_CLIENT_STATUSES]);
+
+  if (clErr || !clients) {
+    return { rows: [], error: clErr ?? new Error("Failed to load clients") };
+  }
+
+  const byId = new Map(clients.map((c) => [c.id, c]));
+  const rows: CheckinConfigRow[] = [];
+
+  for (const c of configs) {
+    const cl = byId.get(c.client_id);
+
+    if (cl) {
+      rows.push({
+        client_id: c.client_id,
+        tenant_host: c.tenant_host,
+        schedule: c.schedule,
+        clients: cl,
+      });
+    }
+  }
+
+  return { rows, error: null };
+}
+
+async function insertNotificationsResilient(
+  supabase: SupabaseClient,
+  rows: NotificationInsert[],
+  errors: string[]
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const { error } = await supabase.from("notifications").insert(rows);
+
+  if (!error) return rows.length;
+
+  let created = 0;
+
+  for (const row of rows) {
+    const { error: oneErr } = await supabase.from("notifications").insert(row);
+
+    if (oneErr) {
+      errors.push(`client ${row.client_id}: ${oneErr.message}`);
+    } else {
+      created++;
+    }
+  }
+
+  return created;
+}
 
 /**
  * POST /api/forms/notifications/create
@@ -39,20 +164,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: tenantRecord } = await supabase
-      .from("tenants")
-      .select("host")
-      .eq("trainer_id", client.tenant)
+    // Resolve trainer by looking up the trainer whose tenant_host matches
+    const { data: trainerRecord } = await supabase
+      .from("trainers")
+      .select("id, tenant_host")
+      .eq("id", client.tenant)
       .single();
 
-    if (!tenantRecord) {
+    if (!trainerRecord) {
       return NextResponse.json(
         { success: false, error: "Tenant no encontrado" },
         { status: 404 }
       );
     }
 
-    const tenantHost = tenantRecord.host;
+    const tenantHost = trainerRecord.tenant_host;
+    const resolvedTrainerId = trainerRecord.id;
+
+    let checkinLabel = "Check-in";
+
+    if (form_type === "checkins") {
+      const { data: cfgRow } = await supabase
+        .from("client_form_configs")
+        .select("schedule")
+        .eq("client_id", client_id)
+        .eq("form_type", "checkins")
+        .maybeSingle();
+
+      checkinLabel = getScheduleOrDefault(
+        cfgRow?.schedule as CheckInSchedule | null
+      ).custom_name;
+    }
 
     // Create notification title and message based on type
     let title = "";
@@ -62,23 +204,20 @@ export async function POST(request: NextRequest) {
     if (form_type === "checkins") {
       switch (notification_type) {
         case "form_weekly_available":
-          title = "Seguimiento Semanal Disponible";
-          message =
-            "Tu check-in semanal está listo. ¡Compártenos cómo va tu semana!";
+          title = `${checkinLabel} disponible`;
+          message = `Tu ${checkinLabel} está listo. ¡Compártenos cómo va tu semana!`;
           break;
         case "form_weekly_reminder":
-          title = "Recordatorio: Seguimiento Semanal";
-          message = "No olvides completar tu check-in semanal";
+          title = `Recordatorio: ${checkinLabel}`;
+          message = `No olvides completar tu ${checkinLabel}`;
           break;
         case "form_weekly_expiring":
           title = "Última Oportunidad";
-          message =
-            "Tu seguimiento semanal vence esta noche. ¡Complétalo ahora!";
+          message = `Tu ${checkinLabel} vence esta noche. ¡Complétalo ahora!`;
           break;
         case "form_weekly_expired":
-          title = "Seguimiento Semanal Vencido";
-          message =
-            "El check-in semanal ha expirado. Estará disponible el próximo lunes.";
+          title = `${checkinLabel} vencido`;
+          message = `Tu ${checkinLabel} ha expirado. Volverá a estar disponible en la próxima ventana.`;
           break;
       }
     } else {
@@ -135,6 +274,7 @@ export async function POST(request: NextRequest) {
       .insert({
         tenant_slug: tenantHost,
         client_id: client_id,
+        trainer_id: resolvedTrainerId,
         type: notification_type,
         title,
         message,
@@ -179,115 +319,246 @@ export async function POST(request: NextRequest) {
 
 /**
  * PUT /api/forms/notifications/create (batch endpoint)
- * Generate notifications for all clients based on current time
- * Called by Supabase cron job every hour
+ * Generate notifications from per-client check-in schedules and daily habits.
+ * Called every hour (e.g. pg_cron). `isDueNow` matches hour+minute in the client TZ;
+ * hourly triggers only align when the schedule minute is :00.
  */
-export async function PUT(request: NextRequest) {
+export async function PUT(_request: NextRequest) {
   const supabase = createSupabaseClient();
+  const now = new Date();
+  const errors: string[] = [];
+  let skippedDuplicates = 0;
+  let skippedNotDue = 0;
 
   try {
-    console.log("[Forms Notifications Batch] Starting batch notification job");
+    console.log(
+      `[FormNotifications:Cron] Evaluating schedules at ${now.toISOString()}`
+    );
 
-    // Get all active clients
-    const { data: clients, error: clientsError } = await supabase
-      .from("clients")
-      .select("id, name, tenant_host");
+    const since23h = new Date(now.getTime() - MS_23H).toISOString();
 
-    if (clientsError) {
+    const { rows: checkinRows, error: checkinFetchErr } =
+      await fetchCheckinConfigsWithClients(supabase);
+
+    if (checkinFetchErr) {
       console.error(
-        "[Forms Notifications Batch] Error fetching clients:",
-        clientsError
+        "[FormNotifications:Cron] Error fetching check-in configs:",
+        checkinFetchErr
       );
 
       return NextResponse.json(
-        { success: false, error: "Error fetching clients" },
+        {
+          success: false,
+          triggered: 0,
+          skipped: 0,
+          errors: [checkinFetchErr.message],
+        },
         { status: 500 }
       );
     }
 
-    if (!clients || clients.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: "No clients found",
-        created: 0,
-      });
-    }
+    type DueCheckin = {
+      client_id: number;
+      tenant_host: string;
+      schedule: CheckInSchedule;
+    };
 
-    const now = new Date();
-    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday
-    const currentHour = now.getHours();
+    const dueByClient = new Map<number, DueCheckin>();
 
-    console.log(
-      `[Forms Notifications Batch] Current time: Day ${currentDay}, Hour ${currentHour}`
-    );
-
-    let weeklyCreated = 0;
-    let dailyCreated = 0;
-    const errors: string[] = [];
-
-    // Process each client
-    for (const client of clients) {
+    for (const row of checkinRows) {
       try {
-        // Monday 8am UTC: Weekly check-in available
-        if (currentDay === 1 && currentHour === 8) {
-          // Check if notification already exists for today
-          const today = new Date().toISOString().split("T")[0];
-          const { data: existingWeekly } = await supabase
-            .from("notifications")
-            .select("id")
-            .eq("client_id", client.id)
-            .eq("type", "form_weekly_available")
-            .gte("created_at", `${today}T00:00:00`)
-            .single();
-
-          if (!existingWeekly) {
-            const { error: notifError } = await supabase
-              .from("notifications")
-              .insert({
-                tenant_slug: client.tenant_host,
-                client_id: client.id,
-                type: "form_weekly_available",
-                title: "Seguimiento Semanal Disponible",
-                message:
-                  "Tu check-in semanal está listo. ¡Compártenos cómo va tu semana!",
-                icon: "solar:clipboard-check-bold",
-                metadata: {
-                  form_type: "checkins",
-                  action: "open_form",
-                  created_by: "system",
-                },
-              });
-
-            if (notifError) {
-              console.error(
-                `[Forms Notifications Batch] Error creating weekly notification for client ${client.id}:`,
-                notifError
-              );
-              errors.push(`Client ${client.id}: ${notifError.message}`);
-            } else {
-              weeklyCreated++;
-            }
-          }
+        if (row.schedule == null) {
+          console.warn(
+            `[FormNotifications:Cron] Client ${row.client_id} has no schedule, using defaults`
+          );
         }
 
-        // Every day at 8am UTC: Daily habits available
-        if (currentHour === 8) {
-          // Check if notification already exists for today
-          const today = new Date().toISOString().split("T")[0];
-          const { data: existingDaily } = await supabase
-            .from("notifications")
-            .select("id")
-            .eq("client_id", client.id)
-            .eq("type", "form_daily_available")
-            .gte("created_at", `${today}T00:00:00`)
-            .single();
+        const s = getScheduleOrDefault(row.schedule as CheckInSchedule | null);
 
-          if (!existingDaily) {
-            const { error: notifError } = await supabase
+        if (!s.enabled) {
+          skippedNotDue++;
+          continue;
+        }
+
+        if (!isDueNow(s, now)) {
+          skippedNotDue++;
+          continue;
+        }
+
+        if (!dueByClient.has(row.client_id)) {
+          dueByClient.set(row.client_id, {
+            client_id: row.client_id,
+            tenant_host: row.tenant_host,
+            schedule: s,
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+
+        errors.push(`client ${row.client_id}: ${msg}`);
+      }
+    }
+
+    const dueCheckinList = [...dueByClient.values()];
+    const dueCheckinIds = dueCheckinList.map((d) => d.client_id);
+
+    // Resolve trainer_id from tenant_host for all due check-ins
+    const tenantHosts = [...new Set(dueCheckinList.map((d) => d.tenant_host))];
+    const trainerByHost = new Map<string, string>();
+
+    if (tenantHosts.length > 0) {
+      const { data: trainerRows } = await supabase
+        .from("trainers")
+        .select("id, tenant_host")
+        .in("tenant_host", tenantHosts);
+
+      for (const t of trainerRows ?? []) {
+        trainerByHost.set(t.tenant_host, t.id);
+      }
+    }
+
+    const dupWeeklyIds = new Set<number>();
+    let weeklyDupCheckFailed = false;
+
+    if (dueCheckinIds.length > 0) {
+      const { data: existingWeekly, error: dupWErr } = await supabase
+        .from("notifications")
+        .select("client_id")
+        .eq("type", "form_weekly_available")
+        .gte("created_at", since23h)
+        .in("client_id", dueCheckinIds);
+
+      if (dupWErr) {
+        errors.push(`duplicate check weekly: ${dupWErr.message}`);
+        weeklyDupCheckFailed = true;
+      } else if (existingWeekly) {
+        for (const r of existingWeekly) {
+          dupWeeklyIds.add(r.client_id as number);
+        }
+      }
+    }
+
+    const checkinInsertRows: NotificationInsert[] = [];
+
+    if (!weeklyDupCheckFailed) {
+      for (const d of dueCheckinList) {
+        if (dupWeeklyIds.has(d.client_id)) {
+          skippedDuplicates++;
+          continue;
+        }
+
+        const s = d.schedule;
+        const dayLabel = getSpanishWeekdayLabelForInstant(now, s.timezone);
+
+        console.log(
+          `[FormNotifications:Cron] Triggering for client ${d.client_id}, schedule: ${dayLabel} at ${s.time} ${s.timezone}`
+        );
+
+        checkinInsertRows.push({
+          tenant_slug: d.tenant_host,
+          client_id: d.client_id,
+          trainer_id: trainerByHost.get(d.tenant_host),
+          type: "form_weekly_available",
+          title: s.custom_name,
+          message: `¡Es hora de completar tu ${s.custom_name}!`,
+          icon: "solar:clipboard-check-bold",
+          metadata: {
+            form_type: "checkins",
+            schedule_trigger: true,
+            scheduled_day: getWallClockWeekdayInTimezone(now, s.timezone),
+            scheduled_time: s.time,
+            action: "open_form",
+            created_by: "system",
+          },
+        });
+      }
+    }
+
+    let triggered = await insertNotificationsResilient(
+      supabase,
+      checkinInsertRows,
+      errors
+    );
+
+    // Daily habits: 8:00 UTC, active clients only, tenant from trainers.tenant → tenants.host
+    if (now.getUTCHours() === 8) {
+      const { data: habitClients, error: hcErr } = await supabase
+        .from("clients")
+        .select("id, tenant")
+        .in("status", [...ACTIVE_CLIENT_STATUSES]);
+
+      if (hcErr) {
+        errors.push(`habits clients fetch: ${hcErr.message}`);
+      } else if (habitClients?.length) {
+        const trainerIds = [
+          ...new Set(
+            habitClients.map((c) => c.tenant).filter(Boolean) as string[]
+          ),
+        ];
+
+        const { data: tenantRows, error: tErr } = await supabase
+          .from("tenants")
+          .select("trainer_id, host")
+          .in("trainer_id", trainerIds);
+
+        if (tErr) {
+          errors.push(`habits tenants fetch: ${tErr.message}`);
+        } else {
+          const hostByTrainer = new Map(
+            (tenantRows ?? []).map((t) => [t.trainer_id, t.host] as const)
+          );
+          const trainerIdByHost = new Map(
+            (tenantRows ?? []).map((t) => [t.host, t.trainer_id] as const)
+          );
+
+          const habitCandidates: { id: number; tenant_slug: string }[] = [];
+
+          for (const c of habitClients) {
+            const host = c.tenant ? hostByTrainer.get(c.tenant) : undefined;
+
+            if (!host) {
+              errors.push(`client ${c.id}: tenant host not found`);
+              continue;
+            }
+
+            habitCandidates.push({ id: c.id, tenant_slug: host });
+          }
+
+          const habitIds = habitCandidates.map((h) => h.id);
+          const dupDailyIds = new Set<number>();
+          let dailyDupCheckFailed = false;
+
+          if (habitIds.length > 0) {
+            const { data: existingDaily, error: dupDErr } = await supabase
               .from("notifications")
-              .insert({
-                tenant_slug: client.tenant_host,
-                client_id: client.id,
+              .select("client_id")
+              .eq("type", "form_daily_available")
+              .gte("created_at", since23h)
+              .in("client_id", habitIds);
+
+            if (dupDErr) {
+              errors.push(`duplicate check daily: ${dupDErr.message}`);
+              dailyDupCheckFailed = true;
+            } else if (existingDaily) {
+              for (const r of existingDaily) {
+                dupDailyIds.add(r.client_id as number);
+              }
+            }
+          }
+
+          const habitInsertRows: NotificationInsert[] = [];
+
+          if (!dailyDupCheckFailed) {
+            for (const h of habitCandidates) {
+              if (dupDailyIds.has(h.id)) {
+                skippedDuplicates++;
+                continue;
+              }
+
+              habitInsertRows.push({
+                tenant_slug: h.tenant_slug,
+                client_id: h.id,
+                trainer_id: trainerIdByHost.get(h.tenant_slug),
                 type: "form_daily_available",
                 title: "Registro Diario Disponible",
                 message: "¡Buenos días! Registra tus hábitos de hoy",
@@ -298,45 +569,41 @@ export async function PUT(request: NextRequest) {
                   created_by: "system",
                 },
               });
-
-            if (notifError) {
-              console.error(
-                `[Forms Notifications Batch] Error creating daily notification for client ${client.id}:`,
-                notifError
-              );
-              errors.push(`Client ${client.id}: ${notifError.message}`);
-            } else {
-              dailyCreated++;
             }
           }
+
+          triggered += await insertNotificationsResilient(
+            supabase,
+            habitInsertRows,
+            errors
+          );
         }
-      } catch (clientError) {
-        console.error(
-          `[Forms Notifications Batch] Error processing client ${client.id}:`,
-          clientError
-        );
-        errors.push(`Client ${client.id}: ${clientError}`);
       }
     }
 
-    const totalCreated = weeklyCreated + dailyCreated;
+    const skipped = skippedDuplicates + skippedNotDue;
 
     console.log(
-      `[Forms Notifications Batch] Completed: ${totalCreated} notifications created (${weeklyCreated} weekly, ${dailyCreated} daily)`
+      `[FormNotifications:Cron] Created ${triggered} notifications, skipped ${skippedDuplicates} (duplicates), skipped ${skippedNotDue} (not due)`
     );
 
     return NextResponse.json({
       success: true,
-      message: `Created ${totalCreated} notifications`,
-      weekly: weeklyCreated,
-      daily: dailyCreated,
-      errors: errors.length > 0 ? errors : undefined,
+      triggered,
+      skipped,
+      errors,
     });
   } catch (error) {
-    console.error("[Forms Notifications Batch] Unexpected error:", error);
+    console.error("[FormNotifications:Cron] Unexpected error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
-      { success: false, error: "Error interno del servidor" },
+      {
+        success: false,
+        triggered: 0,
+        skipped: 0,
+        errors: [msg],
+      },
       { status: 500 }
     );
   }

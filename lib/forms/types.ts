@@ -9,6 +9,36 @@ export type QuestionType =
   | "group";
 export type FormType = "checkins" | "habits";
 
+export type CheckInFrequency = "weekly" | "biweekly" | "custom";
+
+/**
+ * Check-in cadence stored in `client_form_configs.schedule` (JSONB).
+ * `days_of_week` uses 0 = Sunday through 6 = Saturday (JavaScript convention).
+ */
+export interface CheckInSchedule {
+  frequency: CheckInFrequency;
+  times_per_week: number;
+  days_of_week: number[];
+  /** Local wall time in 24h format, e.g. `"12:00"`. */
+  time: string;
+  /** IANA timezone id, e.g. `"Europe/Madrid"`. */
+  timezone: string;
+  custom_name: string;
+  grace_period_hours: number;
+  enabled: boolean;
+}
+
+export const DEFAULT_CHECKIN_SCHEDULE: CheckInSchedule = {
+  frequency: "weekly",
+  times_per_week: 1,
+  days_of_week: [1],
+  time: "12:00",
+  timezone: "Europe/Madrid",
+  custom_name: "Check-in",
+  grace_period_hours: 48,
+  enabled: true,
+};
+
 export interface FormPage {
   id: string;
   title: string;
@@ -103,6 +133,7 @@ export interface ClientFormConfig {
   questions_config: QuestionConfig[] | FormConfigData;
   uses_template: boolean;
   template_id?: string;
+  schedule?: CheckInSchedule | null;
   created_at: string;
   updated_at: string;
 }

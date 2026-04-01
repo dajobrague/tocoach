@@ -1,9 +1,48 @@
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-import { validateQuestionsConfig } from "@/lib/forms";
+import {
+  validateQuestionsConfig,
+  fetchCheckinsTemplateDefaultSchedule,
+  validateCheckInScheduleInput,
+} from "@/lib/forms";
+import {
+  DEFAULT_CHECKIN_SCHEDULE,
+  getScheduleOrDefault,
+} from "@/lib/forms/schedule";
+
+function resolveCheckinScheduleForConfigResponse(
+  clientSchedule: unknown | null | undefined,
+  templateDefaultSchedule: unknown | null | undefined
+): {
+  schedule: CheckInSchedule;
+  schedule_source: "client" | "template" | "default";
+} {
+  if (clientSchedule != null) {
+    return {
+      schedule: getScheduleOrDefault(clientSchedule as CheckInSchedule),
+      schedule_source: "client",
+    };
+  }
+
+  if (templateDefaultSchedule != null) {
+    return {
+      schedule: getScheduleOrDefault(
+        templateDefaultSchedule as CheckInSchedule
+      ),
+      schedule_source: "template",
+    };
+  }
+
+  return {
+    schedule: getScheduleOrDefault(DEFAULT_CHECKIN_SCHEDULE),
+    schedule_source: "default",
+  };
+}
 
 /**
  * GET /api/forms/configs/[clientId]?form_type=checkins|habits
@@ -147,7 +186,7 @@ export async function GET(
       // Look for the tenant's active template for this form type
       const { data: template, error: templateError } = await supabase
         .from("form_templates")
-        .select("id, questions_config")
+        .select("id, questions_config, default_schedule")
         .eq("tenant_host", tenantHost)
         .eq("form_type", formType)
         .eq("is_active", true)
@@ -218,9 +257,35 @@ export async function GET(
       config = newConfig;
     }
 
+    let schedulePayload: {
+      schedule: CheckInSchedule | null;
+      schedule_source: "client" | "template" | "default" | null;
+    };
+
+    if (formType === "checkins") {
+      const templateDefault = await fetchCheckinsTemplateDefaultSchedule(
+        supabase,
+        tenantHost,
+        config.template_id
+      );
+      const resolved = resolveCheckinScheduleForConfigResponse(
+        config.schedule,
+        templateDefault
+      );
+
+      schedulePayload = {
+        schedule: resolved.schedule,
+        schedule_source: resolved.schedule_source,
+      };
+    } else {
+      schedulePayload = { schedule: null, schedule_source: null };
+    }
+
     return NextResponse.json({
       success: true,
       config,
+      schedule: schedulePayload.schedule,
+      schedule_source: schedulePayload.schedule_source,
     });
   } catch (error) {
     console.error("[Forms Configs] Unexpected error:", error);
@@ -319,7 +384,12 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { form_type, questions_config, uses_template } = body;
+    const {
+      form_type,
+      questions_config,
+      uses_template,
+      schedule: bodySchedule,
+    } = body;
 
     // Validate required fields
     if (!form_type || (form_type !== "checkins" && form_type !== "habits")) {
@@ -350,6 +420,49 @@ export async function PUT(
       );
     }
 
+    let validatedScheduleBody: CheckInSchedule | undefined;
+
+    if (bodySchedule !== undefined) {
+      if (form_type !== "checkins") {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "El horario solo puede actualizarse para formularios de tipo checkins.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const scheduleValidation = validateCheckInScheduleInput(bodySchedule);
+
+      if (!scheduleValidation.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Horario inválido",
+            errors: scheduleValidation.errors,
+          },
+          { status: 400 }
+        );
+      }
+
+      validatedScheduleBody = scheduleValidation.value;
+    }
+
+    const { data: existingRow } = await supabase
+      .from("client_form_configs")
+      .select("schedule")
+      .eq("client_id", clientId)
+      .eq("form_type", form_type)
+      .eq("tenant_host", tenantHost)
+      .maybeSingle();
+
+    const nextSchedule: unknown =
+      validatedScheduleBody !== undefined
+        ? validatedScheduleBody
+        : (existingRow?.schedule ?? null);
+
     const { data: config, error } = await supabase
       .from("client_form_configs")
       .upsert(
@@ -359,6 +472,7 @@ export async function PUT(
           form_type,
           questions_config,
           uses_template: uses_template !== undefined ? uses_template : false,
+          schedule: nextSchedule,
         },
         { onConflict: "client_id,form_type" }
       )
@@ -374,9 +488,29 @@ export async function PUT(
       );
     }
 
+    let schedule: CheckInSchedule | null = null;
+    let schedule_source: "client" | "template" | "default" | null = null;
+
+    if (form_type === "checkins") {
+      const templateDefault = await fetchCheckinsTemplateDefaultSchedule(
+        supabase,
+        tenantHost,
+        config.template_id
+      );
+      const resolved = resolveCheckinScheduleForConfigResponse(
+        config.schedule,
+        templateDefault
+      );
+
+      schedule = resolved.schedule;
+      schedule_source = resolved.schedule_source;
+    }
+
     return NextResponse.json({
       success: true,
       config,
+      schedule,
+      schedule_source,
     });
   } catch (error) {
     console.error("[Forms Configs] Unexpected error:", error);

@@ -3,9 +3,217 @@
 
 import type {
   NutritionIngredient,
+  NutritionMealOptionWithIngredients,
   NutritionMealWithIngredients,
+  NutritionPlanMode,
   NutritionPlanWithDays,
 } from "@/types/nutrition";
+
+function addIngredientToMealNested(
+  meal: NutritionMealWithIngredients,
+  ingredient: NutritionIngredient
+): NutritionMealWithIngredients {
+  const primary = meal.options[0];
+  const targetOptionId = primary?.id ?? ingredient.option_id;
+  const resolved: NutritionIngredient = {
+    ...ingredient,
+    option_id: ingredient.option_id || targetOptionId,
+  };
+  const nextIngredients = [...meal.ingredients, resolved];
+  const nextOptions =
+    meal.options.length === 0
+      ? [
+          {
+            id: targetOptionId,
+            meal_id: meal.id,
+            name: "Opción 1",
+            option_order: 1,
+            protein: null,
+            carbs: null,
+            fats: null,
+            calories: null,
+            image_url: null,
+            created_at: resolved.created_at,
+            updated_at: resolved.updated_at,
+            ingredients: [resolved],
+          },
+        ]
+      : meal.options.map((opt) =>
+          opt.id === targetOptionId
+            ? { ...opt, ingredients: [...opt.ingredients, resolved] }
+            : opt
+        );
+
+  return { ...meal, ingredients: nextIngredients, options: nextOptions };
+}
+
+function removeIngredientFromMealNested(
+  meal: NutritionMealWithIngredients,
+  ingredientId: string
+): NutritionMealWithIngredients {
+  return {
+    ...meal,
+    ingredients: meal.ingredients.filter((i) => i.id !== ingredientId),
+    options: meal.options.map((opt) => ({
+      ...opt,
+      ingredients: opt.ingredients.filter((i) => i.id !== ingredientId),
+    })),
+  };
+}
+
+function replaceIngredientInMealNested(
+  meal: NutritionMealWithIngredients,
+  tempId: string,
+  real: NutritionIngredient
+): NutritionMealWithIngredients {
+  return {
+    ...meal,
+    ingredients: meal.ingredients.map((i) => (i.id === tempId ? real : i)),
+    options: meal.options.map((opt) => ({
+      ...opt,
+      ingredients: opt.ingredients.map((i) => (i.id === tempId ? real : i)),
+    })),
+  };
+}
+
+type MacroTotals = {
+  protein: number;
+  carbs: number;
+  fats: number;
+  calories: number;
+};
+
+function sumIngredientMacros(ingredients: NutritionIngredient[]): MacroTotals {
+  return ingredients.reduce(
+    (acc, ing) => ({
+      protein: acc.protein + (ing.protein ?? 0),
+      carbs: acc.carbs + (ing.carbs ?? 0),
+      fats: acc.fats + (ing.fats ?? 0),
+      calories: acc.calories + (ing.calories ?? 0),
+    }),
+    { protein: 0, carbs: 0, fats: 0, calories: 0 }
+  );
+}
+
+function optionDisplayMacros(
+  opt: NutritionMealOptionWithIngredients
+): MacroTotals {
+  const fromIng = sumIngredientMacros(opt.ingredients);
+  const hasDetail =
+    fromIng.protein > 0 ||
+    fromIng.carbs > 0 ||
+    fromIng.fats > 0 ||
+    fromIng.calories > 0;
+
+  if (hasDetail) return fromIng;
+
+  return {
+    protein: Number(opt.protein) || 0,
+    carbs: Number(opt.carbs) || 0,
+    fats: Number(opt.fats) || 0,
+    calories: Number(opt.calories) || 0,
+  };
+}
+
+function mealOptionMacroRanges(meal: NutritionMealWithIngredients): {
+  protein: [number, number];
+  carbs: [number, number];
+  fats: [number, number];
+  calories: [number, number];
+} | null {
+  if (meal.options.length < 2) return null;
+  const rows = meal.options.map(optionDisplayMacros);
+  const mm = (key: keyof MacroTotals): [number, number] => {
+    const vals = rows.map((r) => r[key]);
+
+    return [Math.min(...vals), Math.max(...vals)];
+  };
+
+  return {
+    protein: mm("protein"),
+    carbs: mm("carbs"),
+    fats: mm("fats"),
+    calories: mm("calories"),
+  };
+}
+
+function formatMacroRange(
+  [min, max]: [number, number],
+  decimals: number,
+  suffix: string
+): string {
+  if (min === max) return `${min.toFixed(decimals)}${suffix}`;
+
+  return `${min.toFixed(decimals)}–${max.toFixed(decimals)}${suffix}`;
+}
+
+function nextAlternativeOptionName(meal: NutritionMealWithIngredients): string {
+  const letter = String.fromCharCode(65 + meal.options.length);
+
+  return `Opción ${letter}`;
+}
+
+function isMultiOptionMeal(meal: NutritionMealWithIngredients): boolean {
+  return meal.options.length > 1;
+}
+
+/** Build option shape from POST/PATCH API row (snake_case fields). */
+function normalizeOptionRowFromApi(
+  raw: Record<string, unknown>
+): NutritionMealOptionWithIngredients {
+  return {
+    id: String(raw.id ?? ""),
+    meal_id: String(raw.meal_id ?? ""),
+    name: String(raw.name ?? ""),
+    option_order: Number(raw.option_order ?? 0),
+    protein:
+      raw.protein !== undefined && raw.protein !== null
+        ? Number(raw.protein)
+        : null,
+    carbs:
+      raw.carbs !== undefined && raw.carbs !== null ? Number(raw.carbs) : null,
+    fats: raw.fats !== undefined && raw.fats !== null ? Number(raw.fats) : null,
+    calories:
+      raw.calories !== undefined && raw.calories !== null
+        ? Number(raw.calories)
+        : null,
+    image_url:
+      raw.image_url != null && String(raw.image_url).trim() !== ""
+        ? String(raw.image_url)
+        : null,
+    created_at: String(raw.created_at ?? ""),
+    updated_at: String(raw.updated_at ?? ""),
+    ingredients: [],
+  };
+}
+
+function mapPlanWithNewOption(
+  plan: NutritionPlanWithDays,
+  mealId: string,
+  rawOption: Record<string, unknown>
+): NutritionPlanWithDays {
+  const newOption = normalizeOptionRowFromApi(rawOption);
+
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      meals: day.meals.map((meal) => {
+        if (meal.id !== mealId) return meal;
+        const nextOptions = [...meal.options, newOption].sort(
+          (a, b) => a.option_order - b.option_order
+        );
+
+        return {
+          ...meal,
+          has_alternatives: nextOptions.length > 1,
+          options: nextOptions,
+          ingredients: nextOptions.flatMap((o) => o.ingredients),
+        };
+      }),
+    })),
+  };
+}
 
 import {
   Badge,
@@ -21,10 +229,12 @@ import {
   ModalBody,
   ModalContent,
   ModalFooter,
+  Divider,
   ModalHeader,
   Select,
   SelectItem,
   Spinner,
+  Switch,
   Tab,
   Tabs,
   Textarea,
@@ -47,14 +257,26 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { NutritionPlanPdfBlock } from "@/components/dashboard/nutrition-plan-pdf-block";
+import { MealImageTrainerField } from "@/components/dashboard/nutrition-trainer-meal-image-field";
+import { OptionImageTrainerField } from "@/components/dashboard/nutrition-trainer-option-image-field";
 import SaveNutritionTemplateModal from "@/components/dashboard/save-nutrition-template-modal";
 import { NutritionProgressView } from "@/components/dashboard/client-profile/tabs/progress/nutrition-section";
 
 interface NutritionTabProps {
   clientId: string;
 }
+
+type WeeklyOptionSelectionRow = {
+  id: string;
+  selected_date: string;
+  meal_id: string;
+  option_id: string;
+  meal_label: string;
+  option_name: string;
+};
 
 // Helper to auto-detect weekdays from Spanish day names
 const detectWeekdaysFromLabel = (label: string): number[] => {
@@ -156,9 +378,39 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     "create"
   );
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [addingIngredientToMeal, setAddingIngredientToMeal] = useState<
+  const [addingIngredientContext, setAddingIngredientContext] = useState<{
+    mealId: string;
+    optionId: string;
+  } | null>(null);
+
+  const [mealActiveOptionTab, setMealActiveOptionTab] = useState<
+    Record<string, string>
+  >({});
+
+  const [editingOptionName, setEditingOptionName] = useState<string | null>(
+    null
+  );
+  const [editingOptionNameValue, setEditingOptionNameValue] = useState("");
+  const [editingOptionMacrosId, setEditingOptionMacrosId] = useState<
     string | null
   >(null);
+  const [optionMacrosForm, setOptionMacrosForm] = useState({
+    protein: "",
+    carbs: "",
+    fats: "",
+    calories: "",
+  });
+  const [addingAlternativeForMealId, setAddingAlternativeForMealId] = useState<
+    string | null
+  >(null);
+
+  const [optionDeleteConfirm, setOptionDeleteConfirm] = useState<{
+    optionId: string;
+    mealId: string;
+    name: string;
+    ingredientCount: number;
+  } | null>(null);
+  const [optionDeleteLoading, setOptionDeleteLoading] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<string | null>(
     null
   );
@@ -220,6 +472,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     start_date: new Date().toISOString().split("T")[0],
     status: "active" as "active" | "completed" | "paused" | "cancelled",
     notes: "",
+    show_meal_images: true,
   });
 
   const [macrosForm, setMacrosForm] = useState({
@@ -243,6 +496,18 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   });
 
   const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
+
+  const [weeklyOptionSelections, setWeeklyOptionSelections] = useState<
+    WeeklyOptionSelectionRow[]
+  >([]);
+  const [weeklyOptionRange, setWeeklyOptionRange] = useState<{
+    from: string;
+    to: string;
+  } | null>(null);
+  const [weeklyOptionLoading, setWeeklyOptionLoading] = useState(false);
+  const [weeklyPrefsDetailOpen, setWeeklyPrefsDetailOpen] = useState(false);
+
+  const [planModeSaving, setPlanModeSaving] = useState(false);
 
   const toggleMealCollapse = (mealId: string) => {
     setExpandedMeals((prev) => {
@@ -361,6 +626,110 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
+  useEffect(() => {
+    if (!clientId || activeSubTab !== "setup") return;
+
+    let cancelled = false;
+
+    setWeeklyOptionLoading(true);
+
+    void fetch(
+      `/api/clients/${encodeURIComponent(clientId)}/nutrition/option-selections`
+    )
+      .then((r) => r.json())
+      .then(
+        (j: {
+          success?: boolean;
+          data?: WeeklyOptionSelectionRow[];
+          range?: { from: string; to: string };
+        }) => {
+          if (cancelled) return;
+
+          if (j.success && Array.isArray(j.data)) {
+            setWeeklyOptionSelections(j.data);
+            setWeeklyOptionRange(j.range ?? null);
+          } else {
+            setWeeklyOptionSelections([]);
+            setWeeklyOptionRange(null);
+          }
+
+          setWeeklyOptionLoading(false);
+        }
+      )
+      .catch(() => {
+        if (!cancelled) {
+          setWeeklyOptionSelections([]);
+          setWeeklyOptionRange(null);
+          setWeeklyOptionLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, activeSubTab]);
+
+  const weeklyOptionSummaryLines = useMemo(() => {
+    const mealMap = new Map<string, Map<string, number>>();
+
+    for (const r of weeklyOptionSelections) {
+      const ml = r.meal_label?.trim() || "Comida";
+      const on = r.option_name?.trim() || "Opción";
+
+      if (!mealMap.has(ml)) mealMap.set(ml, new Map());
+      const om = mealMap.get(ml)!;
+
+      om.set(on, (om.get(on) || 0) + 1);
+    }
+
+    const lines: string[] = [];
+
+    for (const [meal, opts] of mealMap) {
+      const parts = [...opts.entries()].map(([name, n]) => `${name} ×${n}`);
+
+      lines.push(`${meal}: ${parts.join(" · ")}`);
+    }
+
+    return lines;
+  }, [weeklyOptionSelections]);
+
+  const handlePlanModeChange = async (next: string) => {
+    if (!nutritionPlan) return;
+
+    const allowed: NutritionPlanMode[] = ["structured", "pdf", "hybrid"];
+
+    if (!allowed.includes(next as NutritionPlanMode)) return;
+
+    const mode = next as NutritionPlanMode;
+    const current = nutritionPlan.plan_mode || "structured";
+
+    if (current === mode) return;
+
+    setPlanModeSaving(true);
+
+    try {
+      const res = await fetch(`/api/nutrition/plans/${nutritionPlan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_mode: mode }),
+      });
+      const result = await res.json();
+
+      if (!result.success) {
+        alert(result.error || "Error al guardar el modo del plan");
+
+        return;
+      }
+
+      await refreshPlan();
+    } catch (err) {
+      console.error("Error updating plan mode:", err);
+      alert("Error al guardar el modo del plan");
+    } finally {
+      setPlanModeSaving(false);
+    }
+  };
+
   // Switch between plans
   const handleSwitchPlan = (index: number) => {
     if (index >= 0 && index < allPlans.length) {
@@ -377,6 +746,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       start_date: new Date().toISOString().split("T")[0],
       status: "active",
       notes: "",
+      show_meal_images: true,
     });
     setCreatePlanTab("blank");
     setSelectedTemplateId("");
@@ -411,6 +781,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       start_date: nutritionPlan.start_date,
       status: nutritionPlan.status,
       notes: nutritionPlan.notes || "",
+      show_meal_images: nutritionPlan.show_meal_images !== false,
     });
     setIsPlanModalOpen(true);
   };
@@ -422,6 +793,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       start_date: new Date().toISOString().split("T")[0],
       status: "active",
       notes: "",
+      show_meal_images: true,
     });
   };
 
@@ -472,6 +844,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               start_date: planForm.start_date,
               status: planForm.status,
               notes: planForm.notes,
+              show_meal_images: planForm.show_meal_images,
             }),
           }
         );
@@ -721,9 +1094,13 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   const handleSaveMeal = async () => {
     if (!selectedDayId || !nutritionPlan) return;
 
-    // Create optimistic meal
-    const optimisticMeal = {
-      id: `temp-${Date.now()}`,
+    const mealTs = Date.now();
+    const tempMealId = `temp-meal-${mealTs}`;
+    const tempOptionId = `temp-opt-${mealTs}`;
+    const nowIso = new Date().toISOString();
+
+    const optimisticMeal: NutritionMealWithIngredients = {
+      id: tempMealId,
       nutrition_day_id: selectedDayId,
       tenant_host: nutritionPlan.tenant_host,
       label: mealForm.label,
@@ -733,9 +1110,27 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       carbs: parseFloat(mealForm.carbs) || 0,
       fats: parseFloat(mealForm.fats) || 0,
       calories: parseFloat(mealForm.calories) || 0,
+      has_alternatives: false,
+      image_url: null,
+      options: [
+        {
+          id: tempOptionId,
+          meal_id: tempMealId,
+          name: "Opción 1",
+          option_order: 1,
+          protein: null,
+          carbs: null,
+          fats: null,
+          calories: null,
+          image_url: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+          ingredients: [],
+        },
+      ],
       ingredients: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: nowIso,
+      updated_at: nowIso,
     };
 
     // Optimistically add meal to UI
@@ -866,19 +1261,21 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     });
   };
 
-  // Ingredient handlers - Inline
-  const handleAddIngredientClick = (mealId: string) => {
-    setAddingIngredientToMeal(mealId);
+  // Ingredient handlers - Inline (scoped to option)
+  const handleAddIngredientClick = (mealId: string, optionId: string) => {
+    setAddingIngredientContext({ mealId, optionId });
     setNewIngredient({ name: "", quantity: "", unit: "" });
   };
 
-  const handleSaveNewIngredient = async (mealId: string) => {
-    if (!nutritionPlan) return;
+  const handleSaveNewIngredient = async () => {
+    if (!nutritionPlan || !addingIngredientContext) return;
 
-    // Create optimistic ingredient with temporary ID
-    const optimisticIngredient = {
-      id: `temp-${Date.now()}`,
+    const { mealId, optionId: targetOptionId } = addingIngredientContext;
+
+    const optimisticIngredient: NutritionIngredient = {
+      id: `temp-ing-${Date.now()}`,
       nutrition_meal_id: mealId,
+      option_id: targetOptionId,
       tenant_host: nutritionPlan.tenant_host,
       name: newIngredient.name,
       quantity: newIngredient.quantity,
@@ -888,7 +1285,6 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       updated_at: new Date().toISOString(),
     };
 
-    // Optimistically update UI immediately
     setNutritionPlan((prevPlan) => {
       if (!prevPlan) return prevPlan;
 
@@ -898,27 +1294,22 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           ...day,
           meals: day.meals.map((meal) =>
             meal.id === mealId
-              ? {
-                  ...meal,
-                  ingredients: [...meal.ingredients, optimisticIngredient],
-                }
+              ? addIngredientToMealNested(meal, optimisticIngredient)
               : meal
           ),
         })),
       };
     });
 
-    // Clear form and close add mode
-    setAddingIngredientToMeal(null);
+    setAddingIngredientContext(null);
     setNewIngredient({ name: "", quantity: "", unit: "" });
 
-    // Make API call in background
     try {
       const response = await fetch("/api/nutrition/ingredients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nutrition_meal_id: mealId,
+          optionId: targetOptionId,
           name: optimisticIngredient.name,
           quantity: optimisticIngredient.quantity,
           unit: optimisticIngredient.unit,
@@ -927,8 +1318,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
       const result = await response.json();
 
-      if (result.success) {
-        // Replace optimistic ingredient with real one
+      if (result.success && result.data) {
         setNutritionPlan((prevPlan) => {
           if (!prevPlan) return prevPlan;
 
@@ -938,12 +1328,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               ...day,
               meals: day.meals.map((meal) =>
                 meal.id === mealId
-                  ? {
-                      ...meal,
-                      ingredients: meal.ingredients.map((ing) =>
-                        ing.id === optimisticIngredient.id ? result.data : ing
-                      ),
-                    }
+                  ? replaceIngredientInMealNested(
+                      meal,
+                      optimisticIngredient.id,
+                      result.data as NutritionIngredient
+                    )
                   : meal
               ),
             })),
@@ -966,8 +1355,329 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   };
 
   const handleCancelNewIngredient = () => {
-    setAddingIngredientToMeal(null);
+    setAddingIngredientContext(null);
     setNewIngredient({ name: "", quantity: "", unit: "" });
+  };
+
+  const handleAddAlternative = async (mealId: string) => {
+    const meal = nutritionPlan?.days
+      .flatMap((d) => d.meals)
+      .find((m) => m.id === mealId);
+
+    if (!meal || meal.id.startsWith("temp-")) {
+      alert("Guarda la comida antes de añadir alternativas.");
+
+      return;
+    }
+
+    if (addingAlternativeForMealId === mealId) return;
+
+    const name = nextAlternativeOptionName(meal);
+
+    setAddingAlternativeForMealId(mealId);
+
+    try {
+      const response = await fetch("/api/nutrition/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mealId, name }),
+      });
+      const result = await response.json();
+
+      if (result.success && result.data?.id) {
+        const raw = result.data as Record<string, unknown>;
+
+        setNutritionPlan((prev) =>
+          prev ? mapPlanWithNewOption(prev, mealId, raw) : prev
+        );
+        setAllPlans((prev) =>
+          prev.map((p, i) =>
+            i === selectedPlanIndex ? mapPlanWithNewOption(p, mealId, raw) : p
+          )
+        );
+        setMealActiveOptionTab((prev) => ({
+          ...prev,
+          [mealId]: result.data.id as string,
+        }));
+        void refreshPlan();
+      } else {
+        alert(
+          result.error || "No se pudo crear la alternativa. Intenta de nuevo."
+        );
+      }
+    } catch {
+      alert("Error al crear alternativa.");
+    } finally {
+      setAddingAlternativeForMealId(null);
+    }
+  };
+
+  const handleEditOptionMacrosClick = (
+    opt: NutritionMealOptionWithIngredients
+  ) => {
+    setEditingOptionName(null);
+    const m = optionDisplayMacros(opt);
+
+    setOptionMacrosForm({
+      protein: m.protein.toString(),
+      carbs: m.carbs.toString(),
+      fats: m.fats.toString(),
+      calories: m.calories.toString(),
+    });
+    setEditingOptionMacrosId(opt.id);
+  };
+
+  const handleSaveOptionMacros = async (optionId: string) => {
+    const payload = {
+      protein: parseFloat(optionMacrosForm.protein) || 0,
+      carbs: parseFloat(optionMacrosForm.carbs) || 0,
+      fats: parseFloat(optionMacrosForm.fats) || 0,
+      calories: parseFloat(optionMacrosForm.calories) || 0,
+    };
+
+    try {
+      const response = await fetch(`/api/nutrition/options/${optionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        setEditingOptionMacrosId(null);
+        await refreshPlan();
+      } else {
+        alert(result.error || "Error al guardar macros de la opción");
+      }
+    } catch {
+      alert("Error al guardar macros de la opción");
+    }
+  };
+
+  const handleSaveOptionName = async (optionId: string) => {
+    const trimmed = editingOptionNameValue.trim();
+
+    if (!trimmed) return;
+
+    try {
+      const response = await fetch(`/api/nutrition/options/${optionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        setEditingOptionName(null);
+        await refreshPlan();
+      } else {
+        alert(result.error || "Error al guardar el nombre");
+      }
+    } catch {
+      alert("Error al guardar el nombre");
+    }
+  };
+
+  const handleConfirmDeleteOption = async () => {
+    if (!optionDeleteConfirm) return;
+    setOptionDeleteLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/nutrition/options/${optionDeleteConfirm.optionId}`,
+        { method: "DELETE" }
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setMealActiveOptionTab((prev) => {
+          const next = { ...prev };
+          const mid = optionDeleteConfirm.mealId;
+
+          if (next[mid] === optionDeleteConfirm.optionId) {
+            delete next[mid];
+          }
+
+          return next;
+        });
+        setOptionDeleteConfirm(null);
+        await refreshPlan();
+      } else {
+        alert(result.error || "Error al eliminar la opción");
+      }
+    } catch {
+      alert("Error al eliminar la opción");
+    } finally {
+      setOptionDeleteLoading(false);
+    }
+  };
+
+  const renderIngredientRows = (
+    meal: NutritionMealWithIngredients,
+    option: NutritionMealOptionWithIngredients | undefined
+  ) => {
+    if (!option) {
+      return (
+        <div className="text-sm text-gray-500 py-2">
+          No hay opción de comida. Actualiza la página.
+        </div>
+      );
+    }
+
+    const ingredients = option.ingredients;
+    const isAdding =
+      addingIngredientContext?.mealId === meal.id &&
+      addingIngredientContext?.optionId === option.id;
+
+    return (
+      <div className="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
+        <div className="space-y-2">
+          {ingredients.map((ingredient) => (
+            <div key={ingredient.id}>
+              {editingIngredient === ingredient.id ? (
+                <div className="flex items-center gap-2 py-2 border-b border-gray-100">
+                  <Input
+                    className="flex-1"
+                    data-field="name"
+                    data-ingredient-id={ingredient.id}
+                    defaultValue={ingredient.name}
+                    placeholder="Ingrediente"
+                    size="sm"
+                  />
+                  <Input
+                    className="w-24"
+                    data-field="quantity"
+                    data-ingredient-id={ingredient.id}
+                    defaultValue={ingredient.quantity}
+                    placeholder="Cantidad"
+                    size="sm"
+                  />
+                  <Input
+                    className="w-24"
+                    data-field="unit"
+                    data-ingredient-id={ingredient.id}
+                    defaultValue={ingredient.unit}
+                    placeholder="Unidad"
+                    size="sm"
+                  />
+                  <Button
+                    isIconOnly
+                    color="success"
+                    size="sm"
+                    variant="flat"
+                    onPress={() =>
+                      handleSaveEditIngredient(ingredient.id, ingredient)
+                    }
+                  >
+                    <Icon icon="solar:check-circle-bold" width={18} />
+                  </Button>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="flat"
+                    onPress={handleCancelEditIngredient}
+                  >
+                    <Icon icon="solar:close-circle-bold" width={18} />
+                  </Button>
+                </div>
+              ) : (
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                <div
+                  className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
+                  onClick={() => handleEditIngredientClick(ingredient.id)}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-sm text-gray-900">
+                      {ingredient.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-gray-600">
+                      <span className="font-semibold text-gray-900">
+                        {ingredient.quantity}
+                      </span>{" "}
+                      {ingredient.unit}
+                    </div>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      onPress={() => handleDeleteIngredient(ingredient.id)}
+                    >
+                      <Icon
+                        className="text-gray-400 hover:text-red-600"
+                        icon="solar:trash-bin-trash-linear"
+                        width={16}
+                      />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isAdding ? (
+            <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
+              <Input
+                autoFocus
+                className="flex-1"
+                placeholder="Nombre del ingrediente"
+                size="sm"
+                value={newIngredient.name}
+                onValueChange={(value) =>
+                  setNewIngredient({ ...newIngredient, name: value })
+                }
+              />
+              <Input
+                className="w-24"
+                placeholder="Cantidad"
+                size="sm"
+                value={newIngredient.quantity}
+                onValueChange={(value) =>
+                  setNewIngredient({ ...newIngredient, quantity: value })
+                }
+              />
+              <Input
+                className="w-24"
+                placeholder="Unidad"
+                size="sm"
+                value={newIngredient.unit}
+                onValueChange={(value) =>
+                  setNewIngredient({ ...newIngredient, unit: value })
+                }
+              />
+              <Button
+                isIconOnly
+                color="success"
+                size="sm"
+                variant="flat"
+                onPress={() => handleSaveNewIngredient()}
+              >
+                <Icon icon="solar:check-circle-bold" width={18} />
+              </Button>
+              <Button
+                isIconOnly
+                size="sm"
+                variant="flat"
+                onPress={handleCancelNewIngredient}
+              >
+                <Icon icon="solar:close-circle-bold" width={18} />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="w-full mt-2"
+              size="sm"
+              startContent={<Icon icon="solar:add-circle-linear" width={16} />}
+              variant="light"
+              onPress={() => handleAddIngredientClick(meal.id, option.id)}
+            >
+              Añadir Ingrediente
+            </Button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleEditIngredientClick = (ingredientId: string) => {
@@ -1078,12 +1788,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
             ...prevPlan,
             days: prevPlan.days.map((day) => ({
               ...day,
-              meals: day.meals.map((meal) => ({
-                ...meal,
-                ingredients: meal.ingredients.filter(
-                  (ing) => ing.id !== deleteConfirm.id
-                ),
-              })),
+              meals: day.meals.map((meal) =>
+                removeIngredientFromMealNested(meal, deleteConfirm.id)
+              ),
             })),
           };
         });
@@ -1115,12 +1822,26 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   // Meal macros handlers
   const handleEditMealMacrosClick = (meal: NutritionMealWithIngredients) => {
-    setMacrosForm({
-      protein: meal.protein?.toString() || "0",
-      carbs: meal.carbs?.toString() || "0",
-      fats: meal.fats?.toString() || "0",
-      calories: meal.calories?.toString() || "0",
-    });
+    const primary = meal.options?.[0];
+
+    if (primary && meal.options.length === 1) {
+      const m = optionDisplayMacros(primary);
+
+      setMacrosForm({
+        protein: m.protein.toString(),
+        carbs: m.carbs.toString(),
+        fats: m.fats.toString(),
+        calories: m.calories.toString(),
+      });
+    } else {
+      setMacrosForm({
+        protein: meal.protein?.toString() || "0",
+        carbs: meal.carbs?.toString() || "0",
+        fats: meal.fats?.toString() || "0",
+        calories: meal.calories?.toString() || "0",
+      });
+    }
+
     setEditingMealMacros(meal.id);
   };
 
@@ -1146,6 +1867,34 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       console.log("[Nutrition] Meal macros save response:", result);
 
       if (result.success) {
+        const meal = nutritionPlan?.days
+          .flatMap((d) => d.meals)
+          .find((m) => m.id === mealId);
+
+        if (meal?.options?.length === 1) {
+          const optId = meal.options[0]?.id;
+
+          if (optId) {
+            try {
+              const optRes = await fetch(`/api/nutrition/options/${optId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              const optJson = await optRes.json();
+
+              if (!optJson.success) {
+                console.warn(
+                  "[Nutrition] Option macro sync failed:",
+                  optJson.error
+                );
+              }
+            } catch (syncErr) {
+              console.warn("[Nutrition] Option macro sync error:", syncErr);
+            }
+          }
+        }
+
         await refreshPlan();
         setEditingMealMacros(null);
       } else {
@@ -1643,6 +2392,84 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         </Button>
       </div>
 
+      {/* Client meal-option selections (current week, America/Chicago) */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon
+              className="shrink-0 text-slate-600"
+              icon="solar:checklist-minimalistic-bold"
+              width={22}
+            />
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Preferencias del cliente (esta semana)
+              </h3>
+              {weeklyOptionRange ? (
+                <p className="text-xs text-gray-500">
+                  {weeklyOptionRange.from} → {weeklyOptionRange.to}{" "}
+                  <span className="text-gray-400">(Chicago)</span>
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {weeklyOptionSelections.length > 0 ? (
+            <Button
+              className="shrink-0 font-medium text-gray-700"
+              size="sm"
+              variant="light"
+              onPress={() => setWeeklyPrefsDetailOpen((open) => !open)}
+            >
+              {weeklyPrefsDetailOpen ? "Ocultar detalle" : "Ver por día"}
+            </Button>
+          ) : null}
+        </div>
+        <div className="px-4 py-3">
+          {weeklyOptionLoading ? (
+            <div className="flex justify-center py-4">
+              <Spinner size="sm" />
+            </div>
+          ) : weeklyOptionSelections.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Sin selecciones registradas en este período. El cliente puede
+              indicar qué alternativa tomará desde su app (opcional).
+            </p>
+          ) : (
+            <>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
+                Resumen
+              </p>
+              <ul className="space-y-1.5 text-sm text-gray-800">
+                {weeklyOptionSummaryLines.map((line, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-slate-400">·</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+              {weeklyPrefsDetailOpen ? (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
+                    Por día
+                  </p>
+                  <ul className="max-h-48 space-y-1 overflow-y-auto text-xs text-gray-600">
+                    {weeklyOptionSelections.map((r) => (
+                      <li key={r.id}>
+                        <span className="font-medium text-gray-700">
+                          {r.selected_date}
+                        </span>
+                        {" — "}
+                        {r.meal_label || "Comida"}: {r.option_name || "Opción"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Plan Container Card - Everything is inside */}
       <Card className="border-2 border-slate-300 shadow-lg">
         <CardBody className="p-0">
@@ -1731,954 +2558,1668 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
             </div>
           </div>
 
-          {/* Days Section - Inside Plan Card */}
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">
-                  Días del Plan
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {nutritionPlan.days.length} días configurados
-                </p>
-              </div>
-              <Button
-                className="bg-black text-white font-semibold hover:bg-slate-800"
-                startContent={<Icon icon="solar:add-circle-bold" width={20} />}
-                onPress={handleOpenAddDay}
-              >
-                Añadir Día
-              </Button>
-            </div>
+          {/* Plan mode + optional PDF */}
+          {(() => {
+            const effectiveMode: NutritionPlanMode =
+              nutritionPlan.plan_mode || "structured";
+            const showPdfSection =
+              effectiveMode === "pdf" || effectiveMode === "hybrid";
+            const showStructuredEditor =
+              effectiveMode === "structured" || effectiveMode === "hybrid";
 
-            {/* Days List */}
-            <div className="space-y-3">
-              {nutritionPlan.days.map((day) => (
-                <details key={day.id} className="group">
-                  <summary className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="bg-slate-50 p-2 rounded-lg">
-                        <Icon
-                          className="text-slate-600"
-                          icon="solar:calendar-bold"
-                          width={24}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        {editingDayName === day.id ? (
-                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                          <div
-                            className="flex items-center gap-2"
-                            onClick={(e) => e.preventDefault()}
-                          >
-                            {}
-                            <Input
-                              autoFocus
-                              className="max-w-xs"
-                              size="sm"
-                              value={editingDayNameValue}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  handleSaveDayName(day.id);
-                                if (e.key === "Escape") setEditingDayName(null);
-                              }}
-                              onValueChange={setEditingDayNameValue}
-                            />
-                            <Button
-                              isIconOnly
-                              color="success"
-                              size="sm"
-                              variant="flat"
-                              onPress={() => handleSaveDayName(day.id)}
-                            >
-                              <Icon icon="solar:check-circle-bold" width={18} />
-                            </Button>
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="flat"
-                              onPress={() => setEditingDayName(null)}
-                            >
-                              <Icon icon="solar:close-circle-bold" width={18} />
-                            </Button>
-                          </div>
-                        ) : (
-                          <h3 className="text-xl font-bold text-gray-900">
-                            {day.day_label}
-                          </h3>
-                        )}
-                        <div className="flex items-center gap-3 mt-1">
-                          <p className="text-sm text-gray-600">
-                            {day.meals.length} comidas
-                          </p>
-                          {day.weekdays && day.weekdays.length > 0 && (
-                            <div className="flex items-center gap-1">
-                              <Icon
-                                className="text-slate-500"
-                                icon="solar:calendar-bold"
-                                width={14}
-                              />
-                              <span className="text-xs text-slate-600 font-medium">
-                                {formatWeekdays(day.weekdays)}
-                              </span>
-                            </div>
-                          )}
-                          {(!day.weekdays || day.weekdays.length === 0) && (
-                            <span className="text-xs text-orange-600 font-medium">
-                              Sin días asignados
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          className="bg-black text-white font-semibold hover:bg-slate-800"
-                          size="sm"
-                          startContent={
-                            <Icon icon="solar:add-circle-bold" width={16} />
-                          }
-                          onPress={(e: any) => {
-                            e?.preventDefault?.();
-                            handleOpenAddMeal(day.id);
-                          }}
-                        >
-                          Añadir Comida
-                        </Button>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="flat"
-                          onPress={(e: any) => {
-                            e?.preventDefault?.();
-                            handleEditDay(day.id);
-                          }}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:pen-linear"
-                            width={18}
-                          />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="flat"
-                          onPress={(e: any) => {
-                            e?.preventDefault?.();
-                            handleDeleteDay(day.id);
-                          }}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:trash-bin-trash-linear"
-                            width={18}
-                          />
-                        </Button>
-                        <Icon
-                          className="text-gray-400 group-open:rotate-180 transition-transform"
-                          icon="solar:alt-arrow-down-linear"
-                          width={20}
-                        />
-                      </div>
-                    </div>
-                  </summary>
-
-                  {/* Weekdays Assignment Section */}
-                  <div className="mt-2 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border-2 border-slate-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Icon
-                          className="text-slate-600"
-                          icon="solar:calendar-bold"
-                          width={20}
-                        />
-                        <h4 className="font-bold text-gray-900">
-                          Días de la Semana
-                        </h4>
-                      </div>
-                      <Button
-                        size="sm"
-                        startContent={
-                          <Icon icon="solar:pen-linear" width={16} />
-                        }
-                        variant="flat"
-                        onPress={() => handleEditWeekdaysClick(day)}
-                      >
-                        Editar Días
-                      </Button>
-                    </div>
-
-                    {editingDayWeekdays === day.id ? (
-                      <div className="p-3 bg-white rounded-lg border border-slate-200">
-                        <p className="text-xs text-gray-600 mb-3">
-                          Selecciona los días de la semana en que este plan
-                          nutricional aplica:
-                        </p>
-                        <div className="grid grid-cols-7 gap-2 mb-3">
-                          {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
-                            <button
-                              key={dayNum}
-                              className={`p-3 rounded-lg border-2 transition-all ${
-                                weekdaysForm.includes(dayNum)
-                                  ? "bg-black border-black text-white"
-                                  : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
-                              }`}
-                              onClick={() => handleToggleWeekday(dayNum)}
-                            >
-                              <div className="text-xs font-bold">
-                                {getWeekdayName(dayNum, true)}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            className="bg-black text-white hover:bg-slate-800"
-                            size="sm"
-                            onPress={() => handleSaveWeekdays(day.id)}
-                          >
-                            Guardar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            onPress={() => setEditingDayWeekdays(null)}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        {day.weekdays && day.weekdays.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {day.weekdays
-                              .sort((a, b) => a - b)
-                              .map((dayNum) => (
-                                <div
-                                  key={dayNum}
-                                  className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg font-medium text-sm"
-                                >
-                                  {getWeekdayName(dayNum)}
-                                </div>
-                              ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-4 bg-orange-50 rounded-lg border border-orange-200">
-                            <Icon
-                              className="text-orange-400 mx-auto mb-2"
-                              icon="solar:calendar-linear"
-                              width={32}
-                            />
-                            <p className="text-sm text-orange-600 font-medium">
-                              No hay días asignados. Haz clic en &quot;Editar
-                              Días&quot; para asignar.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
+            return (
+              <>
+                <div className="px-6 py-5 border-b border-slate-200 bg-white">
+                  <div className="mb-3">
+                    <h4 className="text-sm font-semibold text-slate-900 tracking-tight">
+                      Formato del plan
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Selecciona cómo se mostrará este plan
+                    </p>
                   </div>
+                  <div
+                    aria-label="Formato del plan"
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                    role="radiogroup"
+                  >
+                    {(
+                      [
+                        {
+                          value: "structured" as const,
+                          icon: "solar:list-bold",
+                          title: "Plan estructurado",
+                          desc: "Días, comidas e ingredientes",
+                        },
+                        {
+                          value: "pdf" as const,
+                          icon: "solar:document-text-bold",
+                          title: "Solo PDF",
+                          desc: "Un documento descargable",
+                        },
+                        {
+                          value: "hybrid" as const,
+                          icon: "solar:documents-bold",
+                          title: "Ambos",
+                          desc: "PDF y plan detallado",
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const selected = effectiveMode === opt.value;
 
-                  {/* Day-level Macros Section */}
-                  <div className="mt-2 p-4 bg-gradient-to-r from-purple-50 to-slate-50 rounded-lg border-2 border-purple-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Icon
-                          className="text-purple-600"
-                          icon="solar:chart-2-bold"
-                          width={20}
-                        />
-                        <h4 className="font-bold text-gray-900">
-                          Macros del Día
-                        </h4>
-                      </div>
-                      <Button
-                        size="sm"
-                        startContent={
-                          <Icon icon="solar:pen-linear" width={16} />
-                        }
-                        variant="flat"
-                        onPress={() => handleEditDayMacrosClick(day)}
-                      >
-                        Editar Macros del Día
-                      </Button>
-                    </div>
-
-                    {editingDayMacros === day.id ? (
-                      <div className="p-3 bg-white rounded-lg border border-purple-200">
-                        <div className="grid grid-cols-4 gap-2 mb-2">
-                          <Input
-                            label="Proteína (g)"
-                            size="sm"
-                            type="number"
-                            value={dayMacrosForm.protein}
-                            onValueChange={(value) =>
-                              setDayMacrosForm({
-                                ...dayMacrosForm,
-                                protein: value,
-                              })
+                      return (
+                        <button
+                          key={opt.value}
+                          aria-checked={selected}
+                          className={`
+                            group relative flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200
+                            outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white
+                            ${
+                              selected
+                                ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                             }
-                          />
-                          <Input
-                            label="Carbohidratos (g)"
-                            size="sm"
-                            type="number"
-                            value={dayMacrosForm.carbs}
-                            onValueChange={(value) =>
-                              setDayMacrosForm({
-                                ...dayMacrosForm,
-                                carbs: value,
-                              })
-                            }
-                          />
-                          <Input
-                            label="Grasas (g)"
-                            size="sm"
-                            type="number"
-                            value={dayMacrosForm.fats}
-                            onValueChange={(value) =>
-                              setDayMacrosForm({
-                                ...dayMacrosForm,
-                                fats: value,
-                              })
-                            }
-                          />
-                          <Input
-                            label="Calorías"
-                            size="sm"
-                            type="number"
-                            value={dayMacrosForm.calories}
-                            onValueChange={(value) =>
-                              setDayMacrosForm({
-                                ...dayMacrosForm,
-                                calories: value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            className="bg-black text-white hover:bg-slate-800"
-                            size="sm"
-                            onPress={() => handleSaveDayMacros(day.id)}
-                          >
-                            Guardar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            onPress={() => setEditingDayMacros(null)}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        {(() => {
-                          // Smart display: show manual values if set, otherwise calculate from meals
-                          const hasManualMacros =
-                            day.protein > 0 ||
-                            day.carbs > 0 ||
-                            day.fats > 0 ||
-                            day.calories > 0;
-                          const mealTotals = calculateMealTotals(day.meals);
-                          const displayValues = hasManualMacros
-                            ? {
-                                protein: day.protein || 0,
-                                carbs: day.carbs || 0,
-                                fats: day.fats || 0,
-                                calories: day.calories || 0,
+                            ${planModeSaving ? "opacity-55 pointer-events-none cursor-wait" : "cursor-pointer"}
+                          `}
+                          disabled={planModeSaving}
+                          role="radio"
+                          type="button"
+                          onClick={() => void handlePlanModeChange(opt.value)}
+                        >
+                          <span
+                            className={`
+                              flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors
+                              ${
+                                selected
+                                  ? "border-white/20 bg-white/10 text-white"
+                                  : "border-slate-200 bg-slate-100 text-slate-600 group-hover:bg-slate-200"
                               }
-                            : mealTotals;
+                            `}
+                          >
+                            <Icon icon={opt.icon} width={22} />
+                          </span>
+                          <span className="min-w-0 flex-1 pt-0.5">
+                            <span className="block text-sm font-semibold leading-snug">
+                              {opt.title}
+                            </span>
+                            <span
+                              className={`mt-0.5 block text-xs leading-relaxed ${selected ? "text-white/75" : "text-slate-500"}`}
+                            >
+                              {opt.desc}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {planModeSaving && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                      <Spinner size="sm" />
+                      Guardando…
+                    </div>
+                  )}
 
-                          return (
-                            <div className="flex items-center gap-3">
-                              <div className="bg-purple-100 px-3 py-2 rounded-lg">
-                                <span className="text-xs text-purple-700 font-medium">
-                                  Proteína:
-                                </span>
-                                <span className="text-base font-bold text-purple-900 ml-1">
-                                  {displayValues.protein.toFixed(1)}g
-                                </span>
+                  {showPdfSection && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-semibold text-gray-800 mb-3">
+                        Documento PDF
+                      </h4>
+                      <NutritionPlanPdfBlock
+                        pdfName={nutritionPlan.pdf_name}
+                        pdfUrl={nutritionPlan.pdf_url}
+                        planId={nutritionPlan.id}
+                        onSuccess={refreshPlan}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {showStructuredEditor && showPdfSection && (
+                  <Divider className="my-0" />
+                )}
+
+                {/* Days Section - Inside Plan Card */}
+                {showStructuredEditor ? (
+                  <div className="p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">
+                          Días del Plan
+                        </h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {nutritionPlan.days.length} días configurados
+                        </p>
+                      </div>
+                      <Button
+                        className="bg-black text-white font-semibold hover:bg-slate-800"
+                        startContent={
+                          <Icon icon="solar:add-circle-bold" width={20} />
+                        }
+                        onPress={handleOpenAddDay}
+                      >
+                        Añadir Día
+                      </Button>
+                    </div>
+
+                    {/* Days List */}
+                    <div className="space-y-3">
+                      {nutritionPlan.days.map((day) => (
+                        <details key={day.id} className="group">
+                          <summary className="flex items-center justify-between cursor-pointer list-none p-4 bg-white border border-gray-200 rounded-lg hover:border-slate-300 transition-colors">
+                            <div className="flex items-center gap-4 flex-1">
+                              <div className="bg-slate-50 p-2 rounded-lg">
+                                <Icon
+                                  className="text-slate-600"
+                                  icon="solar:calendar-bold"
+                                  width={24}
+                                />
                               </div>
-                              <div className="bg-green-100 px-3 py-2 rounded-lg">
-                                <span className="text-xs text-green-700 font-medium">
-                                  Carbohidratos:
-                                </span>
-                                <span className="text-base font-bold text-green-900 ml-1">
-                                  {displayValues.carbs.toFixed(1)}g
-                                </span>
+                              <div className="flex-1">
+                                {editingDayName === day.id ? (
+                                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                                  <div
+                                    className="flex items-center gap-2"
+                                    onClick={(e) => e.preventDefault()}
+                                  >
+                                    {}
+                                    <Input
+                                      autoFocus
+                                      className="max-w-xs"
+                                      size="sm"
+                                      value={editingDayNameValue}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter")
+                                          handleSaveDayName(day.id);
+                                        if (e.key === "Escape")
+                                          setEditingDayName(null);
+                                      }}
+                                      onValueChange={setEditingDayNameValue}
+                                    />
+                                    <Button
+                                      isIconOnly
+                                      color="success"
+                                      size="sm"
+                                      variant="flat"
+                                      onPress={() => handleSaveDayName(day.id)}
+                                    >
+                                      <Icon
+                                        icon="solar:check-circle-bold"
+                                        width={18}
+                                      />
+                                    </Button>
+                                    <Button
+                                      isIconOnly
+                                      size="sm"
+                                      variant="flat"
+                                      onPress={() => setEditingDayName(null)}
+                                    >
+                                      <Icon
+                                        icon="solar:close-circle-bold"
+                                        width={18}
+                                      />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <h3 className="text-xl font-bold text-gray-900">
+                                    {day.day_label}
+                                  </h3>
+                                )}
+                                <div className="flex items-center gap-3 mt-1">
+                                  <p className="text-sm text-gray-600">
+                                    {day.meals.length} comidas
+                                  </p>
+                                  {day.weekdays && day.weekdays.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <Icon
+                                        className="text-slate-500"
+                                        icon="solar:calendar-bold"
+                                        width={14}
+                                      />
+                                      <span className="text-xs text-slate-600 font-medium">
+                                        {formatWeekdays(day.weekdays)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {(!day.weekdays ||
+                                    day.weekdays.length === 0) && (
+                                    <span className="text-xs text-orange-600 font-medium">
+                                      Sin días asignados
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="bg-yellow-100 px-3 py-2 rounded-lg">
-                                <span className="text-xs text-yellow-700 font-medium">
-                                  Grasas:
-                                </span>
-                                <span className="text-base font-bold text-yellow-900 ml-1">
-                                  {displayValues.fats.toFixed(1)}g
-                                </span>
-                              </div>
-                              <div className="bg-red-100 px-3 py-2 rounded-lg">
-                                <span className="text-xs text-red-700 font-medium">
-                                  Calorías:
-                                </span>
-                                <span className="text-base font-bold text-red-900 ml-1">
-                                  {displayValues.calories.toFixed(0)} kcal
-                                </span>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  className="bg-black text-white font-semibold hover:bg-slate-800"
+                                  size="sm"
+                                  startContent={
+                                    <Icon
+                                      icon="solar:add-circle-bold"
+                                      width={16}
+                                    />
+                                  }
+                                  onPress={(e: any) => {
+                                    e?.preventDefault?.();
+                                    handleOpenAddMeal(day.id);
+                                  }}
+                                >
+                                  Añadir Comida
+                                </Button>
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="flat"
+                                  onPress={(e: any) => {
+                                    e?.preventDefault?.();
+                                    handleEditDay(day.id);
+                                  }}
+                                >
+                                  <Icon
+                                    className="text-gray-600"
+                                    icon="solar:pen-linear"
+                                    width={18}
+                                  />
+                                </Button>
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="flat"
+                                  onPress={(e: any) => {
+                                    e?.preventDefault?.();
+                                    handleDeleteDay(day.id);
+                                  }}
+                                >
+                                  <Icon
+                                    className="text-gray-600"
+                                    icon="solar:trash-bin-trash-linear"
+                                    width={18}
+                                  />
+                                </Button>
+                                <Icon
+                                  className="text-gray-400 group-open:rotate-180 transition-transform"
+                                  icon="solar:alt-arrow-down-linear"
+                                  width={20}
+                                />
                               </div>
                             </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
+                          </summary>
 
-                  {/* Meals - Collapsed Content */}
-                  <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="space-y-3">
-                      {day.meals.length === 0 ? (
-                        <div className="text-center py-8">
-                          <Icon
-                            className="text-gray-300 mx-auto mb-2"
-                            icon="solar:dish-linear"
-                            width={48}
-                          />
-                          <p className="text-sm text-gray-500">
-                            No hay comidas en este día
-                          </p>
-                          <Button
-                            className="mt-3 bg-black text-white font-semibold hover:bg-slate-800"
-                            size="sm"
-                            startContent={
-                              <Icon icon="solar:add-circle-bold" width={16} />
-                            }
-                            onPress={() => handleOpenAddMeal(day.id)}
-                          >
-                            Añadir Primera Comida
-                          </Button>
-                        </div>
-                      ) : (
-                        <DndContext
-                          collisionDetection={closestCenter}
-                          sensors={mealDndSensors}
-                          onDragEnd={(event) =>
-                            handleMealDragEnd(day.id, event)
-                          }
-                        >
-                          <SortableContext
-                            items={day.meals.map((m) => m.id)}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            {day.meals.map((meal) => (
-                              <SortableMealItem key={meal.id} id={meal.id}>
-                                {({ attributes, listeners }) => (
-                                  <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                    {/* Meal Header */}
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        <button
-                                          className="cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-600 p-0.5 -ml-1 flex-shrink-0"
-                                          type="button"
-                                          {...attributes}
-                                          {...listeners}
-                                        >
-                                          <Icon
-                                            icon="solar:hamburger-menu-linear"
-                                            width={18}
-                                          />
-                                        </button>
-                                        <button
-                                          className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                                          type="button"
-                                          onClick={() =>
-                                            toggleMealCollapse(meal.id)
-                                          }
-                                        >
-                                          <Icon
-                                            className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${expandedMeals.has(meal.id) ? "rotate-90" : ""}`}
-                                            icon="solar:alt-arrow-right-bold"
-                                            width={16}
-                                          />
-                                          <Icon
-                                            className="text-slate-600 flex-shrink-0"
-                                            icon="solar:dish-bold"
-                                            width={20}
-                                          />
-                                          {editingMealName === meal.id ? (
-                                            <div
-                                              className="flex items-center gap-2 flex-1"
-                                              onClick={(e) =>
-                                                e.stopPropagation()
-                                              }
-                                            >
-                                              {}
-                                              <Input
-                                                autoFocus
-                                                className="max-w-xs"
-                                                size="sm"
-                                                value={editingMealNameValue}
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter")
-                                                    handleSaveMealName(meal.id);
-                                                  if (e.key === "Escape")
-                                                    setEditingMealName(null);
-                                                }}
-                                                onValueChange={
-                                                  setEditingMealNameValue
-                                                }
-                                              />
-                                              <Button
-                                                isIconOnly
-                                                color="success"
-                                                size="sm"
-                                                variant="flat"
-                                                onPress={() =>
-                                                  handleSaveMealName(meal.id)
-                                                }
-                                              >
-                                                <Icon
-                                                  icon="solar:check-circle-bold"
-                                                  width={18}
-                                                />
-                                              </Button>
-                                              <Button
-                                                isIconOnly
-                                                size="sm"
-                                                variant="flat"
-                                                onPress={() =>
-                                                  setEditingMealName(null)
-                                                }
-                                              >
-                                                <Icon
-                                                  icon="solar:close-circle-bold"
-                                                  width={18}
-                                                />
-                                              </Button>
-                                            </div>
-                                          ) : (
-                                            <h4 className="font-bold text-gray-900 truncate">
-                                              {meal.label}
-                                            </h4>
-                                          )}
-                                        </button>
+                          {/* Weekdays Assignment Section */}
+                          <div className="mt-2 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border-2 border-slate-200">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Icon
+                                  className="text-slate-600"
+                                  icon="solar:calendar-bold"
+                                  width={20}
+                                />
+                                <h4 className="font-bold text-gray-900">
+                                  Días de la Semana
+                                </h4>
+                              </div>
+                              <Button
+                                size="sm"
+                                startContent={
+                                  <Icon icon="solar:pen-linear" width={16} />
+                                }
+                                variant="flat"
+                                onPress={() => handleEditWeekdaysClick(day)}
+                              >
+                                Editar Días
+                              </Button>
+                            </div>
+
+                            {editingDayWeekdays === day.id ? (
+                              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                                <p className="text-xs text-gray-600 mb-3">
+                                  Selecciona los días de la semana en que este
+                                  plan nutricional aplica:
+                                </p>
+                                <div className="grid grid-cols-7 gap-2 mb-3">
+                                  {[0, 1, 2, 3, 4, 5, 6].map((dayNum) => (
+                                    <button
+                                      key={dayNum}
+                                      className={`p-3 rounded-lg border-2 transition-all ${
+                                        weekdaysForm.includes(dayNum)
+                                          ? "bg-black border-black text-white"
+                                          : "bg-white border-gray-200 text-gray-700 hover:border-slate-300"
+                                      }`}
+                                      onClick={() =>
+                                        handleToggleWeekday(dayNum)
+                                      }
+                                    >
+                                      <div className="text-xs font-bold">
+                                        {getWeekdayName(dayNum, true)}
                                       </div>
-                                      <div className="flex items-center gap-2 flex-shrink-0">
-                                        {!expandedMeals.has(meal.id) && (
-                                          <span className="text-xs text-gray-400 hidden sm:inline">
-                                            {meal.protein || 0}P ·{" "}
-                                            {meal.carbs || 0}C ·{" "}
-                                            {meal.fats || 0}G ·{" "}
-                                            {meal.calories || 0} kcal
-                                          </span>
-                                        )}
-                                        <Button
-                                          isIconOnly
-                                          size="sm"
-                                          variant="flat"
-                                          onPress={() =>
-                                            handleEditMeal(meal.id)
-                                          }
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    className="bg-black text-white hover:bg-slate-800"
+                                    size="sm"
+                                    onPress={() => handleSaveWeekdays(day.id)}
+                                  >
+                                    Guardar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="flat"
+                                    onPress={() => setEditingDayWeekdays(null)}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                {day.weekdays && day.weekdays.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {day.weekdays
+                                      .sort((a, b) => a - b)
+                                      .map((dayNum) => (
+                                        <div
+                                          key={dayNum}
+                                          className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg font-medium text-sm"
                                         >
-                                          <Icon
-                                            className="text-gray-600"
-                                            icon="solar:pen-linear"
-                                            width={16}
-                                          />
-                                        </Button>
-                                        <Button
-                                          isIconOnly
-                                          size="sm"
-                                          variant="flat"
-                                          onPress={() =>
-                                            handleDeleteMeal(meal.id)
-                                          }
-                                        >
-                                          <Icon
-                                            className="text-gray-600"
-                                            icon="solar:trash-bin-trash-linear"
-                                            width={16}
-                                          />
-                                        </Button>
+                                          {getWeekdayName(dayNum)}
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 bg-orange-50 rounded-lg border border-orange-200">
+                                    <Icon
+                                      className="text-orange-400 mx-auto mb-2"
+                                      icon="solar:calendar-linear"
+                                      width={32}
+                                    />
+                                    <p className="text-sm text-orange-600 font-medium">
+                                      No hay días asignados. Haz clic en
+                                      &quot;Editar Días&quot; para asignar.
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Day-level Macros Section */}
+                          <div className="mt-2 p-4 bg-gradient-to-r from-purple-50 to-slate-50 rounded-lg border-2 border-purple-200">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Icon
+                                  className="text-purple-600"
+                                  icon="solar:chart-2-bold"
+                                  width={20}
+                                />
+                                <h4 className="font-bold text-gray-900">
+                                  Macros del Día
+                                </h4>
+                              </div>
+                              <Button
+                                size="sm"
+                                startContent={
+                                  <Icon icon="solar:pen-linear" width={16} />
+                                }
+                                variant="flat"
+                                onPress={() => handleEditDayMacrosClick(day)}
+                              >
+                                Editar Macros del Día
+                              </Button>
+                            </div>
+
+                            {editingDayMacros === day.id ? (
+                              <div className="p-3 bg-white rounded-lg border border-purple-200">
+                                <div className="grid grid-cols-4 gap-2 mb-2">
+                                  <Input
+                                    label="Proteína (g)"
+                                    size="sm"
+                                    type="number"
+                                    value={dayMacrosForm.protein}
+                                    onValueChange={(value) =>
+                                      setDayMacrosForm({
+                                        ...dayMacrosForm,
+                                        protein: value,
+                                      })
+                                    }
+                                  />
+                                  <Input
+                                    label="Carbohidratos (g)"
+                                    size="sm"
+                                    type="number"
+                                    value={dayMacrosForm.carbs}
+                                    onValueChange={(value) =>
+                                      setDayMacrosForm({
+                                        ...dayMacrosForm,
+                                        carbs: value,
+                                      })
+                                    }
+                                  />
+                                  <Input
+                                    label="Grasas (g)"
+                                    size="sm"
+                                    type="number"
+                                    value={dayMacrosForm.fats}
+                                    onValueChange={(value) =>
+                                      setDayMacrosForm({
+                                        ...dayMacrosForm,
+                                        fats: value,
+                                      })
+                                    }
+                                  />
+                                  <Input
+                                    label="Calorías"
+                                    size="sm"
+                                    type="number"
+                                    value={dayMacrosForm.calories}
+                                    onValueChange={(value) =>
+                                      setDayMacrosForm({
+                                        ...dayMacrosForm,
+                                        calories: value,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    className="bg-black text-white hover:bg-slate-800"
+                                    size="sm"
+                                    onPress={() => handleSaveDayMacros(day.id)}
+                                  >
+                                    Guardar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="flat"
+                                    onPress={() => setEditingDayMacros(null)}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                {(() => {
+                                  // Smart display: show manual values if set, otherwise calculate from meals
+                                  const hasManualMacros =
+                                    day.protein > 0 ||
+                                    day.carbs > 0 ||
+                                    day.fats > 0 ||
+                                    day.calories > 0;
+                                  const mealTotals = calculateMealTotals(
+                                    day.meals
+                                  );
+                                  const displayValues = hasManualMacros
+                                    ? {
+                                        protein: day.protein || 0,
+                                        carbs: day.carbs || 0,
+                                        fats: day.fats || 0,
+                                        calories: day.calories || 0,
+                                      }
+                                    : mealTotals;
+
+                                  return (
+                                    <div className="flex items-center gap-3">
+                                      <div className="bg-purple-100 px-3 py-2 rounded-lg">
+                                        <span className="text-xs text-purple-700 font-medium">
+                                          Proteína:
+                                        </span>
+                                        <span className="text-base font-bold text-purple-900 ml-1">
+                                          {displayValues.protein.toFixed(1)}g
+                                        </span>
+                                      </div>
+                                      <div className="bg-green-100 px-3 py-2 rounded-lg">
+                                        <span className="text-xs text-green-700 font-medium">
+                                          Carbohidratos:
+                                        </span>
+                                        <span className="text-base font-bold text-green-900 ml-1">
+                                          {displayValues.carbs.toFixed(1)}g
+                                        </span>
+                                      </div>
+                                      <div className="bg-yellow-100 px-3 py-2 rounded-lg">
+                                        <span className="text-xs text-yellow-700 font-medium">
+                                          Grasas:
+                                        </span>
+                                        <span className="text-base font-bold text-yellow-900 ml-1">
+                                          {displayValues.fats.toFixed(1)}g
+                                        </span>
+                                      </div>
+                                      <div className="bg-red-100 px-3 py-2 rounded-lg">
+                                        <span className="text-xs text-red-700 font-medium">
+                                          Calorías:
+                                        </span>
+                                        <span className="text-base font-bold text-red-900 ml-1">
+                                          {displayValues.calories.toFixed(0)}{" "}
+                                          kcal
+                                        </span>
                                       </div>
                                     </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
 
-                                    {/* Collapsible meal body */}
-                                    {expandedMeals.has(meal.id) && (
-                                      <div className="mt-3">
-                                        {/* Meal Macros - Prominent Display */}
-                                        {editingMealMacros === meal.id ? (
-                                          <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="grid grid-cols-4 gap-2 mb-2">
-                                              <Input
-                                                label="Proteína (g)"
-                                                size="sm"
-                                                type="number"
-                                                value={macrosForm.protein}
-                                                onValueChange={(value) =>
-                                                  setMacrosForm({
-                                                    ...macrosForm,
-                                                    protein: value,
-                                                  })
-                                                }
-                                              />
-                                              <Input
-                                                label="Carbohidratos (g)"
-                                                size="sm"
-                                                type="number"
-                                                value={macrosForm.carbs}
-                                                onValueChange={(value) =>
-                                                  setMacrosForm({
-                                                    ...macrosForm,
-                                                    carbs: value,
-                                                  })
-                                                }
-                                              />
-                                              <Input
-                                                label="Grasas (g)"
-                                                size="sm"
-                                                type="number"
-                                                value={macrosForm.fats}
-                                                onValueChange={(value) =>
-                                                  setMacrosForm({
-                                                    ...macrosForm,
-                                                    fats: value,
-                                                  })
-                                                }
-                                              />
-                                              <Input
-                                                label="Calorías"
-                                                size="sm"
-                                                type="number"
-                                                value={macrosForm.calories}
-                                                onValueChange={(value) =>
-                                                  setMacrosForm({
-                                                    ...macrosForm,
-                                                    calories: value,
-                                                  })
-                                                }
-                                              />
-                                            </div>
-                                            <div className="flex gap-2 justify-end">
-                                              <Button
-                                                className="bg-black text-white hover:bg-slate-800"
-                                                size="sm"
-                                                onPress={() =>
-                                                  handleSaveMealMacros(meal.id)
-                                                }
-                                              >
-                                                Guardar
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                variant="flat"
-                                                onPress={() =>
-                                                  setEditingMealMacros(null)
-                                                }
-                                              >
-                                                Cancelar
-                                              </Button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                                          <div
-                                            className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
-                                            onClick={() =>
-                                              handleEditMealMacrosClick(meal)
-                                            }
-                                          >
-                                            <div className="bg-slate-50 px-3 py-1.5 rounded-lg">
-                                              <span className="text-xs text-gray-600">
-                                                Proteína:
-                                              </span>
-                                              <span className="text-sm font-bold text-gray-900 ml-1">
-                                                {meal.protein || 0}g
-                                              </span>
-                                            </div>
-                                            <div className="bg-green-50 px-3 py-1.5 rounded-lg">
-                                              <span className="text-xs text-gray-600">
-                                                Carbohidratos:
-                                              </span>
-                                              <span className="text-sm font-bold text-gray-900 ml-1">
-                                                {meal.carbs || 0}g
-                                              </span>
-                                            </div>
-                                            <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
-                                              <span className="text-xs text-gray-600">
-                                                Grasas:
-                                              </span>
-                                              <span className="text-sm font-bold text-gray-900 ml-1">
-                                                {meal.fats || 0}g
-                                              </span>
-                                            </div>
-                                            <div className="bg-red-50 px-3 py-1.5 rounded-lg">
-                                              <span className="text-xs text-gray-600">
-                                                Calorías:
-                                              </span>
-                                              <span className="text-sm font-bold text-gray-900 ml-1">
-                                                {meal.calories || 0} kcal
-                                              </span>
-                                            </div>
-                                            <Icon
-                                              className="text-gray-400 ml-auto"
-                                              icon="solar:pen-linear"
-                                              width={16}
-                                            />
-                                          </div>
-                                        )}
+                          {/* Meals - Collapsed Content */}
+                          <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="space-y-3">
+                              {day.meals.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <Icon
+                                    className="text-gray-300 mx-auto mb-2"
+                                    icon="solar:dish-linear"
+                                    width={48}
+                                  />
+                                  <p className="text-sm text-gray-500">
+                                    No hay comidas en este día
+                                  </p>
+                                  <Button
+                                    className="mt-3 bg-black text-white font-semibold hover:bg-slate-800"
+                                    size="sm"
+                                    startContent={
+                                      <Icon
+                                        icon="solar:add-circle-bold"
+                                        width={16}
+                                      />
+                                    }
+                                    onPress={() => handleOpenAddMeal(day.id)}
+                                  >
+                                    Añadir Primera Comida
+                                  </Button>
+                                </div>
+                              ) : (
+                                <DndContext
+                                  collisionDetection={closestCenter}
+                                  sensors={mealDndSensors}
+                                  onDragEnd={(event) =>
+                                    handleMealDragEnd(day.id, event)
+                                  }
+                                >
+                                  <SortableContext
+                                    items={day.meals.map((m) => m.id)}
+                                    strategy={verticalListSortingStrategy}
+                                  >
+                                    {day.meals.map((meal) => (
+                                      <SortableMealItem
+                                        key={meal.id}
+                                        id={meal.id}
+                                      >
+                                        {({ attributes, listeners }) => {
+                                          const multiMeal =
+                                            isMultiOptionMeal(meal);
+                                          const macroRanges = multiMeal
+                                            ? mealOptionMacroRanges(meal)
+                                            : null;
+                                          const primaryOption = meal.options[0];
+                                          const activeOptId =
+                                            mealActiveOptionTab[meal.id] ??
+                                            primaryOption?.id ??
+                                            "";
+                                          const activeOption =
+                                            meal.options.find(
+                                              (o) => o.id === activeOptId
+                                            ) ?? primaryOption;
+                                          const singleMacros =
+                                            !multiMeal && primaryOption
+                                              ? optionDisplayMacros(
+                                                  primaryOption
+                                                )
+                                              : null;
 
-                                        {/* Ingredients Table */}
-                                        <div className="bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200">
-                                          <div className="space-y-2">
-                                            {meal.ingredients.map(
-                                              (ingredient) => (
-                                                <div key={ingredient.id}>
-                                                  {editingIngredient ===
-                                                  ingredient.id ? (
-                                                    // Edit mode
-                                                    <div className="flex items-center gap-2 py-2 border-b border-gray-100">
-                                                      <Input
-                                                        className="flex-1"
-                                                        data-field="name"
-                                                        data-ingredient-id={
-                                                          ingredient.id
-                                                        }
-                                                        defaultValue={
-                                                          ingredient.name
-                                                        }
-                                                        placeholder="Ingrediente"
-                                                        size="sm"
-                                                      />
-                                                      <Input
-                                                        className="w-24"
-                                                        data-field="quantity"
-                                                        data-ingredient-id={
-                                                          ingredient.id
-                                                        }
-                                                        defaultValue={
-                                                          ingredient.quantity
-                                                        }
-                                                        placeholder="Cantidad"
-                                                        size="sm"
-                                                      />
-                                                      <Input
-                                                        className="w-24"
-                                                        data-field="unit"
-                                                        data-ingredient-id={
-                                                          ingredient.id
-                                                        }
-                                                        defaultValue={
-                                                          ingredient.unit
-                                                        }
-                                                        placeholder="Unidad"
-                                                        size="sm"
-                                                      />
-                                                      <Button
-                                                        isIconOnly
-                                                        color="success"
-                                                        size="sm"
-                                                        variant="flat"
-                                                        onPress={() =>
-                                                          handleSaveEditIngredient(
-                                                            ingredient.id,
-                                                            ingredient
+                                          return (
+                                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                              <div className="flex gap-3 items-start">
+                                                {!multiMeal &&
+                                                  (primaryOption ? (
+                                                    <OptionImageTrainerField
+                                                      key={primaryOption.id}
+                                                      disabled={
+                                                        meal.id.startsWith(
+                                                          "temp-"
+                                                        ) ||
+                                                        primaryOption.id.startsWith(
+                                                          "temp-"
+                                                        )
+                                                      }
+                                                      imageUrl={
+                                                        primaryOption.image_url
+                                                      }
+                                                      optionId={
+                                                        primaryOption.id
+                                                      }
+                                                      onAfterChange={
+                                                        refreshPlan
+                                                      }
+                                                    />
+                                                  ) : (
+                                                    <MealImageTrainerField
+                                                      disabled={meal.id.startsWith(
+                                                        "temp-"
+                                                      )}
+                                                      imageUrl={meal.image_url}
+                                                      mealId={meal.id}
+                                                      onAfterChange={
+                                                        refreshPlan
+                                                      }
+                                                    />
+                                                  ))}
+                                                <div className="flex-1 min-w-0">
+                                                  {/* Meal Header */}
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                      <button
+                                                        className="cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-600 p-0.5 -ml-1 flex-shrink-0"
+                                                        type="button"
+                                                        {...attributes}
+                                                        {...listeners}
+                                                      >
+                                                        <Icon
+                                                          icon="solar:hamburger-menu-linear"
+                                                          width={18}
+                                                        />
+                                                      </button>
+                                                      <button
+                                                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                                                        type="button"
+                                                        onClick={() =>
+                                                          toggleMealCollapse(
+                                                            meal.id
                                                           )
                                                         }
                                                       >
                                                         <Icon
-                                                          icon="solar:check-circle-bold"
-                                                          width={18}
+                                                          className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${expandedMeals.has(meal.id) ? "rotate-90" : ""}`}
+                                                          icon="solar:alt-arrow-right-bold"
+                                                          width={16}
+                                                        />
+                                                        <Icon
+                                                          className="text-slate-600 flex-shrink-0"
+                                                          icon="solar:dish-bold"
+                                                          width={20}
+                                                        />
+                                                        {editingMealName ===
+                                                        meal.id ? (
+                                                          <div
+                                                            className="flex items-center gap-2 flex-1"
+                                                            onClick={(e) =>
+                                                              e.stopPropagation()
+                                                            }
+                                                          >
+                                                            {}
+                                                            <Input
+                                                              autoFocus
+                                                              className="max-w-xs"
+                                                              size="sm"
+                                                              value={
+                                                                editingMealNameValue
+                                                              }
+                                                              onKeyDown={(
+                                                                e
+                                                              ) => {
+                                                                if (
+                                                                  e.key ===
+                                                                  "Enter"
+                                                                )
+                                                                  handleSaveMealName(
+                                                                    meal.id
+                                                                  );
+                                                                if (
+                                                                  e.key ===
+                                                                  "Escape"
+                                                                )
+                                                                  setEditingMealName(
+                                                                    null
+                                                                  );
+                                                              }}
+                                                              onValueChange={
+                                                                setEditingMealNameValue
+                                                              }
+                                                            />
+                                                            <Button
+                                                              isIconOnly
+                                                              color="success"
+                                                              size="sm"
+                                                              variant="flat"
+                                                              onPress={() =>
+                                                                handleSaveMealName(
+                                                                  meal.id
+                                                                )
+                                                              }
+                                                            >
+                                                              <Icon
+                                                                icon="solar:check-circle-bold"
+                                                                width={18}
+                                                              />
+                                                            </Button>
+                                                            <Button
+                                                              isIconOnly
+                                                              size="sm"
+                                                              variant="flat"
+                                                              onPress={() =>
+                                                                setEditingMealName(
+                                                                  null
+                                                                )
+                                                              }
+                                                            >
+                                                              <Icon
+                                                                icon="solar:close-circle-bold"
+                                                                width={18}
+                                                              />
+                                                            </Button>
+                                                          </div>
+                                                        ) : (
+                                                          <h4 className="font-bold text-gray-900 truncate">
+                                                            {meal.label}
+                                                          </h4>
+                                                        )}
+                                                      </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                      {!expandedMeals.has(
+                                                        meal.id
+                                                      ) && (
+                                                        <span className="text-xs text-gray-400 hidden sm:inline">
+                                                          {macroRanges ? (
+                                                            <>
+                                                              {formatMacroRange(
+                                                                macroRanges.protein,
+                                                                0,
+                                                                "P"
+                                                              )}{" "}
+                                                              ·{" "}
+                                                              {formatMacroRange(
+                                                                macroRanges.carbs,
+                                                                0,
+                                                                "C"
+                                                              )}{" "}
+                                                              ·{" "}
+                                                              {formatMacroRange(
+                                                                macroRanges.fats,
+                                                                0,
+                                                                "G"
+                                                              )}{" "}
+                                                              ·{" "}
+                                                              {formatMacroRange(
+                                                                macroRanges.calories,
+                                                                0,
+                                                                " kcal"
+                                                              )}
+                                                            </>
+                                                          ) : singleMacros ? (
+                                                            <>
+                                                              {Math.round(
+                                                                singleMacros.protein
+                                                              )}
+                                                              P ·{" "}
+                                                              {Math.round(
+                                                                singleMacros.carbs
+                                                              )}
+                                                              C ·{" "}
+                                                              {Math.round(
+                                                                singleMacros.fats
+                                                              )}
+                                                              G ·{" "}
+                                                              {Math.round(
+                                                                singleMacros.calories
+                                                              )}{" "}
+                                                              kcal
+                                                            </>
+                                                          ) : (
+                                                            <>
+                                                              {meal.protein ||
+                                                                0}
+                                                              P ·{" "}
+                                                              {meal.carbs || 0}C
+                                                              · {meal.fats || 0}
+                                                              G ·{" "}
+                                                              {meal.calories ||
+                                                                0}{" "}
+                                                              kcal
+                                                            </>
+                                                          )}
+                                                        </span>
+                                                      )}
+                                                      <Button
+                                                        isIconOnly
+                                                        size="sm"
+                                                        variant="flat"
+                                                        onPress={() =>
+                                                          handleEditMeal(
+                                                            meal.id
+                                                          )
+                                                        }
+                                                      >
+                                                        <Icon
+                                                          className="text-gray-600"
+                                                          icon="solar:pen-linear"
+                                                          width={16}
                                                         />
                                                       </Button>
                                                       <Button
                                                         isIconOnly
                                                         size="sm"
                                                         variant="flat"
-                                                        onPress={
-                                                          handleCancelEditIngredient
+                                                        onPress={() =>
+                                                          handleDeleteMeal(
+                                                            meal.id
+                                                          )
                                                         }
                                                       >
                                                         <Icon
-                                                          icon="solar:close-circle-bold"
-                                                          width={18}
+                                                          className="text-gray-600"
+                                                          icon="solar:trash-bin-trash-linear"
+                                                          width={16}
                                                         />
                                                       </Button>
                                                     </div>
-                                                  ) : (
-                                                    // View mode
-                                                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                                                    <div
-                                                      className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 hover:bg-white cursor-pointer rounded px-2"
-                                                      onClick={() =>
-                                                        handleEditIngredientClick(
-                                                          ingredient.id
-                                                        )
-                                                      }
-                                                    >
-                                                      <div className="flex items-center gap-3 flex-1">
-                                                        <span className="text-sm text-gray-900">
-                                                          {ingredient.name}
-                                                        </span>
-                                                      </div>
-                                                      <div className="flex items-center gap-3">
-                                                        <div className="text-sm text-gray-600">
-                                                          <span className="font-semibold text-gray-900">
-                                                            {
-                                                              ingredient.quantity
-                                                            }
-                                                          </span>{" "}
-                                                          {ingredient.unit}
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              {/* Collapsible meal body */}
+                                              {expandedMeals.has(meal.id) && (
+                                                <div className="mt-3">
+                                                  {multiMeal && macroRanges && (
+                                                    <p className="text-xs text-gray-500 mb-3">
+                                                      Rango entre opciones:
+                                                      Calorías{" "}
+                                                      {formatMacroRange(
+                                                        macroRanges.calories,
+                                                        0,
+                                                        " kcal"
+                                                      )}{" "}
+                                                      · P{" "}
+                                                      {formatMacroRange(
+                                                        macroRanges.protein,
+                                                        1,
+                                                        "g"
+                                                      )}{" "}
+                                                      · C{" "}
+                                                      {formatMacroRange(
+                                                        macroRanges.carbs,
+                                                        1,
+                                                        "g"
+                                                      )}{" "}
+                                                      · G{" "}
+                                                      {formatMacroRange(
+                                                        macroRanges.fats,
+                                                        1,
+                                                        "g"
+                                                      )}
+                                                    </p>
+                                                  )}
+
+                                                  {!multiMeal ? (
+                                                    <>
+                                                      {editingMealMacros ===
+                                                      meal.id ? (
+                                                        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                                          <div className="grid grid-cols-4 gap-2 mb-2">
+                                                            <Input
+                                                              label="Proteína (g)"
+                                                              size="sm"
+                                                              type="number"
+                                                              value={
+                                                                macrosForm.protein
+                                                              }
+                                                              onValueChange={(
+                                                                value
+                                                              ) =>
+                                                                setMacrosForm({
+                                                                  ...macrosForm,
+                                                                  protein:
+                                                                    value,
+                                                                })
+                                                              }
+                                                            />
+                                                            <Input
+                                                              label="Carbohidratos (g)"
+                                                              size="sm"
+                                                              type="number"
+                                                              value={
+                                                                macrosForm.carbs
+                                                              }
+                                                              onValueChange={(
+                                                                value
+                                                              ) =>
+                                                                setMacrosForm({
+                                                                  ...macrosForm,
+                                                                  carbs: value,
+                                                                })
+                                                              }
+                                                            />
+                                                            <Input
+                                                              label="Grasas (g)"
+                                                              size="sm"
+                                                              type="number"
+                                                              value={
+                                                                macrosForm.fats
+                                                              }
+                                                              onValueChange={(
+                                                                value
+                                                              ) =>
+                                                                setMacrosForm({
+                                                                  ...macrosForm,
+                                                                  fats: value,
+                                                                })
+                                                              }
+                                                            />
+                                                            <Input
+                                                              label="Calorías"
+                                                              size="sm"
+                                                              type="number"
+                                                              value={
+                                                                macrosForm.calories
+                                                              }
+                                                              onValueChange={(
+                                                                value
+                                                              ) =>
+                                                                setMacrosForm({
+                                                                  ...macrosForm,
+                                                                  calories:
+                                                                    value,
+                                                                })
+                                                              }
+                                                            />
+                                                          </div>
+                                                          <div className="flex gap-2 justify-end">
+                                                            <Button
+                                                              className="bg-black text-white hover:bg-slate-800"
+                                                              size="sm"
+                                                              onPress={() =>
+                                                                handleSaveMealMacros(
+                                                                  meal.id
+                                                                )
+                                                              }
+                                                            >
+                                                              Guardar
+                                                            </Button>
+                                                            <Button
+                                                              size="sm"
+                                                              variant="flat"
+                                                              onPress={() =>
+                                                                setEditingMealMacros(
+                                                                  null
+                                                                )
+                                                              }
+                                                            >
+                                                              Cancelar
+                                                            </Button>
+                                                          </div>
                                                         </div>
-                                                        <Button
-                                                          isIconOnly
-                                                          size="sm"
-                                                          variant="light"
-                                                          onPress={(e: any) => {
-                                                            e?.stopPropagation?.();
-                                                            handleDeleteIngredient(
-                                                              ingredient.id
-                                                            );
-                                                          }}
+                                                      ) : (
+                                                        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                                                        <div
+                                                          className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                                                          onClick={() =>
+                                                            handleEditMealMacrosClick(
+                                                              meal
+                                                            )
+                                                          }
                                                         >
+                                                          <div className="bg-slate-50 px-3 py-1.5 rounded-lg">
+                                                            <span className="text-xs text-gray-600">
+                                                              Proteína:
+                                                            </span>
+                                                            <span className="text-sm font-bold text-gray-900 ml-1">
+                                                              {(singleMacros
+                                                                ? singleMacros.protein
+                                                                : meal.protein ||
+                                                                  0
+                                                              ).toFixed(1)}
+                                                              g
+                                                            </span>
+                                                          </div>
+                                                          <div className="bg-green-50 px-3 py-1.5 rounded-lg">
+                                                            <span className="text-xs text-gray-600">
+                                                              Carbohidratos:
+                                                            </span>
+                                                            <span className="text-sm font-bold text-gray-900 ml-1">
+                                                              {(singleMacros
+                                                                ? singleMacros.carbs
+                                                                : meal.carbs ||
+                                                                  0
+                                                              ).toFixed(1)}
+                                                              g
+                                                            </span>
+                                                          </div>
+                                                          <div className="bg-yellow-50 px-3 py-1.5 rounded-lg">
+                                                            <span className="text-xs text-gray-600">
+                                                              Grasas:
+                                                            </span>
+                                                            <span className="text-sm font-bold text-gray-900 ml-1">
+                                                              {(singleMacros
+                                                                ? singleMacros.fats
+                                                                : meal.fats || 0
+                                                              ).toFixed(1)}
+                                                              g
+                                                            </span>
+                                                          </div>
+                                                          <div className="bg-red-50 px-3 py-1.5 rounded-lg">
+                                                            <span className="text-xs text-gray-600">
+                                                              Calorías:
+                                                            </span>
+                                                            <span className="text-sm font-bold text-gray-900 ml-1">
+                                                              {Math.round(
+                                                                singleMacros
+                                                                  ? singleMacros.calories
+                                                                  : meal.calories ||
+                                                                      0
+                                                              )}{" "}
+                                                              kcal
+                                                            </span>
+                                                          </div>
                                                           <Icon
-                                                            className="text-gray-400 hover:text-red-600"
-                                                            icon="solar:trash-bin-trash-linear"
+                                                            className="text-gray-400 ml-auto"
+                                                            icon="solar:pen-linear"
                                                             width={16}
                                                           />
-                                                        </Button>
+                                                        </div>
+                                                      )}
+                                                      {renderIngredientRows(
+                                                        meal,
+                                                        primaryOption
+                                                      )}
+                                                      {!meal.id.startsWith(
+                                                        "temp-"
+                                                      ) && (
+                                                        <div className="flex justify-end">
+                                                          <Button
+                                                            className="mt-1 border-gray-300 font-medium text-gray-800"
+                                                            isDisabled={
+                                                              addingAlternativeForMealId ===
+                                                              meal.id
+                                                            }
+                                                            isLoading={
+                                                              addingAlternativeForMealId ===
+                                                              meal.id
+                                                            }
+                                                            size="sm"
+                                                            startContent={
+                                                              <Icon
+                                                                icon="solar:add-circle-bold"
+                                                                width={16}
+                                                              />
+                                                            }
+                                                            variant="bordered"
+                                                            onPress={() =>
+                                                              handleAddAlternative(
+                                                                meal.id
+                                                              )
+                                                            }
+                                                          >
+                                                            Agregar alternativa
+                                                          </Button>
+                                                        </div>
+                                                      )}
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <div className="mb-4 rounded-xl border border-gray-200/90 bg-gradient-to-b from-slate-50/80 to-white p-4 shadow-sm ring-1 ring-black/[0.03]">
+                                                        <div className="flex flex-col gap-5">
+                                                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                                                            <div className="min-w-0 space-y-1">
+                                                              <p className="text-sm font-semibold tracking-tight text-gray-900">
+                                                                Alternativas
+                                                              </p>
+                                                              <p className="text-xs leading-relaxed text-gray-500">
+                                                                Elige la
+                                                                variante que
+                                                                quieres editar.
+                                                              </p>
+                                                            </div>
+                                                            {!meal.id.startsWith(
+                                                              "temp-"
+                                                            ) && (
+                                                              <Button
+                                                                className="w-full shrink-0 border-gray-300 font-medium text-gray-800 sm:w-auto"
+                                                                isDisabled={
+                                                                  addingAlternativeForMealId ===
+                                                                  meal.id
+                                                                }
+                                                                isLoading={
+                                                                  addingAlternativeForMealId ===
+                                                                  meal.id
+                                                                }
+                                                                size="sm"
+                                                                startContent={
+                                                                  <Icon
+                                                                    icon="solar:add-circle-bold"
+                                                                    width={16}
+                                                                  />
+                                                                }
+                                                                variant="bordered"
+                                                                onPress={() =>
+                                                                  handleAddAlternative(
+                                                                    meal.id
+                                                                  )
+                                                                }
+                                                              >
+                                                                Agregar
+                                                                alternativa
+                                                              </Button>
+                                                            )}
+                                                          </div>
+                                                          <div className="min-w-0">
+                                                            <Dropdown
+                                                              classNames={{
+                                                                content:
+                                                                  "min-w-[min(100vw-2rem,24rem)] overflow-hidden rounded-xl border border-gray-200 p-0 shadow-lg",
+                                                              }}
+                                                              placement="bottom-start"
+                                                            >
+                                                              <DropdownTrigger className="h-auto w-full min-w-0">
+                                                                <Button
+                                                                  className="h-12 w-full min-h-12 justify-between rounded-lg border-gray-200/90 bg-white px-4 font-medium text-gray-900 shadow-sm ring-1 ring-gray-900/[0.04] data-[hover=true]:border-gray-300 data-[hover=true]:bg-gray-50/80 data-[pressed=true]:bg-gray-50"
+                                                                  endContent={
+                                                                    <Icon
+                                                                      className="shrink-0 text-gray-400"
+                                                                      icon="solar:alt-arrow-down-linear"
+                                                                      width={20}
+                                                                    />
+                                                                  }
+                                                                  variant="bordered"
+                                                                >
+                                                                  <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                                                                    <span
+                                                                      aria-hidden
+                                                                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black text-xs font-bold text-white shadow-sm"
+                                                                    >
+                                                                      {String.fromCharCode(
+                                                                        65 +
+                                                                          Math.max(
+                                                                            0,
+                                                                            meal.options.findIndex(
+                                                                              (
+                                                                                o
+                                                                              ) =>
+                                                                                o.id ===
+                                                                                activeOptId
+                                                                            )
+                                                                          )
+                                                                      )}
+                                                                    </span>
+                                                                    <span className="truncate text-[15px]">
+                                                                      {activeOption?.name ??
+                                                                        "—"}
+                                                                    </span>
+                                                                  </div>
+                                                                </Button>
+                                                              </DropdownTrigger>
+                                                              <DropdownMenu
+                                                                aria-label="Elegir alternativa de la comida"
+                                                                classNames={{
+                                                                  base: "p-0",
+                                                                  list: "gap-0.5 p-2",
+                                                                }}
+                                                                itemClasses={{
+                                                                  base: "rounded-lg px-2 py-2 data-[hover=true]:bg-gray-100",
+                                                                }}
+                                                              >
+                                                                {meal.options.map(
+                                                                  (
+                                                                    opt,
+                                                                    idx
+                                                                  ) => {
+                                                                    const selected =
+                                                                      opt.id ===
+                                                                      activeOptId;
+                                                                    const m =
+                                                                      optionDisplayMacros(
+                                                                        opt
+                                                                      );
+
+                                                                    return (
+                                                                      <DropdownItem
+                                                                        key={
+                                                                          opt.id
+                                                                        }
+                                                                        className={
+                                                                          selected
+                                                                            ? "bg-gray-100"
+                                                                            : ""
+                                                                        }
+                                                                        textValue={
+                                                                          opt.name
+                                                                        }
+                                                                        onPress={() =>
+                                                                          setMealActiveOptionTab(
+                                                                            (
+                                                                              p
+                                                                            ) => ({
+                                                                              ...p,
+                                                                              [meal.id]:
+                                                                                opt.id,
+                                                                            })
+                                                                          )
+                                                                        }
+                                                                      >
+                                                                        <div className="flex w-full items-center gap-3 py-0.5">
+                                                                          <span
+                                                                            aria-hidden
+                                                                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                                                                              selected
+                                                                                ? "bg-black text-white"
+                                                                                : "bg-gray-100 text-gray-700"
+                                                                            }`}
+                                                                          >
+                                                                            {String.fromCharCode(
+                                                                              65 +
+                                                                                idx
+                                                                            )}
+                                                                          </span>
+                                                                          <div className="min-w-0 flex-1">
+                                                                            <p
+                                                                              className={`truncate text-sm font-semibold ${
+                                                                                selected
+                                                                                  ? "text-black"
+                                                                                  : "text-gray-800"
+                                                                              }`}
+                                                                            >
+                                                                              {
+                                                                                opt.name
+                                                                              }
+                                                                            </p>
+                                                                            <p className="text-xs text-gray-500">
+                                                                              {m.calories.toFixed(
+                                                                                0
+                                                                              )}{" "}
+                                                                              kcal
+                                                                              ·
+                                                                              P{" "}
+                                                                              {m.protein.toFixed(
+                                                                                0
+                                                                              )}
+                                                                              g
+                                                                            </p>
+                                                                          </div>
+                                                                          {selected ? (
+                                                                            <Icon
+                                                                              className="shrink-0 text-black"
+                                                                              icon="solar:check-circle-bold"
+                                                                              width={
+                                                                                20
+                                                                              }
+                                                                            />
+                                                                          ) : null}
+                                                                        </div>
+                                                                      </DropdownItem>
+                                                                    );
+                                                                  }
+                                                                )}
+                                                              </DropdownMenu>
+                                                            </Dropdown>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+
+                                                      {activeOption ? (
+                                                        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                                          <div className="flex flex-wrap gap-3">
+                                                            <OptionImageTrainerField
+                                                              key={
+                                                                activeOption.id
+                                                              }
+                                                              disabled={activeOption.id.startsWith(
+                                                                "temp-"
+                                                              )}
+                                                              imageUrl={
+                                                                activeOption.image_url
+                                                              }
+                                                              optionId={
+                                                                activeOption.id
+                                                              }
+                                                              onAfterChange={
+                                                                refreshPlan
+                                                              }
+                                                            />
+                                                            <div className="min-w-[200px] flex-1 space-y-3">
+                                                              {editingOptionName ===
+                                                              activeOption.id ? (
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                  <Input
+                                                                    className="max-w-xs"
+                                                                    label="Nombre"
+                                                                    size="sm"
+                                                                    value={
+                                                                      editingOptionNameValue
+                                                                    }
+                                                                    onKeyDown={(
+                                                                      e
+                                                                    ) => {
+                                                                      if (
+                                                                        e.key ===
+                                                                        "Enter"
+                                                                      )
+                                                                        handleSaveOptionName(
+                                                                          activeOption.id
+                                                                        );
+                                                                      if (
+                                                                        e.key ===
+                                                                        "Escape"
+                                                                      )
+                                                                        setEditingOptionName(
+                                                                          null
+                                                                        );
+                                                                    }}
+                                                                    onValueChange={
+                                                                      setEditingOptionNameValue
+                                                                    }
+                                                                  />
+                                                                  <Button
+                                                                    color="success"
+                                                                    size="sm"
+                                                                    variant="flat"
+                                                                    onPress={() =>
+                                                                      handleSaveOptionName(
+                                                                        activeOption.id
+                                                                      )
+                                                                    }
+                                                                  >
+                                                                    Guardar
+                                                                  </Button>
+                                                                  <Button
+                                                                    size="sm"
+                                                                    variant="flat"
+                                                                    onPress={() =>
+                                                                      setEditingOptionName(
+                                                                        null
+                                                                      )
+                                                                    }
+                                                                  >
+                                                                    Cancelar
+                                                                  </Button>
+                                                                </div>
+                                                              ) : (
+                                                                <div className="flex items-center gap-2">
+                                                                  <span className="font-semibold text-gray-900">
+                                                                    {
+                                                                      activeOption.name
+                                                                    }
+                                                                  </span>
+                                                                  <Button
+                                                                    isIconOnly
+                                                                    size="sm"
+                                                                    variant="light"
+                                                                    onPress={() => {
+                                                                      setEditingOptionMacrosId(
+                                                                        null
+                                                                      );
+                                                                      setEditingOptionName(
+                                                                        activeOption.id
+                                                                      );
+                                                                      setEditingOptionNameValue(
+                                                                        activeOption.name
+                                                                      );
+                                                                    }}
+                                                                  >
+                                                                    <Icon
+                                                                      icon="solar:pen-linear"
+                                                                      width={16}
+                                                                    />
+                                                                  </Button>
+                                                                </div>
+                                                              )}
+                                                              {editingOptionMacrosId ===
+                                                              activeOption.id ? (
+                                                                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                                  <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                                                    <Input
+                                                                      label="Proteína (g)"
+                                                                      size="sm"
+                                                                      type="number"
+                                                                      value={
+                                                                        optionMacrosForm.protein
+                                                                      }
+                                                                      onValueChange={(
+                                                                        value
+                                                                      ) =>
+                                                                        setOptionMacrosForm(
+                                                                          (
+                                                                            f
+                                                                          ) => ({
+                                                                            ...f,
+                                                                            protein:
+                                                                              value,
+                                                                          })
+                                                                        )
+                                                                      }
+                                                                    />
+                                                                    <Input
+                                                                      label="Carbohidratos (g)"
+                                                                      size="sm"
+                                                                      type="number"
+                                                                      value={
+                                                                        optionMacrosForm.carbs
+                                                                      }
+                                                                      onValueChange={(
+                                                                        value
+                                                                      ) =>
+                                                                        setOptionMacrosForm(
+                                                                          (
+                                                                            f
+                                                                          ) => ({
+                                                                            ...f,
+                                                                            carbs:
+                                                                              value,
+                                                                          })
+                                                                        )
+                                                                      }
+                                                                    />
+                                                                    <Input
+                                                                      label="Grasas (g)"
+                                                                      size="sm"
+                                                                      type="number"
+                                                                      value={
+                                                                        optionMacrosForm.fats
+                                                                      }
+                                                                      onValueChange={(
+                                                                        value
+                                                                      ) =>
+                                                                        setOptionMacrosForm(
+                                                                          (
+                                                                            f
+                                                                          ) => ({
+                                                                            ...f,
+                                                                            fats: value,
+                                                                          })
+                                                                        )
+                                                                      }
+                                                                    />
+                                                                    <Input
+                                                                      label="Calorías"
+                                                                      size="sm"
+                                                                      type="number"
+                                                                      value={
+                                                                        optionMacrosForm.calories
+                                                                      }
+                                                                      onValueChange={(
+                                                                        value
+                                                                      ) =>
+                                                                        setOptionMacrosForm(
+                                                                          (
+                                                                            f
+                                                                          ) => ({
+                                                                            ...f,
+                                                                            calories:
+                                                                              value,
+                                                                          })
+                                                                        )
+                                                                      }
+                                                                    />
+                                                                  </div>
+                                                                  <div className="flex justify-end gap-2">
+                                                                    <Button
+                                                                      className="bg-black text-white hover:bg-slate-800"
+                                                                      size="sm"
+                                                                      onPress={() =>
+                                                                        handleSaveOptionMacros(
+                                                                          activeOption.id
+                                                                        )
+                                                                      }
+                                                                    >
+                                                                      Guardar
+                                                                    </Button>
+                                                                    <Button
+                                                                      size="sm"
+                                                                      variant="flat"
+                                                                      onPress={() =>
+                                                                        setEditingOptionMacrosId(
+                                                                          null
+                                                                        )
+                                                                      }
+                                                                    >
+                                                                      Cancelar
+                                                                    </Button>
+                                                                  </div>
+                                                                </div>
+                                                              ) : (
+                                                                <div
+                                                                  className="flex cursor-pointer flex-wrap items-center gap-2 rounded-lg p-2 transition-colors hover:bg-gray-50"
+                                                                  role="button"
+                                                                  tabIndex={0}
+                                                                  onClick={() =>
+                                                                    handleEditOptionMacrosClick(
+                                                                      activeOption
+                                                                    )
+                                                                  }
+                                                                  onKeyDown={(
+                                                                    e
+                                                                  ) => {
+                                                                    if (
+                                                                      e.key ===
+                                                                        "Enter" ||
+                                                                      e.key ===
+                                                                        " "
+                                                                    ) {
+                                                                      e.preventDefault();
+                                                                      handleEditOptionMacrosClick(
+                                                                        activeOption
+                                                                      );
+                                                                    }
+                                                                  }}
+                                                                >
+                                                                  {(() => {
+                                                                    const m =
+                                                                      optionDisplayMacros(
+                                                                        activeOption
+                                                                      );
+
+                                                                    return (
+                                                                      <>
+                                                                        <span className="rounded bg-slate-100 px-2 py-1 text-xs text-gray-700">
+                                                                          P:{" "}
+                                                                          {m.protein.toFixed(
+                                                                            1
+                                                                          )}
+                                                                          g
+                                                                        </span>
+                                                                        <span className="rounded bg-slate-100 px-2 py-1 text-xs text-gray-700">
+                                                                          C:{" "}
+                                                                          {m.carbs.toFixed(
+                                                                            1
+                                                                          )}
+                                                                          g
+                                                                        </span>
+                                                                        <span className="rounded bg-slate-100 px-2 py-1 text-xs text-gray-700">
+                                                                          G:{" "}
+                                                                          {m.fats.toFixed(
+                                                                            1
+                                                                          )}
+                                                                          g
+                                                                        </span>
+                                                                        <span className="rounded bg-slate-100 px-2 py-1 text-xs text-gray-700">
+                                                                          {m.calories.toFixed(
+                                                                            0
+                                                                          )}{" "}
+                                                                          kcal
+                                                                        </span>
+                                                                        <Icon
+                                                                          className="ml-auto text-gray-400"
+                                                                          icon="solar:pen-linear"
+                                                                          width={
+                                                                            16
+                                                                          }
+                                                                        />
+                                                                      </>
+                                                                    );
+                                                                  })()}
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                          {renderIngredientRows(
+                                                            meal,
+                                                            activeOption
+                                                          )}
+                                                          <Button
+                                                            color="danger"
+                                                            size="sm"
+                                                            startContent={
+                                                              <Icon
+                                                                icon="solar:trash-bin-trash-linear"
+                                                                width={16}
+                                                              />
+                                                            }
+                                                            variant="flat"
+                                                            onPress={() =>
+                                                              setOptionDeleteConfirm(
+                                                                {
+                                                                  optionId:
+                                                                    activeOption.id,
+                                                                  mealId:
+                                                                    meal.id,
+                                                                  name: activeOption.name,
+                                                                  ingredientCount:
+                                                                    activeOption
+                                                                      .ingredients
+                                                                      .length,
+                                                                }
+                                                              )
+                                                            }
+                                                          >
+                                                            Eliminar opción
+                                                          </Button>
+                                                        </div>
+                                                      ) : null}
+                                                    </>
+                                                  )}
+
+                                                  {/* Meal Notes */}
+                                                  {meal.notes && (
+                                                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                      <div className="flex items-start gap-2">
+                                                        <Icon
+                                                          className="text-slate-600 mt-0.5 flex-shrink-0"
+                                                          icon="solar:notes-bold"
+                                                          width={16}
+                                                        />
+                                                        <p className="text-sm text-slate-700">
+                                                          {meal.notes}
+                                                        </p>
                                                       </div>
                                                     </div>
                                                   )}
                                                 </div>
-                                              )
-                                            )}
-
-                                            {/* Add new ingredient inline */}
-                                            {addingIngredientToMeal ===
-                                            meal.id ? (
-                                              <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
-                                                {}
-                                                <Input
-                                                  autoFocus
-                                                  className="flex-1"
-                                                  placeholder="Nombre del ingrediente"
-                                                  size="sm"
-                                                  value={newIngredient.name}
-                                                  onValueChange={(value) =>
-                                                    setNewIngredient({
-                                                      ...newIngredient,
-                                                      name: value,
-                                                    })
-                                                  }
-                                                />
-                                                <Input
-                                                  className="w-24"
-                                                  placeholder="Cantidad"
-                                                  size="sm"
-                                                  value={newIngredient.quantity}
-                                                  onValueChange={(value) =>
-                                                    setNewIngredient({
-                                                      ...newIngredient,
-                                                      quantity: value,
-                                                    })
-                                                  }
-                                                />
-                                                <Input
-                                                  className="w-24"
-                                                  placeholder="Unidad"
-                                                  size="sm"
-                                                  value={newIngredient.unit}
-                                                  onValueChange={(value) =>
-                                                    setNewIngredient({
-                                                      ...newIngredient,
-                                                      unit: value,
-                                                    })
-                                                  }
-                                                />
-                                                <Button
-                                                  isIconOnly
-                                                  color="success"
-                                                  size="sm"
-                                                  variant="flat"
-                                                  onPress={() =>
-                                                    handleSaveNewIngredient(
-                                                      meal.id
-                                                    )
-                                                  }
-                                                >
-                                                  <Icon
-                                                    icon="solar:check-circle-bold"
-                                                    width={18}
-                                                  />
-                                                </Button>
-                                                <Button
-                                                  isIconOnly
-                                                  size="sm"
-                                                  variant="flat"
-                                                  onPress={
-                                                    handleCancelNewIngredient
-                                                  }
-                                                >
-                                                  <Icon
-                                                    icon="solar:close-circle-bold"
-                                                    width={18}
-                                                  />
-                                                </Button>
-                                              </div>
-                                            ) : (
-                                              <Button
-                                                className="w-full mt-2"
-                                                size="sm"
-                                                startContent={
-                                                  <Icon
-                                                    icon="solar:add-circle-linear"
-                                                    width={16}
-                                                  />
-                                                }
-                                                variant="light"
-                                                onPress={() =>
-                                                  handleAddIngredientClick(
-                                                    meal.id
-                                                  )
-                                                }
-                                              >
-                                                Añadir Ingrediente
-                                              </Button>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        {/* Meal Notes */}
-                                        {meal.notes && (
-                                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                            <div className="flex items-start gap-2">
-                                              <Icon
-                                                className="text-slate-600 mt-0.5 flex-shrink-0"
-                                                icon="solar:notes-bold"
-                                                width={16}
-                                              />
-                                              <p className="text-sm text-slate-700">
-                                                {meal.notes}
-                                              </p>
+                                              )}
                                             </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </SortableMealItem>
-                            ))}
-                          </SortableContext>
-                        </DndContext>
-                      )}
+                                          );
+                                        }}
+                                      </SortableMealItem>
+                                    ))}
+                                  </SortableContext>
+                                </DndContext>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      ))}
                     </div>
                   </div>
-                </details>
-              ))}
-            </div>
-          </div>
+                ) : null}
+              </>
+            );
+          })()}
         </CardBody>
       </Card>
 
@@ -3106,6 +4647,25 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                   <SelectItem key="paused">Pausado</SelectItem>
                   <SelectItem key="cancelled">Cancelado</SelectItem>
                 </Select>
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      Mostrar imágenes de comidas al cliente
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Si lo desactivas, el cliente no verá las fotos; tú puedes
+                      seguir gestionándolas aquí.
+                    </p>
+                  </div>
+                  <Switch
+                    classNames={{ base: "flex-shrink-0" }}
+                    isSelected={planForm.show_meal_images}
+                    size="sm"
+                    onValueChange={(val) =>
+                      setPlanForm({ ...planForm, show_meal_images: val })
+                    }
+                  />
+                </div>
                 <Textarea
                   label="Notas del Plan (Opcional)"
                   minRows={3}
@@ -3280,6 +4840,63 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               onPress={handleSaveMeal}
             >
               Crear Comida
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Delete meal option */}
+      <Modal
+        isOpen={!!optionDeleteConfirm}
+        size="md"
+        onClose={() => {
+          if (!optionDeleteLoading) setOptionDeleteConfirm(null);
+        }}
+      >
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-red-100 rounded-full">
+                <Icon
+                  className="text-red-600"
+                  icon="solar:trash-bin-trash-bold"
+                  width={20}
+                />
+              </div>
+              <span>Eliminar opción</span>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-gray-700">
+              ¿Eliminar la opción{" "}
+              <span className="font-semibold">
+                &quot;{optionDeleteConfirm?.name}&quot;
+              </span>
+              ?
+            </p>
+            {optionDeleteConfirm && optionDeleteConfirm.ingredientCount > 0 ? (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3 mt-2">
+                Esta opción tiene {optionDeleteConfirm.ingredientCount}{" "}
+                ingrediente
+                {optionDeleteConfirm.ingredientCount === 1 ? "" : "s"}. Se
+                borrarán por completo.
+              </p>
+            ) : null}
+            <p className="text-sm text-gray-500 mt-2">
+              Si queda una sola opción, la vista volverá al modo simple. La API
+              garantiza que siempre exista al menos una opción por comida.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setOptionDeleteConfirm(null)}>
+              Cancelar
+            </Button>
+            <Button
+              color="danger"
+              isLoading={optionDeleteLoading}
+              onPress={handleConfirmDeleteOption}
+            >
+              Eliminar opción
             </Button>
           </ModalFooter>
         </ModalContent>

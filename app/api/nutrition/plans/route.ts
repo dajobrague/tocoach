@@ -85,6 +85,10 @@ export async function POST(request: NextRequest) {
           status: status || "active",
           notes: notes || template.notes,
           is_template: false,
+          show_meal_images:
+            template.show_meal_images !== undefined
+              ? Boolean(template.show_meal_images)
+              : true,
         })
         .select()
         .single();
@@ -156,6 +160,8 @@ export async function POST(request: NextRequest) {
                   carbs: templateMeal.carbs || 0,
                   fats: templateMeal.fats || 0,
                   calories: templateMeal.calories || 0,
+                  image_url: templateMeal.image_url ?? null,
+                  has_alternatives: templateMeal.has_alternatives ?? false,
                 })
                 .select()
                 .single();
@@ -168,7 +174,66 @@ export async function POST(request: NextRequest) {
                 continue;
               }
 
-              // Clone ingredients for this meal
+              const { data: templateOptions } = await supabase
+                .from("nutrition_meal_options")
+                .select("*")
+                .eq("meal_id", templateMeal.id)
+                .order("option_order", { ascending: true });
+
+              const optionIdMap = new Map<string, string>();
+
+              if (templateOptions && templateOptions.length > 0) {
+                for (const templateOption of templateOptions) {
+                  const { data: newOption, error: optInsError } = await supabase
+                    .from("nutrition_meal_options")
+                    .insert({
+                      meal_id: newMeal.id,
+                      name: templateOption.name,
+                      option_order: templateOption.option_order,
+                      protein: templateOption.protein,
+                      carbs: templateOption.carbs,
+                      fats: templateOption.fats,
+                      calories: templateOption.calories,
+                      image_url: templateOption.image_url ?? null,
+                    })
+                    .select("id")
+                    .single();
+
+                  if (optInsError || !newOption) {
+                    console.error(
+                      "[Nutrition Plans API] Error cloning meal option:",
+                      optInsError
+                    );
+                    continue;
+                  }
+
+                  optionIdMap.set(templateOption.id, newOption.id);
+                }
+              } else {
+                const { data: fallbackOption, error: fbError } = await supabase
+                  .from("nutrition_meal_options")
+                  .insert({
+                    meal_id: newMeal.id,
+                    name: "Opción 1",
+                    option_order: 1,
+                    protein: newMeal.protein ?? null,
+                    carbs: newMeal.carbs ?? null,
+                    fats: newMeal.fats ?? null,
+                    calories: newMeal.calories ?? null,
+                    image_url: newMeal.image_url ?? null,
+                  })
+                  .select("id")
+                  .single();
+
+                if (fbError || !fallbackOption) {
+                  console.error(
+                    "[Nutrition Plans API] Error creating fallback meal option:",
+                    fbError
+                  );
+                  continue;
+                }
+              }
+
               const { data: templateIngredients } = await supabase
                 .from("nutrition_ingredients")
                 .select("*")
@@ -176,22 +241,54 @@ export async function POST(request: NextRequest) {
                 .order("ingredient_order", { ascending: true });
 
               if (templateIngredients && templateIngredients.length > 0) {
-                const ingredientsToInsert = templateIngredients.map((ing) => ({
-                  tenant_host: tenant.host,
-                  nutrition_meal_id: newMeal.id,
-                  name: ing.name,
-                  quantity: ing.quantity,
-                  unit: ing.unit,
-                  ingredient_order: ing.ingredient_order,
-                  protein: ing.protein,
-                  carbs: ing.carbs,
-                  fats: ing.fats,
-                  calories: ing.calories,
-                }));
+                const { data: firstNewOption } = await supabase
+                  .from("nutrition_meal_options")
+                  .select("id")
+                  .eq("meal_id", newMeal.id)
+                  .order("option_order", { ascending: true })
+                  .limit(1)
+                  .maybeSingle();
 
-                await supabase
+                const defaultNewOptionId = firstNewOption?.id;
+
+                if (!defaultNewOptionId) {
+                  console.error(
+                    "[Nutrition Plans API] No target option for cloned ingredients"
+                  );
+                  continue;
+                }
+
+                const ingredientsToInsert = templateIngredients.map((ing) => {
+                  const newOptId =
+                    ing.option_id && optionIdMap.has(ing.option_id)
+                      ? optionIdMap.get(ing.option_id)!
+                      : defaultNewOptionId;
+
+                  return {
+                    tenant_host: tenant.host,
+                    nutrition_meal_id: newMeal.id,
+                    option_id: newOptId,
+                    name: ing.name,
+                    quantity: ing.quantity,
+                    unit: ing.unit,
+                    ingredient_order: ing.ingredient_order,
+                    protein: ing.protein,
+                    carbs: ing.carbs,
+                    fats: ing.fats,
+                    calories: ing.calories,
+                  };
+                });
+
+                const { error: ingInsertError } = await supabase
                   .from("nutrition_ingredients")
                   .insert(ingredientsToInsert);
+
+                if (ingInsertError) {
+                  console.error(
+                    "[Nutrition Plans API] Error cloning ingredients:",
+                    ingInsertError
+                  );
+                }
               }
             }
           }

@@ -173,9 +173,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { data: defaultOption, error: optionError } = await supabase
+      .from("nutrition_meal_options")
+      .insert({
+        meal_id: meal.id,
+        name: "Opción 1",
+        option_order: 1,
+        protein: meal.protein ?? null,
+        carbs: meal.carbs ?? null,
+        fats: meal.fats ?? null,
+        calories: meal.calories ?? null,
+        image_url: meal.image_url ?? null,
+      })
+      .select()
+      .single();
+
+    if (optionError || !defaultOption) {
+      console.error(
+        "[Nutrition Meals API] Error creating default meal option:",
+        optionError
+      );
+
+      await supabase.from("nutrition_meals").delete().eq("id", meal.id);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Error al crear opción por defecto de la comida",
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      data: { ...meal, ingredients: [] },
+      data: {
+        ...meal,
+        options: [{ ...defaultOption, ingredients: [] }],
+        ingredients: [],
+      },
     });
   } catch (error) {
     console.error("[Nutrition Meals API] Unexpected error:", error);

@@ -11,7 +11,12 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  useRealtimeMessages,
+  RealtimeMessage,
+} from "@/lib/hooks/use-realtime-messages";
 
 interface Message {
   id: string;
@@ -43,7 +48,60 @@ export default function MessagingContent() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [trainerId, setTrainerId] = useState<string | null>(null);
+  const [tenantHost, setTenantHost] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadConversationsRef = useRef<() => void>();
+
+  // Fetch trainer session to get trainerId + tenantHost for realtime
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.session?.trainer_id) {
+          setTrainerId(data.session.trainer_id);
+        }
+        if (data.session?.tenant_host) {
+          setTenantHost(data.session.tenant_host);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleRealtimeMessage = useCallback((msg: RealtimeMessage) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === msg.id)) return prev;
+
+      return [...prev, msg as unknown as Message];
+    });
+    // Update the conversation list entry
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === Number(msg.client_id)
+          ? {
+              ...conv,
+              lastMessage: msg.message,
+              lastMessageAt: msg.created_at,
+              lastMessageSender: msg.sender_type,
+              unreadCount:
+                msg.sender_type === "client"
+                  ? conv.unreadCount + 1
+                  : conv.unreadCount,
+            }
+          : conv
+      )
+    );
+  }, []);
+
+  // Global subscription: listen to ALL messages in this tenant
+  useRealtimeMessages({
+    clientId: null,
+    tenantSlug: tenantHost,
+    userId: trainerId ?? "",
+    userType: "trainer",
+    onNewMessage: handleRealtimeMessage,
+    onRefreshNeeded: () => loadConversationsRef.current?.(),
+  });
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -146,9 +204,14 @@ export default function MessagingContent() {
     }
   };
 
-  // Load conversations on mount
+  loadConversationsRef.current = loadConversations;
+
+  // Load conversations on mount + fallback poll every 60s
   useEffect(() => {
     loadConversations();
+    const interval = setInterval(loadConversations, 60_000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Load messages when conversation is selected

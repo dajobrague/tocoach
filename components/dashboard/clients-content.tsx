@@ -26,8 +26,23 @@ type StatusFilter =
   | "Onboarding Completado"
   | "Programación Inicial Pendiente";
 
+type CheckInListStatus =
+  | "pending"
+  | "completed"
+  | "expired"
+  | "not_due"
+  | "disabled";
+
+type CheckInSortMode = "default" | "pending_first" | "expired_first";
+
+interface ClientCheckInSummary {
+  status: CheckInListStatus;
+  customName: string;
+  scheduleDescription: string;
+}
+
 interface Client {
-  id: string;
+  id: number;
   name: string;
   firstName: string;
   lastName: string;
@@ -47,6 +62,7 @@ interface Client {
     zip?: string;
   };
   nationalId?: string;
+  checkIn: ClientCheckInSummary | null;
 }
 
 interface ClientsStats {
@@ -61,6 +77,8 @@ export default function ClientsContent() {
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [checkInSortMode, setCheckInSortMode] =
+    useState<CheckInSortMode>("default");
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [stats, setStats] = useState<ClientsStats>({
@@ -128,7 +146,7 @@ export default function ClientsContent() {
           (c: Client) => new Date(c.joinedDate) >= weekAgo
         ).length,
         pendingCheckins: transformedClients.filter(
-          (c: Client) => c.status === "Programación Inicial Pendiente"
+          (c: Client) => c.checkIn?.status === "pending"
         ).length,
       });
 
@@ -180,6 +198,46 @@ export default function ClientsContent() {
         );
       }
 
+      const rankPendingFirst: Record<CheckInListStatus, number> = {
+        pending: 0,
+        expired: 1,
+        completed: 2,
+        not_due: 3,
+        disabled: 4,
+      };
+
+      const rankExpiredFirst: Record<CheckInListStatus, number> = {
+        expired: 0,
+        pending: 1,
+        completed: 2,
+        not_due: 3,
+        disabled: 4,
+      };
+
+      if (checkInSortMode === "pending_first") {
+        filtered.sort((a, b) => {
+          const sa = a.checkIn?.status;
+          const sb = b.checkIn?.status;
+          const ra = sa ? rankPendingFirst[sa] : 99;
+          const rb = sb ? rankPendingFirst[sb] : 99;
+
+          if (ra !== rb) return ra - rb;
+
+          return a.name.localeCompare(b.name, "es");
+        });
+      } else if (checkInSortMode === "expired_first") {
+        filtered.sort((a, b) => {
+          const sa = a.checkIn?.status;
+          const sb = b.checkIn?.status;
+          const ra = sa ? rankExpiredFirst[sa] : 99;
+          const rb = sb ? rankExpiredFirst[sb] : 99;
+
+          if (ra !== rb) return ra - rb;
+
+          return a.name.localeCompare(b.name, "es");
+        });
+      }
+
       console.log(
         "[ClientsContent] Filtered clients:",
         filtered.length,
@@ -188,7 +246,7 @@ export default function ClientsContent() {
       );
       setFilteredClients(filtered);
     },
-    [statusFilter, searchQuery]
+    [statusFilter, searchQuery, checkInSortMode]
   );
 
   useEffect(() => {
@@ -200,7 +258,13 @@ export default function ClientsContent() {
     if (clients.length > 0) {
       applyFiltersAndSearch(clients);
     }
-  }, [statusFilter, searchQuery, clients, applyFiltersAndSearch]);
+  }, [
+    statusFilter,
+    searchQuery,
+    checkInSortMode,
+    clients,
+    applyFiltersAndSearch,
+  ]);
 
   const getStatusColor = (
     status: string
@@ -230,6 +294,47 @@ export default function ClientsContent() {
       month: "short",
       year: "numeric",
     });
+  };
+
+  const getCheckInChip = (status: CheckInListStatus) => {
+    switch (status) {
+      case "completed":
+        return {
+          label: "Completado",
+          color: "success" as const,
+          variant: "solid" as const,
+        };
+      case "pending":
+        return {
+          label: "Pendiente",
+          color: "warning" as const,
+          variant: "solid" as const,
+        };
+      case "expired":
+        return {
+          label: "Expirado",
+          color: "danger" as const,
+          variant: "solid" as const,
+        };
+      case "not_due":
+        return {
+          label: "No programado",
+          color: "default" as const,
+          variant: "flat" as const,
+        };
+      case "disabled":
+        return {
+          label: "Desactivado",
+          color: "default" as const,
+          variant: "bordered" as const,
+        };
+      default:
+        return {
+          label: "—",
+          color: "default" as const,
+          variant: "flat" as const,
+        };
+    }
   };
 
   const getLastLoginText = (lastLogin?: string) => {
@@ -326,7 +431,7 @@ export default function ClientsContent() {
                         {stats.pendingCheckins}
                       </p>
                       <p className="text-xs text-gray-600">
-                        Programación Pendiente
+                        Check-ins pendientes
                       </p>
                     </div>
                   </div>
@@ -381,7 +486,11 @@ export default function ClientsContent() {
                       Estado:
                     </span>
                     <Button
-                      className={statusFilter === "all" ? "bg-black text-white hover:bg-slate-800" : "bg-gray-100"}
+                      className={
+                        statusFilter === "all"
+                          ? "bg-black text-white hover:bg-slate-800"
+                          : "bg-gray-100"
+                      }
                       size="sm"
                       variant={statusFilter === "all" ? "solid" : "flat"}
                       onPress={() => setStatusFilter("all")}
@@ -442,6 +551,58 @@ export default function ClientsContent() {
                       Pendiente
                     </Button>
                   </div>
+
+                  <div className="flex gap-2 flex-wrap items-center border-t border-gray-100 pt-3">
+                    <span className="text-sm text-gray-600 font-medium">
+                      Orden check-in:
+                    </span>
+                    <Button
+                      className={
+                        checkInSortMode === "default"
+                          ? "bg-black text-white hover:bg-slate-800"
+                          : "bg-gray-100"
+                      }
+                      size="sm"
+                      variant={checkInSortMode === "default" ? "solid" : "flat"}
+                      onPress={() => setCheckInSortMode("default")}
+                    >
+                      Por defecto
+                    </Button>
+                    <Button
+                      className={
+                        checkInSortMode !== "pending_first" ? "bg-gray-100" : ""
+                      }
+                      color={
+                        checkInSortMode === "pending_first"
+                          ? "warning"
+                          : "default"
+                      }
+                      size="sm"
+                      variant={
+                        checkInSortMode === "pending_first" ? "solid" : "flat"
+                      }
+                      onPress={() => setCheckInSortMode("pending_first")}
+                    >
+                      Pendientes primero
+                    </Button>
+                    <Button
+                      className={
+                        checkInSortMode !== "expired_first" ? "bg-gray-100" : ""
+                      }
+                      color={
+                        checkInSortMode === "expired_first"
+                          ? "danger"
+                          : "default"
+                      }
+                      size="sm"
+                      variant={
+                        checkInSortMode === "expired_first" ? "solid" : "flat"
+                      }
+                      onPress={() => setCheckInSortMode("expired_first")}
+                    >
+                      Expirados primero
+                    </Button>
+                  </div>
                 </div>
               </CardBody>
             </Card>
@@ -481,71 +642,99 @@ export default function ClientsContent() {
                       <TableColumn>CLIENTE</TableColumn>
                       <TableColumn>ÚLTIMO ACCESO</TableColumn>
                       <TableColumn>FECHA INICIO</TableColumn>
+                      <TableColumn>CHECK-IN</TableColumn>
                       <TableColumn>ESTADO</TableColumn>
                       <TableColumn>ACCIONES</TableColumn>
                     </TableHeader>
                     <TableBody>
-                      {filteredClients.map((client) => (
-                        <TableRow key={client.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar
-                                {...(client.profileImage
-                                  ? { src: client.profileImage }
-                                  : {})}
-                                showFallback
-                                color="primary"
-                                isBordered={false}
-                                name={client.name}
-                                radius="lg"
-                                size="md"
-                              />
-                              <div>
-                                <p className="font-semibold text-gray-900">
-                                  {client.name}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                  {client.email}
-                                </p>
+                      {filteredClients.map((client) => {
+                        const checkInChip = client.checkIn
+                          ? getCheckInChip(client.checkIn.status)
+                          : null;
+
+                        return (
+                          <TableRow key={client.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar
+                                  {...(client.profileImage
+                                    ? { src: client.profileImage }
+                                    : {})}
+                                  showFallback
+                                  color="primary"
+                                  isBordered={false}
+                                  name={client.name}
+                                  radius="lg"
+                                  size="md"
+                                />
+                                <div>
+                                  <p className="font-semibold text-gray-900">
+                                    {client.name}
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {client.email}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-gray-600">
-                              {getLastLoginText(client.lastLogin)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-gray-600">
-                              {formatDate(client.joinedDate)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              color={getStatusColor(client.status)}
-                              size="sm"
-                              variant="solid"
-                            >
-                              {getStatusLabel(client.status)}
-                            </Chip>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              color="primary"
-                              size="sm"
-                              startContent={
-                                <Icon icon="solar:eye-bold" width={18} />
-                              }
-                              variant="solid"
-                              onPress={() =>
-                                (window.location.href = `/trainer/dashboard/clients/${client.id}`)
-                              }
-                            >
-                              Ver Perfil
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-gray-600">
+                                {getLastLoginText(client.lastLogin)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-gray-600">
+                                {formatDate(client.joinedDate)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {client.checkIn && checkInChip ? (
+                                <div className="flex max-w-[240px] flex-col gap-1.5">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {client.checkIn.customName}
+                                  </p>
+                                  <Chip
+                                    color={checkInChip.color}
+                                    size="sm"
+                                    variant={checkInChip.variant}
+                                  >
+                                    {checkInChip.label}
+                                  </Chip>
+                                  <p className="text-xs leading-snug text-gray-500">
+                                    {client.checkIn.scheduleDescription}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                color={getStatusColor(client.status)}
+                                size="sm"
+                                variant="solid"
+                              >
+                                {getStatusLabel(client.status)}
+                              </Chip>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                color="primary"
+                                size="sm"
+                                startContent={
+                                  <Icon icon="solar:eye-bold" width={18} />
+                                }
+                                variant="solid"
+                                onPress={() =>
+                                  (window.location.href = `/trainer/dashboard/clients/${client.id}`)
+                                }
+                              >
+                                Ver Perfil
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}

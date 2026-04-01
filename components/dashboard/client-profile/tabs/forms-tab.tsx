@@ -5,6 +5,7 @@ import {
   Card,
   CardBody,
   Chip,
+  Divider,
   Input,
   Modal,
   ModalBody,
@@ -19,15 +20,26 @@ import {
   addToast,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import FormConfigEditor from "@/components/dashboard/client-profile/tabs/form-config-editor";
+import {
+  buildCheckinSchedulePayload,
+  CheckInScheduleEditor,
+  validateCheckinScheduleDraft,
+} from "@/components/trainer/checkin-schedule-editor";
+import {
+  formatScheduleDescription,
+  getScheduleOrDefault,
+} from "@/lib/forms/schedule";
 import {
   FormResponse as FormResponseType,
   QuestionConfig,
   FormConfigData,
   normalizeFormConfig,
   isStructuredConfig,
+  type CheckInSchedule,
 } from "@/lib/forms/types";
 
 interface FormsTabProps {
@@ -58,6 +70,24 @@ export default function FormsTab({
   // Dirty tracking for the config editor
   const [isConfigDirty, setIsConfigDirty] = useState(false);
 
+  const [checkinScheduleLabel, setCheckinScheduleLabel] = useState("Check-in");
+  const [checkinScheduleDraft, setCheckinScheduleDraft] =
+    useState<CheckInSchedule | null>(null);
+  const [checkinScheduleBaseline, setCheckinScheduleBaseline] =
+    useState<CheckInSchedule | null>(null);
+  const [scheduleEditorRevision, setScheduleEditorRevision] = useState(0);
+
+  const queryClient = useQueryClient();
+
+  const isScheduleDirty = useMemo(() => {
+    if (!checkinScheduleDraft || !checkinScheduleBaseline) return false;
+
+    return (
+      JSON.stringify(buildCheckinSchedulePayload(checkinScheduleDraft)) !==
+      JSON.stringify(buildCheckinSchedulePayload(checkinScheduleBaseline))
+    );
+  }, [checkinScheduleDraft, checkinScheduleBaseline]);
+
   const handleDirtyChange = useCallback(
     (dirty: boolean) => {
       setIsConfigDirty(dirty);
@@ -69,7 +99,10 @@ export default function FormsTab({
   // Guard function: warns user before losing unsaved changes
   const guardUnsaved = useCallback(
     (action: () => void) => {
-      if (isConfigDirty) {
+      const dirty =
+        isConfigDirty || (selectedFormType === "checkins" && isScheduleDirty);
+
+      if (dirty) {
         if (
           window.confirm(
             "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
@@ -78,19 +111,41 @@ export default function FormsTab({
           setIsConfigDirty(false);
           onConfigDirtyChange?.(false);
           pendingConfigRef.current = null;
+          if (
+            selectedFormType === "checkins" &&
+            isScheduleDirty &&
+            checkinScheduleBaseline
+          ) {
+            setCheckinScheduleDraft({ ...checkinScheduleBaseline });
+            setScheduleEditorRevision((r) => r + 1);
+          }
+          void queryClient.invalidateQueries({
+            queryKey: ["trainer", "checkin-schedule", clientId],
+          });
           action();
         }
       } else {
         action();
       }
     },
-    [isConfigDirty, onConfigDirtyChange]
+    [
+      isConfigDirty,
+      isScheduleDirty,
+      selectedFormType,
+      checkinScheduleBaseline,
+      onConfigDirtyChange,
+      clientId,
+      queryClient,
+    ]
   );
 
   // Warn before closing the browser tab with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (isConfigDirty) {
+      if (
+        isConfigDirty ||
+        (selectedFormType === "checkins" && isScheduleDirty)
+      ) {
         e.preventDefault();
       }
     };
@@ -98,7 +153,7 @@ export default function FormsTab({
     window.addEventListener("beforeunload", handler);
 
     return () => window.removeEventListener("beforeunload", handler);
-  }, [isConfigDirty]);
+  }, [isConfigDirty, isScheduleDirty, selectedFormType]);
 
   // New question form state
   const [newQuestion, setNewQuestion] = useState({
@@ -722,12 +777,23 @@ export default function FormsTab({
     setIsLoadingConfig(true);
     try {
       const response = await fetch(
-        `/api/forms/configs/${clientId}?form_type=${selectedFormType}`
+        `/api/forms/configs/${clientId}?form_type=${selectedFormType}`,
+        { cache: "no-store" }
       );
       const data = await response.json();
 
       if (data.success && data.config) {
         const raw = data.config.questions_config;
+
+        if (selectedFormType === "checkins") {
+          const s = getScheduleOrDefault(
+            (data.schedule ?? null) as CheckInSchedule | null
+          );
+
+          setCheckinScheduleLabel(s.custom_name);
+          setCheckinScheduleBaseline(s);
+          setCheckinScheduleDraft(s);
+        }
 
         if (isStructuredConfig(raw)) {
           if (selectedFormType === "checkins") {
@@ -764,6 +830,14 @@ export default function FormsTab({
         }
       } else {
         if (selectedFormType === "checkins") {
+          const s = getScheduleOrDefault(
+            ((data as { schedule?: CheckInSchedule | null }).schedule ??
+              null) as CheckInSchedule | null
+          );
+
+          setCheckinScheduleLabel(s.custom_name);
+          setCheckinScheduleBaseline(s);
+          setCheckinScheduleDraft(s);
           setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
           setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
           setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
@@ -776,6 +850,11 @@ export default function FormsTab({
     } catch (error) {
       console.debug("Form config fetch:", error);
       if (selectedFormType === "checkins") {
+        const s = getScheduleOrDefault(null);
+
+        setCheckinScheduleLabel(s.custom_name);
+        setCheckinScheduleBaseline(s);
+        setCheckinScheduleDraft(s);
         setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
         setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
         setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
@@ -794,8 +873,11 @@ export default function FormsTab({
   }, [fetchConfig]);
 
   const handleDiscardChanges = useCallback(() => {
+    const hasUnsaved =
+      isConfigDirty || (selectedFormType === "checkins" && isScheduleDirty);
+
     if (
-      !isConfigDirty ||
+      !hasUnsaved ||
       !window.confirm(
         "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
       )
@@ -805,8 +887,22 @@ export default function FormsTab({
     setIsConfigDirty(false);
     onConfigDirtyChange?.(false);
     pendingConfigRef.current = null;
+    if (selectedFormType === "checkins") {
+      setScheduleEditorRevision((r) => r + 1);
+      void queryClient.invalidateQueries({
+        queryKey: ["trainer", "checkin-schedule", clientId],
+      });
+    }
     fetchConfig();
-  }, [isConfigDirty, onConfigDirtyChange, fetchConfig]);
+  }, [
+    isConfigDirty,
+    isScheduleDirty,
+    selectedFormType,
+    onConfigDirtyChange,
+    fetchConfig,
+    clientId,
+    queryClient,
+  ]);
 
   // Fetch responses when viewing responses tab
   useEffect(() => {
@@ -838,7 +934,11 @@ export default function FormsTab({
     }
   }, [clientId, selectedFormType, selectedView]);
 
-  // Save configuration handler — now sends structured format { pages, questions }
+  const handleCheckinScheduleDraftChange = useCallback((s: CheckInSchedule) => {
+    setCheckinScheduleDraft(s);
+  }, []);
+
+  // Save configuration handler — structured { pages, questions }; check-ins also send schedule
   const handleSaveConfiguration = async () => {
     setIsSavingConfig(true);
     try {
@@ -855,6 +955,35 @@ export default function FormsTab({
           ? checkinQuestions
           : habitQuestions;
 
+      let scheduleBody: CheckInSchedule | undefined;
+
+      if (selectedFormType === "checkins") {
+        if (!checkinScheduleDraft) {
+          addToast({
+            title: "Error",
+            description: "El horario de check-in no está cargado.",
+            color: "danger",
+          });
+
+          return;
+        }
+
+        const schedPayload = buildCheckinSchedulePayload(checkinScheduleDraft);
+        const schedErrs = validateCheckinScheduleDraft(schedPayload);
+
+        if (Object.keys(schedErrs).length > 0) {
+          addToast({
+            title: "Revisa el horario",
+            description: Object.values(schedErrs)[0],
+            color: "danger",
+          });
+
+          return;
+        }
+
+        scheduleBody = schedPayload;
+      }
+
       const response = await fetch(`/api/forms/configs/${clientId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -862,6 +991,7 @@ export default function FormsTab({
           form_type: selectedFormType,
           questions_config: payload,
           uses_template: false,
+          ...(scheduleBody !== undefined ? { schedule: scheduleBody } : {}),
         }),
       });
 
@@ -874,12 +1004,42 @@ export default function FormsTab({
         } else if (selectedFormType === "habits" && habitLiveConfig) {
           setHabitConfigData(habitLiveConfig);
         }
+
+        if (selectedFormType === "checkins") {
+          const rawSchedule =
+            data.schedule != null
+              ? (data.schedule as CheckInSchedule)
+              : scheduleBody;
+
+          if (rawSchedule) {
+            const normalized = buildCheckinSchedulePayload(
+              getScheduleOrDefault(rawSchedule)
+            );
+
+            setCheckinScheduleLabel(normalized.custom_name);
+            setCheckinScheduleBaseline(normalized);
+            setCheckinScheduleDraft(normalized);
+            queryClient.setQueryData(
+              ["trainer", "checkin-schedule", clientId],
+              {
+                schedule: normalized,
+                schedule_source:
+                  (data.schedule_source as string | null | undefined) ??
+                  "client",
+              }
+            );
+            setScheduleEditorRevision((r) => r + 1);
+          }
+          void queryClient.invalidateQueries({
+            queryKey: ["trainer", "checkin-schedule", clientId],
+          });
+        }
+
         pendingConfigRef.current = null;
         setIsConfigDirty(false);
         onConfigDirtyChange?.(false);
         addToast({
-          title: "Configuración guardada",
-          description: "Los cambios se han guardado exitosamente.",
+          title: "Configuración guardada correctamente",
           color: "success",
         });
       } else {
@@ -1217,7 +1377,9 @@ export default function FormsTab({
   };
 
   const showStickySaveBar =
-    selectedView === "configuration" && isConfigDirty && !isLoadingConfig;
+    selectedView === "configuration" &&
+    !isLoadingConfig &&
+    (isConfigDirty || (selectedFormType === "checkins" && isScheduleDirty));
 
   return (
     <div className={`flex flex-col gap-6 ${showStickySaveBar ? "pb-24" : ""}`}>
@@ -1243,7 +1405,7 @@ export default function FormsTab({
             title={
               <div className="flex items-center gap-2">
                 <Icon icon="solar:clipboard-check-bold" width={18} />
-                <span className="font-medium">Check-ins Semanales</span>
+                <span className="font-medium">Check-ins</span>
               </div>
             }
           />
@@ -1397,11 +1559,24 @@ export default function FormsTab({
 
             {!isLoadingConfig && (
               <>
+                {selectedFormType === "checkins" && (
+                  <>
+                    <CheckInScheduleEditor
+                      embedded
+                      hideSaveButton
+                      clientId={clientId}
+                      scheduleSyncRevision={scheduleEditorRevision}
+                      onScheduleChange={handleCheckinScheduleDraftChange}
+                    />
+                    <Divider className="my-8" />
+                  </>
+                )}
+
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h3 className="text-lg font-bold text-gray-900">
                       {selectedFormType === "checkins"
-                        ? "Preguntas del Check-in Semanal"
+                        ? `Preguntas — ${checkinScheduleLabel}`
                         : "Métricas de Hábitos Diarios"}
                     </h3>
                     <p className="text-sm text-gray-500">
@@ -1435,29 +1610,83 @@ export default function FormsTab({
                 )}
 
                 {/* Info Card */}
-                <Card className="bg-blue-50 border border-blue-100 mt-6">
-                  <CardBody className="p-4">
-                    <div className="flex items-start gap-2">
-                      <Icon
-                        className="text-blue-600 mt-0.5 flex-shrink-0"
-                        icon="solar:info-circle-bold"
-                        width={18}
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 mb-1">
-                          {selectedFormType === "checkins"
-                            ? "Frecuencia del Check-in"
-                            : "Seguimiento Diario"}
-                        </p>
-                        <p className="text-sm text-slate-700">
-                          {selectedFormType === "checkins"
-                            ? "Este formulario se enviará automáticamente cada semana. El cliente recibirá una notificación para completarlo."
-                            : "Estas métricas se pueden registrar todos los días. El cliente puede completarlas cuando lo desee."}
-                        </p>
+                {selectedFormType === "checkins" ? (
+                  (() => {
+                    const s = getScheduleOrDefault(
+                      checkinScheduleDraft ?? checkinScheduleBaseline
+                    );
+
+                    if (!s.enabled) {
+                      return (
+                        <Card className="bg-amber-50 border border-amber-200 mt-6">
+                          <CardBody className="p-4">
+                            <div className="flex items-start gap-2">
+                              <Icon
+                                className="text-amber-700 mt-0.5 flex-shrink-0"
+                                icon="solar:danger-triangle-bold"
+                                width={18}
+                              />
+                              <div>
+                                <p className="text-sm font-semibold text-amber-950 mb-1">
+                                  Check-in desactivado
+                                </p>
+                                <p className="text-sm text-amber-950/90">
+                                  El check-in está desactivado para este
+                                  cliente. No recibirá notificaciones.
+                                </p>
+                              </div>
+                            </div>
+                          </CardBody>
+                        </Card>
+                      );
+                    }
+
+                    return (
+                      <Card className="bg-blue-50 border border-blue-100 mt-6">
+                        <CardBody className="p-4">
+                          <div className="flex items-start gap-2">
+                            <Icon
+                              className="text-blue-600 mt-0.5 flex-shrink-0"
+                              icon="solar:info-circle-bold"
+                              width={18}
+                            />
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 mb-1">
+                                Frecuencia del Check-in
+                              </p>
+                              <p className="text-sm text-slate-700">
+                                Este formulario se enviará{" "}
+                                {formatScheduleDescription(s)}. El cliente
+                                recibirá una notificación para completarlo.
+                              </p>
+                            </div>
+                          </div>
+                        </CardBody>
+                      </Card>
+                    );
+                  })()
+                ) : (
+                  <Card className="bg-blue-50 border border-blue-100 mt-6">
+                    <CardBody className="p-4">
+                      <div className="flex items-start gap-2">
+                        <Icon
+                          className="text-blue-600 mt-0.5 flex-shrink-0"
+                          icon="solar:info-circle-bold"
+                          width={18}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 mb-1">
+                            Seguimiento Diario
+                          </p>
+                          <p className="text-sm text-slate-700">
+                            Estas métricas se pueden registrar todos los días.
+                            El cliente puede completarlas cuando lo desee.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </CardBody>
-                </Card>
+                    </CardBody>
+                  </Card>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 mt-6">
@@ -1995,7 +2224,7 @@ export default function FormsTab({
                       </h3>
                       <p className="text-xs text-gray-500">
                         {selectedFormType === "checkins"
-                          ? "Check-in Semanal"
+                          ? checkinScheduleLabel
                           : "Hábitos Diarios"}{" "}
                         · {Object.keys(viewingResponse.answers).length}{" "}
                         respuestas

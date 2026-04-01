@@ -1820,14 +1820,14 @@ export const getMockCalendarEvents = (
       });
     }
 
-    // Sunday - Weekly Check-in (every Sunday)
+    // Sunday - scheduled check-in (every Sunday)
     if (dayOfWeek === 0) {
       events.push({
         id: `checkin-${dateStr}-1`,
         date: dateStr,
         time: "20:00",
         type: "check-in",
-        title: "Check-in Semanal",
+        title: "Check-in",
         description: "Registro de peso, medidas y progreso",
         status: i < 0 ? "completed" : "scheduled",
         duration: 15,

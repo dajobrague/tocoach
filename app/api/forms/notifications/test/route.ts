@@ -1,6 +1,9 @@
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { getScheduleOrDefault } from "@/lib/forms/schedule";
 
 /**
  * POST /api/forms/notifications/test
@@ -49,14 +52,29 @@ export async function POST(request: NextRequest) {
 
     const tenantHost = tenantRecord.host;
 
+    let checkinLabel = "Check-in";
+
+    if (form_type === "checkins") {
+      const { data: cfgRow } = await supabase
+        .from("client_form_configs")
+        .select("schedule")
+        .eq("client_id", client_id)
+        .eq("form_type", "checkins")
+        .maybeSingle();
+
+      checkinLabel = getScheduleOrDefault(
+        cfgRow?.schedule as CheckInSchedule | null
+      ).custom_name;
+    }
+
     const title =
       form_type === "checkins"
-        ? "Seguimiento Semanal Disponible"
+        ? `${checkinLabel} disponible`
         : "Registro Diario Disponible";
 
     const message =
       form_type === "checkins"
-        ? "Tu check-in semanal está listo. ¡Compártenos cómo va tu semana!"
+        ? `Tu ${checkinLabel} está listo. ¡Compártenos cómo va tu semana!`
         : "¡Buenos días! Registra tus hábitos de hoy";
 
     // Create test notification

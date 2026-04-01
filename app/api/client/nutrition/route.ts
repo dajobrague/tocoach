@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// GET - Fetch all nutrition plans for the authenticated client with nested days, meals, and ingredients
+// GET - Fetch all nutrition plans for the authenticated client with nested days, meals, options, and ingredients
 export async function GET(request: NextRequest) {
   const supabase = createSupabaseClient();
 
   try {
-    // Authenticate client
     const session = await getClientSession();
 
     if (!session) {
@@ -22,7 +21,6 @@ export async function GET(request: NextRequest) {
 
     console.log("[Client Nutrition API] Fetching plans for client:", clientId);
 
-    // Get nutrition plans for this client
     const { data: plans, error: plansError } = await supabase
       .from("nutrition_plans")
       .select("*")
@@ -38,10 +36,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // For each plan, get nested days, meals, and ingredients
     const plansWithData = await Promise.all(
       (plans || []).map(async (plan) => {
-        // Get days for this plan
         const { data: days, error: daysError } = await supabase
           .from("nutrition_days")
           .select("*")
@@ -57,10 +53,8 @@ export async function GET(request: NextRequest) {
           return { ...plan, days: [] };
         }
 
-        // For each day, get meals with ingredients
         const daysWithMeals = await Promise.all(
           (days || []).map(async (day) => {
-            // Get meals for this day
             const { data: meals, error: mealsError } = await supabase
               .from("nutrition_meals")
               .select("*")
@@ -76,34 +70,80 @@ export async function GET(request: NextRequest) {
               return { ...day, meals: [] };
             }
 
-            // For each meal, get ingredients
-            const mealsWithIngredients = await Promise.all(
+            const mealsWithOptions = await Promise.all(
               (meals || []).map(async (meal) => {
-                const { data: ingredients, error: ingredientsError } =
-                  await supabase
-                    .from("nutrition_ingredients")
-                    .select("*")
-                    .eq("nutrition_meal_id", meal.id)
-                    .order("ingredient_order", { ascending: true });
+                const { data: options, error: optionsError } = await supabase
+                  .from("nutrition_meal_options")
+                  .select("*")
+                  .eq("meal_id", meal.id)
+                  .order("option_order", { ascending: true });
 
-                if (ingredientsError) {
+                if (optionsError) {
                   console.error(
-                    "[Client Nutrition API] Error fetching ingredients:",
-                    ingredientsError
+                    "[Client Nutrition API] Error fetching meal options:",
+                    optionsError
                   );
 
-                  return { ...meal, ingredients: [] };
+                  return {
+                    ...meal,
+                    image_url: meal.image_url ?? null,
+                    has_alternatives: meal.has_alternatives ?? false,
+                    options: [],
+                    ingredients: [],
+                  };
                 }
 
-                return { ...meal, ingredients: ingredients || [] };
+                const optionsWithIngredients = await Promise.all(
+                  (options || []).map(async (opt) => {
+                    const { data: ingredients, error: ingredientsError } =
+                      await supabase
+                        .from("nutrition_ingredients")
+                        .select("*")
+                        .eq("option_id", opt.id)
+                        .order("ingredient_order", { ascending: true });
+
+                    if (ingredientsError) {
+                      console.error(
+                        "[Client Nutrition API] Error fetching ingredients:",
+                        ingredientsError
+                      );
+
+                      return { ...opt, ingredients: [] };
+                    }
+
+                    return {
+                      ...opt,
+                      ingredients: ingredients || [],
+                    };
+                  })
+                );
+
+                const ingredients = optionsWithIngredients.flatMap(
+                  (opt) => opt.ingredients
+                );
+
+                return {
+                  ...meal,
+                  image_url: meal.image_url ?? null,
+                  has_alternatives: meal.has_alternatives ?? false,
+                  options: optionsWithIngredients,
+                  ingredients,
+                };
               })
             );
 
-            return { ...day, meals: mealsWithIngredients };
+            return { ...day, meals: mealsWithOptions };
           })
         );
 
-        return { ...plan, days: daysWithMeals };
+        return {
+          ...plan,
+          plan_mode: plan.plan_mode ?? "structured",
+          pdf_url: plan.pdf_url ?? null,
+          pdf_name: plan.pdf_name ?? null,
+          show_meal_images: plan.show_meal_images !== false,
+          days: daysWithMeals,
+        };
       })
     );
 

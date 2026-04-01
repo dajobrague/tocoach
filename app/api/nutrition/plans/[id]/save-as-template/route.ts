@@ -75,6 +75,10 @@ export async function POST(
         client_id: null,
         start_date: new Date().toISOString().split("T")[0], // Default date
         status: "active", // Default status for templates
+        show_meal_images:
+          sourcePlan.show_meal_images !== undefined
+            ? Boolean(sourcePlan.show_meal_images)
+            : true,
       })
       .select()
       .single();
@@ -147,6 +151,8 @@ export async function POST(
                 carbs: 0,
                 fats: 0,
                 calories: 0,
+                image_url: sourceMeal.image_url ?? null,
+                has_alternatives: sourceMeal.has_alternatives ?? false,
               })
               .select()
               .single();
@@ -159,7 +165,66 @@ export async function POST(
               continue;
             }
 
-            // Clone ingredients for this meal (full details)
+            const { data: sourceOptions } = await supabase
+              .from("nutrition_meal_options")
+              .select("*")
+              .eq("meal_id", sourceMeal.id)
+              .order("option_order", { ascending: true });
+
+            const optionIdMap = new Map<string, string>();
+
+            if (sourceOptions && sourceOptions.length > 0) {
+              for (const sourceOption of sourceOptions) {
+                const { data: newOption, error: optErr } = await supabase
+                  .from("nutrition_meal_options")
+                  .insert({
+                    meal_id: newMeal.id,
+                    name: sourceOption.name,
+                    option_order: sourceOption.option_order,
+                    protein: sourceOption.protein,
+                    carbs: sourceOption.carbs,
+                    fats: sourceOption.fats,
+                    calories: sourceOption.calories,
+                    image_url: sourceOption.image_url ?? null,
+                  })
+                  .select("id")
+                  .single();
+
+                if (optErr || !newOption) {
+                  console.error(
+                    "[Save Nutrition Template API] Error cloning option:",
+                    optErr
+                  );
+                  continue;
+                }
+
+                optionIdMap.set(sourceOption.id, newOption.id);
+              }
+            } else {
+              const { data: fallbackOption, error: fbErr } = await supabase
+                .from("nutrition_meal_options")
+                .insert({
+                  meal_id: newMeal.id,
+                  name: "Opción 1",
+                  option_order: 1,
+                  protein: newMeal.protein ?? null,
+                  carbs: newMeal.carbs ?? null,
+                  fats: newMeal.fats ?? null,
+                  calories: newMeal.calories ?? null,
+                  image_url: newMeal.image_url ?? null,
+                })
+                .select("id")
+                .single();
+
+              if (fbErr || !fallbackOption) {
+                console.error(
+                  "[Save Nutrition Template API] Error creating default option:",
+                  fbErr
+                );
+                continue;
+              }
+            }
+
             const { data: sourceIngredients } = await supabase
               .from("nutrition_ingredients")
               .select("*")
@@ -167,22 +232,54 @@ export async function POST(
               .order("ingredient_order", { ascending: true });
 
             if (sourceIngredients && sourceIngredients.length > 0) {
-              const ingredientsToInsert = sourceIngredients.map((ing) => ({
-                tenant_host: tenant.host,
-                nutrition_meal_id: newMeal.id,
-                name: ing.name,
-                quantity: ing.quantity,
-                unit: ing.unit,
-                ingredient_order: ing.ingredient_order,
-                protein: ing.protein,
-                carbs: ing.carbs,
-                fats: ing.fats,
-                calories: ing.calories,
-              }));
+              const { data: firstNewOption } = await supabase
+                .from("nutrition_meal_options")
+                .select("id")
+                .eq("meal_id", newMeal.id)
+                .order("option_order", { ascending: true })
+                .limit(1)
+                .maybeSingle();
 
-              await supabase
+              const defaultNewOptionId = firstNewOption?.id;
+
+              if (!defaultNewOptionId) {
+                console.error(
+                  "[Save Nutrition Template API] No option for ingredients"
+                );
+                continue;
+              }
+
+              const ingredientsToInsert = sourceIngredients.map((ing) => {
+                const newOptId =
+                  ing.option_id && optionIdMap.has(ing.option_id)
+                    ? optionIdMap.get(ing.option_id)!
+                    : defaultNewOptionId;
+
+                return {
+                  tenant_host: tenant.host,
+                  nutrition_meal_id: newMeal.id,
+                  option_id: newOptId,
+                  name: ing.name,
+                  quantity: ing.quantity,
+                  unit: ing.unit,
+                  ingredient_order: ing.ingredient_order,
+                  protein: ing.protein,
+                  carbs: ing.carbs,
+                  fats: ing.fats,
+                  calories: ing.calories,
+                };
+              });
+
+              const { error: ingErr } = await supabase
                 .from("nutrition_ingredients")
                 .insert(ingredientsToInsert);
+
+              if (ingErr) {
+                console.error(
+                  "[Save Nutrition Template API] Error cloning ingredients:",
+                  ingErr
+                );
+              }
             }
           }
         }
