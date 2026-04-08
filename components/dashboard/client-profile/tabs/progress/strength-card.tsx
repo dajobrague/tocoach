@@ -121,7 +121,11 @@ export function StrengthExerciseCard({
                   </span>
                 ),
               },
-              { label: "Notas", render: (l) => l.notes ?? "—", truncate: true },
+              {
+                label: "Notas",
+                render: (l) => l.notes ?? "—",
+                wrap: true,
+              },
             ]}
             logs={[...logs].reverse()}
           />

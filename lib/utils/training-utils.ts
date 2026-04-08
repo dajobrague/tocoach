@@ -11,6 +11,59 @@ import type {
   WorkoutSession,
 } from "@/types/training";
 
+import { formatRestTime } from "@/lib/utils/exercise-utils";
+
+type WeekdayAbbr = WorkoutSession["dayOfWeek"][number];
+
+/** Resolve coaching fields from session row + library exercise (handles split storage paths). */
+function resolveStrengthCoachingFields(
+  se: SessionExercise & { exercise?: Record<string, unknown> | null }
+): { tempo: string; rest: string; trainingSystem: string; notes?: string } {
+  const meta =
+    se.metadata && typeof se.metadata === "object"
+      ? (se.metadata as Record<string, unknown>)
+      : {};
+
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+  const tempo = str(meta.tempo) || str(se.exercise?.default_tempo) || "";
+
+  const trainingSystem =
+    str(meta.training_system) ||
+    str(meta.trainingSystem) ||
+    str(se.exercise?.default_training_system) ||
+    "";
+
+  let rest = str(meta.rest_description) || str(meta.restDescription) || "";
+
+  if (!rest) {
+    const rs = se.rest_seconds;
+
+    if (typeof rs === "number" && rs > 0) {
+      rest = formatRestTime(rs);
+    }
+  }
+
+  if (!rest) {
+    const def = se.exercise?.default_rest_seconds;
+
+    if (typeof def === "number" && def > 0) {
+      rest = formatRestTime(def);
+    }
+  }
+
+  const fromColumn = str(se.notes);
+  const fromMeta = str(meta.notes);
+  const notesCombined = fromColumn || fromMeta;
+
+  return {
+    tempo,
+    rest,
+    trainingSystem,
+    ...(notesCombined ? { notes: notesCombined } : {}),
+  };
+}
+
 /**
  * Calculate the current week number based on start date
  * @param startDate - ISO date string (YYYY-MM-DD)
@@ -42,6 +95,21 @@ export function calculateCurrentWeek(
   return `Semana ${weekNumber}`;
 }
 
+/** Spanish abbreviations aligned with `Date#getDay()` index 0 = Sunday. */
+const SPANISH_DAY_ABBR = [
+  "Dom",
+  "Lun",
+  "Mar",
+  "Mie",
+  "Jue",
+  "Vie",
+  "Sab",
+] as const;
+
+function stripAccents(s: string): string {
+  return s.normalize("NFD").replace(/\p{M}/gu, "");
+}
+
 /**
  * Format day of week abbreviation
  * @param day - Full day name or abbreviation
@@ -51,6 +119,8 @@ export function formatDayOfWeek(
   day?: string
 ): "Lun" | "Mar" | "Mie" | "Jue" | "Vie" | "Sab" | "Dom" {
   if (!day) return "Lun";
+
+  const normalized = stripAccents(day.trim()).toLowerCase();
 
   const dayMap: Record<
     string,
@@ -75,13 +145,99 @@ export function formatDayOfWeek(
     lun: "Lun",
     mar: "Mar",
     mie: "Mie",
+    mier: "Mie",
     jue: "Jue",
     vie: "Vie",
     sab: "Sab",
     dom: "Dom",
   };
 
-  return dayMap[day.toLowerCase()] || "Lun";
+  const direct = dayMap[normalized];
+
+  if (direct) return direct;
+
+  const three = normalized.slice(0, 3);
+
+  if (dayMap[three]) return dayMap[three];
+
+  // English / Spanish short prefixes (handles "mon", "thu", "mie", "mié" stripped, etc.)
+  if (normalized.startsWith("sun") || normalized.startsWith("dom"))
+    return "Dom";
+  if (normalized.startsWith("mon") || normalized.startsWith("lun"))
+    return "Lun";
+  if (normalized.startsWith("tue") || normalized.startsWith("mar"))
+    return "Mar";
+  if (
+    normalized.startsWith("wed") ||
+    normalized.startsWith("mie") ||
+    normalized.startsWith("mier")
+  )
+    return "Mie";
+  if (normalized.startsWith("thu") || normalized.startsWith("jue"))
+    return "Jue";
+  if (normalized.startsWith("fri") || normalized.startsWith("vie"))
+    return "Vie";
+  if (normalized.startsWith("sat") || normalized.startsWith("sab"))
+    return "Sab";
+
+  return "Lun";
+}
+
+/**
+ * Coerce session `metadata.days_of_week` from DB (0–6, strings EN/ES, abbrevs) to Spanish abbrevs.
+ */
+export function normalizeWorkoutDaysOfWeek(
+  raw: unknown
+): WorkoutSession["dayOfWeek"] {
+  if (raw == null) return ["Lun"];
+  const list = Array.isArray(raw) ? raw : [raw];
+  const out: WeekdayAbbr[] = [];
+
+  for (const item of list) {
+    if (
+      typeof item === "number" &&
+      Number.isInteger(item) &&
+      item >= 0 &&
+      item <= 6
+    ) {
+      out.push(SPANISH_DAY_ABBR[item]!);
+    } else if (typeof item === "string" && item.trim()) {
+      out.push(formatDayOfWeek(item));
+    }
+  }
+
+  const unique = [...new Set(out)];
+
+  return unique.length > 0 ? unique : ["Lun"];
+}
+
+/**
+ * Whether a calendar day (Spanish abbr from local Date, e.g. "Lun") matches a stored session day token.
+ */
+export function sessionCalendarDayMatches(
+  calendarDayAbbr: string,
+  sessionDayToken: unknown
+): boolean {
+  const cal = (calendarDayAbbr || "").slice(0, 3);
+
+  if (cal.length < 2) return false;
+
+  let sessionAbbr: string;
+
+  if (
+    typeof sessionDayToken === "number" &&
+    Number.isInteger(sessionDayToken) &&
+    sessionDayToken >= 0 &&
+    sessionDayToken <= 6
+  ) {
+    sessionAbbr = SPANISH_DAY_ABBR[sessionDayToken]!;
+  } else if (typeof sessionDayToken === "string") {
+    sessionAbbr = formatDayOfWeek(sessionDayToken);
+  } else {
+    return false;
+  }
+
+  return sessionAbbr === cal;
 }
 
 /**
@@ -112,6 +268,14 @@ export function transformToWorkoutProgram(
           session.session_type === "cardio";
 
         if (isCardio) {
+          const cm =
+            se.metadata && typeof se.metadata === "object"
+              ? (se.metadata as Record<string, unknown>)
+              : {};
+          const noteCol = typeof se.notes === "string" ? se.notes.trim() : "";
+          const noteMeta = typeof cm.notes === "string" ? cm.notes.trim() : "";
+          const cardioNotes = noteCol || noteMeta || undefined;
+
           // Transform cardio exercise
           const cardioExercise: WorkoutExercise = {
             order: se.exercise_order,
@@ -144,7 +308,7 @@ export function transformToWorkoutProgram(
               ? { cardioType: se.metadata.cardio_type }
               : {}),
             description: se.exercise?.description || undefined,
-            notes: se.notes || undefined,
+            notes: cardioNotes,
             ...(se.exercise?.video_url
               ? { videoUrl: se.exercise.video_url }
               : {}),
@@ -160,6 +324,8 @@ export function transformToWorkoutProgram(
 
           return cardioExercise;
         } else {
+          const coaching = resolveStrengthCoachingFields(se);
+
           // Transform strength exercise
           return {
             order: se.exercise_order,
@@ -167,11 +333,11 @@ export function transformToWorkoutProgram(
             category: se.exercise?.category || "strength",
             sets: se.sets || 0,
             reps: se.reps || "0",
-            tempo: se.metadata?.tempo || "",
-            rest: se.metadata?.rest_description || "",
-            trainingSystem: se.metadata?.training_system || "",
+            tempo: coaching.tempo,
+            rest: coaching.rest,
+            trainingSystem: coaching.trainingSystem,
             description: se.exercise?.description || undefined,
-            notes: se.notes || undefined,
+            notes: coaching.notes,
             videoUrl: se.exercise?.video_url,
             uploadedVideoUrl: se.exercise?.uploaded_video_url,
             imageUrl: se.exercise?.image_url,
@@ -181,12 +347,13 @@ export function transformToWorkoutProgram(
         }
       });
 
-    // Handle both single day (backward compatibility) and array of days
-    const dayOfWeek = session.metadata?.days_of_week
-      ? session.metadata.days_of_week
-      : session.metadata?.day_of_week
-        ? [formatDayOfWeek(session.metadata.day_of_week)]
-        : ["Lun"];
+    const rawScheduleDays =
+      session.metadata?.days_of_week != null
+        ? session.metadata.days_of_week
+        : session.metadata?.day_of_week != null
+          ? [session.metadata.day_of_week]
+          : null;
+    const dayOfWeek = normalizeWorkoutDaysOfWeek(rawScheduleDays);
 
     return {
       id: session.id,

@@ -27,7 +27,10 @@ import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { formatScheduleDescription } from "@/lib/forms/schedule";
+import {
+  formatScheduleDescription,
+  getScheduleOrDefault,
+} from "@/lib/forms/schedule";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -130,19 +133,81 @@ function fromTimeInputValue(v: string): string {
 async function fetchClientSchedule(
   clientId: string
 ): Promise<{ schedule: CheckInSchedule; schedule_source: string | null }> {
-  const res = await fetch(`/api/forms/configs/${clientId}/schedule`, {
-    credentials: "include",
-    cache: "no-store",
-  });
-  const data = (await res.json()) as ScheduleApiResponse;
+  const authError = async (res: Response) => {
+    const raw = (await res.json().catch(() => ({}))) as ScheduleApiResponse;
 
-  if (!data.success || !data.schedule) {
-    throw new Error(data.error || "No se pudo cargar el horario");
+    throw new Error(raw.error || "No autorizado");
+  };
+
+  const tryScheduleEndpoint = async () => {
+    const res = await fetch(`/api/forms/configs/${clientId}/schedule`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      await authError(res);
+    }
+
+    const data = (await res.json()) as ScheduleApiResponse;
+
+    if (data.success && data.schedule) {
+      return {
+        schedule: getScheduleOrDefault(data.schedule),
+        schedule_source: data.schedule_source ?? null,
+      };
+    }
+
+    return null;
+  };
+
+  const tryFullConfigEndpoint = async () => {
+    const res = await fetch(
+      `/api/forms/configs/${clientId}?form_type=checkins`,
+      { credentials: "include", cache: "no-store" }
+    );
+
+    if (res.status === 401 || res.status === 403) {
+      await authError(res);
+    }
+
+    const data = (await res.json()) as ScheduleApiResponse & {
+      config?: unknown;
+    };
+
+    if (data.success && data.schedule != null) {
+      return {
+        schedule: getScheduleOrDefault(data.schedule),
+        schedule_source: data.schedule_source ?? "client",
+      };
+    }
+
+    return null;
+  };
+
+  try {
+    const fromSchedule = await tryScheduleEndpoint();
+
+    if (fromSchedule) return fromSchedule;
+
+    const fromConfig = await tryFullConfigEndpoint();
+
+    if (fromConfig) return fromConfig;
+  } catch (e) {
+    if (e instanceof Error && /autorizado/i.test(e.message)) {
+      throw e;
+    }
+
+    console.warn("[CheckInScheduleEditor] Schedule fetch failed:", e);
   }
 
+  console.warn(
+    "[CheckInScheduleEditor] Using system default schedule (API did not return a horario)."
+  );
+
   return {
-    schedule: data.schedule,
-    schedule_source: data.schedule_source ?? null,
+    schedule: getScheduleOrDefault(null),
+    schedule_source: "default",
   };
 }
 
@@ -252,7 +317,11 @@ export function buildCheckinSchedulePayload(
   if (draft.frequency === "weekly" || draft.frequency === "biweekly") {
     times_per_week = 1;
   } else {
-    times_per_week = Math.min(7, Math.max(1, Math.round(draft.times_per_week)));
+    // custom: API and DB require times_per_week === number of selected days
+    times_per_week =
+      sortedDays.length > 0
+        ? sortedDays.length
+        : Math.min(7, Math.max(1, Math.round(draft.times_per_week)));
   }
 
   return {
@@ -338,6 +407,15 @@ export function CheckInScheduleEditor({
         ? fetchTemplateDefaultSchedule()
         : fetchClientSchedule(clientId as string),
     enabled: isTemplate ? true : Boolean(clientId),
+    placeholderData: () =>
+      !isTemplate && clientId
+        ? queryClient.getQueryData<{
+            schedule: CheckInSchedule;
+            schedule_source: string | null;
+          }>(["trainer", "checkin-schedule", clientId])
+        : undefined,
+    retry: 1,
+    retryDelay: 1200,
   });
 
   useEffect(() => {

@@ -119,24 +119,15 @@ export async function GET(
       );
     }
 
-    if (!row) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No se encontró configuración de check-ins para este cliente.",
-        },
-        { status: 404 }
-      );
-    }
-
+    const templateId = row?.template_id ?? null;
     const templateDefault = await fetchCheckinsTemplateDefaultSchedule(
       supabase,
       tenantHost,
-      row.template_id
+      templateId
     );
 
     const { schedule, schedule_source } = resolveCheckInScheduleForApi(
-      row.schedule,
+      row?.schedule ?? null,
       templateDefault
     );
 
@@ -258,24 +249,66 @@ export async function PUT(
       );
     }
 
-    if (!updated) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No se encontró configuración de check-ins para este cliente.",
-        },
-        { status: 404 }
-      );
+    let saved = updated;
+
+    if (!saved) {
+      const { data: template, error: templateError } = await supabase
+        .from("form_templates")
+        .select("id, questions_config")
+        .eq("tenant_host", tenantHost)
+        .eq("form_type", "checkins")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (templateError) {
+        console.error(
+          "[Forms Config Schedule PUT] Template fetch error:",
+          templateError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al obtener plantilla de check-ins" },
+          { status: 500 }
+        );
+      }
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("client_form_configs")
+        .insert({
+          tenant_host: tenantHost,
+          client_id: clientId,
+          form_type: "checkins",
+          questions_config: template?.questions_config ?? [],
+          uses_template: Boolean(template),
+          template_id: template?.id ?? null,
+          schedule: scheduleValidation.value,
+        })
+        .select("schedule, template_id")
+        .single();
+
+      if (insertError) {
+        console.error("[Forms Config Schedule PUT] Insert error:", insertError);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Error al crear configuración de check-ins",
+          },
+          { status: 500 }
+        );
+      }
+
+      saved = inserted;
     }
 
     const templateDefault = await fetchCheckinsTemplateDefaultSchedule(
       supabase,
       tenantHost,
-      updated.template_id
+      saved.template_id
     );
 
     const resolved = resolveCheckInScheduleForApi(
-      updated.schedule,
+      saved.schedule,
       templateDefault
     );
 

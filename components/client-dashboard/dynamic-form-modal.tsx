@@ -255,6 +255,16 @@ export function DynamicFormModal({
 
     const conditionalAnswer = answers[question.conditionalOn];
 
+    // Template uses conditionalValue: true after a rating; parent answer is 1–5, not boolean true
+    if (
+      question.conditionalValue === true &&
+      typeof conditionalAnswer === "number" &&
+      conditionalAnswer >= 1 &&
+      conditionalAnswer <= 5
+    ) {
+      return true;
+    }
+
     if (typeof question.conditionalValue === "boolean") {
       return conditionalAnswer === question.conditionalValue;
     }
@@ -1021,18 +1031,20 @@ export function DynamicFormModal({
                                   </Chip>
                                 )}
                               </div>
-                              {!isViewMode && question.type !== "group" && (
-                                <p className="text-xs text-foreground/60 font-body">
-                                  {question.type === "rating" &&
-                                    "Califica del 1 al 5"}
-                                  {question.type === "number" &&
-                                    `Ingresa el valor${question.unit ? ` en ${question.unit}` : ""}`}
-                                  {question.type === "text" &&
-                                    "Escribe tu respuesta"}
-                                  {question.type === "boolean" &&
-                                    "Selecciona una opción"}
-                                </p>
-                              )}
+                              {!isViewMode &&
+                                question.type !== "group" &&
+                                (question.type === "rating" ||
+                                  question.type === "number" ||
+                                  question.type === "boolean") && (
+                                  <p className="text-xs text-foreground/60 font-body">
+                                    {question.type === "rating" &&
+                                      "Califica del 1 al 5"}
+                                    {question.type === "number" &&
+                                      `Ingresa el valor${question.unit ? ` en ${question.unit}` : ""}`}
+                                    {question.type === "boolean" &&
+                                      "Selecciona una opción"}
+                                  </p>
+                                )}
                               {!isViewMode && question.type === "group" && (
                                 <p className="text-xs text-foreground/60 font-body">
                                   {question.subQuestions?.filter(

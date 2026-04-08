@@ -23,15 +23,23 @@ export async function fetchCheckinsTemplateDefaultSchedule(
     }
   }
 
-  const { data: fallback } = await supabase
+  const { data: fallbackRows, error: fallbackErr } = await supabase
     .from("form_templates")
     .select("default_schedule")
     .eq("tenant_host", tenantHost)
     .eq("form_type", "checkins")
     .eq("is_active", true)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(1);
 
-  return fallback?.default_schedule ?? null;
+  if (fallbackErr) {
+    console.warn(
+      "[fetchCheckinsTemplateDefaultSchedule] Active template query:",
+      fallbackErr
+    );
+  }
+
+  return fallbackRows?.[0]?.default_schedule ?? null;
 }
 
 export type ScheduleSource = "client" | "template" | "default";
@@ -66,6 +74,35 @@ export function resolveCheckInScheduleForApi(
 }
 
 const TIME_RE = /^\d{2}:\d{2}$/;
+
+/** Accepts "9:30" / "09:30" and normalizes to strict HH:MM for DB/API checks. */
+export function normalizeWallTimeToHHMM(time: string): string {
+  const t = time.trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+
+  if (!m) return t;
+
+  const h = Number(m[1]);
+  const mm = m[2];
+
+  if (
+    !Number.isInteger(h) ||
+    h < 0 ||
+    h > 23 ||
+    mm === undefined ||
+    !/^\d{2}$/.test(mm)
+  ) {
+    return t;
+  }
+
+  const mi = Number(mm);
+
+  if (!Number.isInteger(mi) || mi < 0 || mi > 59) {
+    return t;
+  }
+
+  return `${String(h).padStart(2, "0")}:${mm}`;
+}
 
 function isValidIanaTimeZone(tz: string): boolean {
   const t = tz.trim();
@@ -138,9 +175,10 @@ export function validateCheckInScheduleInput(
     }
   }
 
-  const time = o.time;
+  const timeRaw = typeof o.time === "string" ? o.time.trim() : "";
+  const timeNormalized = timeRaw ? normalizeWallTimeToHHMM(timeRaw) : "";
 
-  if (typeof time !== "string" || !TIME_RE.test(time.trim())) {
+  if (!timeRaw || !TIME_RE.test(timeNormalized)) {
     errors.push(
       'El campo time debe tener el formato HH:MM (24 h), por ejemplo "09:00".'
     );
@@ -185,15 +223,8 @@ export function validateCheckInScheduleInput(
     timesPerWeek < 1
   ) {
     errors.push("times_per_week debe ser un entero mayor o igual que 1.");
-  } else if (
-    frequency === "custom" &&
-    daysOfWeekUnique.length > 0 &&
-    timesPerWeek !== daysOfWeekUnique.length
-  ) {
-    errors.push(
-      "Si la frecuencia es custom, times_per_week debe coincidir con el número de días en days_of_week."
-    );
   }
+  // custom: times_per_week is coerced to match days_of_week.length on success (below)
 
   let enabled = true;
 
@@ -211,11 +242,16 @@ export function validateCheckInScheduleInput(
 
   const freq = frequency as CheckInFrequency;
 
+  const resolvedTimesPerWeek =
+    freq === "custom" && daysOfWeekUnique.length > 0
+      ? daysOfWeekUnique.length
+      : (timesPerWeek as number);
+
   const value: CheckInSchedule = {
     frequency: freq,
-    times_per_week: timesPerWeek as number,
+    times_per_week: resolvedTimesPerWeek,
     days_of_week: daysOfWeekUnique,
-    time: (time as string).trim(),
+    time: timeNormalized,
     timezone: (timezone as string).trim(),
     custom_name: (customName as string).trim(),
     grace_period_hours: grace as number,

@@ -29,6 +29,7 @@ import {
   CheckInScheduleEditor,
   validateCheckinScheduleDraft,
 } from "@/components/trainer/checkin-schedule-editor";
+import { countAnswerKeys, normalizeFormAnswers } from "@/lib/forms";
 import {
   formatScheduleDescription,
   getScheduleOrDefault,
@@ -793,6 +794,11 @@ export default function FormsTab({
           setCheckinScheduleLabel(s.custom_name);
           setCheckinScheduleBaseline(s);
           setCheckinScheduleDraft(s);
+          queryClient.setQueryData(["trainer", "checkin-schedule", clientId], {
+            schedule: s,
+            schedule_source:
+              (data.schedule_source as string | null | undefined) ?? "client",
+          });
         }
 
         if (isStructuredConfig(raw)) {
@@ -838,6 +844,15 @@ export default function FormsTab({
           setCheckinScheduleLabel(s.custom_name);
           setCheckinScheduleBaseline(s);
           setCheckinScheduleDraft(s);
+          queryClient.setQueryData(["trainer", "checkin-schedule", clientId], {
+            schedule: s,
+            schedule_source:
+              (
+                data as {
+                  schedule_source?: string | null;
+                }
+              ).schedule_source ?? "default",
+          });
           setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
           setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
           setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
@@ -855,6 +870,10 @@ export default function FormsTab({
         setCheckinScheduleLabel(s.custom_name);
         setCheckinScheduleBaseline(s);
         setCheckinScheduleDraft(s);
+        queryClient.setQueryData(["trainer", "checkin-schedule", clientId], {
+          schedule: s,
+          schedule_source: "default",
+        });
         setCheckinConfigData(DEFAULT_CHECKIN_CONFIG);
         setCheckinLiveConfig(DEFAULT_CHECKIN_CONFIG);
         setCheckinQuestions(DEFAULT_CHECKIN_CONFIG.questions);
@@ -864,9 +883,24 @@ export default function FormsTab({
         setHabitQuestions(DEFAULT_HABIT_CONFIG.questions);
       }
     } finally {
+      if (selectedFormType === "checkins") {
+        setCheckinScheduleDraft((d) => {
+          if (d) return d;
+          const fb = getScheduleOrDefault(null);
+
+          setCheckinScheduleBaseline((b) => b ?? fb);
+          setCheckinScheduleLabel(fb.custom_name);
+          queryClient.setQueryData(["trainer", "checkin-schedule", clientId], {
+            schedule: fb,
+            schedule_source: "default",
+          });
+
+          return fb;
+        });
+      }
       setIsLoadingConfig(false);
     }
-  }, [clientId, selectedFormType]);
+  }, [clientId, selectedFormType, queryClient]);
 
   useEffect(() => {
     fetchConfig();
@@ -958,17 +992,10 @@ export default function FormsTab({
       let scheduleBody: CheckInSchedule | undefined;
 
       if (selectedFormType === "checkins") {
-        if (!checkinScheduleDraft) {
-          addToast({
-            title: "Error",
-            description: "El horario de check-in no está cargado.",
-            color: "danger",
-          });
+        const scheduleDraft =
+          checkinScheduleDraft ?? getScheduleOrDefault(null);
 
-          return;
-        }
-
-        const schedPayload = buildCheckinSchedulePayload(checkinScheduleDraft);
+        const schedPayload = buildCheckinSchedulePayload(scheduleDraft);
         const schedErrs = validateCheckinScheduleDraft(schedPayload);
 
         if (Object.keys(schedErrs).length > 0) {
@@ -1265,7 +1292,7 @@ export default function FormsTab({
       id: r.id,
       date: r.response_date,
       type: r.form_type,
-      answers: r.answers,
+      answers: normalizeFormAnswers(r.answers) as Record<string, unknown>,
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -1473,7 +1500,7 @@ export default function FormsTab({
               <CardBody className="p-0">
                 <div className="divide-y divide-gray-100">
                   {displayResponses.map((response) => {
-                    const answeredCount = Object.keys(response.answers).length;
+                    const answeredCount = countAnswerKeys(response.answers);
                     const formattedDate = new Date(
                       response.date + "T12:00:00"
                     ).toLocaleDateString("es-ES", {
@@ -1693,6 +1720,7 @@ export default function FormsTab({
                   <Button
                     className="text-white font-semibold"
                     color="primary"
+                    isDisabled={isLoadingConfig}
                     isLoading={isSavingConfig}
                     startContent={
                       !isSavingConfig && (
@@ -1743,6 +1771,7 @@ export default function FormsTab({
               <Button
                 className="text-white font-semibold"
                 color="primary"
+                isDisabled={isLoadingConfig}
                 isLoading={isSavingConfig}
                 startContent={
                   !isSavingConfig && (
@@ -2069,6 +2098,26 @@ export default function FormsTab({
         <ModalContent>
           {(() => {
             if (!viewingResponse) return null;
+            const displayAnswers = normalizeFormAnswers(
+              viewingResponse.answers
+            ) as Record<string, any>;
+            const answerKeys = Object.keys(displayAnswers);
+
+            const formatRawAnswerValue = (value: unknown): string => {
+              if (value === null || value === undefined) {
+                return "—";
+              }
+              if (typeof value === "object") {
+                try {
+                  return JSON.stringify(value, null, 2);
+                } catch {
+                  return String(value);
+                }
+              }
+
+              return String(value);
+            };
+
             const configData =
               selectedFormType === "checkins"
                 ? (checkinLiveConfig ?? checkinConfigData)
@@ -2084,8 +2133,15 @@ export default function FormsTab({
               (a, b) => a.order - b.order
             );
 
+            const validQuestionIds = new Set<string>();
+
+            allQuestions.forEach((q) => {
+              validQuestionIds.add(q.id);
+              q.subQuestions?.forEach((sq) => validQuestionIds.add(sq.id));
+            });
+
             // Find all questions that have answers
-            const answeredQIds = new Set(Object.keys(viewingResponse.answers));
+            const answeredQIds = new Set(answerKeys);
 
             // Build sections
             const responseSections =
@@ -2120,6 +2176,18 @@ export default function FormsTab({
                     },
                   ];
 
+            const totalStructuredQuestions = responseSections.reduce(
+              (n, s) => n + s.questions.length,
+              0
+            );
+            const orphanAnswerKeys = answerKeys.filter(
+              (k) => !validQuestionIds.has(k)
+            );
+            const showOnlyRawFallback =
+              totalStructuredQuestions === 0 && answerKeys.length > 0;
+            const showOrphanSection =
+              orphanAnswerKeys.length > 0 && totalStructuredQuestions > 0;
+
             const formattedDate = new Date(
               viewingResponse.date + "T12:00:00"
             ).toLocaleDateString("es-ES", {
@@ -2130,7 +2198,7 @@ export default function FormsTab({
             });
 
             const renderAnswer = (q: QuestionConfig) => {
-              const answer = viewingResponse.answers[q.id];
+              const answer = displayAnswers[q.id];
 
               if (answer === undefined || answer === null) return null;
 
@@ -2226,105 +2294,153 @@ export default function FormsTab({
                         {selectedFormType === "checkins"
                           ? checkinScheduleLabel
                           : "Hábitos Diarios"}{" "}
-                        · {Object.keys(viewingResponse.answers).length}{" "}
-                        respuestas
+                        · {answerKeys.length} respuestas
                       </p>
                     </div>
                   </div>
                 </ModalHeader>
                 <ModalBody>
                   <div className="space-y-6">
-                    {responseSections.map((section, sIdx) => (
-                      <div key={section.title} className="space-y-3">
-                        {/* Section header */}
-                        {responseSections.length > 1 && (
-                          <div className="flex items-center gap-2.5 pt-1">
-                            <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center">
-                              <Icon
-                                className="text-gray-600"
-                                icon={section.icon}
-                                width={16}
-                              />
-                            </div>
-                            <p className="text-sm font-bold text-gray-900">
-                              {section.title}
-                            </p>
-                            <div className="flex-1 border-t border-gray-200 ml-1" />
-                          </div>
-                        )}
+                    {answerKeys.length === 0 && (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No hay respuestas almacenadas para esta fecha.
+                      </p>
+                    )}
 
-                        {/* Questions & answers */}
-                        {section.questions.map((question) => (
-                          <Card
-                            key={question.id}
-                            className="bg-gray-50 border border-gray-200"
-                          >
-                            <CardBody className="p-4">
-                              {/* Main question */}
-                              {question.type !== "group" ? (
-                                <div className="flex items-start gap-3">
-                                  <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-100">
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon={question.icon}
-                                      width={18}
-                                    />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-gray-500 mb-1">
-                                      {question.label}
-                                    </p>
-                                    {renderAnswer(question)}
-                                  </div>
-                                </div>
-                              ) : (
-                                /* Group question with sub-answers */
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <div className="bg-white p-1.5 rounded-lg flex-shrink-0 border border-gray-100">
+                    {showOnlyRawFallback && (
+                      <Card className="bg-amber-50/80 border border-amber-200">
+                        <CardBody className="p-4 space-y-2">
+                          <p className="text-sm font-semibold text-amber-900">
+                            Datos almacenados (vista cruda)
+                          </p>
+                          <p className="text-xs text-amber-800/90">
+                            Las respuestas no coinciden con las preguntas del
+                            formulario actual (p. ej. plantilla antigua). Aquí
+                            puedes ver todo lo guardado.
+                          </p>
+                          <pre className="text-xs font-mono bg-white border border-amber-100 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words text-gray-800">
+                            {formatRawAnswerValue(displayAnswers)}
+                          </pre>
+                        </CardBody>
+                      </Card>
+                    )}
+
+                    {!showOnlyRawFallback &&
+                      responseSections.map((section) => (
+                        <div key={section.title} className="space-y-3">
+                          {responseSections.length > 1 && (
+                            <div className="flex items-center gap-2.5 pt-1">
+                              <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center">
+                                <Icon
+                                  className="text-gray-600"
+                                  icon={section.icon}
+                                  width={16}
+                                />
+                              </div>
+                              <p className="text-sm font-bold text-gray-900">
+                                {section.title}
+                              </p>
+                              <div className="flex-1 border-t border-gray-200 ml-1" />
+                            </div>
+                          )}
+
+                          {section.questions.map((question) => (
+                            <Card
+                              key={question.id}
+                              className="bg-gray-50 border border-gray-200"
+                            >
+                              <CardBody className="p-4">
+                                {question.type !== "group" ? (
+                                  <div className="flex items-start gap-3">
+                                    <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-100">
                                       <Icon
                                         className="text-gray-600"
                                         icon={question.icon}
-                                        width={16}
+                                        width={18}
                                       />
                                     </div>
-                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                      {question.label}
-                                    </p>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold text-gray-500 mb-1">
+                                        {question.label}
+                                      </p>
+                                      {renderAnswer(question)}
+                                    </div>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {question.subQuestions
-                                      ?.filter(
-                                        (sq) =>
-                                          viewingResponse.answers[sq.id] !==
-                                          undefined
-                                      )
-                                      .map((sub) => (
-                                        <div
-                                          key={sub.id}
-                                          className="bg-white rounded-lg p-3 border border-gray-100"
-                                        >
-                                          <div className="flex items-center gap-2 mb-1.5">
-                                            <Icon
-                                              className="text-gray-500"
-                                              icon={sub.icon}
-                                              width={14}
-                                            />
-                                            <p className="text-[11px] font-semibold text-gray-500">
-                                              {sub.label}
-                                            </p>
+                                ) : (
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <div className="bg-white p-1.5 rounded-lg flex-shrink-0 border border-gray-100">
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon={question.icon}
+                                          width={16}
+                                        />
+                                      </div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                        {question.label}
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {question.subQuestions
+                                        ?.filter(
+                                          (sq) =>
+                                            displayAnswers[sq.id] !== undefined
+                                        )
+                                        .map((sub) => (
+                                          <div
+                                            key={sub.id}
+                                            className="bg-white rounded-lg p-3 border border-gray-100"
+                                          >
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                              <Icon
+                                                className="text-gray-500"
+                                                icon={sub.icon}
+                                                width={14}
+                                              />
+                                              <p className="text-[11px] font-semibold text-gray-500">
+                                                {sub.label}
+                                              </p>
+                                            </div>
+                                            {renderAnswer(sub)}
                                           </div>
-                                          {renderAnswer(sub)}
-                                        </div>
-                                      ))}
+                                        ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </CardBody>
-                          </Card>
-                        ))}
-                      </div>
-                    ))}
+                                )}
+                              </CardBody>
+                            </Card>
+                          ))}
+                        </div>
+                      ))}
+
+                    {showOrphanSection && (
+                      <Card className="bg-slate-50 border border-slate-200">
+                        <CardBody className="p-4 space-y-3">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Datos adicionales
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            Campos guardados que no están en el formulario
+                            actual (IDs antiguos u otros).
+                          </p>
+                          <div className="space-y-3">
+                            {orphanAnswerKeys.map((key) => (
+                              <div
+                                key={key}
+                                className="border border-gray-200 rounded-lg p-3 bg-white"
+                              >
+                                <p className="text-[11px] font-mono font-semibold text-gray-500 mb-1 break-all">
+                                  {key}
+                                </p>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+                                  {formatRawAnswerValue(displayAnswers[key])}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardBody>
+                      </Card>
+                    )}
                   </div>
                 </ModalBody>
                 <ModalFooter>

@@ -16,70 +16,145 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
 import { formatRestTime, getCategoryLabel } from "@/lib/utils/exercise-utils";
 
+const PAGE_SIZE = 50;
+
 export default function ExerciseLibraryContent() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [lastLoadedPage, setLastLoadedPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("strength");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [viewingExercise, setViewingExercise] = useState<Exercise | null>(null);
+  const skipInitialSearchDebounceRef = useRef(true);
+  const categoryFilterRef = useRef(categoryFilter);
+  const searchQueryRef = useRef(searchQuery);
+  const listEpochRef = useRef(0);
 
-  // Fetch exercises
-  const fetchExercises = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
+  categoryFilterRef.current = categoryFilter;
+  searchQueryRef.current = searchQuery;
 
-      if (categoryFilter && categoryFilter !== "all") {
-        params.append("category", categoryFilter);
+  const fetchExercisesPage = useCallback(
+    async (page: number, mode: "replace" | "append") => {
+      const epochBeforeList = listEpochRef.current;
+
+      if (mode === "replace") {
+        listEpochRef.current += 1;
       }
-      if (searchQuery) {
-        params.append("search", searchQuery);
-      }
+      const epochForReplace = listEpochRef.current;
 
-      const response = await fetch(`/api/exercises?${params.toString()}`, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        setExercises(result.exercises);
+      if (mode === "replace") {
+        setIsLoading(true);
       } else {
-        console.error("Error fetching exercises:", result.error);
+        setIsLoadingMore(true);
       }
-    } catch (error) {
-      console.error("Error fetching exercises:", error);
-    } finally {
-      setIsLoading(false);
+      try {
+        const params = new URLSearchParams();
+
+        params.set("page", String(page));
+        params.set("limit", String(PAGE_SIZE));
+        const cat = categoryFilterRef.current;
+        const search = searchQueryRef.current;
+
+        if (cat && cat !== "all") {
+          params.append("category", cat);
+        }
+        if (search.trim() !== "") {
+          params.append("search", search.trim());
+        }
+
+        const response = await fetch(`/api/exercises?${params.toString()}`, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+          },
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          if (mode === "replace") {
+            if (epochForReplace !== listEpochRef.current) {
+              return;
+            }
+            setTotalCount(typeof result.total === "number" ? result.total : 0);
+            setExercises(result.exercises ?? []);
+            setLastLoadedPage(1);
+          } else {
+            if (epochBeforeList !== listEpochRef.current) {
+              return;
+            }
+            setTotalCount(typeof result.total === "number" ? result.total : 0);
+            setExercises((prev) => [...prev, ...(result.exercises ?? [])]);
+            setLastLoadedPage(page);
+          }
+        } else {
+          console.error("Error fetching exercises:", result.error);
+        }
+      } catch (error) {
+        console.error("Error fetching exercises:", error);
+      } finally {
+        if (mode === "replace") {
+          if (epochForReplace === listEpochRef.current) {
+            setIsLoading(false);
+          }
+        } else {
+          setIsLoadingMore(false);
+        }
+      }
+    },
+    []
+  );
+
+  const fetchExercises = useCallback(() => {
+    return fetchExercisesPage(1, "replace");
+  }, [fetchExercisesPage]);
+
+  const loadMoreExercises = useCallback(() => {
+    if (isLoading || isLoadingMore || exercises.length >= totalCount) {
+      return;
     }
-  };
+    const nextPage = lastLoadedPage + 1;
+
+    return fetchExercisesPage(nextPage, "append");
+  }, [
+    exercises.length,
+    fetchExercisesPage,
+    isLoading,
+    isLoadingMore,
+    lastLoadedPage,
+    totalCount,
+  ]);
+
+  const hasMore = exercises.length < totalCount;
 
   useEffect(() => {
-    fetchExercises();
-  }, [categoryFilter]);
+    fetchExercisesPage(1, "replace");
+  }, [categoryFilter, fetchExercisesPage]);
 
-  // Handle search with debounce
+  // Debounced refetch when search changes (skip first run to avoid duplicating category initial fetch)
   useEffect(() => {
+    if (skipInitialSearchDebounceRef.current) {
+      skipInitialSearchDebounceRef.current = false;
+
+      return;
+    }
     const timer = setTimeout(() => {
-      if (searchQuery !== "") {
-        fetchExercises();
-      }
+      fetchExercisesPage(1, "replace");
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, fetchExercisesPage]);
 
   // Handle delete
   const handleDelete = async (exerciseId: string, exerciseName: string) => {
@@ -663,6 +738,25 @@ export default function ExerciseLibraryContent() {
             </div>
           </CardBody>
         </Card>
+      )}
+
+      {!isLoading && exercises.length > 0 && hasMore && (
+        <div className="flex flex-col items-center gap-3 mt-8">
+          <p className="text-sm text-gray-500">
+            Mostrando {exercises.length} de {totalCount} ejercicios
+          </p>
+          <Button
+            className="font-semibold border-gray-300"
+            isLoading={isLoadingMore}
+            size="lg"
+            variant="bordered"
+            onPress={() => {
+              void loadMoreExercises();
+            }}
+          >
+            Cargar más
+          </Button>
+        </div>
       )}
 
       {/* Add Exercise Modal */}

@@ -37,6 +37,7 @@ import {
   usePrograms,
   useScheduledSessions,
 } from "@/lib/hooks/use-client-queries";
+import { sessionCalendarDayMatches } from "@/lib/utils/training-utils";
 
 type SessionStatus = "completed" | "pending" | "rest" | "in-progress";
 
@@ -337,8 +338,9 @@ export function WorkoutsContent() {
           (s: any) =>
             dayOfWeek &&
             Array.isArray(s.dayOfWeek) &&
-            s.dayOfWeek.some((d: string) =>
-              d.startsWith(dayOfWeek.substring(0, 3))
+            s.dayOfWeek.length > 0 &&
+            s.dayOfWeek.some((d: unknown) =>
+              sessionCalendarDayMatches(dayOfWeek, d)
             )
         );
 
@@ -800,51 +802,102 @@ export function WorkoutsContent() {
                               )}
                             </div>
                           ) : (
-                            // Strength exercise rendering (existing code)
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="flex items-center gap-1">
-                                <Icon
-                                  className={
-                                    isToday
-                                      ? "text-white/60"
-                                      : "text-foreground/40"
-                                  }
-                                  icon="solar:copy-bold"
-                                  width={12}
-                                />
-                                <span
-                                  className={`${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
-                                >
+                            <>
+                              {/* Strength: series/reps + coaching (always visible) */}
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <Icon
+                                    className={
+                                      isToday
+                                        ? "text-white/60"
+                                        : "text-foreground/40"
+                                    }
+                                    icon="solar:copy-bold"
+                                    width={12}
+                                  />
                                   <span
-                                    className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                    className={`${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
                                   >
-                                    {exercise.sets}
-                                  </span>{" "}
-                                  series
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Icon
-                                  className={
-                                    isToday
-                                      ? "text-white/60"
-                                      : "text-foreground/40"
-                                  }
-                                  icon="solar:hashtag-bold"
-                                  width={12}
-                                />
-                                <span
-                                  className={`${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
-                                >
+                                    <span
+                                      className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                    >
+                                      {exercise.sets}
+                                    </span>{" "}
+                                    series
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Icon
+                                    className={
+                                      isToday
+                                        ? "text-white/60"
+                                        : "text-foreground/40"
+                                    }
+                                    icon="solar:hashtag-bold"
+                                    width={12}
+                                  />
                                   <span
-                                    className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                    className={`${isToday ? "text-white/80" : "text-foreground/60"} font-body`}
                                   >
-                                    {exercise.reps}
-                                  </span>{" "}
-                                  reps
-                                </span>
+                                    <span
+                                      className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                    >
+                                      {exercise.reps}
+                                    </span>{" "}
+                                    reps
+                                  </span>
+                                </div>
                               </div>
-                            </div>
+                              {(exercise.trainingSystem ||
+                                exercise.tempo ||
+                                exercise.rest ||
+                                exercise.notes) && (
+                                <div
+                                  className={`mt-2 space-y-1 text-xs ${isToday ? "text-white/85" : "text-foreground/70"} font-body`}
+                                >
+                                  {exercise.trainingSystem ? (
+                                    <p>
+                                      <span
+                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                      >
+                                        Sistema:{" "}
+                                      </span>
+                                      {exercise.trainingSystem}
+                                    </p>
+                                  ) : null}
+                                  {exercise.tempo ? (
+                                    <p>
+                                      <span
+                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                      >
+                                        Tempo:{" "}
+                                      </span>
+                                      {exercise.tempo}
+                                    </p>
+                                  ) : null}
+                                  {exercise.rest ? (
+                                    <p>
+                                      <span
+                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                      >
+                                        Descanso:{" "}
+                                      </span>
+                                      {exercise.rest}
+                                    </p>
+                                  ) : null}
+                                  {exercise.notes ? (
+                                    <p>
+                                      <span
+                                        className={`font-semibold ${isToday ? "text-white" : "text-foreground"}`}
+                                      >
+                                        Notas:{" "}
+                                      </span>
+                                      {exercise.notes}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              )}
+                            </>
                           )}
 
                           {/* Show logged data if exists */}
@@ -1382,6 +1435,41 @@ export function WorkoutsContent() {
                 </div>
               </div>
             )}
+
+            {/* Active program but no sessions matched the calendar (data / days) */}
+            {!isLoading &&
+              !error &&
+              activePrograms.length > 0 &&
+              scheduledSessions.length === 0 && (
+                <Card className="bg-content1 border border-amber-200 shadow-sm">
+                  <CardBody className="p-8">
+                    <div className="flex flex-col items-center justify-center text-center gap-2">
+                      <Icon
+                        className="text-amber-600 text-5xl mb-1"
+                        icon="solar:calendar-minimalistic-bold"
+                      />
+                      <h3 className="text-lg font-semibold text-foreground font-heading">
+                        No pudimos mostrar tus sesiones
+                      </h3>
+                      <p className="text-foreground/70 text-sm font-body max-w-sm">
+                        Tienes un programa activo, pero no hay entrenamientos
+                        enlazados a los días del calendario. Suele deberse a
+                        cómo están guardados los días de la semana en la sesión.
+                        Contacta a tu entrenador para que lo revise.
+                      </p>
+                      <Button
+                        className="mt-2"
+                        color="primary"
+                        size="sm"
+                        variant="flat"
+                        onPress={() => refetchPrograms()}
+                      >
+                        Actualizar
+                      </Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              )}
 
             {/* No Active Program State */}
             {!isLoading && !error && activePrograms.length === 0 && (

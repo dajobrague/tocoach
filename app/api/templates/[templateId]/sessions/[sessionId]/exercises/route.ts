@@ -180,8 +180,6 @@ export async function POST(
       if (rest) metadata.rest_description = rest;
     }
 
-    if (notes) metadata.notes = notes;
-
     // Add the exercise to the session
     const { data: sessionExercise, error: linkError } = await supabase
       .from("session_exercises")
@@ -195,6 +193,7 @@ export async function POST(
         duration_seconds: duration ? parseInt(duration) * 60 : null, // Convert minutes to seconds
         distance_meters: distance ? parseFloat(distance) * 1000 : null, // Convert km to meters
         rest_seconds: rest && !isNaN(parseInt(rest)) ? parseInt(rest) : null,
+        notes: notes || null,
         metadata,
       })
       .select("*, exercises(*)")

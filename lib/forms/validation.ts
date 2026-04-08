@@ -231,6 +231,16 @@ export function shouldShowQuestion(
 
   const conditionalAnswer = answers[question.conditionalOn];
 
+  // Follow-up after rating: config often uses conditionalValue true; parent stores 1–5
+  if (
+    question.conditionalValue === true &&
+    typeof conditionalAnswer === "number" &&
+    conditionalAnswer >= 1 &&
+    conditionalAnswer <= 5
+  ) {
+    return true;
+  }
+
   // For boolean conditionals
   if (typeof question.conditionalValue === "boolean") {
     return conditionalAnswer === question.conditionalValue;
@@ -243,6 +253,71 @@ export function shouldShowQuestion(
 
   // If conditional answer exists (any truthy value)
   return !!conditionalAnswer;
+}
+
+function pushAnswerTypeErrors(
+  fieldId: string,
+  label: string,
+  type: QuestionConfig["type"],
+  answer: unknown,
+  errors: ValidationError[]
+): void {
+  if (answer === undefined || answer === null || answer === "") {
+    return;
+  }
+
+  switch (type) {
+    case "rating":
+      if (typeof answer !== "number" || answer < 1 || answer > 5) {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser un número entre 1 y 5`,
+        });
+      }
+      break;
+
+    case "number":
+      if (typeof answer !== "number" || isNaN(answer)) {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser un número válido`,
+        });
+      }
+      break;
+
+    case "boolean":
+      if (typeof answer !== "boolean") {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser verdadero o falso`,
+        });
+      }
+      break;
+
+    case "text":
+      if (typeof answer !== "string") {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser texto`,
+        });
+      }
+      break;
+
+    case "photo":
+      if (typeof answer !== "string") {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser una URL o texto de imagen`,
+        });
+      }
+      break;
+
+    case "group":
+      break;
+
+    default:
+      break;
+  }
 }
 
 /**
@@ -266,10 +341,40 @@ export function validateFormResponse(
   // Get only enabled questions
   const enabledQuestions = getEnabledQuestions(questionsArray);
 
-  // Check required fields
   enabledQuestions.forEach((question) => {
-    // Skip if question is conditional and shouldn't be shown
     if (!shouldShowQuestion(question, answers)) {
+      return;
+    }
+
+    if (question.type === "group") {
+      if (question.subQuestions) {
+        question.subQuestions.forEach((subQ) => {
+          if (!shouldShowQuestion(subQ, answers)) {
+            return;
+          }
+
+          if (
+            subQ.required &&
+            (answers[subQ.id] === undefined ||
+              answers[subQ.id] === null ||
+              answers[subQ.id] === "")
+          ) {
+            errors.push({
+              field: subQ.id,
+              message: `${subQ.label} es obligatorio`,
+            });
+          }
+
+          pushAnswerTypeErrors(
+            subQ.id,
+            subQ.label,
+            subQ.type,
+            answers[subQ.id],
+            errors
+          );
+        });
+      }
+
       return;
     }
 
@@ -285,75 +390,13 @@ export function validateFormResponse(
       });
     }
 
-    // Validate type-specific constraints
-    if (
-      answers[question.id] !== undefined &&
-      answers[question.id] !== null &&
-      answers[question.id] !== ""
-    ) {
-      const answer = answers[question.id];
-
-      switch (question.type) {
-        case "rating":
-          if (typeof answer !== "number" || answer < 1 || answer > 5) {
-            errors.push({
-              field: question.id,
-              message: `${question.label} debe ser un número entre 1 y 5`,
-            });
-          }
-          break;
-
-        case "number":
-          if (typeof answer !== "number" || isNaN(answer)) {
-            errors.push({
-              field: question.id,
-              message: `${question.label} debe ser un número válido`,
-            });
-          }
-          break;
-
-        case "boolean":
-          if (typeof answer !== "boolean") {
-            errors.push({
-              field: question.id,
-              message: `${question.label} debe ser verdadero o falso`,
-            });
-          }
-          break;
-
-        case "text":
-          if (typeof answer !== "string") {
-            errors.push({
-              field: question.id,
-              message: `${question.label} debe ser texto`,
-            });
-          }
-          break;
-
-        case "group":
-          // For groups, validate sub-questions
-          if (question.subQuestions) {
-            question.subQuestions.forEach((subQ) => {
-              if (!shouldShowQuestion(subQ, answers)) {
-                return;
-              }
-
-              if (
-                subQ.required &&
-                (answers[subQ.id] === undefined ||
-                  answers[subQ.id] === null ||
-                  answers[subQ.id] === "")
-              ) {
-                errors.push({
-                  field: subQ.id,
-                  message: `${subQ.label} es obligatorio`,
-                });
-              }
-            });
-          }
-          break;
-      }
-    }
+    pushAnswerTypeErrors(
+      question.id,
+      question.label,
+      question.type,
+      answers[question.id],
+      errors
+    );
   });
 
   // Check for unexpected fields (answers not in config)

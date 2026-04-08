@@ -108,7 +108,10 @@ export function LogTable<T extends ExerciseLog>({
   columns: {
     label: string;
     render: (log: T) => React.ReactNode;
+    /** Single-line ellipsis (short columns). */
     truncate?: boolean;
+    /** Multiline text (e.g. client notes). */
+    wrap?: boolean;
   }[];
 }) {
   return (
@@ -141,7 +144,13 @@ export function LogTable<T extends ExerciseLog>({
                 {columns.map((col) => (
                   <td
                     key={col.label}
-                    className={`px-6 py-3 text-gray-700 ${col.truncate ? "max-w-[200px] truncate" : ""}`}
+                    className={`px-6 py-3 text-gray-700 ${
+                      col.wrap
+                        ? "max-w-md min-w-[12rem] whitespace-pre-wrap break-words align-top"
+                        : col.truncate
+                          ? "max-w-[200px] truncate"
+                          : ""
+                    }`}
                   >
                     {col.render(log)}
                   </td>

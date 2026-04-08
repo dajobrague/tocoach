@@ -3,7 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-import { FormResponseSubmission, validateFormResponse } from "@/lib/forms";
+import {
+  FormResponseSubmission,
+  getEnabledQuestions,
+  isStructuredConfig,
+  normalizeFormAnswers,
+  validateFormResponse,
+} from "@/lib/forms";
 
 /**
  * GET /api/forms/responses/[clientId]?form_type=checkins|habits&start_date=&end_date=
@@ -129,7 +135,10 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      responses: responses || [],
+      responses: (responses || []).map((row) => ({
+        ...row,
+        answers: normalizeFormAnswers(row.answers),
+      })),
     });
   } catch (error) {
     console.error("[Forms Responses] Unexpected error:", error);
@@ -232,35 +241,84 @@ export async function POST(
       );
     }
 
-    if (!answers || typeof answers !== "object") {
+    if (
+      !answers ||
+      typeof answers !== "object" ||
+      Array.isArray(answers) ||
+      answers === null
+    ) {
       return NextResponse.json(
         { success: false, error: "Respuestas requeridas" },
         { status: 400 }
       );
     }
 
-    // Get the form config for validation
-    const { data: config } = await supabase
+    const { data: configRow, error: configFetchError } = await supabase
       .from("client_form_configs")
       .select("questions_config")
       .eq("client_id", clientId)
       .eq("form_type", form_type)
-      .single();
+      .maybeSingle();
 
-    if (config) {
-      // Validate responses against config
-      const validation = validateFormResponse(body, config.questions_config);
+    if (configFetchError) {
+      console.error(
+        "[Forms Responses] Error loading form config:",
+        configFetchError
+      );
 
-      if (!validation.valid) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Respuestas inválidas",
-            errors: validation.errors,
-          },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Error al cargar la configuración del formulario",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!configRow?.questions_config) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "El formulario no está configurado para este cliente. El entrenador debe guardar la configuración antes de poder enviar respuestas.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const questionsConfig = configRow.questions_config;
+    const questionsArray = isStructuredConfig(questionsConfig)
+      ? questionsConfig.questions
+      : Array.isArray(questionsConfig)
+        ? questionsConfig
+        : [];
+
+    const enabledQuestions = getEnabledQuestions(questionsArray);
+
+    if (
+      enabledQuestions.length > 0 &&
+      Object.keys(answers as Record<string, unknown>).length === 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Debes enviar al menos una respuesta.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateFormResponse(body, questionsConfig);
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Respuestas inválidas",
+          errors: validation.errors,
+        },
+        { status: 400 }
+      );
     }
 
     // Create response

@@ -190,7 +190,11 @@ export function CardioExerciseCard({
                 render: (l) =>
                   l.avg_heart_rate ? `${l.avg_heart_rate} bpm` : "—",
               },
-              { label: "Notas", render: (l) => l.notes ?? "—", truncate: true },
+              {
+                label: "Notas",
+                render: (l) => l.notes ?? "—",
+                wrap: true,
+              },
             ]}
             logs={[...logs].reverse()}
           />
