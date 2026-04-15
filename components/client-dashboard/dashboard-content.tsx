@@ -188,7 +188,9 @@ export function DashboardContent() {
         }),
         dayName: d.toLocaleDateString("es-ES", { weekday: "long" }),
         isToday: i === 0,
-        isSubmitted: dailyResponses.some((r) => r.response_date === dateStr),
+        isSubmitted: dailyResponses.some(
+          (r: FormResponse) => r.response_date === dateStr
+        ),
       });
     }
 

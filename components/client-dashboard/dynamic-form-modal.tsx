@@ -37,7 +37,7 @@ interface DynamicFormModalProps {
   schedule?: CheckInSchedule | null;
   onSuccess?: () => void;
   /** YYYY-MM-DD date to fill/edit. Defaults to today when omitted. */
-  targetDate?: string;
+  targetDate?: string | undefined;
 }
 
 export function DynamicFormModal({

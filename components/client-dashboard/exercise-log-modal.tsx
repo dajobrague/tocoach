@@ -266,7 +266,12 @@ export function ExerciseLogModal({
   const updateSet = (index: number, field: keyof SetDraft, value: string) => {
     const newSets = [...formData.sets];
 
-    newSets[index] = { ...newSets[index], [field]: value };
+    newSets[index] = {
+      reps: "",
+      weight: "",
+      ...newSets[index],
+      [field]: value,
+    };
     setFormData({ ...formData, sets: newSets });
   };
 
