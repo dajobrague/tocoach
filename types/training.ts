@@ -345,3 +345,12 @@ export interface ExerciseLibraryResponse {
   limit?: number;
   error?: string;
 }
+
+// Exercise log set (per-set tracking)
+
+export interface ExerciseLogSet {
+  id?: string;
+  set_number: number;
+  reps: number | null;
+  weight_kg: number | null;
+}

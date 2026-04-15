@@ -1,35 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { loadTenantContext } from "@/lib/tenant/loader";
-
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  const { slug } = await params;
-
-  let appName = "TopCoach";
-  let shortName = "TopCoach";
-
-  try {
-    const tenantContext = await loadTenantContext(slug);
-
-    if (tenantContext) {
-      appName =
-        tenantContext.theme_json?.meta?.name || tenantContext.slug || appName;
-      shortName = appName;
-    }
-  } catch {
-    // Fall back to defaults
-  }
-
+export async function GET() {
   const manifest = {
-    id: `https://app.topcoach.io/${slug}`,
-    name: `${appName} - Coaching App`,
-    short_name: shortName,
-    description: `${appName} - Plataforma de coaching personal`,
-    start_url: `/${slug}`,
-    scope: `/${slug}`,
+    id: "https://app.topcoach.io/trainer",
+    name: "TopCoach Trainer",
+    short_name: "Trainer",
+    description: "TopCoach — Panel de entrenadores",
+    start_url: "/trainer/login",
+    scope: "/trainer",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#000000",
@@ -84,7 +62,7 @@ export async function GET(
         purpose: "maskable any",
       },
     ],
-    categories: ["health", "fitness", "productivity"],
+    categories: ["health", "fitness", "productivity", "business"],
     lang: "es",
     dir: "ltr",
   };

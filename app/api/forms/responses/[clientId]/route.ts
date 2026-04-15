@@ -233,6 +233,27 @@ export async function POST(
     const body: FormResponseSubmission = await request.json();
     const { form_type, response_date, answers, metadata } = body;
 
+    // Habits can only be submitted for the last 3 days (today, yesterday, day before)
+    if (form_type === "habits" && response_date) {
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0]!;
+      const target = new Date(response_date + "T12:00:00Z");
+      const todayDate = new Date(todayStr + "T12:00:00Z");
+      const diffDays = Math.round(
+        (todayDate.getTime() - target.getTime()) / 86400000
+      );
+
+      if (diffDays < 0 || diffDays > 2) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Solo puedes enviar registros de los últimos 3 días",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate required fields
     if (!form_type || (form_type !== "checkins" && form_type !== "habits")) {
       return NextResponse.json(
@@ -295,9 +316,26 @@ export async function POST(
 
     const enabledQuestions = getEnabledQuestions(questionsArray);
 
+    // Build the set of valid question IDs from the current config so we can
+    // strip any stale keys that were saved under a previous form version.
+    // Without this, renaming or removing a question causes "unexpected field"
+    // validation errors for clients who have answers under the old key.
+    const validQuestionIds = new Set<string>();
+
+    enabledQuestions.forEach((q) => {
+      validQuestionIds.add(q.id);
+      q.subQuestions?.forEach((sq) => validQuestionIds.add(sq.id));
+    });
+
+    const cleanedAnswers = Object.fromEntries(
+      Object.entries(answers as Record<string, unknown>).filter(([k]) =>
+        validQuestionIds.has(k)
+      )
+    );
+
     if (
       enabledQuestions.length > 0 &&
-      Object.keys(answers as Record<string, unknown>).length === 0
+      Object.keys(cleanedAnswers).length === 0
     ) {
       return NextResponse.json(
         {
@@ -308,7 +346,10 @@ export async function POST(
       );
     }
 
-    const validation = validateFormResponse(body, questionsConfig);
+    const validation = validateFormResponse(
+      { ...body, answers: cleanedAnswers },
+      questionsConfig
+    );
 
     if (!validation.valid) {
       return NextResponse.json(
@@ -321,17 +362,23 @@ export async function POST(
       );
     }
 
-    // Create response
+    // Upsert response (insert or update if same day already exists)
     const { data: response, error } = await supabase
       .from("form_responses")
-      .insert({
-        tenant_host: tenantHost,
-        client_id: clientId,
-        form_type,
-        response_date: response_date || new Date().toISOString().split("T")[0],
-        answers,
-        metadata: metadata || {},
-      })
+      .upsert(
+        {
+          tenant_host: tenantHost,
+          client_id: clientId,
+          form_type,
+          response_date:
+            response_date || new Date().toISOString().split("T")[0],
+          answers: cleanedAnswers,
+          metadata: metadata || {},
+        },
+        {
+          onConflict: "tenant_host,client_id,form_type,response_date",
+        }
+      )
       .select()
       .single();
 

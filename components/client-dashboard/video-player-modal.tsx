@@ -34,7 +34,7 @@ export function VideoPlayerModal({
 
       return {
         type: "youtube",
-        embedUrl: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`,
+        embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`,
       };
     }
 
@@ -111,7 +111,7 @@ export function VideoPlayerModal({
             ) : (
               <iframe
                 allowFullScreen
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 className="absolute inset-0 w-full h-full"
                 frameBorder="0"
                 src={videoData.embedUrl}

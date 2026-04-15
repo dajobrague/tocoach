@@ -3,7 +3,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// GET - Fetch exercise logs for a client (trainer-authenticated)
+function buildSetsFromLegacy(log: any) {
+  const count = log.sets_completed ?? 1;
+  const repsStr = log.reps_completed;
+  let reps: number | null = null;
+
+  if (repsStr) {
+    const m = String(repsStr).match(/\d+/);
+
+    if (m) reps = parseInt(m[0]);
+  }
+
+  return Array.from({ length: count }, (_, i) => ({
+    set_number: i + 1,
+    reps,
+    weight_kg: log.weight_kg ?? null,
+  }));
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -25,7 +42,6 @@ export async function GET(
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    // Verify the client belongs to the trainer's tenant
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id, tenant")
@@ -51,7 +67,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date)`
+        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg)`
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: true });
@@ -74,21 +90,32 @@ export async function GET(
       );
     }
 
-    const flattenedLogs = (exerciseLogs || []).map((log: any) => ({
-      ...log,
-      scheduled_date: log.scheduled_sessions?.scheduled_date,
-      weight_used:
-        log.metadata?.weight_used_original ||
-        (log.weight_kg ? `${log.weight_kg}kg` : null),
-      intensity: log.metadata?.intensity,
-      avg_heart_rate: log.metadata?.avg_heart_rate,
-      duration_minutes: log.duration_seconds
-        ? Math.round(log.duration_seconds / 60)
-        : null,
-      distance_km: log.distance_meters
-        ? parseFloat((log.distance_meters / 1000).toFixed(1))
-        : null,
-    }));
+    const flattenedLogs = (exerciseLogs || []).map((log: any) => {
+      const rawSets = log.exercise_log_sets ?? [];
+      const sets =
+        rawSets.length > 0
+          ? rawSets.sort((a: any, b: any) => a.set_number - b.set_number)
+          : buildSetsFromLegacy(log);
+
+      return {
+        ...log,
+        exercise_log_sets: undefined,
+        scheduled_sessions: undefined,
+        scheduled_date: log.scheduled_sessions?.scheduled_date,
+        sets,
+        weight_used:
+          log.metadata?.weight_used_original ||
+          (log.weight_kg ? `${log.weight_kg}kg` : null),
+        intensity: log.metadata?.intensity,
+        avg_heart_rate: log.metadata?.avg_heart_rate,
+        duration_minutes: log.duration_seconds
+          ? Math.round(log.duration_seconds / 60)
+          : null,
+        distance_km: log.distance_meters
+          ? parseFloat((log.distance_meters / 1000).toFixed(1))
+          : null,
+      };
+    });
 
     return NextResponse.json({
       success: true,

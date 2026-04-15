@@ -1,3 +1,10 @@
+export interface ExerciseLogSet {
+  id?: string;
+  set_number: number;
+  reps: number | null;
+  weight_kg: number | null;
+}
+
 export interface ExerciseLog {
   id: string;
   exercise_id: string;
@@ -9,10 +16,13 @@ export interface ExerciseLog {
   };
   scheduled_date: string;
   completed_at: string;
-  sets_completed: number | null;
-  reps_completed: string | null;
-  weight_kg: number | null;
-  weight_used: string | null;
+  sets: ExerciseLogSet[];
+  video_url: string | null;
+  // Legacy fields kept for backward compatibility with old data
+  sets_completed?: number | null;
+  reps_completed?: string | null;
+  weight_kg?: number | null;
+  weight_used?: string | null;
   duration_minutes: number | null;
   distance_km: number | null;
   intensity: string | null;

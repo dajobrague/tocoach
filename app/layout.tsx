@@ -69,7 +69,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
   const manifestUrl = tenantSlug
     ? `/${tenantSlug}/manifest.json`
-    : "/manifest.json";
+    : pathname.startsWith("/trainer")
+      ? "/trainer/manifest.json"
+      : "/manifest.json";
 
   return {
     title: pageTitle,
@@ -77,7 +79,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: manifestUrl,
     icons: {
       icon: "/favicon.ico",
-      apple: "/icons/icon-192x192.png",
+      apple: "/icons/icon-180x180.png",
     },
     appleWebApp: {
       capable: true,

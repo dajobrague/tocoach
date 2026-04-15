@@ -944,8 +944,12 @@ export function WorkoutsContent() {
                                       <p
                                         className={`font-semibold ${isToday ? "text-white" : "text-success"}`}
                                       >
-                                        ✓ Registrado: {log.sets_completed}x
-                                        {log.reps_completed} @ {log.weight_used}
+                                        ✓ Registrado:{" "}
+                                        {log.sets?.length
+                                          ? `${log.sets.length} series`
+                                          : log.sets_completed
+                                            ? `${log.sets_completed}x${log.reps_completed}`
+                                            : ""}
                                       </p>
                                     )}
                                     {log.notes && (

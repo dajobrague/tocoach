@@ -239,17 +239,20 @@ export async function DELETE(
       );
     }
 
-    // Check if exercise is used in any sessions
-    const { data: usedInSessions, error: checkError } = await supabase
-      .from("session_exercises")
-      .select("id")
-      .eq("exercise_id", exerciseId)
-      .limit(1);
+    // Check if exercise is used in sessions that belong to actively-assigned programs.
+    // Exercises only referenced in inactive/template programs can be safely deleted
+    // because session_exercises has ON DELETE CASCADE on exercise_id.
 
-    if (checkError) {
+    // Step 1: find all sessions that reference this exercise
+    const { data: sessionExercises, error: seCheckError } = await supabase
+      .from("session_exercises")
+      .select("session_id")
+      .eq("exercise_id", exerciseId);
+
+    if (seCheckError) {
       console.error(
         "[Exercise Library API] Error checking exercise usage:",
-        checkError
+        seCheckError
       );
 
       return NextResponse.json(
@@ -258,15 +261,57 @@ export async function DELETE(
       );
     }
 
-    if (usedInSessions && usedInSessions.length > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "No se puede eliminar este ejercicio porque está siendo usado en programas activos",
-        },
-        { status: 400 }
-      );
+    if (sessionExercises && sessionExercises.length > 0) {
+      // Step 2: get the program IDs for those sessions
+      const sessionIds = [
+        ...new Set(sessionExercises.map((se) => se.session_id)),
+      ];
+
+      const { data: sessionsData } = await supabase
+        .from("sessions")
+        .select("program_id")
+        .in("id", sessionIds)
+        .not("program_id", "is", null);
+
+      const programIds = [
+        ...new Set(
+          (sessionsData ?? []).map((s: any) => s.program_id).filter(Boolean)
+        ),
+      ];
+
+      if (programIds.length > 0) {
+        // Step 3: check if any of those programs have an active client assignment
+        const { data: activeAssignments, error: activeCheckError } =
+          await supabase
+            .from("client_programs")
+            .select("id")
+            .in("program_id", programIds)
+            .eq("status", "active")
+            .limit(1);
+
+        if (activeCheckError) {
+          console.error(
+            "[Exercise Library API] Error checking active assignments:",
+            activeCheckError
+          );
+
+          return NextResponse.json(
+            { success: false, error: "Error al verificar uso del ejercicio" },
+            { status: 500 }
+          );
+        }
+
+        if (activeAssignments && activeAssignments.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "No se puede eliminar este ejercicio porque está siendo usado en programas activos",
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Delete the exercise

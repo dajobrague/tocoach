@@ -4,7 +4,7 @@ import type { ExerciseLog, FormResponse, StepsPoint } from "./progress/types";
 
 import { Button, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildDateRange,
@@ -18,6 +18,11 @@ import { StrengthExerciseCard } from "./progress/strength-card";
 import { CardioExerciseCard } from "./progress/cardio-card";
 import { NeatSection } from "./progress/neat-section";
 
+import {
+  VerticalVideoPlayerModal,
+  type VerticalVideoPlayerHandle,
+} from "@/components/client-dashboard/vertical-video-player-modal";
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ProgressTab({ clientId }: { clientId: string }) {
@@ -28,6 +33,11 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
   const [stepsData, setStepsData] = useState<StepsPoint[]>([]);
   const [stepsLoading, setStepsLoading] = useState(true);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const videoPlayerRef = useRef<VerticalVideoPlayerHandle>(null);
+
+  const openVideo = useCallback((url: string, name: string) => {
+    videoPlayerRef.current?.open(url, name);
+  }, []);
 
   const fetchLogs = useCallback(async () => {
     setLogsLoading(true);
@@ -172,6 +182,7 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
                     key={g.exercise.id}
                     group={g}
                     isExpanded={expandedCard === `s-${g.exercise.id}`}
+                    onPlayVideo={openVideo}
                     onToggle={() =>
                       setExpandedCard(
                         expandedCard === `s-${g.exercise.id}`
@@ -219,6 +230,8 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
           )}
         </>
       )}
+
+      <VerticalVideoPlayerModal ref={videoPlayerRef} />
     </div>
   );
 }

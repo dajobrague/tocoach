@@ -21,7 +21,12 @@ import {
   readExerciseLogDraft,
   writeExerciseLogDraft,
   type ExerciseLogFormDraft,
+  type SetDraft,
 } from "@/lib/client/exercise-log-draft";
+import {
+  compressVideo,
+  isCompressionSupported,
+} from "@/lib/utils/video-compression";
 
 interface ExerciseLogModalProps {
   isOpen: boolean;
@@ -58,41 +63,62 @@ function isExerciseCardio(
   );
 }
 
+function defaultSet(): SetDraft {
+  return { reps: "", weight: "" };
+}
+
 function buildBaseFormData(
   exercise: NonNullable<ExerciseLogModalProps["exercise"]>,
   existingLog: ExerciseLogModalProps["existingLog"]
 ): ExerciseLogFormDraft {
-  if (existingLog) {
-    return {
-      setsCompleted:
-        existingLog.sets_completed?.toString() ||
-        exercise.sets?.toString() ||
-        "",
-      repsCompleted: existingLog.reps_completed || exercise.reps || "",
-      weightUsed: existingLog.weight_used || "",
-      durationCompleted:
-        existingLog.duration_minutes?.toString() ||
-        exercise.duration?.toString() ||
-        "",
-      distanceCompleted:
-        existingLog.distance_km?.toString() ||
-        exercise.distance?.toString() ||
-        "",
-      intensityCompleted: existingLog.intensity || exercise.intensity || "",
-      avgHeartRate: existingLog.avg_heart_rate?.toString() || "",
-      notes: existingLog.notes || "",
-    };
+  let sets: SetDraft[];
+
+  if (
+    existingLog?.sets &&
+    Array.isArray(existingLog.sets) &&
+    existingLog.sets.length > 0
+  ) {
+    sets = existingLog.sets.map((s: any) => ({
+      reps: s.reps != null ? String(s.reps) : "",
+      weight: s.weight_kg != null ? String(s.weight_kg) : "",
+    }));
+  } else if (existingLog?.sets_completed) {
+    const count = existingLog.sets_completed;
+    const repsStr = existingLog.reps_completed;
+    let reps = "";
+
+    if (repsStr) {
+      const m = String(repsStr).match(/\d+/);
+
+      if (m) reps = m[0];
+    }
+    sets = Array.from({ length: count }, () => ({
+      reps,
+      weight: "",
+    }));
+  } else {
+    const count = exercise.sets || 1;
+
+    sets = Array.from({ length: count }, () => defaultSet());
   }
 
   return {
-    setsCompleted: exercise.sets?.toString() || "",
-    repsCompleted: exercise.reps || "",
-    weightUsed: "",
-    durationCompleted: exercise.duration?.toString() || "",
-    distanceCompleted: exercise.distance?.toString() || "",
-    intensityCompleted: exercise.intensity || "",
-    avgHeartRate: "",
-    notes: "",
+    sets,
+    durationCompleted: existingLog
+      ? existingLog.duration_minutes?.toString() ||
+        exercise.duration?.toString() ||
+        ""
+      : exercise.duration?.toString() || "",
+    distanceCompleted: existingLog
+      ? existingLog.distance_km?.toString() ||
+        exercise.distance?.toString() ||
+        ""
+      : exercise.distance?.toString() || "",
+    intensityCompleted: existingLog
+      ? existingLog.intensity || exercise.intensity || ""
+      : exercise.intensity || "",
+    avgHeartRate: existingLog?.avg_heart_rate?.toString() || "",
+    notes: existingLog?.notes || "",
   };
 }
 
@@ -108,13 +134,17 @@ export function ExerciseLogModal({
   onSuccess,
 }: ExerciseLogModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoPath, setVideoPath] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isCardio = exercise ? isExerciseCardio(exercise) : false;
 
   const [formData, setFormData] = useState<ExerciseLogFormDraft>({
-    setsCompleted: "",
-    repsCompleted: "",
-    weightUsed: "",
+    sets: [defaultSet()],
     durationCompleted: "",
     distanceCompleted: "",
     intensityCompleted: "",
@@ -133,7 +163,6 @@ export function ExerciseLogModal({
     scheduledDate
   );
 
-  // When the modal opens, hydrate from server/program defaults and overlay any local draft
   useEffect(() => {
     if (!isOpen || !exercise) return;
 
@@ -155,6 +184,9 @@ export function ExerciseLogModal({
     } else {
       setFormData(base);
     }
+
+    setVideoUrl(existingLog?.video_url || null);
+    setVideoPath(null);
   }, [
     isOpen,
     exercise,
@@ -166,7 +198,6 @@ export function ExerciseLogModal({
     draftKey,
   ]);
 
-  // Persist draft while editing (debounced)
   useEffect(() => {
     if (!isOpen || !exercise) return;
 
@@ -177,7 +208,6 @@ export function ExerciseLogModal({
     return () => window.clearTimeout(t);
   }, [formData, isOpen, exercise, draftKey]);
 
-  // Flush draft when user leaves the tab or backgrounds the app (before unload may skip debounce)
   useEffect(() => {
     if (!isOpen || !exercise) return;
 
@@ -233,6 +263,84 @@ export function ExerciseLogModal({
     return () => vv.removeEventListener("resize", onResize);
   }, [isOpen, scrollToFocused]);
 
+  const updateSet = (index: number, field: keyof SetDraft, value: string) => {
+    const newSets = [...formData.sets];
+
+    newSets[index] = { ...newSets[index], [field]: value };
+    setFormData({ ...formData, sets: newSets });
+  };
+
+  const addSet = () => {
+    const lastSet = formData.sets[formData.sets.length - 1];
+    const newSet: SetDraft = lastSet
+      ? { reps: lastSet.reps, weight: lastSet.weight }
+      : defaultSet();
+
+    setFormData({ ...formData, sets: [...formData.sets, newSet] });
+  };
+
+  const removeSet = (index: number) => {
+    if (formData.sets.length <= 1) return;
+    const newSets = formData.sets.filter((_, i) => i !== index);
+
+    setFormData({ ...formData, sets: newSets });
+  };
+
+  const handleVideoUpload = async (file: File) => {
+    try {
+      let fileToUpload = file;
+
+      if (isCompressionSupported()) {
+        setIsCompressing(true);
+        setCompressionProgress(0);
+        fileToUpload = await compressVideo(file, (percent) => {
+          setCompressionProgress(percent);
+        });
+        setIsCompressing(false);
+      }
+
+      setIsUploading(true);
+      const fd = new FormData();
+
+      fd.append("file", fileToUpload);
+
+      const response = await fetch(
+        `/api/clients/${clientId}/exercise-logs/upload-video`,
+        { method: "POST", body: fd }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setVideoUrl(data.url);
+        setVideoPath(data.path);
+      } else {
+        alert("Error al subir video: " + (data.error || "Error desconocido"));
+      }
+    } catch (err) {
+      console.error("[ExerciseLogModal] Error uploading video:", err);
+      alert("Error al subir video");
+      setIsCompressing(false);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    if (videoPath) {
+      try {
+        await fetch(
+          `/api/clients/${clientId}/exercise-logs/upload-video?path=${encodeURIComponent(videoPath)}`,
+          { method: "DELETE" }
+        );
+      } catch {
+        // best effort
+      }
+    }
+    setVideoUrl(null);
+    setVideoPath(null);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -241,9 +349,9 @@ export function ExerciseLogModal({
         exerciseId,
         scheduledDate,
         notes: formData.notes,
+        videoUrl: videoUrl || null,
       };
 
-      // Add fields based on exercise type
       if (isCardio) {
         requestBody.durationCompleted = formData.durationCompleted
           ? parseInt(formData.durationCompleted)
@@ -256,9 +364,10 @@ export function ExerciseLogModal({
           ? parseInt(formData.avgHeartRate)
           : null;
       } else {
-        requestBody.setsCompleted = parseInt(formData.setsCompleted);
-        requestBody.repsCompleted = formData.repsCompleted;
-        requestBody.weightUsed = formData.weightUsed;
+        requestBody.sets = formData.sets.map((s) => ({
+          reps: s.reps ? parseInt(s.reps) : null,
+          weight: s.weight || null,
+        }));
       }
 
       const response = await fetch(`/api/clients/${clientId}/exercise-logs`, {
@@ -351,7 +460,6 @@ export function ExerciseLogModal({
               </p>
 
               {isCardio ? (
-                // Cardio exercise details
                 <div className="grid grid-cols-2 gap-3">
                   {exercise.duration && (
                     <div>
@@ -396,7 +504,6 @@ export function ExerciseLogModal({
                   )}
                 </div>
               ) : (
-                // Strength exercise details
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs text-foreground/60 font-body">
@@ -441,7 +548,6 @@ export function ExerciseLogModal({
               </h4>
 
               {isCardio ? (
-                // Cardio log form
                 <>
                   <div className="grid grid-cols-2 gap-4">
                     <Input
@@ -553,63 +659,65 @@ export function ExerciseLogModal({
                   />
                 </>
               ) : (
-                // Strength log form
                 <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      isRequired
-                      classNames={{ input: "text-base" }}
-                      label="Series Completadas"
-                      placeholder="Ej: 4"
-                      startContent={
-                        <Icon
-                          className="text-foreground/40"
-                          icon="solar:copy-bold"
-                          width={18}
+                  {/* Per-set inputs */}
+                  <div className="space-y-3">
+                    {formData.sets.map((set, index) => (
+                      <div key={index} className="flex items-end gap-2">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mb-1">
+                          {index + 1}
+                        </div>
+                        <Input
+                          classNames={{ input: "text-base", base: "flex-1" }}
+                          label={index === 0 ? "Reps" : undefined}
+                          placeholder="10"
+                          size="sm"
+                          type="number"
+                          value={set.reps}
+                          onValueChange={(value) =>
+                            updateSet(index, "reps", value)
+                          }
                         />
-                      }
-                      type="number"
-                      value={formData.setsCompleted}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, setsCompleted: value })
-                      }
-                    />
-                    <Input
-                      isRequired
-                      classNames={{ input: "text-base" }}
-                      label="Repeticiones"
-                      placeholder="Ej: 10 o 8-10"
-                      startContent={
-                        <Icon
-                          className="text-foreground/40"
-                          icon="solar:hashtag-bold"
-                          width={18}
+                        <Input
+                          classNames={{ input: "text-base", base: "flex-1" }}
+                          label={index === 0 ? "Peso" : undefined}
+                          placeholder="80kg"
+                          size="sm"
+                          value={set.weight}
+                          onValueChange={(value) =>
+                            updateSet(index, "weight", value)
+                          }
                         />
-                      }
-                      value={formData.repsCompleted}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, repsCompleted: value })
-                      }
-                    />
+                        {formData.sets.length > 1 && (
+                          <Button
+                            isIconOnly
+                            className="mb-1"
+                            size="sm"
+                            variant="light"
+                            onPress={() => removeSet(index)}
+                          >
+                            <Icon
+                              className="text-danger"
+                              icon="solar:trash-bin-minimalistic-bold"
+                              width={16}
+                            />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
-                  <Input
-                    isRequired
-                    classNames={{ input: "text-base" }}
-                    label="Peso Utilizado"
-                    placeholder="Ej: 20kg, BW, 15lbs, BW+10kg"
+                  <Button
+                    className="w-full"
+                    size="sm"
                     startContent={
-                      <Icon
-                        className="text-foreground/40"
-                        icon="solar:scale-bold"
-                        width={18}
-                      />
+                      <Icon icon="solar:add-circle-bold" width={18} />
                     }
-                    value={formData.weightUsed}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, weightUsed: value })
-                    }
-                  />
+                    variant="flat"
+                    onPress={addSet}
+                  >
+                    Añadir serie
+                  </Button>
 
                   <Textarea
                     classNames={{ input: "text-base" }}
@@ -631,6 +739,89 @@ export function ExerciseLogModal({
                 </>
               )}
             </div>
+
+            {/* Video upload section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-foreground font-heading">
+                Video (Opcional)
+              </h4>
+
+              {videoUrl ? (
+                <div className="relative rounded-lg overflow-hidden bg-black">
+                  <video
+                    controls
+                    playsInline
+                    className="w-full max-h-48 object-contain"
+                    preload="metadata"
+                    src={videoUrl}
+                  />
+                  <Button
+                    isIconOnly
+                    className="absolute top-2 right-2"
+                    color="danger"
+                    size="sm"
+                    variant="solid"
+                    onPress={handleRemoveVideo}
+                  >
+                    <Icon icon="solar:trash-bin-minimalistic-bold" width={16} />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.mov,.webm,.m4v"
+                    className="hidden"
+                    disabled={isCompressing || isUploading}
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+
+                      if (file) handleVideoUpload(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    className="w-full"
+                    isDisabled={isCompressing || isUploading}
+                    isLoading={isUploading && !isCompressing}
+                    size="sm"
+                    startContent={
+                      !isUploading &&
+                      !isCompressing && (
+                        <Icon icon="solar:videocamera-bold" width={18} />
+                      )
+                    }
+                    variant="flat"
+                    onPress={() => fileInputRef.current?.click()}
+                  >
+                    {isCompressing
+                      ? "Comprimiendo video..."
+                      : isUploading
+                        ? "Subiendo video..."
+                        : "Subir video"}
+                  </Button>
+                  {isCompressing && (
+                    <div>
+                      <div className="flex items-center gap-2 text-sm text-foreground/60">
+                        <Icon
+                          className="animate-spin"
+                          icon="solar:refresh-bold"
+                          width={16}
+                        />
+                        Comprimiendo video... {compressionProgress}%
+                      </div>
+                      <div className="w-full bg-default-200 rounded-full h-2 mt-1">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${compressionProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </ModalBody>
         <ModalFooter>
@@ -640,7 +831,7 @@ export function ExerciseLogModal({
           <Button
             className="text-white font-semibold"
             color="primary"
-            isDisabled={isSaving}
+            isDisabled={isSaving || isUploading || isCompressing}
             isLoading={isSaving}
             startContent={
               !isSaving && <Icon icon="solar:check-circle-bold" width={18} />

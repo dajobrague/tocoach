@@ -7,10 +7,13 @@ const PREFIX = "tc_exercise_log_draft:";
 /** Drop drafts older than this so stale data does not override fresh server logs. */
 const DRAFT_TTL_MS = 48 * 60 * 60 * 1000;
 
+export type SetDraft = {
+  reps: string;
+  weight: string;
+};
+
 export type ExerciseLogFormDraft = {
-  setsCompleted: string;
-  repsCompleted: string;
-  weightUsed: string;
+  sets: SetDraft[];
   durationCompleted: string;
   distanceCompleted: string;
   intensityCompleted: string;

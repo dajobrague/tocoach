@@ -3,7 +3,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// GET - Fetch exercise logs for a client within a date range
+function parseWeightKg(weight: string): number | null {
+  if (!weight) return null;
+  const match = weight.match(/[\d.]+/);
+
+  return match ? parseFloat(match[0]) : null;
+}
+
+function buildSetsFromLegacy(log: any) {
+  const count = log.sets_completed ?? 1;
+  const repsStr = log.reps_completed;
+  let reps: number | null = null;
+
+  if (repsStr) {
+    const m = String(repsStr).match(/\d+/);
+
+    if (m) reps = parseInt(m[0]);
+  }
+
+  return Array.from({ length: count }, (_, i) => ({
+    set_number: i + 1,
+    reps,
+    weight_kg: log.weight_kg ?? null,
+  }));
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -11,7 +35,6 @@ export async function GET(
   const supabase = createSupabaseClient();
 
   try {
-    // Authenticate client
     const session = await getClientSession();
 
     if (!session) {
@@ -27,7 +50,6 @@ export async function GET(
     const endDate = searchParams.get("endDate");
     const sessionId = searchParams.get("sessionId");
 
-    // Verify client is requesting their own data
     if (session.client_id.toString() !== clientId) {
       return NextResponse.json(
         { success: false, error: "No autorizado" },
@@ -37,7 +59,9 @@ export async function GET(
 
     let query = supabase
       .from("exercise_logs")
-      .select("*, scheduled_sessions!inner(scheduled_date)")
+      .select(
+        "*, scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg)"
+      )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: false });
 
@@ -62,25 +86,32 @@ export async function GET(
       );
     }
 
-    // Flatten the data structure for easier use in UI
-    const flattenedLogs = (exerciseLogs || []).map((log: any) => ({
-      ...log,
-      scheduled_date: log.scheduled_sessions?.scheduled_date,
-      // Use original weight format from metadata if available, otherwise format weight_kg
-      weight_used:
-        log.metadata?.weight_used_original ||
-        (log.weight_kg ? `${log.weight_kg}kg` : null),
-      // Cardio fields from metadata
-      intensity: log.metadata?.intensity,
-      avg_heart_rate: log.metadata?.avg_heart_rate,
-      // Convert stored values back to UI-friendly units
-      duration_minutes: log.duration_seconds
-        ? Math.round(log.duration_seconds / 60)
-        : null,
-      distance_km: log.distance_meters
-        ? (log.distance_meters / 1000).toFixed(1)
-        : null,
-    }));
+    const flattenedLogs = (exerciseLogs || []).map((log: any) => {
+      const rawSets = log.exercise_log_sets ?? [];
+      const sets =
+        rawSets.length > 0
+          ? rawSets.sort((a: any, b: any) => a.set_number - b.set_number)
+          : buildSetsFromLegacy(log);
+
+      return {
+        ...log,
+        exercise_log_sets: undefined,
+        scheduled_sessions: undefined,
+        scheduled_date: log.scheduled_sessions?.scheduled_date,
+        sets,
+        weight_used:
+          log.metadata?.weight_used_original ||
+          (log.weight_kg ? `${log.weight_kg}kg` : null),
+        intensity: log.metadata?.intensity,
+        avg_heart_rate: log.metadata?.avg_heart_rate,
+        duration_minutes: log.duration_seconds
+          ? Math.round(log.duration_seconds / 60)
+          : null,
+        distance_km: log.distance_meters
+          ? (log.distance_meters / 1000).toFixed(1)
+          : null,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -96,7 +127,6 @@ export async function GET(
   }
 }
 
-// POST - Create an exercise log
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -104,7 +134,6 @@ export async function POST(
   const supabase = createSupabaseClient();
 
   try {
-    // Authenticate client
     const session = await getClientSession();
 
     if (!session) {
@@ -120,20 +149,15 @@ export async function POST(
       sessionId,
       exerciseId,
       scheduledDate,
-      // Strength fields
-      setsCompleted,
-      repsCompleted,
-      weightUsed,
-      // Cardio fields
+      sets,
+      videoUrl,
       durationCompleted,
       distanceCompleted,
       intensityCompleted,
       avgHeartRate,
-      // Common
       notes,
     } = body;
 
-    // Verify client is creating for themselves
     if (session.client_id.toString() !== clientId) {
       return NextResponse.json(
         { success: false, error: "No autorizado" },
@@ -143,7 +167,6 @@ export async function POST(
 
     console.log("[Exercise Logs API] Creating log:", body);
 
-    // Get the session to find trainer_id and tenant_host
     const { data: sessionData, error: sessionError } = await supabase
       .from("sessions")
       .select("trainer_id, tenant_host")
@@ -159,22 +182,19 @@ export async function POST(
       );
     }
 
-    // Find or create scheduled_session for this date
     let scheduledSessionId: string;
 
-    const { data: existingScheduled, error: scheduledFindError } =
-      await supabase
-        .from("scheduled_sessions")
-        .select("id")
-        .eq("session_id", sessionId)
-        .eq("client_id", clientId)
-        .eq("scheduled_date", scheduledDate)
-        .maybeSingle();
+    const { data: existingScheduled } = await supabase
+      .from("scheduled_sessions")
+      .select("id")
+      .eq("session_id", sessionId)
+      .eq("client_id", clientId)
+      .eq("scheduled_date", scheduledDate)
+      .maybeSingle();
 
     if (existingScheduled) {
       scheduledSessionId = existingScheduled.id;
     } else {
-      // Create new scheduled session
       const { data: newScheduled, error: scheduledCreateError } = await supabase
         .from("scheduled_sessions")
         .insert({
@@ -203,31 +223,13 @@ export async function POST(
       scheduledSessionId = newScheduled.id;
     }
 
-    // Parse weight - extract number from string like "20kg" or "20"
-    let weightKg: number | null = null;
+    const isCardio = !!(durationCompleted || distanceCompleted);
 
-    if (weightUsed) {
-      const weightMatch = weightUsed.match(/[\d.]+/);
-
-      if (weightMatch) {
-        weightKg = parseFloat(weightMatch[0]);
-      }
-    }
-
-    // Build metadata object
     const metadata: any = {};
 
-    if (weightUsed) {
-      metadata.weight_used_original = weightUsed; // Store original format like "20kg", "BW+10kg", etc.
-    }
-    if (intensityCompleted) {
-      metadata.intensity = intensityCompleted;
-    }
-    if (avgHeartRate) {
-      metadata.avg_heart_rate = parseInt(avgHeartRate);
-    }
+    if (intensityCompleted) metadata.intensity = intensityCompleted;
+    if (avgHeartRate) metadata.avg_heart_rate = parseInt(avgHeartRate);
 
-    // Create exercise log with appropriate fields
     const logData: any = {
       tenant_host: sessionData.tenant_host,
       scheduled_session_id: scheduledSessionId,
@@ -236,26 +238,19 @@ export async function POST(
       trainer_id: sessionData.trainer_id,
       notes: notes || null,
       completed_at: new Date().toISOString(),
+      video_url: videoUrl || null,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
 
-    // Add strength or cardio specific fields
-    if (durationCompleted || distanceCompleted) {
-      // Cardio exercise
+    if (isCardio) {
       if (durationCompleted) {
-        logData.duration_seconds = parseInt(durationCompleted) * 60; // Convert minutes to seconds
+        logData.duration_seconds = parseInt(durationCompleted) * 60;
       }
       if (distanceCompleted) {
-        logData.distance_meters = parseFloat(distanceCompleted) * 1000; // Convert km to meters
+        logData.distance_meters = parseFloat(distanceCompleted) * 1000;
       }
-    } else {
-      // Strength exercise
-      logData.sets_completed = setsCompleted;
-      logData.reps_completed = repsCompleted;
-      logData.weight_kg = weightKg;
     }
 
-    // Upsert: update existing log for same session+exercise+client, or insert new
     const { data: existingExerciseLog } = await supabase
       .from("exercise_logs")
       .select("id")
@@ -301,16 +296,39 @@ export async function POST(
       );
     }
 
-    // Return flattened format for consistency with GET
+    let savedSets: any[] = [];
+
+    if (!isCardio && Array.isArray(sets) && sets.length > 0) {
+      await supabase
+        .from("exercise_log_sets")
+        .delete()
+        .eq("exercise_log_id", exerciseLog.id);
+
+      const setRows = sets.map((s: any, i: number) => ({
+        exercise_log_id: exerciseLog.id,
+        set_number: i + 1,
+        reps: s.reps != null ? parseInt(s.reps) : null,
+        weight_kg: parseWeightKg(String(s.weight ?? "")),
+      }));
+
+      const { data: insertedSets, error: setsError } = await supabase
+        .from("exercise_log_sets")
+        .insert(setRows)
+        .select("id, set_number, reps, weight_kg");
+
+      if (setsError) {
+        console.error("[Exercise Logs API] Error saving sets:", setsError);
+      } else {
+        savedSets = insertedSets ?? [];
+      }
+    }
+
     const flattenedLog: any = {
       ...exerciseLog,
       scheduled_date: scheduledDate,
+      sets: savedSets.sort((a: any, b: any) => a.set_number - b.set_number),
     };
 
-    // Add appropriate fields based on log type
-    if (weightUsed) {
-      flattenedLog.weight_used = weightUsed;
-    }
     if (exerciseLog.duration_seconds) {
       flattenedLog.duration_minutes = Math.round(
         exerciseLog.duration_seconds / 60

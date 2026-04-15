@@ -36,6 +36,8 @@ interface DynamicFormModalProps {
   /** Resolved from dashboard; merged with API schedule when modal opens. */
   schedule?: CheckInSchedule | null;
   onSuccess?: () => void;
+  /** YYYY-MM-DD date to fill/edit. Defaults to today when omitted. */
+  targetDate?: string;
 }
 
 export function DynamicFormModal({
@@ -45,6 +47,7 @@ export function DynamicFormModal({
   formType,
   schedule: scheduleProp,
   onSuccess,
+  targetDate,
 }: DynamicFormModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [questions, setQuestions] = useState<QuestionConfig[]>([]);
@@ -53,6 +56,7 @@ export function DynamicFormModal({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
   const [existingResponseDate, setExistingResponseDate] = useState<string>("");
   const [hasNeatCards, setHasNeatCards] = useState(true);
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(
@@ -126,7 +130,7 @@ export function DynamicFormModal({
       fetchFormConfig();
       checkExistingResponse();
     }
-  }, [isOpen, clientId, formType]);
+  }, [isOpen, clientId, formType, targetDate]);
 
   const checkNeatCards = async () => {
     try {
@@ -144,9 +148,9 @@ export function DynamicFormModal({
 
   const checkExistingResponse = async () => {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const dateToCheck = targetDate || new Date().toISOString().split("T")[0];
       const response = await fetch(
-        `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${today}`
+        `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${dateToCheck}&end_date=${dateToCheck}`
       );
       const data = await response.json();
 
@@ -155,13 +159,20 @@ export function DynamicFormModal({
 
         setAnswers(existingResponse.answers || {});
         setExistingResponseDate(existingResponse.response_date);
-        setIsViewMode(true);
+
+        // Both habits and check-in forms are editable when a response already
+        // exists. This allows clients to update their answers during a coaching
+        // call or if they need to correct a previous submission.
+        setIsEditingExisting(true);
+        setIsViewMode(false);
       } else {
+        setIsEditingExisting(false);
         setIsViewMode(false);
         setAnswers({});
       }
     } catch (error) {
       console.error("Error checking existing response:", error);
+      setIsEditingExisting(false);
       setIsViewMode(false);
     }
   };
@@ -398,7 +409,7 @@ export function DynamicFormModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           form_type: formType,
-          response_date: new Date().toISOString().split("T")[0],
+          response_date: targetDate || new Date().toISOString().split("T")[0],
           answers,
           metadata: {
             submitted_from: "mobile",
@@ -413,10 +424,15 @@ export function DynamicFormModal({
         if (onSuccess) onSuccess();
         setAnswers({});
         setCurrentStep(0);
+        setIsEditingExisting(false);
         onClose();
         addToast({
-          title: "Formulario enviado",
-          description: "Tus respuestas se han guardado correctamente",
+          title: isEditingExisting
+            ? "Registro actualizado"
+            : "Formulario enviado",
+          description: isEditingExisting
+            ? "Tus respuestas se han actualizado correctamente"
+            : "Tus respuestas se han guardado correctamente",
           color: "success",
         });
       } else {
@@ -932,13 +948,17 @@ export function DynamicFormModal({
                       ? formType === "checkins"
                         ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
                         : "Registro Diario"
-                      : currentSection.title || "Formulario"}
+                      : targetDate
+                        ? `Registro del ${new Date(targetDate + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`
+                        : currentSection.title || "Formulario"}
                     {isViewMode && <span className="text-success"> ✓</span>}
                   </h2>
                   <p className="text-sm text-foreground/60 font-normal font-body">
                     {isViewMode
                       ? `Enviado el ${new Date(existingResponseDate).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}`
-                      : `Paso ${currentStep + 1} de ${totalSteps}`}
+                      : isEditingExisting
+                        ? "Editando registro enviado"
+                        : `Paso ${currentStep + 1} de ${totalSteps}`}
                   </p>
                 </div>
               </div>
@@ -1155,8 +1175,12 @@ export function DynamicFormModal({
                       {uploadingPhotos.size > 0
                         ? "Espera, subiendo fotos..."
                         : isSubmitting
-                          ? "Enviando..."
-                          : "Enviar"}
+                          ? isEditingExisting
+                            ? "Actualizando..."
+                            : "Enviando..."
+                          : isEditingExisting
+                            ? "Actualizar"
+                            : "Enviar"}
                     </Button>
                   )}
                 </div>

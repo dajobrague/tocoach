@@ -18,10 +18,7 @@ import {
   TrainingActivityChart,
   WeightChart,
 } from "@/components/client-dashboard/progress-charts";
-import {
-  formResponsesToSubmittedAtPayload,
-  isDailyHabitsSubmittedToday,
-} from "@/lib/forms/client-helpers";
+import { formResponsesToSubmittedAtPayload } from "@/lib/forms/client-helpers";
 import { aggregateWeightByCheckInPeriods } from "@/lib/forms/checkin-chart-periods";
 import {
   chartPeriodCountForRange,
@@ -96,7 +93,9 @@ export function DashboardContent() {
   }, [checkinsConfigJson?.schedule]);
 
   // State
-  const [showDailyFormModal, setShowDailyFormModal] = useState(false);
+  const [selectedDayForForm, setSelectedDayForForm] = useState<string | null>(
+    null
+  );
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
 
@@ -166,8 +165,35 @@ export function DashboardContent() {
     checkinSchedule,
     weeklyResponses,
   ]);
-  const showDailyButton =
-    !isLoadingForms && !isDailyHabitsSubmittedToday(dailyResponses);
+  const dailyFormDays = useMemo(() => {
+    const days: {
+      date: string;
+      label: string;
+      dayName: string;
+      isToday: boolean;
+      isSubmitted: boolean;
+    }[] = [];
+
+    for (let i = 0; i < 3; i++) {
+      const d = new Date();
+
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0]!;
+
+      days.push({
+        date: dateStr,
+        label: d.toLocaleDateString("es-ES", {
+          day: "numeric",
+          month: "short",
+        }),
+        dayName: d.toLocaleDateString("es-ES", { weekday: "long" }),
+        isToday: i === 0,
+        isSubmitted: dailyResponses.some((r) => r.response_date === dateStr),
+      });
+    }
+
+    return days;
+  }, [dailyResponses]);
 
   const periodLabels = useMemo(() => {
     try {
@@ -470,7 +496,9 @@ export function DashboardContent() {
             logoUrl={logoUrl}
             tenantSlug={tenantSlug}
             trainerName={trainerName}
-            onOpenDailyForm={() => setShowDailyFormModal(true)}
+            onOpenDailyForm={() =>
+              setSelectedDayForForm(new Date().toISOString().split("T")[0]!)
+            }
             onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
           />
 
@@ -497,26 +525,80 @@ export function DashboardContent() {
             </div>
           )}
 
-          {/* Daily Habits Section - Only shows if not completed today */}
-          {showDailyButton && (
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
+          {/* Daily Habits Section - 3-day cards */}
+          {!isLoadingForms && (
+            <div className="mb-4 px-4">
+              <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
                 Registro Diario
               </h2>
-              <button
-                className="bg-primary cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
-                onClick={() => setShowDailyFormModal(true)}
-              >
-                <div className="max-w-lg mx-auto flex items-center justify-between">
-                  <span className="text-white text-xl font-medium">
-                    Registra tu día de hoy
-                  </span>
-                  <Icon
-                    className="text-white text-3xl"
-                    icon="solar:alt-arrow-right-bold"
-                  />
-                </div>
-              </button>
+              <div className="grid grid-cols-3 gap-2">
+                {dailyFormDays.map((day) => (
+                  <button
+                    key={day.date}
+                    className={`relative flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer border ${
+                      day.isSubmitted && day.isToday
+                        ? "border-primary bg-primary shadow-sm"
+                        : day.isSubmitted
+                          ? "border-default-200 bg-default-50"
+                          : day.isToday
+                            ? "border-primary bg-primary shadow-sm"
+                            : "border-default-200 bg-default-50"
+                    }`}
+                    onClick={() => setSelectedDayForForm(day.date)}
+                  >
+                    {day.isToday && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Hoy
+                      </span>
+                    )}
+                    <span
+                      className={`text-sm font-bold capitalize mt-1 ${day.isToday ? "text-white" : "text-foreground"}`}
+                    >
+                      {day.label}
+                    </span>
+                    <span
+                      className={`text-xs capitalize mb-2 ${day.isToday ? "text-white/70" : "text-foreground/50"}`}
+                    >
+                      {day.dayName}
+                    </span>
+                    {day.isSubmitted ? (
+                      <div
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${day.isToday ? "bg-white/20" : "bg-success/10"}`}
+                      >
+                        <Icon
+                          className={
+                            day.isToday ? "text-white" : "text-success"
+                          }
+                          icon="solar:check-circle-bold"
+                          width={14}
+                        />
+                        <span
+                          className={`text-[11px] font-semibold ${day.isToday ? "text-white" : "text-success"}`}
+                        >
+                          Enviado
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${day.isToday ? "bg-white/20" : "bg-warning/10"}`}
+                      >
+                        <Icon
+                          className={
+                            day.isToday ? "text-white" : "text-warning-600"
+                          }
+                          icon="solar:clock-circle-bold"
+                          width={14}
+                        />
+                        <span
+                          className={`text-[11px] font-semibold ${day.isToday ? "text-white" : "text-warning-600"}`}
+                        >
+                          Pendiente
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -543,8 +625,9 @@ export function DashboardContent() {
           <DynamicFormModal
             clientId={clientId}
             formType="habits"
-            isOpen={showDailyFormModal}
-            onClose={() => setShowDailyFormModal(false)}
+            isOpen={selectedDayForForm !== null}
+            targetDate={selectedDayForForm ?? undefined}
+            onClose={() => setSelectedDayForForm(null)}
             onSuccess={() => {
               queryClient.invalidateQueries({
                 queryKey: ["client", "formResponses", clientId, "habits"],
