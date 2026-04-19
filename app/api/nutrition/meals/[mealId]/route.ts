@@ -165,7 +165,16 @@ export async function PATCH(
 
     const { mealId } = await params;
     const body = await request.json();
-    const { label, meal_order, notes, protein, carbs, fats, calories } = body;
+    const {
+      label,
+      meal_order,
+      notes,
+      protein,
+      carbs,
+      fats,
+      calories,
+      show_calories,
+    } = body;
 
     console.log("[Nutrition Meals API] Updating meal:", mealId, body);
 
@@ -192,6 +201,13 @@ export async function PATCH(
     if (carbs !== undefined) updateData.carbs = carbs;
     if (fats !== undefined) updateData.fats = fats;
     if (calories !== undefined) updateData.calories = calories;
+    // Item 2.3: per-meal calorie visibility override.
+    //  null  → inherit from plan (default)
+    //  true  → force show
+    //  false → force hide
+    if (show_calories !== undefined)
+      updateData.show_calories =
+        show_calories === null ? null : Boolean(show_calories);
 
     const { data: meal, error: updateError } = await supabase
       .from("nutrition_meals")

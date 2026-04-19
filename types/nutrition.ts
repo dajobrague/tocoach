@@ -15,6 +15,11 @@ export interface NutritionPlan {
   is_template: boolean; // Whether this is a reusable template
   /** When false, clients do not see meal images (trainer can still manage them). */
   show_meal_images?: boolean;
+  /**
+   * Plan-level calorie visibility toggle (Item 2.3). Default true. Can be
+   * overridden per meal via NutritionMeal.show_calories (tri-state).
+   */
+  show_calories?: boolean;
   /** structured: solo comidas; pdf: solo PDF; hybrid: ambos */
   plan_mode?: NutritionPlanMode;
   pdf_url?: string | null;
@@ -56,6 +61,13 @@ export interface NutritionMeal {
   carbs: number; // grams
   fats: number; // grams
   calories: number; // kcal
+  /**
+   * Per-meal override for calorie visibility (Item 2.3).
+   *   null  → inherit from NutritionPlan.show_calories (default).
+   *   true  → always show, even if plan hides.
+   *   false → always hide, even if plan shows.
+   */
+  show_calories?: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +82,17 @@ export interface NutritionMealOption {
   fats: number | null;
   calories: number | null;
   image_url: string | null;
+  // Item 2.4: per-option recipe. All fields optional.
+  /** Free-form preparation instructions (multi-line). */
+  instructions?: string | null;
+  /** Minutes of prep time before cooking. */
+  prep_time_minutes?: number | null;
+  /** Minutes of cooking/oven/stove time. */
+  cooking_time_minutes?: number | null;
+  /** How many people the recipe feeds as written. */
+  servings?: number | null;
+  /** Short extra note shown on the recipe panel. */
+  recipe_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -145,6 +168,7 @@ export interface UpdateNutritionPlanRequest {
   status?: "active" | "completed" | "paused" | "cancelled";
   notes?: string;
   show_meal_images?: boolean;
+  show_calories?: boolean;
   plan_mode?: NutritionPlanMode;
 }
 
@@ -185,6 +209,8 @@ export interface UpdateNutritionMealRequest {
   fats?: number;
   calories?: number;
   has_alternatives?: boolean;
+  /** Tri-state: null = inherit, true = force show, false = force hide. */
+  show_calories?: boolean | null;
 }
 
 export interface CreateNutritionMealOptionRequest {
@@ -200,6 +226,12 @@ export interface UpdateNutritionMealOptionRequest {
   fats?: number | null;
   calories?: number | null;
   image_url?: string | null;
+  // Item 2.4: recipe fields. Empty string is accepted and normalised to NULL.
+  instructions?: string | null;
+  prep_time_minutes?: number | null;
+  cooking_time_minutes?: number | null;
+  servings?: number | null;
+  recipe_notes?: string | null;
 }
 
 export interface CreateNutritionIngredientRequest {

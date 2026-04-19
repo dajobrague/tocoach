@@ -163,8 +163,21 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, option_order, protein, carbs, fats, calories, image_url } =
-      body;
+    const {
+      name,
+      option_order,
+      protein,
+      carbs,
+      fats,
+      calories,
+      image_url,
+      // Item 2.4: recipe fields. All optional.
+      instructions,
+      prep_time_minutes,
+      cooking_time_minutes,
+      servings,
+      recipe_notes,
+    } = body;
 
     const updateData: Record<string, unknown> = {};
 
@@ -183,6 +196,39 @@ export async function PATCH(
     if (fats !== undefined) updateData.fats = fats;
     if (calories !== undefined) updateData.calories = calories;
     if (image_url !== undefined) updateData.image_url = image_url;
+
+    // Item 2.4: recipe fields. Empty string from the UI is normalised to NULL
+    // so the DB stays tidy (and so "clear" actually clears).
+    const toNullableString = (v: unknown): string | null => {
+      if (typeof v !== "string") return null;
+      const trimmed = v.trim();
+
+      return trimmed.length === 0 ? null : trimmed;
+    };
+    const toNullableNonNegInt = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : parseInt(String(v), 10);
+
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+    };
+    const toNullablePositiveInt = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : parseInt(String(v), 10);
+
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+    };
+
+    if (instructions !== undefined)
+      updateData.instructions = toNullableString(instructions);
+    if (prep_time_minutes !== undefined)
+      updateData.prep_time_minutes = toNullableNonNegInt(prep_time_minutes);
+    if (cooking_time_minutes !== undefined)
+      updateData.cooking_time_minutes =
+        toNullableNonNegInt(cooking_time_minutes);
+    if (servings !== undefined)
+      updateData.servings = toNullablePositiveInt(servings);
+    if (recipe_notes !== undefined)
+      updateData.recipe_notes = toNullableString(recipe_notes);
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(

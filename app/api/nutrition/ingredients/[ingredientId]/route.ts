@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { startPerfTimer } from "@/lib/utils/perf-logger";
 
 // PATCH - Update a nutrition ingredient
 export async function PATCH(
@@ -9,12 +10,15 @@ export async function PATCH(
   { params }: { params: Promise<{ ingredientId: string }> }
 ) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("PATCH /api/nutrition/ingredients/[id]");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -52,6 +56,7 @@ export async function PATCH(
         "[Nutrition Ingredients API] Ingredient not found:",
         checkError
       );
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Ingrediente no encontrado" },
@@ -68,6 +73,7 @@ export async function PATCH(
 
     if (mealError || !meal) {
       console.error("[Nutrition Ingredients API] Meal not found:", mealError);
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Comida no encontrada" },
@@ -83,6 +89,7 @@ export async function PATCH(
 
     if (dayError || !day) {
       console.error("[Nutrition Ingredients API] Day not found:", dayError);
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Día no encontrado" },
@@ -102,6 +109,7 @@ export async function PATCH(
         "[Nutrition Ingredients API] Plan not found or unauthorized:",
         planError
       );
+      timer.end({ ingredient_id: ingredientId, status: 403 });
 
       return NextResponse.json(
         { success: false, error: "No autorizado" },
@@ -134,6 +142,7 @@ export async function PATCH(
         "[Nutrition Ingredients API] Error updating ingredient:",
         updateError
       );
+      timer.end({ ingredient_id: ingredientId, status: 500 });
 
       return NextResponse.json(
         { success: false, error: "Error al actualizar ingrediente" },
@@ -141,12 +150,19 @@ export async function PATCH(
       );
     }
 
+    timer.end({
+      ingredient_id: ingredientId,
+      fields_updated: Object.keys(updateData).length,
+      status: 200,
+    });
+
     return NextResponse.json({
       success: true,
       data: ingredient,
     });
   } catch (error) {
     console.error("[Nutrition Ingredients API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },
@@ -161,12 +177,15 @@ export async function DELETE(
   { params }: { params: Promise<{ ingredientId: string }> }
 ) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("DELETE /api/nutrition/ingredients/[id]");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -192,6 +211,7 @@ export async function DELETE(
         "[Nutrition Ingredients API] Ingredient not found:",
         checkError
       );
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Ingrediente no encontrado" },
@@ -208,6 +228,7 @@ export async function DELETE(
 
     if (mealError || !meal) {
       console.error("[Nutrition Ingredients API] Meal not found:", mealError);
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Comida no encontrada" },
@@ -223,6 +244,7 @@ export async function DELETE(
 
     if (dayError || !day) {
       console.error("[Nutrition Ingredients API] Day not found:", dayError);
+      timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Día no encontrado" },
@@ -242,6 +264,7 @@ export async function DELETE(
         "[Nutrition Ingredients API] Plan not found or unauthorized:",
         planError
       );
+      timer.end({ ingredient_id: ingredientId, status: 403 });
 
       return NextResponse.json(
         { success: false, error: "No autorizado" },
@@ -260,6 +283,7 @@ export async function DELETE(
         "[Nutrition Ingredients API] Error deleting ingredient:",
         deleteError
       );
+      timer.end({ ingredient_id: ingredientId, status: 500 });
 
       return NextResponse.json(
         { success: false, error: "Error al eliminar ingrediente" },
@@ -267,12 +291,15 @@ export async function DELETE(
       );
     }
 
+    timer.end({ ingredient_id: ingredientId, status: 200 });
+
     return NextResponse.json({
       success: true,
       message: "Ingrediente eliminado exitosamente",
     });
   } catch (error) {
     console.error("[Nutrition Ingredients API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },

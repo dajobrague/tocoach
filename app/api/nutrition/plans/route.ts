@@ -3,16 +3,379 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { NUTRITION_TREE_SELECT } from "@/lib/utils/nutrition-tree";
+import { startPerfTimer } from "@/lib/utils/perf-logger";
+
+// ---------------------------------------------------------------------------
+// Types for the template tree we read with NUTRITION_TREE_SELECT. Kept
+// permissive on purpose: these rows come straight from PostgREST and we don't
+// want to force Supabase's generated types on them.
+// ---------------------------------------------------------------------------
+
+type TemplateIngredient = {
+  id: string;
+  option_id?: string | null;
+  name: string;
+  quantity: string;
+  unit: string;
+  ingredient_order: number;
+  protein: number | string | null;
+  carbs: number | string | null;
+  fats: number | string | null;
+  calories: number | string | null;
+};
+
+type TemplateOption = {
+  id: string;
+  name: string;
+  option_order: number;
+  protein: number | string | null;
+  carbs: number | string | null;
+  fats: number | string | null;
+  calories: number | string | null;
+  image_url: string | null;
+  // Item 2.4: recipe fields. All optional; older templates have them NULL.
+  instructions: string | null;
+  prep_time_minutes: number | null;
+  cooking_time_minutes: number | null;
+  servings: number | null;
+  recipe_notes: string | null;
+  nutrition_ingredients?: TemplateIngredient[] | null;
+};
+
+type TemplateMeal = {
+  id: string;
+  label: string;
+  meal_order: number;
+  notes: string | null;
+  protein: number | string | null;
+  carbs: number | string | null;
+  fats: number | string | null;
+  calories: number | string | null;
+  image_url: string | null;
+  has_alternatives: boolean | null;
+  // Item 2.3: tri-state calorie visibility override. null = inherit from plan.
+  show_calories: boolean | null;
+  nutrition_meal_options?: TemplateOption[] | null;
+};
+
+type TemplateDay = {
+  id: string;
+  day_label: string;
+  day_order: number;
+  protein: number | string | null;
+  carbs: number | string | null;
+  fats: number | string | null;
+  calories: number | string | null;
+  weekdays: unknown[] | null;
+  nutrition_meals?: TemplateMeal[] | null;
+};
+
+type TemplateTree = {
+  id: string;
+  notes: string | null;
+  show_meal_images: boolean | null;
+  // Item 2.3: plan-level calorie visibility (boolean, defaults to true in DB).
+  show_calories: boolean | null;
+  nutrition_days?: TemplateDay[] | null;
+  [key: string]: unknown;
+};
+
+/**
+ * Clone the full subtree (days → meals → options → ingredients) of a template
+ * into a freshly-created plan. Runs as a sequence of 4 batch INSERTs instead
+ * of the O(days × meals × options) sequential inserts the route had before
+ * Fase 3.
+ *
+ * Ordering contract: Postgres guarantees that a single INSERT ... VALUES ...
+ * RETURNING returns rows in VALUES order. Supabase-js passes this through
+ * unchanged. We rely on that to map `templateX[i] → newX[i]` via array index.
+ * A strict length check on every batch catches any unexpected divergence.
+ *
+ * Failure semantics: any batch failure throws. The caller is responsible for
+ * deleting the newly created plan so the cascade cleans up whatever got
+ * inserted before the failure. This is a stronger guarantee than the
+ * pre-Fase-3 code, which silently skipped failed rows.
+ */
+async function cloneTemplateSubtree(params: {
+  supabase: ReturnType<typeof createSupabaseClient>;
+  tenantHost: string;
+  newPlanId: string;
+  templateDays: TemplateDay[];
+}): Promise<void> {
+  const { supabase, tenantHost, newPlanId, templateDays } = params;
+
+  if (templateDays.length === 0) {
+    return; // Nothing to clone.
+  }
+
+  // -----------------------------------------------------------------------
+  // 1) DAYS — one INSERT for all days of the plan.
+  // -----------------------------------------------------------------------
+  const dayRows = templateDays.map((td) => ({
+    tenant_host: tenantHost,
+    nutrition_plan_id: newPlanId,
+    day_label: td.day_label,
+    day_order: td.day_order,
+    protein: td.protein || 0,
+    carbs: td.carbs || 0,
+    fats: td.fats || 0,
+    calories: td.calories || 0,
+    weekdays: td.weekdays || [],
+  }));
+
+  const { data: newDays, error: daysError } = await supabase
+    .from("nutrition_days")
+    .insert(dayRows)
+    .select("id");
+
+  if (daysError || !newDays || newDays.length !== templateDays.length) {
+    throw new Error(
+      `clone_days_failed: ${daysError?.message ?? "unexpected length mismatch"}`
+    );
+  }
+
+  // template_day_id → new_day_id
+  const dayIdByTemplateId = new Map<string, string>();
+
+  // Safe index access: length check above guarantees newDays[i] exists.
+  templateDays.forEach((td, i) => dayIdByTemplateId.set(td.id, newDays[i]!.id));
+
+  // -----------------------------------------------------------------------
+  // 2) MEALS — one INSERT for all meals across every day.
+  //    We keep a parallel array of template meals so we can build the
+  //    template_meal_id → new_meal_id map once the insert returns.
+  // -----------------------------------------------------------------------
+  const mealPlanned: {
+    row: Record<string, unknown>;
+    template: TemplateMeal;
+  }[] = [];
+
+  for (const td of templateDays) {
+    const newDayId = dayIdByTemplateId.get(td.id)!;
+
+    for (const tm of td.nutrition_meals ?? []) {
+      mealPlanned.push({
+        template: tm,
+        row: {
+          tenant_host: tenantHost,
+          nutrition_day_id: newDayId,
+          label: tm.label,
+          meal_order: tm.meal_order,
+          notes: tm.notes,
+          protein: tm.protein || 0,
+          carbs: tm.carbs || 0,
+          fats: tm.fats || 0,
+          calories: tm.calories || 0,
+          image_url: tm.image_url ?? null,
+          has_alternatives: tm.has_alternatives ?? false,
+          // Item 2.3: preserve meal-level calorie visibility (tri-state).
+          show_calories: tm.show_calories ?? null,
+        },
+      });
+    }
+  }
+
+  const mealIdByTemplateId = new Map<string, string>();
+
+  if (mealPlanned.length > 0) {
+    const { data: newMeals, error: mealsError } = await supabase
+      .from("nutrition_meals")
+      .insert(mealPlanned.map((m) => m.row))
+      .select("id");
+
+    if (mealsError || !newMeals || newMeals.length !== mealPlanned.length) {
+      throw new Error(
+        `clone_meals_failed: ${mealsError?.message ?? "unexpected length mismatch"}`
+      );
+    }
+
+    // Safe index access: length check above guarantees newMeals[i] exists.
+    mealPlanned.forEach((m, i) =>
+      mealIdByTemplateId.set(m.template.id, newMeals[i]!.id)
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // 3) OPTIONS — one INSERT for all options.
+  //    Each template meal contributes either its template options, or (if
+  //    it had none) a single fallback "Opción 1" derived from the meal's
+  //    macros. This matches the pre-Fase-3 fallback branch.
+  //
+  //    We track a couple of maps:
+  //     - optionIdByTemplateId: template_option_id → new_option_id (only for
+  //       rows that correspond to a real template option).
+  //     - defaultOptionIdByNewMealId: new_meal_id → id of its first option,
+  //       used to route any ingredient whose template option_id doesn't map
+  //       cleanly (defensive; should never happen after migration 073).
+  // -----------------------------------------------------------------------
+  type PlannedOption =
+    | {
+        kind: "template";
+        row: Record<string, unknown>;
+        template: TemplateOption;
+        newMealId: string;
+      }
+    | {
+        kind: "fallback";
+        row: Record<string, unknown>;
+        newMealId: string;
+      };
+
+  const optionPlanned: PlannedOption[] = [];
+
+  for (const m of mealPlanned) {
+    const newMealId = mealIdByTemplateId.get(m.template.id)!;
+    const templateOptions = m.template.nutrition_meal_options ?? [];
+
+    if (templateOptions.length > 0) {
+      for (const to of templateOptions) {
+        optionPlanned.push({
+          kind: "template",
+          template: to,
+          newMealId,
+          row: {
+            meal_id: newMealId,
+            name: to.name,
+            option_order: to.option_order,
+            protein: to.protein,
+            carbs: to.carbs,
+            fats: to.fats,
+            calories: to.calories,
+            image_url: to.image_url ?? null,
+            // Item 2.4: preserve recipe fields when cloning from template.
+            instructions: to.instructions ?? null,
+            prep_time_minutes: to.prep_time_minutes ?? null,
+            cooking_time_minutes: to.cooking_time_minutes ?? null,
+            servings: to.servings ?? null,
+            recipe_notes: to.recipe_notes ?? null,
+          },
+        });
+      }
+    } else {
+      // Fallback: promote meal-level macros into a default "Opción 1".
+      optionPlanned.push({
+        kind: "fallback",
+        newMealId,
+        row: {
+          meal_id: newMealId,
+          name: "Opción 1",
+          option_order: 1,
+          protein: m.template.protein ?? null,
+          carbs: m.template.carbs ?? null,
+          fats: m.template.fats ?? null,
+          calories: m.template.calories ?? null,
+          image_url: m.template.image_url ?? null,
+        },
+      });
+    }
+  }
+
+  const optionIdByTemplateId = new Map<string, string>();
+  const defaultOptionIdByNewMealId = new Map<string, string>();
+
+  if (optionPlanned.length > 0) {
+    const { data: newOptions, error: optionsError } = await supabase
+      .from("nutrition_meal_options")
+      .insert(optionPlanned.map((o) => o.row))
+      .select("id");
+
+    if (
+      optionsError ||
+      !newOptions ||
+      newOptions.length !== optionPlanned.length
+    ) {
+      throw new Error(
+        `clone_options_failed: ${optionsError?.message ?? "unexpected length mismatch"}`
+      );
+    }
+
+    // Safe index access: length check above guarantees newOptions[i] exists.
+    optionPlanned.forEach((op, i) => {
+      const newOptId = newOptions[i]!.id;
+
+      if (op.kind === "template") {
+        optionIdByTemplateId.set(op.template.id, newOptId);
+      }
+      // First option we see for a given new meal becomes its default
+      // fallback target for ingredients.
+      if (!defaultOptionIdByNewMealId.has(op.newMealId)) {
+        defaultOptionIdByNewMealId.set(op.newMealId, newOptId);
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // 4) INGREDIENTS — one INSERT for all ingredients across every option.
+  //    In the pre-Fase-3 code, ingredients were fetched by nutrition_meal_id
+  //    (a legacy FK) and routed either through optionIdMap or to the
+  //    default option. We now traverse ingredients through each template
+  //    option, so the routing is always direct; the defaultOption fallback
+  //    remains as a defensive path for any ingredient whose template
+  //    option_id happens to be missing from the map.
+  // -----------------------------------------------------------------------
+  const ingredientRows: Record<string, unknown>[] = [];
+
+  for (const m of mealPlanned) {
+    const newMealId = mealIdByTemplateId.get(m.template.id)!;
+    const defaultNewOptionId = defaultOptionIdByNewMealId.get(newMealId);
+
+    for (const to of m.template.nutrition_meal_options ?? []) {
+      const mappedOptId = optionIdByTemplateId.get(to.id);
+
+      for (const ti of to.nutrition_ingredients ?? []) {
+        const routedOptId =
+          (ti.option_id && optionIdByTemplateId.get(ti.option_id)) ||
+          mappedOptId ||
+          defaultNewOptionId;
+
+        if (!routedOptId) {
+          // Shouldn't happen: every meal has at least one option by now.
+          throw new Error(
+            `clone_ingredients_failed: no target option for ingredient ${ti.id}`
+          );
+        }
+
+        ingredientRows.push({
+          tenant_host: tenantHost,
+          nutrition_meal_id: newMealId,
+          option_id: routedOptId,
+          name: ti.name,
+          quantity: ti.quantity,
+          unit: ti.unit,
+          ingredient_order: ti.ingredient_order,
+          protein: ti.protein,
+          carbs: ti.carbs,
+          fats: ti.fats,
+          calories: ti.calories,
+        });
+      }
+    }
+  }
+
+  if (ingredientRows.length > 0) {
+    const { error: ingredientsError } = await supabase
+      .from("nutrition_ingredients")
+      .insert(ingredientRows);
+
+    if (ingredientsError) {
+      throw new Error(`clone_ingredients_failed: ${ingredientsError.message}`);
+    }
+  }
+}
 
 // POST - Create a new nutrition plan
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("POST /api/nutrition/plans");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -40,25 +403,48 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tenant) {
+      timer.end({ status: 404, reason: "tenant_not_found" });
+
       return NextResponse.json(
         { success: false, error: "Tenant no encontrado" },
         { status: 404 }
       );
     }
 
-    let plan: any;
+    let plan: { id: string; [key: string]: unknown } | null = null;
 
     // If templateId is provided, clone from template
     if (templateId) {
       console.log("[Nutrition Plans API] Creating from template:", templateId);
 
-      // Fetch the template
+      // Fetch the full template tree in a single query (Fase 3). Orders the
+      // nested collections so the traversal below preserves the original
+      // plan's sequence (day_order, meal_order, option_order,
+      // ingredient_order).
       const { data: template, error: templateError } = await supabase
         .from("nutrition_plans")
-        .select("*")
+        .select(NUTRITION_TREE_SELECT)
         .eq("id", templateId)
         .eq("trainer_id", session.trainer_id)
         .eq("is_template", true)
+        .order("day_order", {
+          referencedTable: "nutrition_days",
+          ascending: true,
+        })
+        .order("meal_order", {
+          referencedTable: "nutrition_days.nutrition_meals",
+          ascending: true,
+        })
+        .order("option_order", {
+          referencedTable:
+            "nutrition_days.nutrition_meals.nutrition_meal_options",
+          ascending: true,
+        })
+        .order("ingredient_order", {
+          referencedTable:
+            "nutrition_days.nutrition_meals.nutrition_meal_options.nutrition_ingredients",
+          ascending: true,
+        })
         .single();
 
       if (templateError || !template) {
@@ -66,12 +452,15 @@ export async function POST(request: NextRequest) {
           "[Nutrition Plans API] Template not found:",
           templateError
         );
+        timer.end({ status: 404, reason: "template_not_found", templateId });
 
         return NextResponse.json(
           { success: false, error: "Plantilla no encontrada" },
           { status: 404 }
         );
       }
+
+      const templateTree = template as unknown as TemplateTree;
 
       // Create the plan from template
       const { data: newPlan, error: planError } = await supabase
@@ -83,12 +472,20 @@ export async function POST(request: NextRequest) {
           name,
           start_date: start_date || new Date().toISOString().split("T")[0],
           status: status || "active",
-          notes: notes || template.notes,
+          notes: notes || templateTree.notes,
           is_template: false,
           show_meal_images:
-            template.show_meal_images !== undefined
-              ? Boolean(template.show_meal_images)
+            templateTree.show_meal_images !== undefined
+              ? Boolean(templateTree.show_meal_images)
               : true,
+          // Item 2.3: copy plan-level calorie visibility from template. Default
+          // true if the template doesn't have the column populated (older
+          // templates created before migration 079).
+          show_calories:
+            templateTree.show_calories === null ||
+            templateTree.show_calories === undefined
+              ? true
+              : Boolean(templateTree.show_calories),
         })
         .select()
         .single();
@@ -98,6 +495,7 @@ export async function POST(request: NextRequest) {
           "[Nutrition Plans API] Error creating plan from template:",
           planError
         );
+        timer.end({ status: 500, reason: "clone_failed", templateId });
 
         return NextResponse.json(
           { success: false, error: "Error al crear plan desde plantilla" },
@@ -107,192 +505,45 @@ export async function POST(request: NextRequest) {
 
       plan = newPlan;
 
-      // Clone days from template
-      const { data: templateDays } = await supabase
-        .from("nutrition_days")
-        .select("*")
-        .eq("nutrition_plan_id", templateId)
-        .order("day_order", { ascending: true });
+      // Clone the subtree. If anything goes wrong, remove the plan we just
+      // created; ON DELETE CASCADE on days/meals/options/ingredients cleans
+      // up whatever the batches managed to insert.
+      try {
+        await cloneTemplateSubtree({
+          supabase,
+          tenantHost: tenant.host,
+          newPlanId: newPlan.id,
+          templateDays: templateTree.nutrition_days ?? [],
+        });
+      } catch (cloneError) {
+        console.error(
+          "[Nutrition Plans API] Clone subtree failed, rolling back plan:",
+          cloneError
+        );
 
-      if (templateDays && templateDays.length > 0) {
-        for (const templateDay of templateDays) {
-          // Create new day
-          const { data: newDay, error: dayError } = await supabase
-            .from("nutrition_days")
-            .insert({
-              tenant_host: tenant.host,
-              nutrition_plan_id: plan.id,
-              day_label: templateDay.day_label,
-              day_order: templateDay.day_order,
-              protein: templateDay.protein || 0,
-              carbs: templateDay.carbs || 0,
-              fats: templateDay.fats || 0,
-              calories: templateDay.calories || 0,
-              weekdays: templateDay.weekdays || [],
-            })
-            .select()
-            .single();
+        const { error: rollbackError } = await supabase
+          .from("nutrition_plans")
+          .delete()
+          .eq("id", newPlan.id);
 
-          if (dayError || !newDay) {
-            console.error("[Nutrition Plans API] Error cloning day:", dayError);
-            continue;
-          }
-
-          // Clone meals for this day
-          const { data: templateMeals } = await supabase
-            .from("nutrition_meals")
-            .select("*")
-            .eq("nutrition_day_id", templateDay.id)
-            .order("meal_order", { ascending: true });
-
-          if (templateMeals && templateMeals.length > 0) {
-            for (const templateMeal of templateMeals) {
-              // Create new meal
-              const { data: newMeal, error: mealError } = await supabase
-                .from("nutrition_meals")
-                .insert({
-                  tenant_host: tenant.host,
-                  nutrition_day_id: newDay.id,
-                  label: templateMeal.label,
-                  meal_order: templateMeal.meal_order,
-                  notes: templateMeal.notes,
-                  protein: templateMeal.protein || 0,
-                  carbs: templateMeal.carbs || 0,
-                  fats: templateMeal.fats || 0,
-                  calories: templateMeal.calories || 0,
-                  image_url: templateMeal.image_url ?? null,
-                  has_alternatives: templateMeal.has_alternatives ?? false,
-                })
-                .select()
-                .single();
-
-              if (mealError || !newMeal) {
-                console.error(
-                  "[Nutrition Plans API] Error cloning meal:",
-                  mealError
-                );
-                continue;
-              }
-
-              const { data: templateOptions } = await supabase
-                .from("nutrition_meal_options")
-                .select("*")
-                .eq("meal_id", templateMeal.id)
-                .order("option_order", { ascending: true });
-
-              const optionIdMap = new Map<string, string>();
-
-              if (templateOptions && templateOptions.length > 0) {
-                for (const templateOption of templateOptions) {
-                  const { data: newOption, error: optInsError } = await supabase
-                    .from("nutrition_meal_options")
-                    .insert({
-                      meal_id: newMeal.id,
-                      name: templateOption.name,
-                      option_order: templateOption.option_order,
-                      protein: templateOption.protein,
-                      carbs: templateOption.carbs,
-                      fats: templateOption.fats,
-                      calories: templateOption.calories,
-                      image_url: templateOption.image_url ?? null,
-                    })
-                    .select("id")
-                    .single();
-
-                  if (optInsError || !newOption) {
-                    console.error(
-                      "[Nutrition Plans API] Error cloning meal option:",
-                      optInsError
-                    );
-                    continue;
-                  }
-
-                  optionIdMap.set(templateOption.id, newOption.id);
-                }
-              } else {
-                const { data: fallbackOption, error: fbError } = await supabase
-                  .from("nutrition_meal_options")
-                  .insert({
-                    meal_id: newMeal.id,
-                    name: "Opción 1",
-                    option_order: 1,
-                    protein: newMeal.protein ?? null,
-                    carbs: newMeal.carbs ?? null,
-                    fats: newMeal.fats ?? null,
-                    calories: newMeal.calories ?? null,
-                    image_url: newMeal.image_url ?? null,
-                  })
-                  .select("id")
-                  .single();
-
-                if (fbError || !fallbackOption) {
-                  console.error(
-                    "[Nutrition Plans API] Error creating fallback meal option:",
-                    fbError
-                  );
-                  continue;
-                }
-              }
-
-              const { data: templateIngredients } = await supabase
-                .from("nutrition_ingredients")
-                .select("*")
-                .eq("nutrition_meal_id", templateMeal.id)
-                .order("ingredient_order", { ascending: true });
-
-              if (templateIngredients && templateIngredients.length > 0) {
-                const { data: firstNewOption } = await supabase
-                  .from("nutrition_meal_options")
-                  .select("id")
-                  .eq("meal_id", newMeal.id)
-                  .order("option_order", { ascending: true })
-                  .limit(1)
-                  .maybeSingle();
-
-                const defaultNewOptionId = firstNewOption?.id;
-
-                if (!defaultNewOptionId) {
-                  console.error(
-                    "[Nutrition Plans API] No target option for cloned ingredients"
-                  );
-                  continue;
-                }
-
-                const ingredientsToInsert = templateIngredients.map((ing) => {
-                  const newOptId =
-                    ing.option_id && optionIdMap.has(ing.option_id)
-                      ? optionIdMap.get(ing.option_id)!
-                      : defaultNewOptionId;
-
-                  return {
-                    tenant_host: tenant.host,
-                    nutrition_meal_id: newMeal.id,
-                    option_id: newOptId,
-                    name: ing.name,
-                    quantity: ing.quantity,
-                    unit: ing.unit,
-                    ingredient_order: ing.ingredient_order,
-                    protein: ing.protein,
-                    carbs: ing.carbs,
-                    fats: ing.fats,
-                    calories: ing.calories,
-                  };
-                });
-
-                const { error: ingInsertError } = await supabase
-                  .from("nutrition_ingredients")
-                  .insert(ingredientsToInsert);
-
-                if (ingInsertError) {
-                  console.error(
-                    "[Nutrition Plans API] Error cloning ingredients:",
-                    ingInsertError
-                  );
-                }
-              }
-            }
-          }
+        if (rollbackError) {
+          console.error(
+            "[Nutrition Plans API] Rollback delete failed:",
+            rollbackError
+          );
         }
+
+        timer.end({
+          status: 500,
+          reason: "clone_subtree_failed",
+          templateId,
+          rolled_back: !rollbackError,
+        });
+
+        return NextResponse.json(
+          { success: false, error: "Error al clonar plantilla" },
+          { status: 500 }
+        );
       }
     } else {
       // Create a blank nutrition plan
@@ -313,6 +564,7 @@ export async function POST(request: NextRequest) {
 
       if (planError) {
         console.error("[Nutrition Plans API] Error creating plan:", planError);
+        timer.end({ status: 500, reason: "blank_create_failed" });
 
         return NextResponse.json(
           { success: false, error: "Error al crear plan nutricional" },
@@ -323,12 +575,20 @@ export async function POST(request: NextRequest) {
       plan = newPlan;
     }
 
+    timer.end({
+      status: 200,
+      plan_id: plan?.id,
+      cloned_from_template: Boolean(templateId),
+      is_template: Boolean(is_template),
+    });
+
     return NextResponse.json({
       success: true,
       data: { ...plan, days: [] },
     });
   } catch (error) {
     console.error("[Nutrition Plans API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },

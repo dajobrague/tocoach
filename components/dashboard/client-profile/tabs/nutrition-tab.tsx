@@ -76,6 +76,50 @@ function replaceIngredientInMealNested(
   };
 }
 
+/**
+ * Apply a shallow patch to a single ingredient inside a meal tree, keeping the
+ * flat `meal.ingredients` and the per-option `opt.ingredients` arrays in sync.
+ * Used by optimistic-update handlers (Fase 4) so the UI reflects edits
+ * instantly without waiting for a full refreshPlan() round-trip.
+ */
+function updateIngredientInMealNested(
+  meal: NutritionMealWithIngredients,
+  ingredientId: string,
+  changes: Partial<NutritionIngredient>
+): NutritionMealWithIngredients {
+  return {
+    ...meal,
+    ingredients: meal.ingredients.map((i) =>
+      i.id === ingredientId ? { ...i, ...changes } : i
+    ),
+    options: meal.options.map((opt) => ({
+      ...opt,
+      ingredients: opt.ingredients.map((i) =>
+        i.id === ingredientId ? { ...i, ...changes } : i
+      ),
+    })),
+  };
+}
+
+/**
+ * Apply a shallow patch to a single option inside a meal tree. Used by
+ * optimistic-update handlers (Fase 4) for option-name and option-macros edits.
+ * Does NOT touch ingredient totals — the option's macros (protein/carbs/fats/
+ * calories) are edited directly by the trainer on the option row.
+ */
+function updateOptionInMealNested(
+  meal: NutritionMealWithIngredients,
+  optionId: string,
+  changes: Partial<NutritionMealOptionWithIngredients>
+): NutritionMealWithIngredients {
+  return {
+    ...meal,
+    options: meal.options.map((opt) =>
+      opt.id === optionId ? { ...opt, ...changes } : opt
+    ),
+  };
+}
+
 type MacroTotals = {
   protein: number;
   carbs: number;
@@ -400,6 +444,19 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     fats: "",
     calories: "",
   });
+  // Item 2.4: per-option recipe editor. Null = no option has its recipe
+  // open in edit mode (trainer is either viewing the read-only summary or
+  // the recipe section is collapsed).
+  const [editingOptionRecipeId, setEditingOptionRecipeId] = useState<
+    string | null
+  >(null);
+  const [optionRecipeForm, setOptionRecipeForm] = useState({
+    instructions: "",
+    prep_time_minutes: "",
+    cooking_time_minutes: "",
+    servings: "",
+    recipe_notes: "",
+  });
   const [addingAlternativeForMealId, setAddingAlternativeForMealId] = useState<
     string | null
   >(null);
@@ -473,6 +530,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     status: "active" as "active" | "completed" | "paused" | "cancelled",
     notes: "",
     show_meal_images: true,
+    // Item 2.3: plan-level calorie visibility. Default true matches
+    // backward-compatible behaviour (existing plans showed calories).
+    show_calories: true,
   });
 
   const [macrosForm, setMacrosForm] = useState({
@@ -747,6 +807,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       status: "active",
       notes: "",
       show_meal_images: true,
+      show_calories: true,
     });
     setCreatePlanTab("blank");
     setSelectedTemplateId("");
@@ -782,6 +843,8 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       status: nutritionPlan.status,
       notes: nutritionPlan.notes || "",
       show_meal_images: nutritionPlan.show_meal_images !== false,
+      // Item 2.3: same default-true semantics as the DB column.
+      show_calories: nutritionPlan.show_calories !== false,
     });
     setIsPlanModalOpen(true);
   };
@@ -794,6 +857,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       status: "active",
       notes: "",
       show_meal_images: true,
+      show_calories: true,
     });
   };
 
@@ -845,6 +909,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               status: planForm.status,
               notes: planForm.notes,
               show_meal_images: planForm.show_meal_images,
+              show_calories: planForm.show_calories,
             }),
           }
         );
@@ -1340,16 +1405,48 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         });
       } else {
         console.error("Error creating ingredient:", result.error);
-        // Revert optimistic update on error
-        await refreshPlan();
+        // Fase 4: local rollback of the optimistic add (cheaper than
+        // refreshPlan() which would re-fetch the whole plan tree).
+        setNutritionPlan((prevPlan) => {
+          if (!prevPlan) return prevPlan;
+
+          return {
+            ...prevPlan,
+            days: prevPlan.days.map((day) => ({
+              ...day,
+              meals: day.meals.map((meal) =>
+                meal.id === mealId
+                  ? removeIngredientFromMealNested(
+                      meal,
+                      optimisticIngredient.id
+                    )
+                  : meal
+              ),
+            })),
+          };
+        });
         alert(
           `Error al guardar ingrediente: ${result.error || "Error desconocido"}`
         );
       }
     } catch (err) {
       console.error("Error saving ingredient:", err);
-      // Revert optimistic update on error
-      await refreshPlan();
+      // Fase 4: local rollback on network error.
+      setNutritionPlan((prevPlan) => {
+        if (!prevPlan) return prevPlan;
+
+        return {
+          ...prevPlan,
+          days: prevPlan.days.map((day) => ({
+            ...day,
+            meals: day.meals.map((meal) =>
+              meal.id === mealId
+                ? removeIngredientFromMealNested(meal, optimisticIngredient.id)
+                : meal
+            ),
+          })),
+        };
+      });
       alert("Error al guardar ingrediente. Por favor intenta de nuevo.");
     }
   };
@@ -1399,7 +1496,8 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           ...prev,
           [mealId]: result.data.id as string,
         }));
-        void refreshPlan();
+        // Fase 4: mapPlanWithNewOption above already updated both
+        // `nutritionPlan` and `allPlans`; no refresh needed.
       } else {
         alert(
           result.error || "No se pudo crear la alternativa. Intenta de nuevo."
@@ -1435,6 +1533,25 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       calories: parseFloat(optionMacrosForm.calories) || 0,
     };
 
+    // Fase 4: optimistic update. Apply the macro change locally and close the
+    // editor immediately; revert if the PATCH fails.
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((meal) =>
+            updateOptionInMealNested(meal, optionId, payload)
+          ),
+        })),
+      };
+    });
+    setEditingOptionMacrosId(null);
+
     try {
       const response = await fetch(`/api/nutrition/options/${optionId}`, {
         method: "PATCH",
@@ -1443,13 +1560,12 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       });
       const result = await response.json();
 
-      if (result.success) {
-        setEditingOptionMacrosId(null);
-        await refreshPlan();
-      } else {
+      if (!result.success) {
+        if (snapshot) setNutritionPlan(snapshot);
         alert(result.error || "Error al guardar macros de la opción");
       }
     } catch {
+      if (snapshot) setNutritionPlan(snapshot);
       alert("Error al guardar macros de la opción");
     }
   };
@@ -1459,6 +1575,25 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
     if (!trimmed) return;
 
+    // Fase 4: optimistic update. Apply the new name locally and close the
+    // editor immediately; revert if the PATCH fails.
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((meal) =>
+            updateOptionInMealNested(meal, optionId, { name: trimmed })
+          ),
+        })),
+      };
+    });
+    setEditingOptionName(null);
+
     try {
       const response = await fetch(`/api/nutrition/options/${optionId}`, {
         method: "PATCH",
@@ -1467,14 +1602,115 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       });
       const result = await response.json();
 
-      if (result.success) {
-        setEditingOptionName(null);
-        await refreshPlan();
-      } else {
+      if (!result.success) {
+        if (snapshot) setNutritionPlan(snapshot);
         alert(result.error || "Error al guardar el nombre");
       }
     } catch {
+      if (snapshot) setNutritionPlan(snapshot);
       alert("Error al guardar el nombre");
+    }
+  };
+
+  // Item 2.4: open the recipe editor for a given option, pre-filled with its
+  // existing values (or empty strings for unset fields).
+  const handleOpenOptionRecipe = (
+    option: NutritionMealOptionWithIngredients
+  ) => {
+    setOptionRecipeForm({
+      instructions: option.instructions ?? "",
+      prep_time_minutes:
+        option.prep_time_minutes === null ||
+        option.prep_time_minutes === undefined
+          ? ""
+          : String(option.prep_time_minutes),
+      cooking_time_minutes:
+        option.cooking_time_minutes === null ||
+        option.cooking_time_minutes === undefined
+          ? ""
+          : String(option.cooking_time_minutes),
+      servings:
+        option.servings === null || option.servings === undefined
+          ? ""
+          : String(option.servings),
+      recipe_notes: option.recipe_notes ?? "",
+    });
+    setEditingOptionRecipeId(option.id);
+  };
+
+  const handleCloseOptionRecipe = () => {
+    setEditingOptionRecipeId(null);
+  };
+
+  // Item 2.4: save the recipe fields for the given option, with an optimistic
+  // update. Empty strings are coerced to nulls (same contract as the PATCH
+  // endpoint's normaliser) so the UI reflects the cleared state immediately.
+  const handleSaveOptionRecipe = async (optionId: string) => {
+    const parsedPrep = optionRecipeForm.prep_time_minutes.trim();
+    const parsedCook = optionRecipeForm.cooking_time_minutes.trim();
+    const parsedServings = optionRecipeForm.servings.trim();
+
+    const payload = {
+      instructions: optionRecipeForm.instructions.trim() || null,
+      prep_time_minutes: parsedPrep === "" ? null : parseInt(parsedPrep, 10),
+      cooking_time_minutes: parsedCook === "" ? null : parseInt(parsedCook, 10),
+      servings: parsedServings === "" ? null : parseInt(parsedServings, 10),
+      recipe_notes: optionRecipeForm.recipe_notes.trim() || null,
+    };
+
+    // Guard against NaN from malformed numeric input.
+    if (
+      (payload.prep_time_minutes !== null &&
+        !Number.isFinite(payload.prep_time_minutes)) ||
+      (payload.cooking_time_minutes !== null &&
+        !Number.isFinite(payload.cooking_time_minutes)) ||
+      (payload.servings !== null && !Number.isFinite(payload.servings))
+    ) {
+      alert(
+        "Los tiempos y las porciones deben ser números enteros (o quedar en blanco)."
+      );
+
+      return;
+    }
+    if (payload.servings !== null && payload.servings < 1) {
+      alert("Las porciones deben ser al menos 1.");
+
+      return;
+    }
+
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((meal) =>
+            updateOptionInMealNested(meal, optionId, payload)
+          ),
+        })),
+      };
+    });
+    setEditingOptionRecipeId(null);
+
+    try {
+      const response = await fetch(`/api/nutrition/options/${optionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+
+      if (!result.success) {
+        if (snapshot) setNutritionPlan(snapshot);
+        alert(result.error || "Error al guardar la receta");
+      }
+    } catch (err) {
+      console.error("[Nutrition] Error saving recipe:", err);
+      if (snapshot) setNutritionPlan(snapshot);
+      alert("Error al guardar la receta");
     }
   };
 
@@ -1510,6 +1746,213 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     } finally {
       setOptionDeleteLoading(false);
     }
+  };
+
+  // Item 2.4: Collapsible "Receta" editor for a nutrition option. Renders one
+  // of three states depending on whether the option is in edit mode and
+  // whether it already has recipe content to show:
+  //   - edit mode   → form with instructions / times / servings / notes.
+  //   - has content → read-only summary + "Editar" button.
+  //   - empty       → "Añadir receta" button only.
+  // Used for both single-option meals (primaryOption) and multi-option meals
+  // (activeOption) to keep behaviour identical.
+  const renderRecipeEditor = (
+    option: NutritionMealOptionWithIngredients | undefined
+  ) => {
+    if (!option) return null;
+
+    if (option.id.startsWith("temp-")) {
+      // Temp optimistic options don't exist on the server yet; don't let the
+      // trainer write to them until refreshPlan promotes them to real rows.
+      return null;
+    }
+
+    const isEditing = editingOptionRecipeId === option.id;
+    const hasAnyContent = Boolean(
+      (option.instructions && option.instructions.trim().length > 0) ||
+        option.prep_time_minutes != null ||
+        option.cooking_time_minutes != null ||
+        option.servings != null ||
+        (option.recipe_notes && option.recipe_notes.trim().length > 0)
+    );
+
+    return (
+      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon
+              className="text-amber-600 flex-shrink-0"
+              icon="solar:chef-hat-linear"
+              width={16}
+            />
+            <span className="text-sm font-semibold text-gray-800 truncate">
+              Receta (opcional)
+            </span>
+          </div>
+          {!isEditing && (
+            <Button
+              className="flex-shrink-0"
+              size="sm"
+              startContent={
+                <Icon
+                  icon={
+                    hasAnyContent
+                      ? "solar:pen-linear"
+                      : "solar:add-circle-linear"
+                  }
+                  width={14}
+                />
+              }
+              variant="flat"
+              onPress={() => handleOpenOptionRecipe(option)}
+            >
+              {hasAnyContent ? "Editar" : "Añadir receta"}
+            </Button>
+          )}
+        </div>
+
+        {isEditing ? (
+          <div className="flex flex-col gap-2">
+            <Textarea
+              label="Instrucciones"
+              minRows={4}
+              placeholder="Ej: 1) Pica la cebolla. 2) Sofríe a fuego medio..."
+              value={optionRecipeForm.instructions}
+              onValueChange={(value) =>
+                setOptionRecipeForm((prev) => ({
+                  ...prev,
+                  instructions: value,
+                }))
+              }
+            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Input
+                label="Preparación (min)"
+                min={0}
+                placeholder="0"
+                size="sm"
+                type="number"
+                value={optionRecipeForm.prep_time_minutes}
+                onValueChange={(value) =>
+                  setOptionRecipeForm((prev) => ({
+                    ...prev,
+                    prep_time_minutes: value,
+                  }))
+                }
+              />
+              <Input
+                label="Cocción (min)"
+                min={0}
+                placeholder="0"
+                size="sm"
+                type="number"
+                value={optionRecipeForm.cooking_time_minutes}
+                onValueChange={(value) =>
+                  setOptionRecipeForm((prev) => ({
+                    ...prev,
+                    cooking_time_minutes: value,
+                  }))
+                }
+              />
+              <Input
+                label="Porciones"
+                min={1}
+                placeholder="1"
+                size="sm"
+                type="number"
+                value={optionRecipeForm.servings}
+                onValueChange={(value) =>
+                  setOptionRecipeForm((prev) => ({ ...prev, servings: value }))
+                }
+              />
+            </div>
+            <Textarea
+              label="Nota (opcional)"
+              minRows={2}
+              placeholder="Ej: Sustituye la mantequilla por aceite de oliva si lo prefieres."
+              value={optionRecipeForm.recipe_notes}
+              onValueChange={(value) =>
+                setOptionRecipeForm((prev) => ({
+                  ...prev,
+                  recipe_notes: value,
+                }))
+              }
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="flat"
+                onPress={handleCloseOptionRecipe}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-black text-white hover:bg-slate-800"
+                size="sm"
+                onPress={() => handleSaveOptionRecipe(option.id)}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+        ) : hasAnyContent ? (
+          <div className="space-y-2 text-sm">
+            {(option.prep_time_minutes != null ||
+              option.cooking_time_minutes != null ||
+              option.servings != null) && (
+              <div className="flex flex-wrap gap-3 text-xs text-gray-700">
+                {option.prep_time_minutes != null && (
+                  <span className="inline-flex items-center gap-1">
+                    <Icon
+                      className="text-amber-700"
+                      icon="solar:clock-circle-linear"
+                      width={14}
+                    />
+                    Preparación: {option.prep_time_minutes} min
+                  </span>
+                )}
+                {option.cooking_time_minutes != null && (
+                  <span className="inline-flex items-center gap-1">
+                    <Icon
+                      className="text-amber-700"
+                      icon="solar:fire-linear"
+                      width={14}
+                    />
+                    Cocción: {option.cooking_time_minutes} min
+                  </span>
+                )}
+                {option.servings != null && (
+                  <span className="inline-flex items-center gap-1">
+                    <Icon
+                      className="text-amber-700"
+                      icon="solar:users-group-rounded-linear"
+                      width={14}
+                    />
+                    {option.servings} porción
+                    {option.servings !== 1 ? "es" : ""}
+                  </span>
+                )}
+              </div>
+            )}
+            {option.instructions && option.instructions.trim().length > 0 && (
+              <p className="whitespace-pre-wrap text-sm text-gray-800">
+                {option.instructions}
+              </p>
+            )}
+            {option.recipe_notes && option.recipe_notes.trim().length > 0 && (
+              <p className="text-xs italic text-gray-600">
+                {option.recipe_notes}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Sin instrucciones. Puedes añadir pasos, tiempos y notas para esta
+            opción.
+          </p>
+        )}
+      </div>
+    );
   };
 
   const renderIngredientRows = (
@@ -1705,30 +2148,66 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       return;
     }
 
+    const changes: Partial<NutritionIngredient> = {
+      name: nameInput.value,
+      quantity: quantityInput.value,
+      unit: unitInput.value,
+    };
+
+    // Fase 4: optimistic update. Snapshot the plan before touching it so we
+    // can revert if the PATCH fails. The input values are captured above so
+    // subsequent renders don't have to read the DOM again.
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((meal) =>
+            updateIngredientInMealNested(meal, ingredientId, changes)
+          ),
+        })),
+      };
+    });
+
+    // Close the editor immediately — the UI shows the updated values without
+    // waiting for the network round-trip.
+    setEditingIngredient(null);
+
     try {
+      // Item 2.2 (defensive): re-send the current ingredient_order so the row
+      // keeps its position on the server side. The PATCH backend only touches
+      // fields that are explicitly sent; this is a no-op in the happy path
+      // but protects against a future backend change that might reset it.
       const response = await fetch(
         `/api/nutrition/ingredients/${ingredientId}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: nameInput.value,
-            quantity: quantityInput.value,
-            unit: unitInput.value,
+            ...changes,
+            ingredient_order: _ingredient.ingredient_order,
           }),
         }
       );
 
       const result = await response.json();
 
-      if (result.success) {
-        await refreshPlan();
-        setEditingIngredient(null);
-      } else {
+      if (!result.success) {
         console.error("Error updating ingredient:", result.error);
+        if (snapshot) setNutritionPlan(snapshot);
+        alert(
+          `Error al guardar ingrediente: ${result.error || "Error desconocido"}`
+        );
       }
+      // On success the local state already matches the server — no refresh.
     } catch (err) {
       console.error("Error saving ingredient:", err);
+      if (snapshot) setNutritionPlan(snapshot);
+      alert("Error al guardar ingrediente. Por favor intenta de nuevo.");
     }
   };
 
@@ -1800,9 +2279,12 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       const result = await response.json();
 
       if (result.success) {
-        if (deleteConfirm.type === "plan") {
-          setNutritionPlan(null);
-        } else if (deleteConfirm.type !== "ingredient") {
+        // For ingredient deletes we already applied the optimistic removal
+        // above; for everything else (plan, day, meal) re-fetch the list so
+        // both `allPlans` and `nutritionPlan` stay in sync. Using only
+        // `setNutritionPlan(null)` on plan-delete left `allPlans` stale and
+        // made the UI look empty until the user reloaded the page.
+        if (deleteConfirm.type !== "ingredient") {
           await refreshPlan();
         }
       } else {
@@ -1906,6 +2388,58 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     } catch (err) {
       console.error("[Nutrition] Error saving meal macros:", err);
       alert("Error al guardar macros. Por favor intenta de nuevo.");
+    }
+  };
+
+  // Item 2.3: cycle the per-meal calorie visibility through a tri-state:
+  //   null (inherit) → true (force show) → false (force hide) → null.
+  // Uses optimistic update (same pattern as Fase 4 handlers) so the UI reflects
+  // the change immediately; rolls back on error.
+  const handleCycleMealShowCalories = async (
+    mealId: string,
+    current: boolean | null | undefined
+  ) => {
+    const next: boolean | null =
+      current === null || current === undefined
+        ? true
+        : current === true
+          ? false
+          : null;
+
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((meal) =>
+            meal.id === mealId ? { ...meal, show_calories: next } : meal
+          ),
+        })),
+      };
+    });
+
+    try {
+      const response = await fetch(`/api/nutrition/meals/${mealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_calories: next }),
+      });
+      const result = await response.json();
+
+      if (!result.success) {
+        if (snapshot) setNutritionPlan(snapshot);
+        alert(
+          `Error al actualizar visibilidad de calorías: ${result.error || "Error desconocido"}`
+        );
+      }
+    } catch (err) {
+      console.error("[Nutrition] Error toggling show_calories:", err);
+      if (snapshot) setNutritionPlan(snapshot);
+      alert("Error al actualizar visibilidad de calorías.");
     }
   };
 
@@ -3419,6 +3953,60 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                               {/* Collapsible meal body */}
                                               {expandedMeals.has(meal.id) && (
                                                 <div className="mt-3">
+                                                  {/* Item 2.3: per-meal calorie visibility tri-state toggle. */}
+                                                  {(() => {
+                                                    const planShowsCalories =
+                                                      nutritionPlan?.show_calories !==
+                                                      false;
+                                                    const current =
+                                                      meal.show_calories;
+                                                    const effective =
+                                                      current === null ||
+                                                      current === undefined
+                                                        ? planShowsCalories
+                                                        : current;
+                                                    const label =
+                                                      current === null ||
+                                                      current === undefined
+                                                        ? `Heredar del plan (${planShowsCalories ? "mostrar" : "ocultar"})`
+                                                        : current === true
+                                                          ? "Forzar mostrar"
+                                                          : "Forzar ocultar";
+                                                    const iconName = effective
+                                                      ? "solar:eye-linear"
+                                                      : "solar:eye-closed-linear";
+
+                                                    return (
+                                                      <div className="flex items-center justify-between gap-2 mb-3 p-2 rounded-lg bg-gray-50 border border-gray-200">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                          <Icon
+                                                            className="text-gray-500 flex-shrink-0"
+                                                            icon={iconName}
+                                                            width={16}
+                                                          />
+                                                          <span className="text-xs text-gray-700 truncate">
+                                                            Calorías al cliente:{" "}
+                                                            <span className="font-semibold">
+                                                              {label}
+                                                            </span>
+                                                          </span>
+                                                        </div>
+                                                        <Button
+                                                          className="flex-shrink-0"
+                                                          size="sm"
+                                                          variant="flat"
+                                                          onPress={() =>
+                                                            handleCycleMealShowCalories(
+                                                              meal.id,
+                                                              current
+                                                            )
+                                                          }
+                                                        >
+                                                          Cambiar
+                                                        </Button>
+                                                      </div>
+                                                    );
+                                                  })()}
                                                   {multiMeal && macroRanges && (
                                                     <p className="text-xs text-gray-500 mb-3">
                                                       Rango entre opciones:
@@ -3618,6 +4206,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                       )}
                                                       {renderIngredientRows(
                                                         meal,
+                                                        primaryOption
+                                                      )}
+                                                      {renderRecipeEditor(
                                                         primaryOption
                                                       )}
                                                       {!meal.id.startsWith(
@@ -4152,6 +4743,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                             meal,
                                                             activeOption
                                                           )}
+                                                          {renderRecipeEditor(
+                                                            activeOption
+                                                          )}
                                                           <Button
                                                             color="danger"
                                                             size="sm"
@@ -4663,6 +5257,25 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                     size="sm"
                     onValueChange={(val) =>
                       setPlanForm({ ...planForm, show_meal_images: val })
+                    }
+                  />
+                </div>
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      Mostrar calorías al cliente
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Si lo desactivas, el cliente no verá las kcal en ninguna
+                      comida del plan. Puedes sobrescribirlo por comida.
+                    </p>
+                  </div>
+                  <Switch
+                    classNames={{ base: "flex-shrink-0" }}
+                    isSelected={planForm.show_calories}
+                    size="sm"
+                    onValueChange={(val) =>
+                      setPlanForm({ ...planForm, show_calories: val })
                     }
                   />
                 </div>

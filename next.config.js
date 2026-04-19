@@ -1,5 +1,10 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Pin workspace root when multiple lockfiles exist (e.g. parent ~/package-lock.json).
+  outputFileTracingRoot: path.join(__dirname),
+
   // Production optimizations
   reactStrictMode: true,
   poweredByHeader: false,

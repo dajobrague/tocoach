@@ -226,24 +226,29 @@ function MacroRow({
   protein,
   carbs,
   fats,
+  showCalories = true,
 }: {
   calories: number;
   protein: number;
   carbs: number;
   fats: number;
+  /** Item 2.3: hide the kcal chip when the plan or meal disables it. */
+  showCalories?: boolean;
 }) {
   return (
     <div className="flex gap-1.5 flex-wrap">
-      <Chip className="bg-default-100" size="sm" variant="flat">
-        <span className="text-xs text-foreground/70 font-body">
-          <Icon
-            className="text-danger inline-block mr-0.5"
-            icon="solar:fire-bold"
-            width={10}
-          />
-          {Math.round(calories)} kcal
-        </span>
-      </Chip>
+      {showCalories && (
+        <Chip className="bg-default-100" size="sm" variant="flat">
+          <span className="text-xs text-foreground/70 font-body">
+            <Icon
+              className="text-danger inline-block mr-0.5"
+              icon="solar:fire-bold"
+              width={10}
+            />
+            {Math.round(calories)} kcal
+          </span>
+        </Chip>
+      )}
       <Chip className="bg-default-100" size="sm" variant="flat">
         <span className="text-xs text-foreground/70 font-body">
           <Icon
@@ -278,6 +283,119 @@ function MacroRow({
   );
 }
 
+// Item 2.4: Recipe panel for the client. Rendered collapsed by default so it
+// doesn't dominate the meal card; trainer-authored instructions tend to be
+// long. Returns `null` when the option has no recipe content so we don't
+// show an empty "Preparación" shell.
+function RecipeSection({
+  option,
+}: {
+  option: Pick<
+    NutritionMealOptionWithIngredients,
+    | "instructions"
+    | "prep_time_minutes"
+    | "cooking_time_minutes"
+    | "servings"
+    | "recipe_notes"
+  >;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const hasInstructions =
+    typeof option.instructions === "string" &&
+    option.instructions.trim().length > 0;
+  const hasNotes =
+    typeof option.recipe_notes === "string" &&
+    option.recipe_notes.trim().length > 0;
+  const hasTimes =
+    option.prep_time_minutes != null ||
+    option.cooking_time_minutes != null ||
+    option.servings != null;
+
+  if (!hasInstructions && !hasNotes && !hasTimes) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+      <button
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-2"
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon
+            className="text-amber-700 flex-shrink-0"
+            icon="solar:chef-hat-linear"
+            width={16}
+          />
+          <span className="text-sm font-semibold text-foreground font-heading">
+            Preparación
+          </span>
+        </div>
+        <Icon
+          className="text-foreground/50 flex-shrink-0"
+          icon={
+            expanded
+              ? "solar:alt-arrow-up-linear"
+              : "solar:alt-arrow-down-linear"
+          }
+          width={16}
+        />
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          {hasTimes && (
+            <div className="flex flex-wrap gap-3 text-xs text-foreground/80 font-body">
+              {option.prep_time_minutes != null && (
+                <span className="inline-flex items-center gap-1">
+                  <Icon
+                    className="text-amber-700"
+                    icon="solar:clock-circle-linear"
+                    width={14}
+                  />
+                  Prep: {option.prep_time_minutes} min
+                </span>
+              )}
+              {option.cooking_time_minutes != null && (
+                <span className="inline-flex items-center gap-1">
+                  <Icon
+                    className="text-amber-700"
+                    icon="solar:fire-linear"
+                    width={14}
+                  />
+                  Cocción: {option.cooking_time_minutes} min
+                </span>
+              )}
+              {option.servings != null && (
+                <span className="inline-flex items-center gap-1">
+                  <Icon
+                    className="text-amber-700"
+                    icon="solar:users-group-rounded-linear"
+                    width={14}
+                  />
+                  {option.servings} porción
+                  {option.servings !== 1 ? "es" : ""}
+                </span>
+              )}
+            </div>
+          )}
+          {hasInstructions && (
+            <p className="whitespace-pre-wrap text-sm text-foreground font-body">
+              {option.instructions}
+            </p>
+          )}
+          {hasNotes && (
+            <p className="text-xs italic text-foreground/70 font-body">
+              {option.recipe_notes}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatMacroPair([a, b]: [number, number]): string {
   const ra = Math.round(a);
   const rb = Math.round(b);
@@ -291,24 +409,29 @@ function MacroRangeRow({
   protein,
   carbs,
   fats,
+  showCalories = true,
 }: {
   calories: [number, number];
   protein: [number, number];
   carbs: [number, number];
   fats: [number, number];
+  /** Item 2.3: hide the kcal chip when the plan or meal disables it. */
+  showCalories?: boolean;
 }) {
   return (
     <div className="flex gap-1.5 flex-wrap">
-      <Chip className="bg-default-100" size="sm" variant="flat">
-        <span className="text-xs text-foreground/70 font-body">
-          <Icon
-            className="text-danger inline-block mr-0.5"
-            icon="solar:fire-bold"
-            width={10}
-          />
-          {formatMacroPair(calories)} kcal
-        </span>
-      </Chip>
+      {showCalories && (
+        <Chip className="bg-default-100" size="sm" variant="flat">
+          <span className="text-xs text-foreground/70 font-body">
+            <Icon
+              className="text-danger inline-block mr-0.5"
+              icon="solar:fire-bold"
+              width={10}
+            />
+            {formatMacroPair(calories)} kcal
+          </span>
+        </Chip>
+      )}
       <Chip className="bg-default-100" size="sm" variant="flat">
         <span className="text-xs text-foreground/70 font-body">
           <Icon
@@ -865,22 +988,33 @@ export function NutritionContent() {
 
                       {isDayExpanded && (
                         <div className="space-y-3">
-                          {/* Day macro summary */}
+                          {/* Day macro summary. Item 2.3: plan-level
+                              `show_calories` hides the kcal tile (day totals
+                              aggregate all meals, so meal-level overrides
+                              don't apply here). */}
                           <Card className="border border-default-200 shadow-sm">
                             <CardBody className="p-3">
-                              <div className="grid grid-cols-4 gap-2">
-                                <div className="bg-default-50 rounded-xl p-2.5 text-center">
-                                  <Icon
-                                    className="text-danger text-base mx-auto mb-0.5"
-                                    icon="solar:fire-bold"
-                                  />
-                                  <p className="text-base font-bold text-foreground font-heading">
-                                    {Math.round(dayTotals.calories)}
-                                  </p>
-                                  <p className="text-[10px] text-foreground/50 font-body">
-                                    kcal
-                                  </p>
-                                </div>
+                              <div
+                                className={`grid gap-2 ${
+                                  nutritionPlan.show_calories !== false
+                                    ? "grid-cols-4"
+                                    : "grid-cols-3"
+                                }`}
+                              >
+                                {nutritionPlan.show_calories !== false && (
+                                  <div className="bg-default-50 rounded-xl p-2.5 text-center">
+                                    <Icon
+                                      className="text-danger text-base mx-auto mb-0.5"
+                                      icon="solar:fire-bold"
+                                    />
+                                    <p className="text-base font-bold text-foreground font-heading">
+                                      {Math.round(dayTotals.calories)}
+                                    </p>
+                                    <p className="text-[10px] text-foreground/50 font-body">
+                                      kcal
+                                    </p>
+                                  </div>
+                                )}
                                 <div className="bg-default-50 rounded-xl p-2.5 text-center">
                                   <Icon
                                     className="text-primary text-base mx-auto mb-0.5"
@@ -935,6 +1069,9 @@ export function NutritionContent() {
                                 selectedOptionId={
                                   selectionsByDate[selectedDate]?.[meal.id] ??
                                   null
+                                }
+                                showCalories={
+                                  nutritionPlan.show_calories !== false
                                 }
                                 showMealImages={
                                   nutritionPlan.show_meal_images === true
@@ -1125,6 +1262,7 @@ function MealMultiOptionClientSection({
   selectedOptionId,
   selectedDate,
   showMealImages,
+  showCalories = true,
   onSelectOption,
 }: {
   mealId: string;
@@ -1133,6 +1271,8 @@ function MealMultiOptionClientSection({
   selectedOptionId: string | null;
   selectedDate: string;
   showMealImages: boolean;
+  /** Resolved meal-level calorie visibility (already merged with plan). */
+  showCalories?: boolean;
   onSelectOption?: (mealId: string, optionId: string, date: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -1264,6 +1404,7 @@ function MealMultiOptionClientSection({
           carbs={Number(activeOption.carbs) || 0}
           fats={Number(activeOption.fats) || 0}
           protein={Number(activeOption.protein) || 0}
+          showCalories={showCalories}
         />
         {showMealImages && optImg ? (
           <div className="mt-3">
@@ -1302,6 +1443,9 @@ function MealMultiOptionClientSection({
             </p>
           )}
         </div>
+        {/* Item 2.4: recipe panel for the currently-selected option. Switching
+            variants re-renders this with the new option's recipe fields. */}
+        <RecipeSection option={activeOption} />
       </div>
     </div>
   );
@@ -1314,6 +1458,7 @@ function MealCard({
   expandedMeals,
   onToggle,
   showMealImages = true,
+  showCalories = true,
   selectedDate,
   selectedOptionId = null,
   onSelectOption,
@@ -1322,10 +1467,19 @@ function MealCard({
   expandedMeals: Set<string>;
   onToggle: (id: string) => void;
   showMealImages?: boolean;
+  /** Plan-level calorie visibility; meal.show_calories overrides it. */
+  showCalories?: boolean;
   selectedDate: string;
   selectedOptionId?: string | null;
   onSelectOption?: (mealId: string, optionId: string, date: string) => void;
 }) {
+  // Item 2.3: resolve per-meal override vs. plan-level default.
+  //   null/undefined → inherit plan-level `showCalories`.
+  //   true/false     → explicit override.
+  const mealShowCalories =
+    meal.show_calories === null || meal.show_calories === undefined
+      ? showCalories
+      : meal.show_calories;
   const isExpanded = expandedMeals.has(meal.id);
   const options = meal.options && meal.options.length > 0 ? meal.options : [];
   const multi = options.length > 1;
@@ -1399,6 +1553,7 @@ function MealCard({
               carbs={Number(selectedOpt.carbs) || 0}
               fats={Number(selectedOpt.fats) || 0}
               protein={Number(selectedOpt.protein) || 0}
+              showCalories={mealShowCalories}
             />
           ) : multi && rangeMacros ? (
             <MacroRangeRow
@@ -1406,9 +1561,13 @@ function MealCard({
               carbs={rangeMacros.carbs}
               fats={rangeMacros.fats}
               protein={rangeMacros.protein}
+              showCalories={mealShowCalories}
             />
           ) : (
-            <MacroRow {...headerMacrosFromPrimaryOption(meal)} />
+            <MacroRow
+              {...headerMacrosFromPrimaryOption(meal)}
+              showCalories={mealShowCalories}
+            />
           )}
         </div>
 
@@ -1421,6 +1580,7 @@ function MealCard({
                 options={options}
                 selectedDate={selectedDate}
                 selectedOptionId={selectedOptionId ?? null}
+                showCalories={mealShowCalories}
                 showMealImages={showMealImages === true}
                 {...(onSelectOption ? { onSelectOption } : {})}
               />
@@ -1461,6 +1621,7 @@ function MealCard({
                     </p>
                   )}
                 </div>
+                {primaryOpt ? <RecipeSection option={primaryOpt} /> : null}
               </>
             )}
           </div>

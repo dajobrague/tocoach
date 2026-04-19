@@ -2,19 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  NUTRITION_TREE_SELECT,
+  RawNutritionPlan,
+  reshapeNutritionPlan,
+} from "@/lib/utils/nutrition-tree";
+import { startPerfTimer } from "@/lib/utils/perf-logger";
 
-// GET - Fetch all nutrition plans for a client with nested days, meals, and ingredients
+// GET - Fetch all nutrition plans for a client with nested days, meals,
+// options, and ingredients.
+//
+// Fase 2: replaced the previous 4-level nested Promise.all (87+ queries per
+// plan) with a single Supabase embedded select. Shape returned to the frontend
+// is byte-for-byte identical to the pre-Fase-2 response — see
+// lib/utils/nutrition-tree.ts for the reshape contract. The "trainer" variant
+// preserves the untouched plan-level columns and meal.image_url pass-through
+// that this endpoint returned before Fase 2.
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("GET /api/nutrition/plans/[id]");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -25,16 +42,35 @@ export async function GET(
 
     console.log("[Nutrition Plans API] Fetching plans for client:", clientId);
 
-    // Get nutrition plans for this client
-    const { data: plans, error: plansError } = await supabase
+    // Single query: plan → days → meals → options → ingredients.
+    const { data: rawPlans, error: plansError } = await supabase
       .from("nutrition_plans")
-      .select("*")
+      .select(NUTRITION_TREE_SELECT)
       .eq("client_id", clientId)
       .eq("trainer_id", session.trainer_id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("day_order", {
+        referencedTable: "nutrition_days",
+        ascending: true,
+      })
+      .order("meal_order", {
+        referencedTable: "nutrition_days.nutrition_meals",
+        ascending: true,
+      })
+      .order("option_order", {
+        referencedTable:
+          "nutrition_days.nutrition_meals.nutrition_meal_options",
+        ascending: true,
+      })
+      .order("ingredient_order", {
+        referencedTable:
+          "nutrition_days.nutrition_meals.nutrition_meal_options.nutrition_ingredients",
+        ascending: true,
+      });
 
     if (plansError) {
       console.error("[Nutrition Plans API] Error fetching plans:", plansError);
+      timer.end({ client_id: clientId, status: 500 });
 
       return NextResponse.json(
         { success: false, error: "Error al obtener planes nutricionales" },
@@ -42,111 +78,15 @@ export async function GET(
       );
     }
 
-    // For each plan, get nested days, meals, and ingredients
-    const plansWithData = await Promise.all(
-      (plans || []).map(async (plan) => {
-        // Get days for this plan
-        const { data: days, error: daysError } = await supabase
-          .from("nutrition_days")
-          .select("*")
-          .eq("nutrition_plan_id", plan.id)
-          .order("day_order", { ascending: true });
+    const plansWithData = (
+      (rawPlans ?? []) as unknown as RawNutritionPlan[]
+    ).map((plan) => reshapeNutritionPlan(plan, "trainer"));
 
-        if (daysError) {
-          console.error(
-            "[Nutrition Plans API] Error fetching days:",
-            daysError
-          );
-
-          return { ...plan, days: [] };
-        }
-
-        // For each day, get meals with ingredients
-        const daysWithMeals = await Promise.all(
-          (days || []).map(async (day) => {
-            // Get meals for this day
-            const { data: meals, error: mealsError } = await supabase
-              .from("nutrition_meals")
-              .select("*")
-              .eq("nutrition_day_id", day.id)
-              .order("meal_order", { ascending: true });
-
-            if (mealsError) {
-              console.error(
-                "[Nutrition Plans API] Error fetching meals:",
-                mealsError
-              );
-
-              return { ...day, meals: [] };
-            }
-
-            const mealsWithOptions = await Promise.all(
-              (meals || []).map(async (meal) => {
-                const { data: options, error: optionsError } = await supabase
-                  .from("nutrition_meal_options")
-                  .select("*")
-                  .eq("meal_id", meal.id)
-                  .order("option_order", { ascending: true });
-
-                if (optionsError) {
-                  console.error(
-                    "[Nutrition Plans API] Error fetching meal options:",
-                    optionsError
-                  );
-
-                  return {
-                    ...meal,
-                    has_alternatives: meal.has_alternatives ?? false,
-                    options: [],
-                    ingredients: [],
-                  };
-                }
-
-                const optionsWithIngredients = await Promise.all(
-                  (options || []).map(async (opt) => {
-                    const { data: ingredients, error: ingredientsError } =
-                      await supabase
-                        .from("nutrition_ingredients")
-                        .select("*")
-                        .eq("option_id", opt.id)
-                        .order("ingredient_order", { ascending: true });
-
-                    if (ingredientsError) {
-                      console.error(
-                        "[Nutrition Plans API] Error fetching ingredients:",
-                        ingredientsError
-                      );
-
-                      return { ...opt, ingredients: [] };
-                    }
-
-                    return {
-                      ...opt,
-                      ingredients: ingredients || [],
-                    };
-                  })
-                );
-
-                const ingredients = optionsWithIngredients.flatMap(
-                  (opt) => opt.ingredients
-                );
-
-                return {
-                  ...meal,
-                  has_alternatives: meal.has_alternatives ?? false,
-                  options: optionsWithIngredients,
-                  ingredients,
-                };
-              })
-            );
-
-            return { ...day, meals: mealsWithOptions };
-          })
-        );
-
-        return { ...plan, days: daysWithMeals };
-      })
-    );
+    timer.end({
+      client_id: clientId,
+      plans: plansWithData.length,
+      status: 200,
+    });
 
     return NextResponse.json({
       success: true,
@@ -154,6 +94,7 @@ export async function GET(
     });
   } catch (error) {
     console.error("[Nutrition Plans API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },
@@ -168,12 +109,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("PATCH /api/nutrition/plans/[id]");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -182,8 +126,15 @@ export async function PATCH(
 
     const { id: planId } = await params;
     const body = await request.json();
-    const { name, start_date, status, notes, show_meal_images, plan_mode } =
-      body;
+    const {
+      name,
+      start_date,
+      status,
+      notes,
+      show_meal_images,
+      show_calories,
+      plan_mode,
+    } = body;
 
     console.log("[Nutrition Plans API] Updating plan:", planId, body);
 
@@ -200,6 +151,7 @@ export async function PATCH(
         "[Nutrition Plans API] Plan not found or unauthorized:",
         checkError
       );
+      timer.end({ plan_id: planId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Plan no encontrado o no autorizado" },
@@ -216,9 +168,14 @@ export async function PATCH(
     if (notes !== undefined) updateData.notes = notes;
     if (show_meal_images !== undefined)
       updateData.show_meal_images = Boolean(show_meal_images);
+    // Item 2.3: plan-level calorie visibility toggle.
+    if (show_calories !== undefined)
+      updateData.show_calories = Boolean(show_calories);
 
     if (plan_mode !== undefined) {
       if (!["structured", "pdf", "hybrid"].includes(plan_mode)) {
+        timer.end({ plan_id: planId, status: 400 });
+
         return NextResponse.json(
           { success: false, error: "Modo de plan no válido" },
           { status: 400 }
@@ -228,6 +185,8 @@ export async function PATCH(
     }
 
     if (Object.keys(updateData).length === 0) {
+      timer.end({ plan_id: planId, status: 400 });
+
       return NextResponse.json(
         { success: false, error: "No hay campos para actualizar" },
         { status: 400 }
@@ -243,6 +202,7 @@ export async function PATCH(
 
     if (updateError) {
       console.error("[Nutrition Plans API] Error updating plan:", updateError);
+      timer.end({ plan_id: planId, status: 500 });
 
       return NextResponse.json(
         { success: false, error: "Error al actualizar plan nutricional" },
@@ -250,12 +210,15 @@ export async function PATCH(
       );
     }
 
+    timer.end({ plan_id: planId, status: 200 });
+
     return NextResponse.json({
       success: true,
       data: plan,
     });
   } catch (error) {
     console.error("[Nutrition Plans API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },
@@ -270,12 +233,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createSupabaseClient();
+  const timer = startPerfTimer("DELETE /api/nutrition/plans/[id]");
 
   try {
     // Authenticate trainer
     const session = await getTrainerSession();
 
     if (!session) {
+      timer.end({ status: 401 });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -299,6 +265,7 @@ export async function DELETE(
         "[Nutrition Plans API] Plan not found or unauthorized:",
         checkError
       );
+      timer.end({ plan_id: planId, status: 404 });
 
       return NextResponse.json(
         { success: false, error: "Plan no encontrado o no autorizado" },
@@ -314,6 +281,7 @@ export async function DELETE(
 
     if (deleteError) {
       console.error("[Nutrition Plans API] Error deleting plan:", deleteError);
+      timer.end({ plan_id: planId, status: 500 });
 
       return NextResponse.json(
         { success: false, error: "Error al eliminar plan nutricional" },
@@ -321,12 +289,15 @@ export async function DELETE(
       );
     }
 
+    timer.end({ plan_id: planId, status: 200 });
+
     return NextResponse.json({
       success: true,
       message: "Plan eliminado exitosamente",
     });
   } catch (error) {
     console.error("[Nutrition Plans API] Unexpected error:", error);
+    timer.end({ status: 500, unexpected_error: true });
 
     return NextResponse.json(
       { success: false, error: "Error inesperado" },
