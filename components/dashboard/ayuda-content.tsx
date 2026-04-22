@@ -29,7 +29,15 @@ const categories = [
   { key: "other", label: "Otro" },
 ];
 
-export default function AyudaContent() {
+interface AyudaContentProps {
+  trainerName?: string;
+  trainerEmail?: string;
+}
+
+export default function AyudaContent({
+  trainerName,
+  trainerEmail,
+}: AyudaContentProps = {}) {
   const [subject, setSubject] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("");
@@ -40,6 +48,43 @@ export default function AyudaContent() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  // Client-side fallback trainer info. Props take priority; otherwise fetch
+  // the session once so we can send the info in the body even when cookies
+  // on the POST request get blocked.
+  const [fallbackTrainer, setFallbackTrainer] = React.useState<{
+    name?: string;
+    email?: string;
+  }>({});
+
+  React.useEffect(() => {
+    if (trainerName || trainerEmail) return;
+    let cancelled = false;
+
+    fetch("/api/auth/session", {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.session) {
+          setFallbackTrainer({
+            name: data.session.full_name || data.session.email,
+            email: data.session.email,
+          });
+        }
+      })
+      .catch(() => {
+        /* non-fatal — server will still try cookie auth */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trainerName, trainerEmail]);
+
+  const resolvedTrainerName = trainerName || fallbackTrainer.name;
+  const resolvedTrainerEmail = trainerEmail || fallbackTrainer.email;
 
   const canSubmit = subject.trim().length > 0 && description.trim().length > 0;
 
@@ -69,12 +114,17 @@ export default function AyudaContent() {
       const response = await fetch("/api/support/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           asunto: subject.trim(),
           categoria: categoryLabel,
           prioridad: priorityLabel,
           descripcion: description.trim(),
           video_url: videoUrl.trim() || undefined,
+          // Send trainer info as a fallback in case the session cookie
+          // isn't delivered (some browsers/clients strip cookies on POSTs).
+          trainer_name: resolvedTrainerName,
+          trainer_email: resolvedTrainerEmail,
         }),
       });
 

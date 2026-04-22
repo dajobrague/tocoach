@@ -4,7 +4,15 @@ import { Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React from "react";
 
-export default function FloatingSupportButton() {
+interface FloatingSupportButtonProps {
+  trainerName?: string;
+  trainerEmail?: string;
+}
+
+export default function FloatingSupportButton({
+  trainerName,
+  trainerEmail,
+}: FloatingSupportButtonProps = {}) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitResult, setSubmitResult] = React.useState<{
@@ -16,6 +24,44 @@ export default function FloatingSupportButton() {
   const [category, setCategory] = React.useState("");
   const [priority, setPriority] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
+  // Client-side fallback trainer info. The props take priority (passed from the
+  // dashboard once its session is loaded); if the component is mounted before
+  // that prop is ready, we try to fetch the session directly so we always
+  // have something to send in the body as a fallback for cookie-less requests.
+  const [fallbackTrainer, setFallbackTrainer] = React.useState<{
+    name?: string;
+    email?: string;
+  }>({});
+
+  React.useEffect(() => {
+    if (trainerName || trainerEmail) return;
+    let cancelled = false;
+
+    fetch("/api/auth/session", {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.session) {
+          setFallbackTrainer({
+            name: data.session.full_name || data.session.email,
+            email: data.session.email,
+          });
+        }
+      })
+      .catch(() => {
+        /* non-fatal — server will still try cookie auth */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trainerName, trainerEmail]);
+
+  const resolvedTrainerName = trainerName || fallbackTrainer.name;
+  const resolvedTrainerEmail = trainerEmail || fallbackTrainer.email;
 
   const resetForm = () => {
     setSubject("");
@@ -69,12 +115,17 @@ export default function FloatingSupportButton() {
       const response = await fetch("/api/support/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           asunto: subject.trim(),
           categoria: categoryLabel,
           prioridad: priorityLabel,
           descripcion: description.trim(),
           video_url: videoUrl.trim() || undefined,
+          // Send trainer info as a fallback in case the session cookie
+          // isn't delivered (some browsers/clients strip cookies on POSTs).
+          trainer_name: resolvedTrainerName,
+          trainer_email: resolvedTrainerEmail,
         }),
       });
 

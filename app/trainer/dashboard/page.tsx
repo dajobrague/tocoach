@@ -331,7 +331,12 @@ export default function TrainerDashboard() {
       case "messaging":
         return <MessagingContent />;
       case "ayuda":
-        return <AyudaContent />;
+        return (
+          <AyudaContent
+            trainerEmail={session.email}
+            trainerName={session.full_name || session.email}
+          />
+        );
       case "brand-settings":
         return (
           <SettingsContent
@@ -363,7 +368,10 @@ export default function TrainerDashboard() {
       <main className="flex-1 w-full overflow-hidden">{renderContent()}</main>
 
       {/* Floating Support Button */}
-      <FloatingSupportButton />
+      <FloatingSupportButton
+        trainerEmail={session.email}
+        trainerName={session.full_name || session.email}
+      />
     </div>
   );
 }

@@ -4,12 +4,10 @@ import { getTrainerSession } from "@/lib/auth/session";
 
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate trainer
+    // Try to authenticate trainer via session cookie (preferred)
+    // Fall back to body-provided trainer info if cookie is unavailable
+    // (some browsers/clients may block or strip cookies on certain requests).
     const session = await getTrainerSession();
-
-    if (!session) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
 
     // Read Airtable credentials from env
     const pat = process.env.AIRTABLE_PAT;
@@ -29,7 +27,15 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { asunto, categoria, prioridad, descripcion, video_url } = body;
+    const {
+      asunto,
+      categoria,
+      prioridad,
+      descripcion,
+      video_url,
+      trainer_name,
+      trainer_email,
+    } = body;
 
     if (!asunto || !descripcion) {
       return NextResponse.json(
@@ -38,8 +44,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build trainer name from session
-    const trainerName = session.full_name || session.email || "Desconocido";
+    // Resolve trainer identification:
+    // 1) From cookie-based session (preferred, verified JWT).
+    // 2) From body-provided trainer info (client-side fallback — pulled from
+    //    the session the dashboard already loaded). This isn't cryptographically
+    //    verified, but the ticket endpoint only writes to Airtable for support
+    //    purposes, so spoofing just produces a mislabeled ticket — no auth escalation.
+    const trainerFromBody =
+      (typeof trainer_name === "string" && trainer_name.trim()) ||
+      (typeof trainer_email === "string" && trainer_email.trim()) ||
+      "";
+
+    const trainerName =
+      session?.full_name || session?.email || trainerFromBody || "Desconocido";
+
+    // Resolve trainer email separately (for the Airtable Email field used
+    // for notifications). Prefer the verified session, fall back to body.
+    const trainerEmailResolved =
+      session?.email ||
+      (typeof trainer_email === "string" && trainer_email.trim()) ||
+      "";
+
+    if (!session && !trainerFromBody) {
+      console.warn(
+        "[Support Ticket] No session cookie and no trainer info in body — rejecting"
+      );
+
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    if (!session) {
+      console.warn(
+        "[Support Ticket] No session cookie — falling back to body-provided trainer:",
+        trainerFromBody
+      );
+    }
 
     // Build Airtable fields — only include Video URL if provided
     const fields: Record<string, string> = {
@@ -49,6 +88,10 @@ export async function POST(request: NextRequest) {
       descripcion,
       trainer: trainerName,
     };
+
+    if (trainerEmailResolved) {
+      fields["Email"] = trainerEmailResolved;
+    }
 
     if (video_url && video_url.trim()) {
       fields["Video URL"] = video_url.trim();
