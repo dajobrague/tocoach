@@ -13,6 +13,8 @@ import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { clearClientToken } from "@/lib/auth/client-token-storage";
+
 export function LogoutButton() {
   const router = useRouter();
   const pathname = usePathname();
@@ -29,12 +31,18 @@ export function LogoutButton() {
         method: "POST",
       });
 
+      // Always clear the localStorage fallback token on logout, even if
+      // the server call fails — otherwise a stale JWT would keep
+      // authenticating writes until it expires (30 days).
+      clearClientToken();
+
       if (response.ok) {
         router.push(`/${slug}/login`);
         router.refresh();
       }
     } catch (error) {
       console.error("Logout error:", error);
+      clearClientToken();
     } finally {
       setIsLoading(false);
     }

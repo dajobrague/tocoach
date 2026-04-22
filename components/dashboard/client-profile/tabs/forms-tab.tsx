@@ -23,6 +23,7 @@ import { Icon } from "@iconify/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ApplyTemplateSection } from "@/components/dashboard/client-profile/tabs/apply-template-section";
 import FormConfigEditor from "@/components/dashboard/client-profile/tabs/form-config-editor";
 import {
   buildCheckinSchedulePayload,
@@ -31,6 +32,10 @@ import {
 } from "@/components/trainer/checkin-schedule-editor";
 import { countAnswerKeys, normalizeFormAnswers } from "@/lib/forms";
 import {
+  DEFAULT_CHECKIN_CONFIG,
+  DEFAULT_HABIT_CONFIG,
+} from "@/lib/forms/defaults";
+import {
   formatScheduleDescription,
   getScheduleOrDefault,
 } from "@/lib/forms/schedule";
@@ -38,6 +43,7 @@ import {
   FormResponse as FormResponseType,
   QuestionConfig,
   FormConfigData,
+  hasStructuredPages,
   normalizeFormConfig,
   isStructuredConfig,
   type CheckInSchedule,
@@ -170,565 +176,6 @@ export default function FormsTab({
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isLoadingResponses, setIsLoadingResponses] = useState(true);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-
-  // ── Default structured configs with category-based pages ───────────
-  const DEFAULT_CHECKIN_CONFIG: FormConfigData = {
-    pages: [
-      {
-        id: "checkin_reflection",
-        title: "Reflexión Personal",
-        icon: "solar:user-heart-bold",
-        order: 0,
-      },
-      {
-        id: "checkin_goals",
-        title: "Objetivos",
-        icon: "solar:target-bold",
-        order: 1,
-      },
-      {
-        id: "checkin_service",
-        title: "Valoración del Servicio",
-        icon: "solar:star-bold",
-        order: 2,
-      },
-      {
-        id: "checkin_body",
-        title: "Fotos y Medidas",
-        icon: "solar:camera-bold",
-        order: 3,
-      },
-    ],
-    questions: [
-      // ── Page: Reflexión Personal ──
-      {
-        id: "personal_life",
-        label: "Vida Personal",
-        fullQuestion: "¿Cómo va todo a nivel personal?",
-        icon: "solar:user-heart-bold",
-        type: "text",
-        enabled: true,
-        required: true,
-        pageId: "checkin_reflection",
-      },
-      {
-        id: "gym_achievement",
-        label: "Triunfo en el Gimnasio",
-        fullQuestion:
-          "Triunfo que has conseguido en el gimnasio desde última revisión",
-        icon: "solar:cup-star-bold",
-        type: "text",
-        enabled: true,
-        required: true,
-        pageId: "checkin_reflection",
-      },
-      {
-        id: "other_victory",
-        label: "Otra Victoria",
-        fullQuestion: "¿Alguna otra victoria que celebrar?",
-        icon: "solar:star-circle-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        pageId: "checkin_reflection",
-      },
-      {
-        id: "biggest_challenge",
-        label: "Mayor Desafío",
-        fullQuestion:
-          "¿Cuál ha sido el mayor desafío al que te has enfrentado?",
-        icon: "solar:shield-warning-bold",
-        type: "text",
-        enabled: true,
-        required: true,
-        pageId: "checkin_reflection",
-      },
-      // ── Page: Objetivos ──
-      {
-        id: "goals_completed",
-        label: "Objetivos Cumplidos",
-        fullQuestion:
-          "¿Has cumplido objetivos que te marcaste en nuestra última revisión?",
-        icon: "solar:check-square-bold",
-        type: "boolean",
-        enabled: true,
-        required: true,
-        pageId: "checkin_goals",
-      },
-      {
-        id: "goals_impediment",
-        label: "Impedimentos",
-        fullQuestion: "¿Qué te lo ha impedido?",
-        icon: "solar:close-circle-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "goals_completed",
-        conditionalValue: false,
-        pageId: "checkin_goals",
-      },
-      {
-        id: "focus_next_weeks",
-        label: "Enfoque Próximas Semanas",
-        fullQuestion:
-          "¿En qué quieres enfocarte especialmente para mejorar en estas próximas semanas?",
-        icon: "solar:target-bold",
-        type: "text",
-        enabled: true,
-        required: true,
-        pageId: "checkin_goals",
-      },
-      // ── Page: Valoración del Servicio ──
-      {
-        id: "service_rating",
-        label: "Valoración del Servicio",
-        fullQuestion: "¿Cómo valoras el servicio que te estamos dando?",
-        icon: "solar:star-bold",
-        type: "rating",
-        enabled: true,
-        required: true,
-        pageId: "checkin_service",
-      },
-      {
-        id: "service_details",
-        label: "Detalles del Servicio",
-        fullQuestion: "¿Me puedes dar más detalles?",
-        icon: "solar:chat-round-dots-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "service_rating",
-        conditionalValue: true,
-        pageId: "checkin_service",
-      },
-      // ── Page: Fotos y Medidas ──
-      {
-        id: "photos",
-        label: "Fotos de Progreso",
-        icon: "solar:camera-bold",
-        type: "group",
-        enabled: true,
-        required: false,
-        pageId: "checkin_body",
-        subQuestions: [
-          {
-            id: "photo_front",
-            label: "Foto de Frente",
-            icon: "solar:user-bold",
-            type: "photo",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "photo_side",
-            label: "Foto de Perfil",
-            icon: "solar:user-bold",
-            type: "photo",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "photo_back",
-            label: "Foto de Espaldas",
-            icon: "solar:user-bold",
-            type: "photo",
-            enabled: true,
-            required: false,
-          },
-        ],
-      },
-      {
-        id: "body_measurements",
-        label: "Medidas Corporales",
-        icon: "solar:ruler-bold",
-        type: "group",
-        enabled: true,
-        required: false,
-        pageId: "checkin_body",
-        subQuestions: [
-          {
-            id: "chest",
-            label: "Pecho",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "shoulders",
-            label: "Hombros",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "arm",
-            label: "Brazo",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "above_navel",
-            label: "Sobre el Ombligo 3cm",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "below_navel",
-            label: "Bajo el Ombligo 3cm",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "groin",
-            label: "Ingle",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "thigh",
-            label: "Muslo",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "calf",
-            label: "Gemelo",
-            icon: "solar:ruler-cross-pen-bold",
-            type: "number",
-            unit: "cm",
-            enabled: true,
-            required: false,
-          },
-        ],
-      },
-      {
-        id: "body_weight",
-        label: "Peso Corporal",
-        icon: "solar:scale-bold",
-        type: "number",
-        unit: "kg",
-        enabled: true,
-        required: true,
-        pageId: "checkin_body",
-      },
-    ],
-  };
-
-  const DEFAULT_HABIT_CONFIG: FormConfigData = {
-    pages: [
-      {
-        id: "habit_wellbeing",
-        title: "Bienestar",
-        icon: "solar:heart-pulse-bold",
-        order: 0,
-      },
-      {
-        id: "habit_activity",
-        title: "Actividad Física",
-        icon: "solar:running-bold",
-        order: 1,
-      },
-      {
-        id: "habit_nutrition",
-        title: "Nutrición",
-        icon: "solar:plate-bold",
-        order: 2,
-      },
-      {
-        id: "habit_sleep",
-        title: "Sueño",
-        icon: "solar:sleeping-bold",
-        order: 3,
-      },
-    ],
-    questions: [
-      // ── Page: Bienestar ──
-      {
-        id: "body_weight",
-        label: "Peso Corporal",
-        fullQuestion: "¿Cuánto pesas hoy?",
-        icon: "solar:scale-bold",
-        type: "number",
-        unit: "kg",
-        enabled: true,
-        required: false,
-        pageId: "habit_wellbeing",
-      },
-      {
-        id: "energy_levels",
-        label: "Niveles de Energía",
-        fullQuestion: "Niveles de energía durante el día",
-        icon: "solar:bolt-bold",
-        type: "rating",
-        enabled: true,
-        required: false,
-        pageId: "habit_wellbeing",
-      },
-      {
-        id: "stress_levels",
-        label: "Manejo del Estrés",
-        fullQuestion: "¿Qué tal has sobrellevado el estrés?",
-        icon: "solar:shield-warning-bold",
-        type: "rating",
-        enabled: true,
-        required: false,
-        pageId: "habit_wellbeing",
-      },
-      {
-        id: "illness_signs",
-        label: "Signos de Enfermedad",
-        fullQuestion:
-          "¿Has tenido algún signo de enfermedad, infección, dolor?",
-        icon: "solar:health-bold",
-        type: "boolean",
-        enabled: true,
-        required: false,
-        pageId: "habit_wellbeing",
-      },
-      {
-        id: "illness_details",
-        label: "Detalles de Enfermedad",
-        fullQuestion: "Más detalles",
-        icon: "solar:notes-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "illness_signs",
-        conditionalValue: true,
-        pageId: "habit_wellbeing",
-      },
-      // ── Page: Actividad Física ──
-      {
-        id: "steps",
-        label: "Pasos del Día",
-        fullQuestion: "¿Cuántos pasos has hecho hoy?",
-        icon: "solar:walking-bold",
-        type: "number",
-        unit: "pasos",
-        enabled: true,
-        required: false,
-        pageId: "habit_activity",
-      },
-      {
-        id: "other_activity",
-        label: "Otra Actividad Física",
-        fullQuestion: "¿Otra actividad física exigente?",
-        icon: "solar:running-bold",
-        type: "boolean",
-        enabled: true,
-        required: false,
-        pageId: "habit_activity",
-      },
-      {
-        id: "other_activity_details",
-        label: "Detalles de Actividad",
-        fullQuestion: "Más detalles",
-        icon: "solar:notes-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "other_activity",
-        conditionalValue: true,
-        pageId: "habit_activity",
-      },
-      {
-        id: "sun_exposure",
-        label: "Exposición Solar",
-        fullQuestion: "Horas de exposición al sol durante el día",
-        icon: "solar:sun-bold",
-        type: "number",
-        unit: "horas",
-        enabled: true,
-        required: false,
-        pageId: "habit_activity",
-      },
-      // ── Page: Nutrición ──
-      {
-        id: "macro_tracking",
-        label: "Seguimiento de Macros",
-        fullQuestion: "¿Seguimiento de macros hoy?",
-        icon: "solar:pie-chart-bold",
-        type: "group",
-        enabled: true,
-        required: false,
-        pageId: "habit_nutrition",
-        subQuestions: [
-          {
-            id: "calories",
-            label: "Calorías Totales",
-            icon: "solar:fire-bold",
-            type: "number",
-            unit: "kcal",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "protein",
-            label: "Proteína",
-            icon: "solar:bone-bold",
-            type: "number",
-            unit: "g",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "carbs",
-            label: "Carbohidratos",
-            icon: "solar:leaf-bold",
-            type: "number",
-            unit: "g",
-            enabled: true,
-            required: false,
-          },
-          {
-            id: "fats",
-            label: "Grasas",
-            icon: "solar:cloud-waterdrop-bold",
-            type: "number",
-            unit: "g",
-            enabled: true,
-            required: false,
-          },
-        ],
-      },
-      {
-        id: "hunger_levels",
-        label: "Niveles de Hambre",
-        fullQuestion: "¿Cómo han sido tus niveles de hambre?",
-        icon: "solar:plate-bold",
-        type: "rating",
-        enabled: true,
-        required: false,
-        pageId: "habit_nutrition",
-      },
-      {
-        id: "adherence",
-        label: "Adherencia al Plan",
-        fullQuestion: "¿Cómo ha sido la adherencia?",
-        icon: "solar:check-circle-bold",
-        type: "rating",
-        enabled: true,
-        required: false,
-        pageId: "habit_nutrition",
-      },
-      {
-        id: "adherence_reason",
-        label: "Razón de No Adherencia",
-        fullQuestion: "¿Por qué no te has podido ceñir al plan?",
-        icon: "solar:question-circle-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "adherence",
-        conditionalValue: true,
-        pageId: "habit_nutrition",
-      },
-      {
-        id: "caffeine",
-        label: "Consumo de Cafeína",
-        fullQuestion: "¿Cuánta cafeína se ha consumido?",
-        icon: "solar:cup-hot-bold",
-        type: "number",
-        unit: "mg",
-        enabled: true,
-        required: false,
-        pageId: "habit_nutrition",
-      },
-      {
-        id: "supplementation",
-        label: "Suplementación",
-        fullQuestion: "Suplementación",
-        icon: "solar:pill-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        pageId: "habit_nutrition",
-      },
-      // ── Page: Sueño ──
-      {
-        id: "bedtime",
-        label: "Hora de Acostar",
-        fullQuestion: "¿A qué hora te acostaste ayer?",
-        icon: "solar:moon-stars-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        pageId: "habit_sleep",
-      },
-      {
-        id: "wake_time",
-        label: "Hora de Despertar",
-        fullQuestion: "¿A qué hora te has despertado hoy?",
-        icon: "solar:sun-fog-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        pageId: "habit_sleep",
-      },
-      {
-        id: "sleep_hours",
-        label: "Horas de Sueño",
-        fullQuestion: "¿Cuántas horas has dormido en total?",
-        icon: "solar:sleeping-bold",
-        type: "number",
-        unit: "horas",
-        enabled: true,
-        required: false,
-        pageId: "habit_sleep",
-      },
-      {
-        id: "morning_feeling",
-        label: "Sensación al Despertar",
-        fullQuestion: "Al salir de cama esta mañana sentías que",
-        icon: "solar:smile-circle-bold",
-        type: "rating",
-        enabled: true,
-        required: false,
-        pageId: "habit_sleep",
-      },
-      {
-        id: "morning_feeling_details",
-        label: "Detalles de Despertar",
-        fullQuestion: "Más detalles",
-        icon: "solar:notes-bold",
-        type: "text",
-        enabled: true,
-        required: false,
-        conditionalOn: "morning_feeling",
-        conditionalValue: true,
-        pageId: "habit_sleep",
-      },
-      {
-        id: "special_comment",
-        label: "Comentario Especial",
-        fullQuestion: "Comentario especial",
-        icon: "solar:chat-round-dots-bold",
-        type: "boolean",
-        enabled: false,
-        required: false,
-        pageId: "habit_sleep",
-      },
-    ],
-  };
 
   // Flat question arrays (kept for backward compat in responses/preview views)
   const [checkinQuestions, setCheckinQuestions] = useState<QuestionConfig[]>(
@@ -1586,6 +1033,29 @@ export default function FormsTab({
 
             {!isLoadingConfig && (
               <>
+                <div className="mb-6">
+                  <ApplyTemplateSection
+                    clientId={clientId}
+                    formType={selectedFormType}
+                    onApplied={() => {
+                      // Reset dirty state and re-sync both editors from the
+                      // server so the UI reflects the template we just wrote.
+                      setIsConfigDirty(false);
+                      onConfigDirtyChange?.(false);
+                      pendingConfigRef.current = null;
+
+                      if (selectedFormType === "checkins") {
+                        setScheduleEditorRevision((r) => r + 1);
+                        void queryClient.invalidateQueries({
+                          queryKey: ["trainer", "checkin-schedule", clientId],
+                        });
+                      }
+
+                      fetchConfig();
+                    }}
+                  />
+                </div>
+
                 {selectedFormType === "checkins" && (
                   <>
                     <CheckInScheduleEditor
@@ -1897,7 +1367,12 @@ export default function FormsTab({
                                             ? "Sube una foto"
                                             : question.type === "group"
                                               ? `${question.subQuestions?.filter((sq) => sq.enabled).length || 0} elementos`
-                                              : ""}
+                                              : question.type === "choice"
+                                                ? "Selecciona una opción"
+                                                : question.type ===
+                                                    "multi_choice"
+                                                  ? "Selecciona una o varias opciones"
+                                                  : ""}
                               </p>
                             </div>
                           </div>
@@ -1964,6 +1439,34 @@ export default function FormsTab({
                                 <p className="text-sm text-gray-500">
                                   Toca para subir una foto
                                 </p>
+                              </div>
+                            )}
+                            {(question.type === "choice" ||
+                              question.type === "multi_choice") && (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {(question.choices || []).map((choice) => (
+                                  <div
+                                    key={choice.id}
+                                    className="min-h-12 rounded-lg border-2 border-default-200 bg-white px-3 py-2 flex flex-col items-center justify-center gap-1 text-xs font-semibold text-gray-700"
+                                  >
+                                    {choice.icon && (
+                                      <Icon
+                                        className="text-gray-500"
+                                        icon={choice.icon}
+                                        width={16}
+                                      />
+                                    )}
+                                    <span className="text-center leading-tight">
+                                      {choice.label}
+                                    </span>
+                                  </div>
+                                ))}
+                                {(question.choices || []).length === 0 && (
+                                  <p className="col-span-full text-xs text-amber-600 italic">
+                                    Aún no hay opciones — añádelas desde
+                                    &quot;Editar opciones&quot;.
+                                  </p>
+                                )}
                               </div>
                             )}
                             {question.type === "group" &&
@@ -2143,38 +1646,37 @@ export default function FormsTab({
             // Find all questions that have answers
             const answeredQIds = new Set(answerKeys);
 
-            // Build sections
-            const responseSections =
-              sortedPages.length > 1
-                ? sortedPages
-                    .map((page) => ({
-                      title: page.title,
-                      icon: page.icon,
-                      questions: allQuestions.filter(
-                        (q) =>
-                          (q.pageId || sortedPages[0]?.id) === page.id &&
-                          (answeredQIds.has(q.id) ||
-                            (q.type === "group" &&
-                              q.subQuestions?.some((sq) =>
-                                answeredQIds.has(sq.id)
-                              )))
-                      ),
-                    }))
-                    .filter((s) => s.questions.length > 0)
-                : [
-                    {
-                      title: "Respuestas",
-                      icon: "solar:clipboard-check-bold",
-                      questions: allQuestions.filter(
-                        (q) =>
-                          answeredQIds.has(q.id) ||
+            // Build sections. Usamos `hasStructuredPages` — mismo criterio
+            // que el renderer del cliente — para decidir si particionar por
+            // pages o colapsar en una única sección "Respuestas".
+            const responseSections = hasStructuredPages(sortedPages)
+              ? sortedPages
+                  .map((page) => ({
+                    title: page.title,
+                    icon: page.icon,
+                    questions: allQuestions.filter(
+                      (q) =>
+                        (q.pageId || sortedPages[0]?.id) === page.id &&
+                        (answeredQIds.has(q.id) ||
                           (q.type === "group" &&
                             q.subQuestions?.some((sq) =>
                               answeredQIds.has(sq.id)
-                            ))
-                      ),
-                    },
-                  ];
+                            )))
+                    ),
+                  }))
+                  .filter((s) => s.questions.length > 0)
+              : [
+                  {
+                    title: "Respuestas",
+                    icon: "solar:clipboard-check-bold",
+                    questions: allQuestions.filter(
+                      (q) =>
+                        answeredQIds.has(q.id) ||
+                        (q.type === "group" &&
+                          q.subQuestions?.some((sq) => answeredQIds.has(sq.id)))
+                    ),
+                  },
+                ];
 
             const totalStructuredQuestions = responseSections.reduce(
               (n, s) => n + s.questions.length,
@@ -2187,6 +1689,24 @@ export default function FormsTab({
               totalStructuredQuestions === 0 && answerKeys.length > 0;
             const showOrphanSection =
               orphanAnswerKeys.length > 0 && totalStructuredQuestions > 0;
+
+            // Preguntas que están en la config ACTUAL pero no tienen respuesta
+            // en este registro. Pueden ser: (a) preguntas añadidas después de
+            // que el cliente envió, o (b) preguntas que el cliente dejó
+            // vacías. Sin esta señal, la ausencia era indistinguible de un
+            // bug. Se muestran con el nombre de la pregunta (no el id) para
+            // que el trainer reconozca qué falta.
+            const unansweredCurrentQuestions = allQuestions.filter((q) => {
+              // Grupos "responden" si cualquier subQuestion tiene answer.
+              if (q.type === "group") {
+                return !q.subQuestions?.some((sq) => answeredQIds.has(sq.id));
+              }
+
+              return !answeredQIds.has(q.id);
+            });
+            const showUnansweredSection =
+              unansweredCurrentQuestions.length > 0 &&
+              totalStructuredQuestions > 0;
 
             const formattedDate = new Date(
               viewingResponse.date + "T12:00:00"
@@ -2265,6 +1785,72 @@ export default function FormsTab({
                   </a>
                 ) : (
                   <p className="text-xs text-gray-400 italic">Sin foto</p>
+                );
+              }
+              if (q.type === "choice") {
+                if (typeof answer !== "string") {
+                  return (
+                    <p className="text-xs text-gray-400 italic">
+                      Sin respuesta
+                    </p>
+                  );
+                }
+                const opt = (q.choices || []).find((c) => c.id === answer);
+
+                return (
+                  <Chip
+                    className="font-semibold"
+                    color={opt ? "primary" : "default"}
+                    size="sm"
+                    startContent={
+                      opt?.icon ? (
+                        <Icon className="ml-1" icon={opt.icon} width={14} />
+                      ) : undefined
+                    }
+                    variant={opt ? "flat" : "bordered"}
+                  >
+                    {opt ? opt.label : "opción eliminada"}
+                  </Chip>
+                );
+              }
+              if (q.type === "multi_choice") {
+                const ids = Array.isArray(answer) ? (answer as string[]) : [];
+
+                if (ids.length === 0) {
+                  return (
+                    <p className="text-xs text-gray-400 italic">
+                      Sin respuesta
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {ids.map((id) => {
+                      const opt = (q.choices || []).find((c) => c.id === id);
+
+                      return (
+                        <Chip
+                          key={id}
+                          className="font-semibold"
+                          color={opt ? "primary" : "default"}
+                          size="sm"
+                          startContent={
+                            opt?.icon ? (
+                              <Icon
+                                className="ml-1"
+                                icon={opt.icon}
+                                width={14}
+                              />
+                            ) : undefined
+                          }
+                          variant={opt ? "flat" : "bordered"}
+                        >
+                          {opt ? opt.label : "opción eliminada"}
+                        </Chip>
+                      );
+                    })}
+                  </div>
                 );
               }
 
@@ -2413,6 +1999,41 @@ export default function FormsTab({
                         </div>
                       ))}
 
+                    {showUnansweredSection && (
+                      <Card className="bg-amber-50 border border-amber-200">
+                        <CardBody className="p-4 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <Icon
+                              className="text-amber-500 mt-0.5"
+                              icon="solar:info-circle-bold"
+                              width={18}
+                            />
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-amber-900">
+                                Preguntas sin respuesta en este registro
+                              </p>
+                              <p className="text-xs text-amber-800/80">
+                                Estas preguntas están en el formulario actual
+                                pero no aparecen aquí. Pueden haber sido
+                                añadidas después del envío o dejadas vacías por
+                                el cliente.
+                              </p>
+                            </div>
+                          </div>
+                          <ul className="space-y-1.5 pl-1">
+                            {unansweredCurrentQuestions.map((q) => (
+                              <li
+                                key={q.id}
+                                className="text-sm text-gray-700 flex items-start gap-2"
+                              >
+                                <span className="text-amber-400 mt-0.5">•</span>
+                                <span>{q.fullQuestion || q.label}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardBody>
+                      </Card>
+                    )}
                     {showOrphanSection && (
                       <Card className="bg-slate-50 border border-slate-200">
                         <CardBody className="p-4 space-y-3">

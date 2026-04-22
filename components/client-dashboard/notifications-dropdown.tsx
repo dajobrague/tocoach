@@ -15,6 +15,7 @@ import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   useRealtimeNotifications,
   RealtimeNotification,
@@ -79,7 +80,7 @@ export function NotificationsDropdown({
   const loadNotifications = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/notifications?clientId=${clientId}&tenantSlug=${tenantSlug}`
       );
 
@@ -99,7 +100,7 @@ export function NotificationsDropdown({
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
-      await fetch("/api/notifications", {
+      await clientFetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notificationIds: [notificationId] }),
@@ -126,7 +127,7 @@ export function NotificationsDropdown({
     if (unreadIds.length === 0) return;
 
     try {
-      await fetch("/api/notifications", {
+      await clientFetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notificationIds: unreadIds }),

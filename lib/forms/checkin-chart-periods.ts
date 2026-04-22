@@ -54,7 +54,7 @@ export function aggregateWeightByCheckInPeriods(
   const s = getScheduleOrDefault(schedule);
   const now = new Date();
   const oldest = new Date(now.getTime() - lookbackDays * 86400000);
-  const maxW = chartPeriodCountForRange(selectedPeriod, s.frequency);
+  const maxW = chartPeriodCountForRange(selectedPeriod, s);
   const windows = listCheckInPeriodWindows(s, now, maxW, oldest);
 
   const data: { date: string; weight: number; periodTooltip: string }[] = [];

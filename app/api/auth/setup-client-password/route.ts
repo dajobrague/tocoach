@@ -126,6 +126,10 @@ export async function POST(request: NextRequest) {
     updateClientLastLogin(clientId).catch(console.warn);
 
     const fullName = `${client.name} ${client.last_name || ""}`.trim();
+
+    // See the note in `app/api/auth/client-login/route.ts` explaining why
+    // we echo the JWT back in the body — this is the localStorage fallback
+    // for environments where the httpOnly cookie gets blocked/dropped.
     const response = NextResponse.json(
       {
         success: true,
@@ -140,7 +144,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    await setClientSessionCookie(
+    const token = await setClientSessionCookie(
       response,
       client.id,
       tenantSlug,
@@ -148,11 +152,30 @@ export async function POST(request: NextRequest) {
       fullName
     );
 
+    const finalResponse = NextResponse.json(
+      {
+        success: true,
+        message: "Contraseña configurada correctamente",
+        client: {
+          id: client.id,
+          email: client.email,
+          fullName,
+          tenantSlug: tenantSlug,
+        },
+        token,
+      },
+      { status: 200 }
+    );
+
+    response.cookies.getAll().forEach((cookie) => {
+      finalResponse.cookies.set(cookie);
+    });
+
     console.log(
       `[Setup Password] Password set for client: ${client.email} in tenant: ${tenantSlug}`
     );
 
-    return response;
+    return finalResponse;
   } catch (error) {
     console.error("[Setup Password] Unexpected error:", error);
 

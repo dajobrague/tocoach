@@ -11,6 +11,7 @@ export interface ClientData {
   trainerName: string;
   clientProfilePicture: string;
   tenantSlug: string;
+  communityUrl: string | null;
 }
 
 const ClientDataContext = createContext<ClientData | null>(null);

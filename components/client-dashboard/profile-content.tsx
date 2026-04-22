@@ -16,6 +16,7 @@ import { TenantLogo } from "@/components/tenant-logo";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { LogoutButton } from "@/components/client-dashboard/logout-button";
+import { clientFetch } from "@/lib/auth/client-token-storage";
 
 export function ProfileContent() {
   const {
@@ -55,7 +56,7 @@ export function ProfileContent() {
   useEffect(() => {
     async function fetchProfile() {
       try {
-        const res = await fetch(`/api/client/profile`);
+        const res = await clientFetch(`/api/client/profile`);
         const data = await res.json();
 
         if (data.success) {
@@ -95,7 +96,7 @@ export function ProfileContent() {
 
       formData.append("file", file);
 
-      const res = await fetch("/api/client/profile-picture", {
+      const res = await clientFetch("/api/client/profile-picture", {
         method: "POST",
         body: formData,
       });
@@ -155,7 +156,7 @@ export function ProfileContent() {
     setIsChangingPassword(true);
 
     try {
-      const res = await fetch("/api/client/change-password", {
+      const res = await clientFetch("/api/client/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

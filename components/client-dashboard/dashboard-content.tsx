@@ -10,6 +10,7 @@ import { useClientData } from "@/components/client-dashboard/client-data-provide
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   CaloriesChart,
   MacrosRing,
@@ -18,6 +19,14 @@ import {
   TrainingActivityChart,
   WeightChart,
 } from "@/components/client-dashboard/progress-charts";
+import {
+  resolveCaloriesAnswer,
+  resolveCarbsAnswer,
+  resolveFatsAnswer,
+  resolveProteinAnswer,
+  resolveSleepHoursAnswer,
+  resolveStepsAnswer,
+} from "@/lib/forms/analytics-keys";
 import { formResponsesToSubmittedAtPayload } from "@/lib/forms/client-helpers";
 import { aggregateWeightByCheckInPeriods } from "@/lib/forms/checkin-chart-periods";
 import {
@@ -66,7 +75,7 @@ export function DashboardContent() {
       queryKey: ["client", "formConfig", clientId, "checkins"],
       queryFn: async () => {
         try {
-          const res = await fetch(
+          const res = await clientFetch(
             `/api/forms/configs/${clientId}?form_type=checkins`,
             { cache: "no-store" }
           );
@@ -101,17 +110,14 @@ export function DashboardContent() {
 
   const chartPeriodCount = useMemo(() => {
     try {
-      return chartPeriodCountForRange(
-        selectedPeriod,
-        checkinSchedule.frequency
-      );
+      return chartPeriodCountForRange(selectedPeriod, checkinSchedule);
     } catch {
       return chartPeriodCountForRange(
         selectedPeriod,
-        FALLBACK_CHECKIN_SCHEDULE.frequency
+        FALLBACK_CHECKIN_SCHEDULE
       );
     }
-  }, [selectedPeriod, checkinSchedule.frequency]);
+  }, [selectedPeriod, checkinSchedule]);
 
   const fetchDays = useMemo(() => {
     try {
@@ -271,20 +277,15 @@ export function DashboardContent() {
             g.periodEnd.getTime() === p.end.getTime()
         );
         const list = match?.responses ?? [];
+        // Sólo promedia sobre días donde el cliente respondió horas de
+        // sueño. Un día sin respuesta no debería diluir el promedio a 0.
+        const reported = list
+          .map((r) => resolveSleepHoursAnswer(r.answers))
+          .filter((v): v is number => v !== null);
         const hours =
-          list.length === 0
+          reported.length === 0
             ? 0
-            : list.reduce((s, r) => {
-                const h = Number(
-                  r.answers?.sleep_hours ||
-                    r.answers?.sleep ||
-                    r.answers?.sueno ||
-                    r.answers?.horas_sueno ||
-                    0
-                );
-
-                return s + h;
-              }, 0) / list.length;
+            : reported.reduce((s, h) => s + h, 0) / reported.length;
 
         return {
           date: p.label,
@@ -308,16 +309,13 @@ export function DashboardContent() {
             g.periodEnd.getTime() === p.end.getTime()
         );
         const list = match?.responses ?? [];
+        const reported = list
+          .map((r) => resolveCaloriesAnswer(r.answers))
+          .filter((v): v is number => v !== null);
         const calories =
-          list.length === 0
+          reported.length === 0
             ? 0
-            : list.reduce((s, r) => {
-                const c = Number(
-                  r.answers?.calories || r.answers?.calorias || 0
-                );
-
-                return s + c;
-              }, 0) / list.length;
+            : reported.reduce((s, c) => s + c, 0) / reported.length;
 
         return {
           date: p.label,
@@ -345,16 +343,13 @@ export function DashboardContent() {
             g.periodEnd.getTime() === p.end.getTime()
         );
         const list = match?.responses ?? [];
+        const reported = list
+          .map((r) => resolveProteinAnswer(r.answers))
+          .filter((v): v is number => v !== null);
         const protein =
-          list.length === 0
+          reported.length === 0
             ? 0
-            : list.reduce((s, r) => {
-                const v = Number(
-                  r.answers?.protein || r.answers?.proteina || 0
-                );
-
-                return s + v;
-              }, 0) / list.length;
+            : reported.reduce((s, v) => s + v, 0) / reported.length;
 
         return {
           date: p.label,
@@ -375,7 +370,7 @@ export function DashboardContent() {
     const t = new Date().toISOString().split("T")[0] ?? "";
     const row = dailyResponses.find((r: FormResponse) => r.response_date === t);
 
-    return Number(row?.answers?.steps ?? row?.answers?.pasos ?? 0) || 0;
+    return resolveStepsAnswer(row?.answers) ?? 0;
   }, [dailyResponses]);
 
   const avgMacros = useMemo(() => {
@@ -385,25 +380,39 @@ export function DashboardContent() {
       const scoped = dailyResponses.filter(
         (r: FormResponse) => responseTimestampMs(r) >= fromMs
       );
-      const withData = scoped.filter((r: FormResponse) => {
-        if (!r.answers) return false;
-        const p = Number(r.answers.protein || r.answers.proteina || 0);
-        const c = Number(r.answers.carbs || r.answers.carbohidratos || 0);
-        const f = Number(r.answers.fats || r.answers.grasas || 0);
 
-        return p > 0 || c > 0 || f > 0;
-      });
+      // Un día cuenta como "con datos" si reportó al menos UNO de los 3
+      // macros (cualquiera, incluso con valor 0 — lo importante es que el
+      // cliente respondió algo). Usamos los resolvers para tolerar ids
+      // renombrados por el trainer.
+      type MacroRow = {
+        protein: number | null;
+        carbs: number | null;
+        fats: number | null;
+      };
+      const withData: MacroRow[] = scoped
+        .map(
+          (r: FormResponse): MacroRow => ({
+            protein: resolveProteinAnswer(r.answers),
+            carbs: resolveCarbsAnswer(r.answers),
+            fats: resolveFatsAnswer(r.answers),
+          })
+        )
+        .filter(
+          (m: MacroRow) =>
+            m.protein !== null || m.carbs !== null || m.fats !== null
+        );
 
       if (withData.length === 0) return { protein: 0, carbs: 0, fats: 0 };
 
       const totals = withData.reduce(
         (
           acc: { protein: number; carbs: number; fats: number },
-          r: FormResponse
+          m: MacroRow
         ) => {
-          acc.protein += Number(r.answers.protein || r.answers.proteina || 0);
-          acc.carbs += Number(r.answers.carbs || r.answers.carbohidratos || 0);
-          acc.fats += Number(r.answers.fats || r.answers.grasas || 0);
+          acc.protein += m.protein ?? 0;
+          acc.carbs += m.carbs ?? 0;
+          acc.fats += m.fats ?? 0;
 
           return acc;
         },

@@ -15,6 +15,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   clearExerciseLogDraft,
   exerciseLogDraftStorageKey,
@@ -309,7 +310,7 @@ export function ExerciseLogModal({
 
       fd.append("file", fileToUpload);
 
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/clients/${clientId}/exercise-logs/upload-video`,
         { method: "POST", body: fd }
       );
@@ -334,7 +335,7 @@ export function ExerciseLogModal({
   const handleRemoveVideo = async () => {
     if (videoPath) {
       try {
-        await fetch(
+        await clientFetch(
           `/api/clients/${clientId}/exercise-logs/upload-video?path=${encodeURIComponent(videoPath)}`,
           { method: "DELETE" }
         );
@@ -375,11 +376,14 @@ export function ExerciseLogModal({
         }));
       }
 
-      const response = await fetch(`/api/clients/${clientId}/exercise-logs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      const response = await clientFetch(
+        `/api/clients/${clientId}/exercise-logs`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        }
+      );
 
       const data = await response.json();
 

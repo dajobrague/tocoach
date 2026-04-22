@@ -18,6 +18,7 @@ import { StrengthExerciseCard } from "./progress/strength-card";
 import { CardioExerciseCard } from "./progress/cardio-card";
 import { NeatSection } from "./progress/neat-section";
 
+import { resolveStepsAnswer } from "@/lib/forms/analytics-keys";
 import {
   VerticalVideoPlayerModal,
   type VerticalVideoPlayerHandle,
@@ -75,12 +76,17 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
 
       if (json.success) {
         const responses: FormResponse[] = json.responses || [];
+        // Usamos resolveStepsAnswer para atrapar ids no canónicos
+        // (daily_steps, stepsTaken, etc.) que en el comportamiento previo
+        // salían como 0 y eran descartados por el filtro > 0.
+        // Además distinguimos "no respondió" (null) de "respondió 0" (día
+        // de descanso legítimo) — sólo los null se descartan.
         const points = responses
           .map((r) => ({
             date: r.response_date,
-            steps: Number(r.answers?.steps ?? r.answers?.pasos ?? 0),
+            steps: resolveStepsAnswer(r.answers),
           }))
-          .filter((p) => p.steps > 0)
+          .filter((p): p is { date: string; steps: number } => p.steps !== null)
           .sort((a, b) => a.date.localeCompare(b.date));
 
         setStepsData(points);

@@ -21,6 +21,13 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  resolveCaloriesAnswer,
+  resolveCarbsAnswer,
+  resolveFatsAnswer,
+  resolveProteinAnswer,
+} from "@/lib/forms/analytics-keys";
+
 const DATE_RANGES = [
   { key: "30", label: "30 días" },
   { key: "90", label: "3 meses" },
@@ -351,15 +358,43 @@ export function NutritionProgressView({ clientId }: { clientId: string }) {
 
       if (json.success) {
         const responses = json.responses || [];
+        // Usamos los resolvers centralizados para atrapar ids no canónicos
+        // (kcal, prot_total, daily_carbs, etc.) que antes caían como 0 y
+        // eran filtrados fuera silenciosamente.
+        //
+        // Filtro: conservamos el día sólo si el cliente reportó al menos
+        // un macro/calorías. `null` = no reportado; `0` = reportado como 0
+        // (ayuno, día sin grasa, etc.) y debe contar como día logueado.
         const points: NutritionPoint[] = responses
-          .map((r: any) => ({
-            date: r.response_date,
-            calories: Number(r.answers?.calories ?? r.answers?.calorias ?? 0),
-            protein: Number(r.answers?.protein ?? r.answers?.proteina ?? 0),
-            carbs: Number(r.answers?.carbs ?? r.answers?.carbohidratos ?? 0),
-            fats: Number(r.answers?.fats ?? r.answers?.grasas ?? 0),
-          }))
-          .filter((p: NutritionPoint) => p.calories > 0 || p.protein > 0)
+          .map((r: any) => {
+            const calories = resolveCaloriesAnswer(r.answers);
+            const protein = resolveProteinAnswer(r.answers);
+            const carbs = resolveCarbsAnswer(r.answers);
+            const fats = resolveFatsAnswer(r.answers);
+            const anyReported =
+              calories !== null ||
+              protein !== null ||
+              carbs !== null ||
+              fats !== null;
+
+            return {
+              date: r.response_date,
+              calories: calories ?? 0,
+              protein: protein ?? 0,
+              carbs: carbs ?? 0,
+              fats: fats ?? 0,
+              _anyReported: anyReported,
+            };
+          })
+          .filter(
+            (p: NutritionPoint & { _anyReported: boolean }) => p._anyReported
+          )
+          .map(
+            ({
+              _anyReported: _ignored,
+              ...rest
+            }: NutritionPoint & { _anyReported: boolean }) => rest
+          )
           .sort((a: NutritionPoint, b: NutritionPoint) =>
             a.date.localeCompare(b.date)
           );

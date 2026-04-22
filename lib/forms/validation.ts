@@ -1,5 +1,6 @@
 // Validation functions for the dynamic forms system
 
+import { shouldShowQuestion as sharedShouldShowQuestion } from "./conditional";
 import {
   FormConfigData,
   FormResponseSubmission,
@@ -38,7 +39,16 @@ export function validateQuestionConfig(question: any): ValidationResult {
   }
 
   // Type validation
-  const validTypes = ["rating", "number", "text", "boolean", "photo", "group"];
+  const validTypes = [
+    "rating",
+    "number",
+    "text",
+    "boolean",
+    "photo",
+    "group",
+    "choice",
+    "multi_choice",
+  ];
 
   if (!question.type || !validTypes.includes(question.type)) {
     errors.push({
@@ -99,6 +109,62 @@ export function validateQuestionConfig(question: any): ValidationResult {
               field: `subQuestions[${index}].${err.field}`,
               message: err.message,
             });
+          });
+        }
+      });
+    }
+  }
+
+  // Choice / multi_choice: exigir `choices` con mínimo 2 opciones,
+  // cada una con id + label no vacíos, ids únicos dentro de la pregunta.
+  if (question.type === "choice" || question.type === "multi_choice") {
+    if (!Array.isArray(question.choices)) {
+      errors.push({
+        field: "choices",
+        message:
+          "Las preguntas de opciones requieren un array `choices` con al menos 2 elementos",
+      });
+    } else if (question.choices.length < 2) {
+      errors.push({
+        field: "choices",
+        message:
+          "Las preguntas de opciones deben tener al menos 2 opciones configuradas",
+      });
+    } else {
+      const seenIds = new Set<string>();
+
+      question.choices.forEach((choice: any, index: number) => {
+        if (!choice || typeof choice !== "object") {
+          errors.push({
+            field: `choices[${index}]`,
+            message: "Cada opción debe ser un objeto { id, label }",
+          });
+
+          return;
+        }
+        if (!choice.id || typeof choice.id !== "string") {
+          errors.push({
+            field: `choices[${index}].id`,
+            message: "El id de la opción es obligatorio y debe ser string",
+          });
+        } else if (seenIds.has(choice.id)) {
+          errors.push({
+            field: `choices[${index}].id`,
+            message: `Id duplicado en opciones: ${choice.id}`,
+          });
+        } else {
+          seenIds.add(choice.id);
+        }
+        if (!choice.label || typeof choice.label !== "string") {
+          errors.push({
+            field: `choices[${index}].label`,
+            message: "El label de la opción es obligatorio y debe ser string",
+          });
+        }
+        if (choice.icon !== undefined && typeof choice.icon !== "string") {
+          errors.push({
+            field: `choices[${index}].icon`,
+            message: "El icono de la opción debe ser string (nombre iconify)",
           });
         }
       });
@@ -219,54 +285,50 @@ export function getEnabledQuestions(
 }
 
 /**
- * Checks if a question should be visible based on conditional logic
+ * Checks if a question should be visible based on conditional logic.
+ *
+ * La implementación real vive en `lib/forms/conditional.ts` — este re-export
+ * se mantiene para no romper los imports existentes.
  */
 export function shouldShowQuestion(
   question: QuestionConfig,
   answers: Record<string, any>
 ): boolean {
-  if (!question.conditionalOn) {
+  return sharedShouldShowQuestion(question, answers);
+}
+
+/**
+ * Determina si el answer del cliente cuenta como "vacío" para el propósito
+ * del required check. Un array vacío cuenta como vacío SOLO para `multi_choice`
+ * (el resto de tipos no usan arrays como valor).
+ */
+export function isEmptyAnswer(
+  type: QuestionConfig["type"],
+  answer: unknown
+): boolean {
+  if (answer === undefined || answer === null || answer === "") {
+    return true;
+  }
+  if (type === "multi_choice" && Array.isArray(answer) && answer.length === 0) {
     return true;
   }
 
-  const conditionalAnswer = answers[question.conditionalOn];
-
-  // Follow-up after rating: config often uses conditionalValue true; parent stores 1–5
-  if (
-    question.conditionalValue === true &&
-    typeof conditionalAnswer === "number" &&
-    conditionalAnswer >= 1 &&
-    conditionalAnswer <= 5
-  ) {
-    return true;
-  }
-
-  // For boolean conditionals
-  if (typeof question.conditionalValue === "boolean") {
-    return conditionalAnswer === question.conditionalValue;
-  }
-
-  // For numeric conditionals (e.g., rating <= 3)
-  if (typeof question.conditionalValue === "number") {
-    return conditionalAnswer <= question.conditionalValue;
-  }
-
-  // If conditional answer exists (any truthy value)
-  return !!conditionalAnswer;
+  return false;
 }
 
 function pushAnswerTypeErrors(
-  fieldId: string,
-  label: string,
-  type: QuestionConfig["type"],
+  question: QuestionConfig,
   answer: unknown,
   errors: ValidationError[]
 ): void {
-  if (answer === undefined || answer === null || answer === "") {
+  const fieldId = question.id;
+  const label = question.label;
+
+  if (isEmptyAnswer(question.type, answer)) {
     return;
   }
 
-  switch (type) {
+  switch (question.type) {
     case "rating":
       if (typeof answer !== "number" || answer < 1 || answer > 5) {
         errors.push({
@@ -312,6 +374,54 @@ function pushAnswerTypeErrors(
       }
       break;
 
+    case "choice": {
+      if (typeof answer !== "string") {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser el id de una de las opciones`,
+        });
+        break;
+      }
+      const validIds = new Set((question.choices ?? []).map((c) => c.id));
+
+      if (!validIds.has(answer)) {
+        errors.push({
+          field: fieldId,
+          message: `${label}: la opción seleccionada no existe en la configuración`,
+        });
+      }
+      break;
+    }
+
+    case "multi_choice": {
+      if (!Array.isArray(answer)) {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser un array de ids de opciones`,
+        });
+        break;
+      }
+      const validIds = new Set((question.choices ?? []).map((c) => c.id));
+
+      answer.forEach((item, index) => {
+        if (typeof item !== "string") {
+          errors.push({
+            field: `${fieldId}[${index}]`,
+            message: `${label}: cada elemento debe ser un id string`,
+          });
+
+          return;
+        }
+        if (!validIds.has(item)) {
+          errors.push({
+            field: `${fieldId}[${index}]`,
+            message: `${label}: la opción "${item}" no existe en la configuración`,
+          });
+        }
+      });
+      break;
+    }
+
     case "group":
       break;
 
@@ -353,25 +463,14 @@ export function validateFormResponse(
             return;
           }
 
-          if (
-            subQ.required &&
-            (answers[subQ.id] === undefined ||
-              answers[subQ.id] === null ||
-              answers[subQ.id] === "")
-          ) {
+          if (subQ.required && isEmptyAnswer(subQ.type, answers[subQ.id])) {
             errors.push({
               field: subQ.id,
               message: `${subQ.label} es obligatorio`,
             });
           }
 
-          pushAnswerTypeErrors(
-            subQ.id,
-            subQ.label,
-            subQ.type,
-            answers[subQ.id],
-            errors
-          );
+          pushAnswerTypeErrors(subQ, answers[subQ.id], errors);
         });
       }
 
@@ -380,9 +479,7 @@ export function validateFormResponse(
 
     if (
       question.required &&
-      (answers[question.id] === undefined ||
-        answers[question.id] === null ||
-        answers[question.id] === "")
+      isEmptyAnswer(question.type, answers[question.id])
     ) {
       errors.push({
         field: question.id,
@@ -390,13 +487,7 @@ export function validateFormResponse(
       });
     }
 
-    pushAnswerTypeErrors(
-      question.id,
-      question.label,
-      question.type,
-      answers[question.id],
-      errors
-    );
+    pushAnswerTypeErrors(question, answers[question.id], errors);
   });
 
   // Check for unexpected fields (answers not in config)

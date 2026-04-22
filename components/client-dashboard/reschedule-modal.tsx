@@ -11,6 +11,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
+
 interface RescheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,7 +62,7 @@ export function RescheduleModal({
 
       if (scheduledSessionId) {
         // Update existing scheduled_session
-        response = await fetch(
+        response = await clientFetch(
           `/api/clients/${clientId}/scheduled-sessions/${scheduledSessionId}`,
           {
             method: "PUT",
@@ -71,16 +73,19 @@ export function RescheduleModal({
         data = await response.json();
       } else if (sessionId) {
         // Create new scheduled_session for the new date
-        response = await fetch(`/api/clients/${clientId}/scheduled-sessions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            scheduledDate: newDate,
-            originalPlanDate: currentDate,
-            status: "scheduled",
-          }),
-        });
+        response = await clientFetch(
+          `/api/clients/${clientId}/scheduled-sessions`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              scheduledDate: newDate,
+              originalPlanDate: currentDate,
+              status: "scheduled",
+            }),
+          }
+        );
         data = await response.json();
       } else {
         alert("Error: no se puede reprogramar esta sesión");

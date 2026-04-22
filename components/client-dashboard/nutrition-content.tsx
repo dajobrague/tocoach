@@ -30,6 +30,7 @@ import {
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import { useNutritionPlan } from "@/lib/hooks/use-client-queries";
 
 // ─── Weekday helpers ───────────────────────────────────────────────────────
@@ -709,7 +710,7 @@ export function NutritionContent() {
 
       void (async () => {
         try {
-          const res = await fetch(
+          const res = await clientFetch(
             `/api/client/nutrition/select-option?date=${encodeURIComponent(date)}`,
             { signal: ac.signal }
           );
@@ -746,7 +747,7 @@ export function NutritionContent() {
       });
 
       try {
-        const res = await fetch("/api/client/nutrition/select-option", {
+        const res = await clientFetch("/api/client/nutrition/select-option", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mealId, optionId, date }),

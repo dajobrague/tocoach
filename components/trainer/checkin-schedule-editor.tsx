@@ -1,6 +1,6 @@
 "use client";
 
-import type { CheckInFrequency, CheckInSchedule } from "@/lib/forms/types";
+import type { CheckInSchedule } from "@/lib/forms/types";
 
 import {
   Autocomplete,
@@ -93,6 +93,9 @@ const DAY_CHIPS: { dow: number; short: string }[] = [
   { dow: 6, short: "S" },
   { dow: 0, short: "D" },
 ];
+
+/** Upper bound for the "cada N semanas" selector. Mirrors `MAX_INTERVAL_WEEKS` in `schedule.ts`. */
+const MAX_INTERVAL_WEEKS = 12;
 
 function getAllIanaTimeZones(): string[] {
   try {
@@ -305,6 +308,21 @@ async function batchApplyScheduleToClients(
   return data.updated ?? 0;
 }
 
+function clampIntervalWeeks(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+
+  return Math.min(MAX_INTERVAL_WEEKS, Math.max(1, Math.round(n)));
+}
+
+/**
+ * Normalise a UI draft into the canonical payload sent to the API.
+ *
+ * - `frequency` becomes `"custom"` when the trainer picks more than one day per week,
+ *   `"weekly"` otherwise. The legacy `"biweekly"` enum value is never emitted — the
+ *   every-two-weeks cadence is captured by `interval_weeks === 2`.
+ * - `times_per_week` is always coerced to match `days_of_week.length` when >1,
+ *   which is what the backend validator expects.
+ */
 export function buildCheckinSchedulePayload(
   draft: CheckInSchedule
 ): CheckInSchedule {
@@ -312,20 +330,17 @@ export function buildCheckinSchedulePayload(
     .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
     .sort((a, b) => a - b);
 
-  let times_per_week = draft.times_per_week;
-
-  if (draft.frequency === "weekly" || draft.frequency === "biweekly") {
-    times_per_week = 1;
-  } else {
-    // custom: API and DB require times_per_week === number of selected days
-    times_per_week =
-      sortedDays.length > 0
-        ? sortedDays.length
-        : Math.min(7, Math.max(1, Math.round(draft.times_per_week)));
-  }
+  const interval_weeks = clampIntervalWeeks(draft.interval_weeks ?? 1);
+  const multiDay = sortedDays.length > 1;
+  const frequency: CheckInSchedule["frequency"] = multiDay
+    ? "custom"
+    : "weekly";
+  const times_per_week = multiDay ? sortedDays.length : 1;
 
   return {
     ...draft,
+    frequency,
+    interval_weeks,
     days_of_week: sortedDays,
     times_per_week,
     custom_name: draft.custom_name.trim(),
@@ -346,16 +361,16 @@ export function validateCheckinScheduleDraft(
 
   const days = [...new Set(d.days_of_week)].sort((a, b) => a - b);
 
-  if (d.frequency === "weekly" || d.frequency === "biweekly") {
-    if (days.length !== 1) {
-      err.days_of_week = "Selecciona exactamente un día.";
-    }
-  } else if (d.frequency === "custom") {
-    const n = Math.min(7, Math.max(1, Math.round(d.times_per_week)));
+  if (days.length < 1) {
+    err.days_of_week = "Selecciona al menos un día de la semana.";
+  } else if (days.length > 7) {
+    err.days_of_week = "Puedes seleccionar como máximo 7 días.";
+  }
 
-    if (days.length !== n) {
-      err.days_of_week = `Debes seleccionar exactamente ${n} día(s) (coincide con «veces por semana»).`;
-    }
+  const interval = clampIntervalWeeks(d.interval_weeks ?? 1);
+
+  if (interval < 1 || interval > MAX_INTERVAL_WEEKS) {
+    err.interval_weeks = `El intervalo debe estar entre 1 y ${MAX_INTERVAL_WEEKS} semanas.`;
   }
 
   if (!/^\d{2}:\d{2}$/.test(toTimeInputValue(d.time))) {
@@ -511,57 +526,52 @@ export function CheckInScheduleEditor({
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
-  const handleFrequencyChange = useCallback((freq: CheckInFrequency) => {
+  const setIntervalWeeks = useCallback((raw: number) => {
     setDraft((prev) => {
       if (!prev) return prev;
-      let days = [...prev.days_of_week];
+      const n = clampIntervalWeeks(raw);
 
-      if (freq === "weekly" || freq === "biweekly") {
-        days = days.length > 0 ? [days[0] ?? 1] : [1];
-      } else {
-        const n = Math.min(
-          7,
-          Math.max(1, prev.times_per_week || days.length || 1)
-        );
+      return { ...prev, interval_weeks: n };
+    });
+    setInlineErrors((e) => {
+      if (!e.interval_weeks) return e;
+      const n = { ...e };
 
-        days = days.slice(0, n);
-        if (days.length === 0) days = [1];
-      }
+      delete n.interval_weeks;
 
-      return {
-        ...prev,
-        frequency: freq,
-        days_of_week: days,
-        times_per_week:
-          freq === "custom"
-            ? Math.min(7, Math.max(1, prev.times_per_week || days.length))
-            : 1,
-      };
+      return n;
     });
   }, []);
 
   const toggleDay = useCallback((dow: number) => {
     setDraft((prev) => {
       if (!prev) return prev;
-      const { frequency } = prev;
       let days = [...prev.days_of_week];
-
-      if (frequency === "weekly" || frequency === "biweekly") {
-        days = [dow];
-
-        return { ...prev, days_of_week: days };
-      }
-
-      const n = Math.min(7, Math.max(1, Math.round(prev.times_per_week)));
       const has = days.includes(dow);
 
       if (has) {
+        // Prevent deselecting the last remaining day — a schedule needs ≥ 1 day.
+        if (days.length <= 1) return prev;
         days = days.filter((d) => d !== dow);
-      } else if (days.length < n) {
+      } else if (days.length < 7) {
         days = [...days, dow].sort((a, b) => a - b);
       }
 
-      return { ...prev, days_of_week: days };
+      // Keep times_per_week in sync with the number of selected days (backend
+      // uses this for custom-cadence validation). `buildCheckinSchedulePayload`
+      // also coerces this on save, but keeping it correct in the draft keeps
+      // the "Vista previa" honest.
+      const times_per_week = Math.max(1, days.length);
+
+      return { ...prev, days_of_week: days, times_per_week };
+    });
+    setInlineErrors((e) => {
+      if (!e.days_of_week) return e;
+      const n = { ...e };
+
+      delete n.days_of_week;
+
+      return n;
     });
   }, []);
 
@@ -707,22 +717,17 @@ export function CheckInScheduleEditor({
     return (
       <>
         <div
-          className={`flex flex-col gap-6 ${formDisabled ? "pointer-events-none opacity-45" : ""}`}
+          className={`flex flex-col gap-4 ${formDisabled ? "pointer-events-none opacity-45" : ""}`}
         >
-          {/* Nombre */}
+          {/* Nombre — compacto: sin helper text ni contador visible. */}
           <Input
             isRequired
-            description="Este nombre aparecerá en la app del cliente"
-            endContent={
-              <span className="text-xs text-default-400">
-                {draft.custom_name.length}/50
-              </span>
-            }
             errorMessage={inlineErrors.custom_name}
             isInvalid={Boolean(inlineErrors.custom_name)}
             label="Nombre del check-in"
             maxLength={50}
             placeholder="Check-in"
+            size="sm"
             value={draft.custom_name}
             onValueChange={(v) => {
               updateDraft({ custom_name: v });
@@ -738,101 +743,98 @@ export function CheckInScheduleEditor({
             }}
           />
 
-          {/* Frecuencia */}
+          {/* Frecuencia — fila compacta estilo Google Meet: "Cada N semana(s)" +
+              chips de días en una sola línea. Un único día = cadencia simple
+              (weekly/biweekly/etc. por interval_weeks); varios días = varios
+              check-ins dentro de cada semana activa. */}
           <div>
-            <p className="mb-2 text-sm font-medium text-default-700">
-              Frecuencia
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { key: "weekly" as const, label: "Semanal" },
-                  { key: "biweekly" as const, label: "Quincenal" },
-                  { key: "custom" as const, label: "Personalizado" },
-                ] as const
-              ).map(({ key, label }) => (
-                <Button
-                  key={key}
-                  className="min-w-[7rem]"
-                  color={draft.frequency === key ? "primary" : "default"}
-                  variant={draft.frequency === key ? "solid" : "bordered"}
-                  onPress={() => handleFrequencyChange(key)}
-                >
-                  {label}
-                </Button>
-              ))}
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <p className="text-sm font-medium text-default-700">Frecuencia</p>
+              {inlineErrors.interval_weeks || inlineErrors.days_of_week ? (
+                <p className="text-xs text-danger">
+                  {inlineErrors.interval_weeks ?? inlineErrors.days_of_week}
+                </p>
+              ) : null}
             </div>
-            {draft.frequency === "custom" && (
-              <Input
-                className="mt-3 max-w-[220px]"
-                description="Número de días distintos a la semana (1–7)"
-                label="Veces por semana"
-                max={7}
-                min={1}
-                type="number"
-                value={String(draft.times_per_week)}
-                onValueChange={(v) => {
-                  const n = parseInt(v, 10);
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-default-200 bg-default-50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-default-700">Cada</span>
+                <Input
+                  aria-label="Número de semanas entre cada check-in"
+                  classNames={{
+                    base: "w-[4.5rem]",
+                    inputWrapper: "h-8 min-h-8 px-1",
+                    input: "text-center text-sm font-semibold",
+                  }}
+                  isInvalid={Boolean(inlineErrors.interval_weeks)}
+                  max={MAX_INTERVAL_WEEKS}
+                  min={1}
+                  size="sm"
+                  type="number"
+                  value={String(draft.interval_weeks)}
+                  onValueChange={(v) => {
+                    const n = parseInt(v, 10);
 
-                  updateDraft({
-                    times_per_week: Number.isFinite(n)
-                      ? Math.min(7, Math.max(1, n))
-                      : 1,
-                  });
-                }}
+                    setIntervalWeeks(Number.isFinite(n) ? n : 1);
+                  }}
+                />
+                <span className="text-sm text-default-700">
+                  {draft.interval_weeks === 1 ? "semana" : "semanas"}
+                </span>
+              </div>
+              <div
+                aria-hidden="true"
+                className="hidden h-6 w-px self-center bg-default-200 sm:block"
               />
-            )}
-          </div>
+              <div className="flex flex-wrap gap-1">
+                {DAY_CHIPS.map(({ dow, short }) => {
+                  const selected = draft.days_of_week.includes(dow);
 
-          {/* Días */}
-          <div>
-            <p className="mb-2 text-sm font-medium text-default-700">Días</p>
-            <div className="flex flex-wrap gap-2">
-              {DAY_CHIPS.map(({ dow, short }) => {
-                const selected = draft.days_of_week.includes(dow);
-
-                return (
-                  <Button
-                    key={dow}
-                    className="min-h-10 min-w-10 font-semibold"
-                    color={selected ? "primary" : "default"}
-                    radius="full"
-                    size="sm"
-                    variant={selected ? "solid" : "bordered"}
-                    onPress={() => toggleDay(dow)}
-                  >
-                    {short}
-                  </Button>
-                );
-              })}
+                  return (
+                    <Button
+                      key={dow}
+                      isIconOnly
+                      aria-label={`Día ${short}`}
+                      className="h-8 min-h-8 w-8 min-w-8 text-xs font-semibold"
+                      color={selected ? "primary" : "default"}
+                      radius="full"
+                      size="sm"
+                      variant={selected ? "solid" : "bordered"}
+                      onPress={() => toggleDay(dow)}
+                    >
+                      {short}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-            {inlineErrors.days_of_week ? (
-              <p className="mt-2 text-xs text-danger">
-                {inlineErrors.days_of_week}
-              </p>
-            ) : null}
           </div>
 
-          {/* Hora */}
-          <Input
-            errorMessage={inlineErrors.time}
-            isInvalid={Boolean(inlineErrors.time)}
-            label="Hora de envío"
-            type="time"
-            value={toTimeInputValue(draft.time)}
-            onValueChange={(v) => updateDraft({ time: fromTimeInputValue(v) })}
-          />
+          {/* Hora + Zona horaria + Tiempo límite — una sola fila en sm+, se
+              apila en móvil. Elimina tres filas separadas para ahorrar alto. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto]">
+            <Input
+              classNames={{ base: "sm:w-32" }}
+              errorMessage={inlineErrors.time}
+              isInvalid={Boolean(inlineErrors.time)}
+              label="Hora"
+              size="sm"
+              type="time"
+              value={toTimeInputValue(draft.time)}
+              onValueChange={(v) =>
+                updateDraft({ time: fromTimeInputValue(v) })
+              }
+            />
 
-          {/* Zona horaria */}
-          <div>
             <Autocomplete
               classNames={{ base: "w-full" }}
               defaultItems={timezoneItems.map((id) => ({ id }))}
               errorMessage={inlineErrors.timezone}
               isInvalid={Boolean(inlineErrors.timezone)}
               label="Zona horaria"
-              placeholder="Busca zona horaria (IANA)…"
+              placeholder="Buscar…"
               selectedKey={draft.timezone}
+              size="sm"
               onSelectionChange={(key) => {
                 if (key) {
                   updateDraft({ timezone: String(key) });
@@ -857,74 +859,61 @@ export function CheckInScheduleEditor({
                 </AutocompleteItem>
               )}
             </Autocomplete>
-            <p className="mt-1 text-xs text-default-500">
-              Escribe para filtrar entre todas las zonas IANA disponibles en tu
-              navegador.
-            </p>
+
+            <Select
+              classNames={{ base: "sm:w-40" }}
+              label="Tiempo límite"
+              selectedKeys={new Set([String(draft.grace_period_hours)])}
+              size="sm"
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0];
+
+                if (v) {
+                  updateDraft({ grace_period_hours: parseInt(String(v), 10) });
+                }
+              }}
+            >
+              <>
+                {GRACE_OPTIONS.map((o) => (
+                  <SelectItem key={String(o.value)}>{o.label}</SelectItem>
+                ))}
+                {!GRACE_OPTIONS.some(
+                  (o) => o.value === draft.grace_period_hours
+                ) ? (
+                  <SelectItem key={String(draft.grace_period_hours)}>
+                    {draft.grace_period_hours} horas (actual)
+                  </SelectItem>
+                ) : null}
+              </>
+            </Select>
           </div>
 
-          {/* Periodo de gracia */}
-          <Select
-            label="Tiempo límite para completar"
-            selectedKeys={new Set([String(draft.grace_period_hours)])}
-            onSelectionChange={(keys) => {
-              const v = Array.from(keys)[0];
-
-              if (v) {
-                updateDraft({ grace_period_hours: parseInt(String(v), 10) });
-              }
-            }}
-          >
-            <>
-              {GRACE_OPTIONS.map((o) => (
-                <SelectItem key={String(o.value)}>{o.label}</SelectItem>
-              ))}
-              {!GRACE_OPTIONS.some(
-                (o) => o.value === draft.grace_period_hours
-              ) ? (
-                <SelectItem key={String(draft.grace_period_hours)}>
-                  {draft.grace_period_hours} horas (actual)
-                </SelectItem>
-              ) : null}
-            </>
-          </Select>
-
-          {/* Vista previa */}
-          <Card className="border border-default-200 bg-default-50/80 shadow-none">
-            <CardHeader className="flex gap-2 pb-0">
-              <Icon
-                className="text-primary"
-                icon="solar:eye-linear"
-                width={22}
-              />
-              <span className="text-sm font-semibold">Vista previa</span>
-            </CardHeader>
-            <CardBody className="gap-2 pt-2 text-sm text-default-700">
-              {!draft.enabled ? (
-                <p>
-                  {isTemplate
-                    ? "El check-in está desactivado en la plantilla por defecto."
-                    : "El check-in está desactivado para este cliente."}
-                </p>
-              ) : (
-                <>
-                  <p>
-                    Los clientes recibirán su{" "}
-                    <strong className="text-foreground">
-                      {draft.custom_name.trim() || "check-in"}
-                    </strong>
-                    : {formatScheduleDescription(draft)} (
-                    <span className="font-mono text-xs">{draft.timezone}</span>
-                    ).
-                  </p>
-                  <p>
-                    Tendrán <strong>{draft.grace_period_hours}</strong> horas
-                    para completarlo.
-                  </p>
-                </>
-              )}
-            </CardBody>
-          </Card>
+          {/* Vista previa — línea inline en vez de card. */}
+          <div className="flex items-start gap-2 rounded-lg border border-default-200 bg-default-50/60 px-3 py-2 text-xs text-default-700">
+            <Icon
+              className="mt-0.5 shrink-0 text-primary"
+              icon="solar:eye-linear"
+              width={14}
+            />
+            {!draft.enabled ? (
+              <span>
+                {isTemplate
+                  ? "El check-in está desactivado en la plantilla por defecto."
+                  : "El check-in está desactivado para este cliente."}
+              </span>
+            ) : (
+              <span className="leading-snug">
+                <strong className="text-foreground">
+                  {draft.custom_name.trim() || "Check-in"}
+                </strong>
+                : {formatScheduleDescription(draft)}{" "}
+                <span className="text-default-500">
+                  ({draft.timezone} · {draft.grace_period_hours}h para
+                  completar)
+                </span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Footer */}

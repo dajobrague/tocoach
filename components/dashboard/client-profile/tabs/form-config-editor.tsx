@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  ChoiceOption,
   FormConfigData,
   FormPage,
   QuestionConfig,
@@ -46,6 +47,8 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ChoicesEditor } from "./choices-editor";
 
 import { IconPicker } from "@/components/ui/icon-picker";
 import { normalizeFormConfig } from "@/lib/forms/types";
@@ -96,6 +99,8 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   boolean: "Sí/No",
   photo: "Foto",
   group: "Grupo",
+  choice: "Opciones",
+  multi_choice: "Opciones múltiples",
 };
 
 const TYPE_CHIP_STYLES: Record<QuestionType, string> = {
@@ -105,6 +110,8 @@ const TYPE_CHIP_STYLES: Record<QuestionType, string> = {
   boolean: "bg-emerald-100 text-emerald-800",
   photo: "bg-purple-100 text-purple-800",
   group: "bg-orange-100 text-orange-800",
+  choice: "bg-indigo-100 text-indigo-800",
+  multi_choice: "bg-violet-100 text-violet-800",
 };
 
 // ── Props ─────────────────────────────────────────────────────────────
@@ -186,7 +193,12 @@ export default function FormConfigEditor({
     type: "text" as QuestionType,
     unit: "",
     icon: "solar:question-circle-bold",
+    choices: [] as ChoiceOption[],
   });
+
+  // Modal para editar las opciones de una pregunta choice/multi_choice ya existente.
+  const [editingChoicesFor, setEditingChoicesFor] =
+    useState<QuestionConfig | null>(null);
 
   // DnD sensors
   const sensors = useSensors(
@@ -386,8 +398,22 @@ export default function FormConfigEditor({
   const addQuestion = () => {
     if (!newQ.label.trim()) return;
 
+    const isChoiceType = newQ.type === "choice" || newQ.type === "multi_choice";
+
+    // Guard: choice types require ≥2 labeled choices.
+    if (isChoiceType) {
+      const validChoices = newQ.choices.filter((c) => c.label.trim());
+
+      if (validChoices.length < 2) return;
+    }
+
     const unitValue =
       newQ.type === "number" ? newQ.unit.trim() || undefined : undefined;
+    const choicesValue = isChoiceType
+      ? newQ.choices
+          .filter((c) => c.label.trim())
+          .map((c) => ({ ...c, label: c.label.trim() }))
+      : undefined;
     const q: QuestionConfig = {
       id: `custom_${Date.now()}`,
       label: newQ.label.trim(),
@@ -395,6 +421,7 @@ export default function FormConfigEditor({
       icon: newQ.icon,
       type: newQ.type,
       ...(unitValue !== undefined ? { unit: unitValue } : {}),
+      ...(choicesValue !== undefined ? { choices: choicesValue } : {}),
       enabled: true,
       required: false,
       pageId: selectedPageId,
@@ -407,9 +434,19 @@ export default function FormConfigEditor({
       type: "text",
       unit: "",
       icon: "solar:question-circle-bold",
+      choices: [],
     });
     onAddClose();
     onQuestionAdded?.();
+  };
+
+  const updateQuestionChoices = (qId: string, choices: ChoiceOption[]) => {
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) =>
+        q.id === qId ? { ...q, choices } : q
+      ),
+    });
   };
 
   // ── DnD handlers ──────────────────────────────────────────────────
@@ -904,6 +941,20 @@ export default function FormConfigEditor({
                                         },
                                       ];
 
+                                      if (
+                                        question.type === "choice" ||
+                                        question.type === "multi_choice"
+                                      ) {
+                                        menuItems.push({
+                                          key: "edit-choices",
+                                          label: "Editar opciones",
+                                          icon: "solar:list-bold",
+                                          iconClass: "text-indigo-500",
+                                          action: () =>
+                                            setEditingChoicesFor(question),
+                                        });
+                                      }
+
                                       if (otherPages.length > 0) {
                                         for (const page of otherPages) {
                                           menuItems.push({
@@ -1156,6 +1207,10 @@ export default function FormConfigEditor({
                 <SelectItem key="number">Número</SelectItem>
                 <SelectItem key="rating">Valoración (1-5)</SelectItem>
                 <SelectItem key="boolean">Sí / No</SelectItem>
+                <SelectItem key="choice">Opciones (elige una)</SelectItem>
+                <SelectItem key="multi_choice">
+                  Opciones múltiples (elige varias)
+                </SelectItem>
               </Select>
               {newQ.type === "number" && (
                 <Input
@@ -1168,6 +1223,16 @@ export default function FormConfigEditor({
                 />
               )}
             </div>
+
+            {(newQ.type === "choice" || newQ.type === "multi_choice") && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                <ChoicesEditor
+                  choices={newQ.choices}
+                  multi={newQ.type === "multi_choice"}
+                  onChange={(choices) => setNewQ({ ...newQ, choices })}
+                />
+              </div>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={onAddClose}>
@@ -1176,7 +1241,11 @@ export default function FormConfigEditor({
             <Button
               className="text-white font-semibold"
               color="primary"
-              isDisabled={!newQ.label.trim()}
+              isDisabled={
+                !newQ.label.trim() ||
+                ((newQ.type === "choice" || newQ.type === "multi_choice") &&
+                  newQ.choices.filter((c) => c.label.trim()).length < 2)
+              }
               onPress={addQuestion}
             >
               Agregar
@@ -1311,6 +1380,88 @@ export default function FormConfigEditor({
                   );
                   setEditingQuestion(null);
                 }
+              }}
+            >
+              Guardar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ────────────────────────────────────────────────────────────
+          Edit Choices Modal — only for choice / multi_choice
+      ──────────────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!editingChoicesFor}
+        placement="center"
+        size="lg"
+        onClose={() => setEditingChoicesFor(null)}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-100">
+                <Icon
+                  className="text-indigo-600"
+                  icon="solar:list-bold"
+                  width={22}
+                />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">
+                  Editar opciones
+                </h3>
+                <p className="text-sm text-gray-500 font-normal">
+                  {editingChoicesFor?.label}
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            {editingChoicesFor && (
+              <>
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                  <p className="font-semibold mb-1">Respuestas históricas</p>
+                  <p>
+                    Puedes renombrar opciones libremente — las respuestas ya
+                    enviadas se siguen mostrando con el nuevo nombre. Si
+                    eliminas una opción, las respuestas antiguas se verán como
+                    &quot;opción eliminada&quot;.
+                  </p>
+                </div>
+                <ChoicesEditor
+                  choices={editingChoicesFor.choices || []}
+                  multi={editingChoicesFor.type === "multi_choice"}
+                  onChange={(choices) =>
+                    setEditingChoicesFor({
+                      ...editingChoicesFor,
+                      choices,
+                    })
+                  }
+                />
+              </>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setEditingChoicesFor(null)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-gray-900 text-white font-semibold"
+              isDisabled={
+                !editingChoicesFor ||
+                (editingChoicesFor.choices || []).filter((c) => c.label.trim())
+                  .length < 2
+              }
+              onPress={() => {
+                if (!editingChoicesFor) return;
+
+                const cleaned = (editingChoicesFor.choices || [])
+                  .filter((c) => c.label.trim())
+                  .map((c) => ({ ...c, label: c.label.trim() }));
+
+                updateQuestionChoices(editingChoicesFor.id, cleaned);
+                setEditingChoicesFor(null);
               }}
             >
               Guardar

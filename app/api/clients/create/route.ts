@@ -82,6 +82,71 @@ export async function POST(request: NextRequest) {
       newClient.id
     );
 
+    // Auto-seed form configs from any template that has
+    // `auto_apply_to_new_clients = true`. Non-blocking: errors here should
+    // never break client creation — if seeding fails, the client will still
+    // get configs lazily on first access to `/api/forms/configs/[clientId]`.
+    try {
+      const { data: tenantRow } = await supabase
+        .from("tenants")
+        .select("host")
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      if (tenantRow?.host) {
+        const { data: autoApplyTemplates, error: tplError } = await supabase
+          .from("form_templates")
+          .select("id, form_type, questions_config, default_schedule")
+          .eq("tenant_host", tenantRow.host)
+          .eq("is_active", true)
+          .eq("auto_apply_to_new_clients", true);
+
+        if (tplError) {
+          console.warn(
+            "[Create Client API] auto-seed: error fetching templates",
+            tplError
+          );
+        } else if (autoApplyTemplates && autoApplyTemplates.length > 0) {
+          const rows = autoApplyTemplates.map((tpl) => {
+            const row: Record<string, unknown> = {
+              tenant_host: tenantRow.host,
+              client_id: newClient.id,
+              form_type: tpl.form_type,
+              questions_config: tpl.questions_config,
+              uses_template: true,
+              template_id: tpl.id,
+            };
+
+            if (tpl.form_type === "checkins") {
+              row.schedule = tpl.default_schedule ?? null;
+            }
+
+            return row;
+          });
+
+          const { error: seedError } = await supabase
+            .from("client_form_configs")
+            .upsert(rows, { onConflict: "client_id,form_type" });
+
+          if (seedError) {
+            console.warn(
+              "[Create Client API] auto-seed: error inserting configs",
+              seedError
+            );
+          } else {
+            console.log(
+              "[Create Client API] auto-seed: applied",
+              autoApplyTemplates.length,
+              "template(s) to client",
+              newClient.id
+            );
+          }
+        }
+      }
+    } catch (seedEx) {
+      console.warn("[Create Client API] auto-seed: unexpected error", seedEx);
+    }
+
     return NextResponse.json({
       success: true,
       client: {

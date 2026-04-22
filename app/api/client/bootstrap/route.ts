@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const [tenantResult, profileResult] = await Promise.all([
       supabase
         .from("tenants")
-        .select("logo_url, theme_json")
+        .select("logo_url, theme_json, trainer_id")
         .eq("host", session.tenant_slug)
         .single(),
       supabase
@@ -39,6 +39,19 @@ export async function GET(request: NextRequest) {
         .eq("id", session.client_id)
         .single(),
     ]);
+
+    // Fetch trainer's community_url if tenant has a trainer_id
+    let communityUrl: string | null = null;
+
+    if (tenantResult.data?.trainer_id) {
+      const { data: trainer } = await supabase
+        .from("trainers")
+        .select("community_url")
+        .eq("id", tenantResult.data.trainer_id)
+        .single();
+
+      communityUrl = trainer?.community_url || null;
+    }
 
     if (tenantResult.error) {
       console.error("[Bootstrap API] Tenant query error:", tenantResult.error);
@@ -68,6 +81,7 @@ export async function GET(request: NextRequest) {
         trainerName: tenant?.theme_json?.meta?.name || "Your Trainer",
         clientProfilePicture: profile?.profile_picture_url || "",
         tenantSlug: session.tenant_slug,
+        communityUrl,
       },
     });
   } catch (error) {

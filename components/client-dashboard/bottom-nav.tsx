@@ -3,7 +3,7 @@
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { MorePanel } from "@/components/client-dashboard/more-panel";
@@ -11,28 +11,41 @@ import { MorePanel } from "@/components/client-dashboard/more-panel";
 export function ClientBottomNav() {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const { clientProfilePicture } = useClientData();
+  const { clientProfilePicture, communityUrl } = useClientData();
 
   // Extract slug from pathname (e.g., /ironfit/dashboard -> ironfit)
   const slug = pathname.split("/")[1] || "";
 
-  const navItems = [
-    {
-      href: `/${slug}/dashboard`,
-      icon: "solar:home-2-bold",
-      label: "Inicio",
-    },
-    {
-      href: `/${slug}/ejercicio`,
-      icon: "solar:dumbbell-bold",
-      label: "Entrenamiento",
-    },
-    {
-      href: `/${slug}/nutricion`,
-      icon: "fluent:food-20-filled",
-      label: "Nutrición",
-    },
-  ];
+  const navItems = useMemo(() => {
+    const items = [
+      {
+        href: `/${slug}/dashboard`,
+        icon: "solar:home-2-bold",
+        label: "Inicio",
+      },
+      {
+        href: `/${slug}/ejercicio`,
+        icon: "solar:dumbbell-bold",
+        label: "Entrenamiento",
+      },
+      {
+        href: `/${slug}/nutricion`,
+        icon: "fluent:food-20-filled",
+        label: "Nutrición",
+      },
+    ];
+
+    // Only add Community tab if URL is configured
+    if (communityUrl) {
+      items.push({
+        href: `/${slug}/comunidad`,
+        icon: "solar:users-group-rounded-bold",
+        label: "Comunidad",
+      });
+    }
+
+    return items;
+  }, [slug, communityUrl]);
 
   return (
     <>

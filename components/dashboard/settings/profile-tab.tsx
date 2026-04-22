@@ -28,6 +28,7 @@ interface TrainerProfile {
   tenant_host: string;
   created_at: string;
   status: string;
+  community_url: string | null;
 }
 
 interface ProfileTabProps {
@@ -49,6 +50,7 @@ export default function ProfileTab({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [communityUrl, setCommunityUrl] = useState("");
 
   // Password modal
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -73,6 +75,7 @@ export default function ProfileTab({
         setFullName(data.trainer.full_name || "");
         setEmail(data.trainer.email || "");
         setPhone(data.trainer.phone || "");
+        setCommunityUrl(data.trainer.community_url || "");
       }
     } catch (error) {
       console.error("[ProfileTab] Failed to fetch profile:", error);
@@ -117,6 +120,7 @@ export default function ProfileTab({
           full_name: fullName.trim(),
           email: email.trim(),
           phone: phone.trim() || null,
+          community_url: communityUrl.trim() || null,
         }),
       });
 
@@ -234,7 +238,8 @@ export default function ProfileTab({
     profile &&
     (fullName !== (profile.full_name || "") ||
       email !== (profile.email || "") ||
-      phone !== (profile.phone || ""));
+      phone !== (profile.phone || "") ||
+      communityUrl !== (profile.community_url || ""));
 
   if (isLoading) {
     return (
@@ -245,7 +250,7 @@ export default function ProfileTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* Status Messages */}
       {successMessage && (
         <div className="flex items-center gap-2 p-3 bg-green-50 text-green-700 rounded-xl text-sm">
@@ -391,26 +396,46 @@ export default function ProfileTab({
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-6">
-            <p className="text-xs text-gray-400">
-              Miembro desde{" "}
-              {profile?.created_at
-                ? new Date(profile.created_at).toLocaleDateString("es-ES", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "—"}
-            </p>
-            <Button
-              className="bg-gray-900 text-white font-semibold"
-              isDisabled={!hasChanges}
-              isLoading={isSaving}
-              onPress={handleSaveProfile}
-            >
-              Guardar cambios
-            </Button>
-          </div>
+          <p className="text-xs text-gray-400 mt-4">
+            Miembro desde{" "}
+            {profile?.created_at
+              ? new Date(profile.created_at).toLocaleDateString("es-ES", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+              : "—"}
+          </p>
+        </CardBody>
+      </Card>
+
+      {/* Community URL Section */}
+      <Card className="border border-gray-200 shadow-sm">
+        <CardBody className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Comunidad
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Configura la URL de tu comunidad (Go High Level u otra plataforma)
+            para mostrarla a tus clientes
+          </p>
+          <Input
+            description="Los clientes verán esta página en una pestaña 'Comunidad' en su dashboard"
+            label="URL de la Comunidad"
+            labelPlacement="outside"
+            placeholder="https://community.example.com/your-community"
+            startContent={
+              <Icon
+                className="text-gray-400"
+                icon="solar:users-group-rounded-linear"
+                width={18}
+              />
+            }
+            type="url"
+            value={communityUrl}
+            variant="bordered"
+            onValueChange={setCommunityUrl}
+          />
         </CardBody>
       </Card>
 
@@ -560,6 +585,49 @@ export default function ProfileTab({
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Sticky Save Bar */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg transition-transform duration-300 z-50 ${
+          hasChanges ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Icon
+              className="text-amber-500"
+              icon="solar:info-circle-bold"
+              width={18}
+            />
+            <span>Tienes cambios sin guardar</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={() => {
+                // Reset to original values
+                if (profile) {
+                  setFullName(profile.full_name || "");
+                  setEmail(profile.email || "");
+                  setPhone(profile.phone || "");
+                  setCommunityUrl(profile.community_url || "");
+                }
+              }}
+            >
+              Descartar
+            </Button>
+            <Button
+              className="bg-gray-900 text-white font-semibold"
+              isLoading={isSaving}
+              size="sm"
+              onPress={handleSaveProfile}
+            >
+              Guardar cambios
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

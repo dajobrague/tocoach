@@ -49,6 +49,12 @@ export default function TopNavigation({
   onHelpClick,
 }: TopNavigationProps) {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [logoError, setLogoError] = React.useState(false);
+
+  // Reset error state when brandLogo changes (e.g., new upload)
+  React.useEffect(() => {
+    setLogoError(false);
+  }, [brandLogo]);
 
   const handleItemClick = (key: string) => {
     onSelect(key);
@@ -72,11 +78,12 @@ export default function TopNavigation({
     >
       {/* Logo/Brand */}
       <NavbarBrand>
-        {brandLogo ? (
+        {brandLogo && !logoError ? (
           <img
             alt="Logo"
             className="h-9 w-9 rounded-lg object-contain"
             src={brandLogo}
+            onError={() => setLogoError(true)}
           />
         ) : (
           <div className="bg-black flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">

@@ -1,5 +1,29 @@
 // Client-side form helpers for status checking and timezone handling
 
+/**
+ * Devuelve la fecha de hoy en el huso horario del navegador (YYYY-MM-DD).
+ *
+ * Antes usábamos `new Date().toISOString().split("T")[0]`, que devuelve la
+ * fecha en UTC. Para un cliente en Argentina (UTC-3) que registra hábitos a
+ * las 22h local, el ISO UTC ya era el día siguiente (01:00 UTC), por lo que
+ * el registro quedaba guardado con la fecha de "mañana" y los filtros de
+ * "buscar registro de hoy" no matcheaban.
+ *
+ * Esta función usa los componentes Date del huso local del navegador, por
+ * lo que `response_date` = la fecha que el usuario ve en su reloj.
+ *
+ * IMPORTANTE: sólo es válido en el browser. En el servidor (Node), los
+ * componentes Date están en el huso del proceso y no tienen relación con el
+ * huso del cliente — por eso este helper vive en `client-helpers.ts`.
+ */
+export function getLocalTodayYmd(date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 import {
   DEFAULT_CHECKIN_SCHEDULE,
   getCheckInPeriodEnd,
@@ -72,7 +96,10 @@ export function isWeeklyCheckInDue(responses: FormResponse[]): boolean {
 export function isDailyHabitsSubmittedToday(
   responses: FormResponse[]
 ): boolean {
-  const today = new Date().toISOString().split("T")[0];
+  // Fecha local del navegador, no UTC. Sin esto, el check pregunta por el
+  // día de mañana para usuarios en zonas al oeste de UTC y responde
+  // `false` aunque el usuario ya haya enviado su registro hoy.
+  const today = getLocalTodayYmd();
 
   return responses.some((r) => r.response_date === today);
 }

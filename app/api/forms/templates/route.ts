@@ -106,7 +106,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { form_type, name, description, questions_config } = body;
+    const {
+      form_type,
+      name,
+      description,
+      questions_config,
+      auto_apply_to_new_clients,
+    } = body;
 
     // Validate required fields
     if (!form_type || (form_type !== "checkins" && form_type !== "habits")) {
@@ -140,17 +146,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (
+      auto_apply_to_new_clients !== undefined &&
+      typeof auto_apply_to_new_clients !== "boolean"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "auto_apply_to_new_clients debe ser true o false",
+        },
+        { status: 400 }
+      );
+    }
+
     // Create template
+    const insertPayload: Record<string, unknown> = {
+      tenant_host: tenant.host,
+      form_type,
+      name,
+      description,
+      questions_config,
+      is_active: true,
+    };
+
+    if (auto_apply_to_new_clients !== undefined) {
+      insertPayload.auto_apply_to_new_clients = auto_apply_to_new_clients;
+    }
+
     const { data: template, error } = await supabase
       .from("form_templates")
-      .insert({
-        tenant_host: tenant.host,
-        form_type,
-        name,
-        description,
-        questions_config,
-        is_active: true,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -209,8 +234,14 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { template_id, name, description, questions_config, is_active } =
-      body;
+    const {
+      template_id,
+      name,
+      description,
+      questions_config,
+      is_active,
+      auto_apply_to_new_clients,
+    } = body;
 
     if (!template_id) {
       return NextResponse.json(
@@ -235,6 +266,19 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    if (
+      auto_apply_to_new_clients !== undefined &&
+      typeof auto_apply_to_new_clients !== "boolean"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "auto_apply_to_new_clients debe ser true o false",
+        },
+        { status: 400 }
+      );
+    }
+
     // Build update object
     const updates: any = {};
 
@@ -242,6 +286,9 @@ export async function PUT(request: NextRequest) {
     if (description !== undefined) updates.description = description;
     if (questions_config) updates.questions_config = questions_config;
     if (is_active !== undefined) updates.is_active = is_active;
+    if (auto_apply_to_new_clients !== undefined) {
+      updates.auto_apply_to_new_clients = auto_apply_to_new_clients;
+    }
 
     // Update template
     const { data: template, error } = await supabase

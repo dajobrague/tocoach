@@ -74,6 +74,8 @@ export function resolveCheckInScheduleForApi(
 }
 
 const TIME_RE = /^\d{2}:\d{2}$/;
+const MIN_INTERVAL_WEEKS = 1;
+const MAX_INTERVAL_WEEKS = 12;
 
 /** Accepts "9:30" / "09:30" and normalizes to strict HH:MM for DB/API checks. */
 export function normalizeWallTimeToHHMM(time: string): string {
@@ -226,6 +228,27 @@ export function validateCheckInScheduleInput(
   }
   // custom: times_per_week is coerced to match days_of_week.length on success (below)
 
+  // interval_weeks is optional for backward compatibility; legacy `biweekly`
+  // rows don't include it. When provided it must be a small positive integer.
+  const intervalWeeksRaw = o.interval_weeks;
+  let intervalWeeksValidated: number | undefined;
+
+  if (intervalWeeksRaw !== undefined && intervalWeeksRaw !== null) {
+    if (
+      typeof intervalWeeksRaw !== "number" ||
+      !Number.isFinite(intervalWeeksRaw) ||
+      !Number.isInteger(intervalWeeksRaw) ||
+      intervalWeeksRaw < MIN_INTERVAL_WEEKS ||
+      intervalWeeksRaw > MAX_INTERVAL_WEEKS
+    ) {
+      errors.push(
+        `interval_weeks debe ser un entero entre ${MIN_INTERVAL_WEEKS} y ${MAX_INTERVAL_WEEKS}.`
+      );
+    } else {
+      intervalWeeksValidated = intervalWeeksRaw;
+    }
+  }
+
   let enabled = true;
 
   if (o.enabled !== undefined && o.enabled !== null) {
@@ -240,7 +263,22 @@ export function validateCheckInScheduleInput(
     return { ok: false, errors };
   }
 
-  const freq = frequency as CheckInFrequency;
+  const rawFreq = frequency as CheckInFrequency;
+
+  // Legacy alias normalisation: `biweekly` → `weekly` + interval_weeks=2.
+  // This mirrors `getScheduleOrDefault`, so saved rows always use the canonical
+  // `weekly` form and the DB CHECK constraint keeps accepting them.
+  let freq: CheckInFrequency = rawFreq;
+  let interval_weeks: number =
+    intervalWeeksValidated ?? (rawFreq === "biweekly" ? 2 : 1);
+
+  if (rawFreq === "biweekly") {
+    freq = "weekly";
+
+    if (intervalWeeksValidated === undefined) {
+      interval_weeks = 2;
+    }
+  }
 
   const resolvedTimesPerWeek =
     freq === "custom" && daysOfWeekUnique.length > 0
@@ -251,6 +289,7 @@ export function validateCheckInScheduleInput(
     frequency: freq,
     times_per_week: resolvedTimesPerWeek,
     days_of_week: daysOfWeekUnique,
+    interval_weeks,
     time: timeNormalized,
     timezone: (timezone as string).trim(),
     custom_name: (customName as string).trim(),

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
+
 // ─── Date helpers ───────────────────────────────────────────────────────────
 
 function getDateRange() {
@@ -34,10 +36,11 @@ export interface ClientBootstrapData {
   trainerName: string;
   clientProfilePicture: string;
   tenantSlug: string;
+  communityUrl: string | null;
 }
 
 async function fetchBootstrap(): Promise<ClientBootstrapData | null> {
-  const response = await fetch("/api/client/bootstrap");
+  const response = await clientFetch("/api/client/bootstrap");
 
   // Not authenticated — return null so the query "succeeds" with no data.
   // This avoids caching an error state that sticks after login.
@@ -67,7 +70,7 @@ export function useClientBootstrap() {
 // ─── Fetcher functions ──────────────────────────────────────────────────────
 
 async function fetchPrograms() {
-  const response = await fetch("/api/client/programs");
+  const response = await clientFetch("/api/client/programs");
   const data = await response.json();
 
   if (!data.success) throw new Error(data.error || "Error al cargar programas");
@@ -77,7 +80,7 @@ async function fetchPrograms() {
 
 async function fetchExerciseLogs(clientId: string) {
   const { startDate, endDate } = getDateRange();
-  const response = await fetch(
+  const response = await clientFetch(
     `/api/clients/${clientId}/exercise-logs?startDate=${startDate}&endDate=${endDate}`
   );
   const data = await response.json();
@@ -87,7 +90,7 @@ async function fetchExerciseLogs(clientId: string) {
 
 async function fetchScheduledSessions(clientId: string) {
   const { startDate, endDate } = getDateRange();
-  const response = await fetch(
+  const response = await clientFetch(
     `/api/clients/${clientId}/scheduled-sessions?startDate=${startDate}&endDate=${endDate}`
   );
   const data = await response.json();
@@ -96,7 +99,7 @@ async function fetchScheduledSessions(clientId: string) {
 }
 
 async function fetchNutritionPlan() {
-  const response = await fetch("/api/client/nutrition");
+  const response = await clientFetch("/api/client/nutrition");
   const data = await response.json();
 
   if (!data.success) return null;
@@ -105,7 +108,7 @@ async function fetchNutritionPlan() {
 }
 
 async function fetchSupplements() {
-  const response = await fetch("/api/client/supplements");
+  const response = await clientFetch("/api/client/supplements");
   const data = await response.json();
 
   if (!data.success)
@@ -119,7 +122,7 @@ async function fetchFormResponses(
   formType: string,
   startDate: string
 ) {
-  const response = await fetch(
+  const response = await clientFetch(
     `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${startDate}`
   );
   const data = await response.json();
@@ -128,7 +131,7 @@ async function fetchFormResponses(
 }
 
 async function fetchNeatCards() {
-  const response = await fetch("/api/client/neat");
+  const response = await clientFetch("/api/client/neat");
   const data = await response.json();
 
   return data.success ? data.cards || [] : [];
@@ -201,11 +204,14 @@ export function useLogExercise(clientId: string) {
 
   return useMutation({
     mutationFn: async (requestBody: any) => {
-      const response = await fetch(`/api/clients/${clientId}/exercise-logs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      const response = await clientFetch(
+        `/api/clients/${clientId}/exercise-logs`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        }
+      );
       const data = await response.json();
 
       if (!data.success) {
@@ -230,7 +236,7 @@ export function useRescheduleSession(clientId: string) {
 
   return useMutation({
     mutationFn: async (requestBody: any) => {
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/clients/${clientId}/scheduled-sessions`,
         {
           method: "POST",

@@ -4,6 +4,7 @@ import { Button, Input, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   useRealtimeMessages,
   RealtimeMessage,
@@ -64,7 +65,7 @@ export function ChatPanel({
   const loadMessages = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/messages?clientId=${clientId}&tenantSlug=${tenantSlug}`
       );
 
@@ -79,7 +80,7 @@ export function ChatPanel({
           .map((m: Message) => m.id);
 
         if (unreadIds.length > 0) {
-          await fetch("/api/messages", {
+          await clientFetch("/api/messages", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ messageIds: unreadIds }),
@@ -99,7 +100,7 @@ export function ChatPanel({
 
     setIsSending(true);
     try {
-      const response = await fetch("/api/messages", {
+      const response = await clientFetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -96,6 +96,16 @@ export async function POST(request: NextRequest) {
     updateClientLastLogin(client.id).catch(console.warn);
 
     const fullName = `${client.name} ${client.last_name || ""}`.trim();
+
+    // NOTE: we construct the response in two passes so we can echo the
+    // signed JWT back to the frontend in the JSON body. The browser will
+    // persist this in localStorage and attach it as `Authorization: Bearer`
+    // on write requests — a fallback transport for cases where the cookie
+    // gets dropped (Safari ITP, third-party cookie restrictions, in-app
+    // browsers, iframe embedding). See `lib/auth/client-token-storage.ts`
+    // and `getClientSession` in `lib/auth/client-session.ts` for the full
+    // rationale. Same JWT, same secret, same payload — just a second
+    // delivery channel.
     const response = NextResponse.json(
       {
         success: true,
@@ -109,7 +119,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    await setClientSessionCookie(
+    const token = await setClientSessionCookie(
       response,
       String(client.id),
       tenantSlug,
@@ -117,11 +127,33 @@ export async function POST(request: NextRequest) {
       fullName
     );
 
+    // Re-serialize with the token included. We recreate the response to
+    // avoid mutating `response.json()` (not possible in Next) — the cookie
+    // was attached to the headers above, so we re-apply it to the new
+    // response before returning.
+    const finalResponse = NextResponse.json(
+      {
+        success: true,
+        client: {
+          id: client.id,
+          email: client.email,
+          fullName: fullName,
+          tenantSlug: tenantSlug,
+        },
+        token,
+      },
+      { status: 200 }
+    );
+
+    response.cookies.getAll().forEach((cookie) => {
+      finalResponse.cookies.set(cookie);
+    });
+
     console.log(
       `[Client Login] Authenticated: ${client.email} for tenant: ${tenantSlug}`
     );
 
-    return response;
+    return finalResponse;
   } catch (error) {
     console.error("[Client Login] Unexpected error:", error);
 

@@ -1,6 +1,6 @@
 // Client session management (separate from trainer sessions)
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -31,22 +31,77 @@ export interface ClientSession {
 }
 
 /**
- * Get the current client session from cookies
+ * Extract a bearer token from an `Authorization` header value.
+ * Exported for reuse in request-scoped verifiers and logging/telemetry.
+ */
+export function extractBearerToken(
+  authHeader: string | null | undefined
+): string | null {
+  if (!authHeader) return null;
+  const trimmed = authHeader.trim();
+
+  if (!/^Bearer\s+/i.test(trimmed)) return null;
+  const token = trimmed.replace(/^Bearer\s+/i, "").trim();
+
+  return token || null;
+}
+
+/**
+ * Get the current client session.
+ *
+ * Tries two transports in order:
+ *   1. `client-session` httpOnly cookie (preferred — set by login flow).
+ *   2. `Authorization: Bearer <jwt>` header (fallback for browsers where
+ *      the cookie is blocked/stripped: Safari ITP, third-party cookie
+ *      restrictions, in-app browsers, iframe embedding).
+ *
+ * Both transports carry the SAME signed JWT (same `JWT_SECRET`, same
+ * payload shape), so the security properties are identical — we're just
+ * giving the browser two ways to present it. The client-side helper
+ * `lib/auth/client-token-storage.ts` stores a copy of the JWT in
+ * `localStorage` on login and attaches it as a bearer token on subsequent
+ * requests.
  */
 export async function getClientSession(): Promise<ClientSession | null> {
+  // 1) Cookie transport (preferred)
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get(COOKIE_NAME)?.value;
+    const cookieToken = cookieStore.get(COOKIE_NAME)?.value;
 
-    if (!token) {
+    if (cookieToken) {
+      try {
+        const { payload } = await jwtVerify(cookieToken, JWT_SECRET);
+
+        return payload as unknown as ClientSession;
+      } catch (error) {
+        // Cookie present but invalid/expired — fall through to bearer.
+        console.warn(
+          "[Client Session] Cookie token invalid, trying bearer:",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+  } catch {
+    // cookies() can throw if called outside a request scope — fall through.
+  }
+
+  // 2) Authorization: Bearer <jwt> fallback
+  try {
+    const headerList = await headers();
+    const bearer = extractBearerToken(headerList.get("authorization"));
+
+    if (!bearer) {
       return null;
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(bearer, JWT_SECRET);
 
     return payload as unknown as ClientSession;
   } catch (error) {
-    console.warn("[Client Session] Invalid or expired session:", error);
+    console.warn(
+      "[Client Session] Invalid or expired session:",
+      error instanceof Error ? error.message : error
+    );
 
     return null;
   }

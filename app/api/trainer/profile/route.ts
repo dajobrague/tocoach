@@ -17,7 +17,7 @@ export async function GET() {
     const { data: trainer, error } = await supabase
       .from("trainers")
       .select(
-        "id, email, full_name, phone, profile_picture_url, tenant_host, created_at, status"
+        "id, email, full_name, phone, profile_picture_url, tenant_host, created_at, status, community_url"
       )
       .eq("id", session.trainer_id)
       .single();
@@ -54,9 +54,25 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
 
+    // Validate community_url format if provided
+    if (
+      body.community_url !== undefined &&
+      body.community_url !== null &&
+      body.community_url !== ""
+    ) {
+      try {
+        new URL(body.community_url);
+      } catch {
+        return NextResponse.json(
+          { error: "URL de comunidad no válida" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Only allow updating specific fields
-    const allowedFields = ["full_name", "phone", "email"];
-    const updates: Record<string, string> = {};
+    const allowedFields = ["full_name", "phone", "email", "community_url"];
+    const updates: Record<string, string | null> = {};
 
     for (const field of allowedFields) {
       if (body[field] !== undefined) {

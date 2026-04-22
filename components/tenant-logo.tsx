@@ -1,7 +1,8 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Renders the tenant/brand logo using Next.js Image optimization.
@@ -9,6 +10,8 @@ import { useState } from "react";
  * Resizes and optimizes the logo server-side, which fixes iOS Safari issues
  * where large PNGs fail to display (iOS limits PNG decoded size to 3-5
  * megapixels). Optimization produces smaller, mobile-friendly images.
+ *
+ * Shows a fallback icon when the image fails to load or src is empty.
  */
 export function TenantLogo({
   src,
@@ -17,6 +20,7 @@ export function TenantLogo({
   width = 80,
   height = 40,
   priority = false,
+  showFallback = true,
 }: {
   src: string;
   alt: string;
@@ -24,11 +28,30 @@ export function TenantLogo({
   width?: number;
   height?: number;
   priority?: boolean;
+  showFallback?: boolean;
 }) {
   const [hasError, setHasError] = useState(false);
 
+  // Reset error state when src changes
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
   if (hasError || !src) {
-    return null;
+    if (!showFallback) return null;
+
+    return (
+      <div
+        className="bg-primary/10 rounded-lg flex items-center justify-center"
+        style={{ width: height, height: height }}
+      >
+        <Icon
+          className="text-primary"
+          icon="solar:dumbbell-bold"
+          width={height * 0.5}
+        />
+      </div>
+    );
   }
 
   return (

@@ -8,6 +8,7 @@ import { ChatPanel } from "./chat-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 
 import { TenantLogo } from "@/components/tenant-logo";
+import { clientFetch } from "@/lib/auth/client-token-storage";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface ClientHeaderProps {
@@ -46,7 +47,7 @@ export function ClientHeader({
   // Load unread message count (fallback)
   const loadUnreadCount = async () => {
     try {
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/messages?clientId=${clientId}&tenantSlug=${tenantSlug}`
       );
 

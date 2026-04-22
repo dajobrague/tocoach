@@ -167,6 +167,23 @@ export async function POST(
     const clientSession = await getClientSession();
 
     if (!trainerSession && !clientSession) {
+      // Log auth failures so we can distinguish the real-world causes:
+      //   - cookie blocked/dropped (Safari ITP, iframe, in-app browser)
+      //   - JWT expired (> 30 days since last login)
+      //   - neither transport presented
+      // The user-agent helps identify in-app browsers (IG/FB/TikTok).
+      const ua = request.headers.get("user-agent") || "unknown";
+      const hasCookie = Boolean(request.headers.get("cookie"));
+      const hasAuth = Boolean(request.headers.get("authorization"));
+      const { clientId: dbgClientId } = await params;
+
+      console.warn("[Forms POST] Unauthorized submission attempt", {
+        clientIdFromUrl: dbgClientId,
+        userAgent: ua,
+        hasCookieHeader: hasCookie,
+        hasAuthHeader: hasAuth,
+      });
+
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 401 }
@@ -362,6 +379,37 @@ export async function POST(
       );
     }
 
+    // El cliente (browser) siempre envía `response_date` calculado en huso
+    // local (ver `getLocalTodayYmd` en `lib/forms/client-helpers.ts`), así
+    // que esta rama UTC sólo se ejecuta si un llamador no-browser (tests,
+    // scripts) omite el campo. Para esos casos dejamos UTC como fallback
+    // defensivo — documentado para evitar que alguien "arregle" esto al
+    // huso del servidor sin entender las implicaciones.
+    const resolvedDate =
+      response_date || new Date().toISOString().split("T")[0];
+
+    // Preserve historical answers for questions that were renamed or disabled
+    // after this day's response was first submitted. Without this merge, a
+    // client re-editing an old record would wipe keys no longer present in
+    // the current config. We only merge keys NOT in validQuestionIds — the
+    // current-config keys are fully overwritten by the new submission.
+    const { data: existingRow } = await supabase
+      .from("form_responses")
+      .select("answers")
+      .eq("tenant_host", tenantHost)
+      .eq("client_id", clientId)
+      .eq("form_type", form_type)
+      .eq("response_date", resolvedDate)
+      .maybeSingle();
+
+    const existingAnswers = existingRow
+      ? normalizeFormAnswers(existingRow.answers)
+      : {};
+    const preservedOrphanAnswers = Object.fromEntries(
+      Object.entries(existingAnswers).filter(([k]) => !validQuestionIds.has(k))
+    );
+    const mergedAnswers = { ...preservedOrphanAnswers, ...cleanedAnswers };
+
     // Upsert response (insert or update if same day already exists)
     const { data: response, error } = await supabase
       .from("form_responses")
@@ -370,9 +418,8 @@ export async function POST(
           tenant_host: tenantHost,
           client_id: clientId,
           form_type,
-          response_date:
-            response_date || new Date().toISOString().split("T")[0],
-          answers: cleanedAnswers,
+          response_date: resolvedDate,
+          answers: mergedAnswers,
           metadata: metadata || {},
         },
         {

@@ -224,10 +224,19 @@ export function groupResponsesByPeriod(
   return groups;
 }
 
-/** Period buckets per dashboard range tab (tuned for readable charts). */
+/**
+ * Period buckets per dashboard range tab (tuned for readable charts).
+ *
+ * Accepts either a legacy `CheckInFrequency` (`"biweekly"` halves the count, like
+ * before) or a modern `{ interval_weeks }` descriptor. For `interval_weeks === N`
+ * the bucket count is divided by `N` so longer cadences still yield a readable
+ * number of data points.
+ */
 export function chartPeriodCountForRange(
   periodKey: string,
-  frequency: CheckInSchedule["frequency"]
+  scheduleOrFrequency:
+    | CheckInSchedule["frequency"]
+    | Pick<CheckInSchedule, "frequency" | "interval_weeks">
 ): number {
   const map: Record<string, number> = {
     "7d": 6,
@@ -239,8 +248,24 @@ export function chartPeriodCountForRange(
 
   let n = map[periodKey] ?? 10;
 
-  if (frequency === "biweekly") {
-    n = Math.max(4, Math.ceil(n / 2));
+  let intervalWeeks = 1;
+
+  if (typeof scheduleOrFrequency === "string") {
+    // Legacy call site: only string frequency available.
+    if (scheduleOrFrequency === "biweekly") intervalWeeks = 2;
+  } else if (scheduleOrFrequency) {
+    intervalWeeks = Math.max(
+      1,
+      Math.round(scheduleOrFrequency.interval_weeks ?? 1) || 1
+    );
+
+    if (intervalWeeks === 1 && scheduleOrFrequency.frequency === "biweekly") {
+      intervalWeeks = 2;
+    }
+  }
+
+  if (intervalWeeks > 1) {
+    n = Math.max(4, Math.ceil(n / intervalWeeks));
   }
 
   return n;

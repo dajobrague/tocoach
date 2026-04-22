@@ -18,11 +18,16 @@ import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
+import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
+import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/conditional";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
+import { isEmptyAnswer } from "@/lib/forms/validation";
 import {
   QuestionConfig,
   FormPage,
   FormConfigData,
+  hasStructuredPages,
   isStructuredConfig,
   normalizeFormConfig,
   type CheckInSchedule,
@@ -76,7 +81,7 @@ export function DynamicFormModal({
         fd.append("question_id", questionId);
         fd.append("form_type", formType);
 
-        const res = await fetch("/api/forms/upload-photo", {
+        const res = await clientFetch("/api/forms/upload-photo", {
           method: "POST",
           body: fd,
         });
@@ -134,7 +139,7 @@ export function DynamicFormModal({
 
   const checkNeatCards = async () => {
     try {
-      const response = await fetch("/api/client/neat");
+      const response = await clientFetch("/api/client/neat");
       const data = await response.json();
 
       if (data.success) {
@@ -148,8 +153,12 @@ export function DynamicFormModal({
 
   const checkExistingResponse = async () => {
     try {
-      const dateToCheck = targetDate || new Date().toISOString().split("T")[0];
-      const response = await fetch(
+      // `getLocalTodayYmd` usa el huso local del navegador. Con
+      // `new Date().toISOString()` un cliente en LATAM a las 22h local queda
+      // buscando "el día de mañana" en UTC y no encontraba el registro
+      // recién enviado.
+      const dateToCheck = targetDate || getLocalTodayYmd();
+      const response = await clientFetch(
         `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${dateToCheck}&end_date=${dateToCheck}`
       );
       const data = await response.json();
@@ -194,7 +203,7 @@ export function DynamicFormModal({
     setIsLoading(true);
     setConfigError(null);
     try {
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/forms/configs/${clientId}?form_type=${formType}`
       );
       const data = await response.json();
@@ -215,17 +224,65 @@ export function DynamicFormModal({
           ? raw
           : normalizeFormConfig(Array.isArray(raw) ? raw : []);
 
-        // Filter to only enabled questions
-        let enabledQuestions = structured.questions.filter(
+        // Filter to only enabled questions. NEAT-based filtering (steps
+        // question for clients without NEAT cards) is NOT applied here —
+        // `hasNeatCards` is resolved asynchronously and applying the filter
+        // at fetch time would race (initial state is `true` so the filter
+        // would become a no-op). Instead, we filter at render time in
+        // `visibleQuestions` below, which re-runs whenever `hasNeatCards`
+        // changes.
+        const enabledQuestionsRaw = structured.questions.filter(
           (q: QuestionConfig) => q.enabled
         );
 
-        // For habits form, filter out steps question if client has no NEAT cards
-        if (formType === "habits" && !hasNeatCards) {
-          enabledQuestions = enabledQuestions.filter(
-            (q: QuestionConfig) => q.id !== "steps" && q.id !== "pasos"
-          );
-        }
+        // Defensa contra padres condicionales desactivados: si un hijo tiene
+        // `conditionalOn` apuntando a una pregunta que el trainer desactivó
+        // (o eliminó), el fallback `Boolean(undefined)` del matcher dejaría
+        // al hijo permanentemente oculto — aunque el trainer lo vea como
+        // enabled en el editor. Despojamos la condición en memoria (no
+        // mutamos el config guardado) para que el hijo se muestre como
+        // incondicional. El mismo patrón se aplica a subquestions dentro
+        // de grupos.
+        const enabledMainIds = new Set(enabledQuestionsRaw.map((q) => q.id));
+        const stripOrphanConditional = (
+          q: QuestionConfig,
+          allowedParentIds: Set<string>
+        ): QuestionConfig => {
+          if (!q.conditionalOn) return q;
+          if (allowedParentIds.has(q.conditionalOn)) return q;
+
+          // Copia shallow y retiramos la condición. `delete` es seguro porque
+          // ambas keys son opcionales en `QuestionConfig` (ver
+          // `exactOptionalPropertyTypes: true` en tsconfig).
+          const cleaned: QuestionConfig = { ...q };
+
+          delete cleaned.conditionalOn;
+          delete cleaned.conditionalValue;
+
+          return cleaned;
+        };
+
+        const enabledQuestions = enabledQuestionsRaw.map((q) => {
+          const normalized = stripOrphanConditional(q, enabledMainIds);
+
+          if (normalized.type === "group" && normalized.subQuestions) {
+            const enabledSubIds = new Set(
+              normalized.subQuestions
+                .filter((sq) => sq.enabled)
+                .map((sq) => sq.id)
+            );
+            // Los hijos condicionales de un grupo pueden referenciar
+            // subquestions hermanos O preguntas main — ambos son válidos.
+            const subParentIds = new Set([...enabledMainIds, ...enabledSubIds]);
+            const cleanedSubs = normalized.subQuestions.map((sq) =>
+              stripOrphanConditional(sq, subParentIds)
+            );
+
+            return { ...normalized, subQuestions: cleanedSubs };
+          }
+
+          return normalized;
+        });
 
         setQuestions(enabledQuestions);
         setPages(structured.pages.sort((a, b) => a.order - b.order));
@@ -260,42 +317,45 @@ export function DynamicFormModal({
     }
   };
 
-  // Check if question should be shown based on conditional logic
-  const shouldShowQuestion = (question: QuestionConfig): boolean => {
-    if (!question.conditionalOn) return true;
+  // Delegado a lib/forms/conditional.ts para evitar divergencia con el
+  // validador del servidor (ver `validateFormResponse`).
+  const shouldShowQuestion = (question: QuestionConfig): boolean =>
+    sharedShouldShowQuestion(question, answers);
 
-    const conditionalAnswer = answers[question.conditionalOn];
+  /**
+   * Heurística para detectar la pregunta "de pasos" del formulario de hábitos.
+   * Se usa para ocultarla cuando el cliente no tiene NEAT cards configuradas.
+   *
+   * Históricamente sólo se comprobaba `id === "steps" || id === "pasos"`, pero
+   * trainers que renombran la pregunta (p.ej. `daily_steps`, `pasos_diarios`)
+   * bypassaban el filtro. Ampliamos a label/unit/id-contains para atrapar más
+   * casos sin falsos positivos evidentes. Mantenemos los ids canónicos como
+   * match exacto por compatibilidad.
+   */
+  const isStepsQuestion = (q: QuestionConfig): boolean => {
+    const id = q.id.toLowerCase();
 
-    // Template uses conditionalValue: true after a rating; parent answer is 1–5, not boolean true
-    if (
-      question.conditionalValue === true &&
-      typeof conditionalAnswer === "number" &&
-      conditionalAnswer >= 1 &&
-      conditionalAnswer <= 5
-    ) {
-      return true;
-    }
+    if (id === "steps" || id === "pasos") return true;
+    if (id.includes("step") || id.includes("paso")) return true;
+    if (q.unit && /^(pasos|steps)$/i.test(q.unit)) return true;
 
-    if (typeof question.conditionalValue === "boolean") {
-      return conditionalAnswer === question.conditionalValue;
-    }
-
-    if (typeof question.conditionalValue === "number") {
-      return conditionalAnswer <= question.conditionalValue;
-    }
-
-    return !!conditionalAnswer;
+    return false;
   };
 
-  // Get visible questions for current view
-  const visibleQuestions = questions.filter(shouldShowQuestion);
+  // Get visible questions for current view. NEAT filter applies at render
+  // time so it reacts to `hasNeatCards` resolving after mount.
+  const visibleQuestions = questions.filter((q) => {
+    if (!shouldShowQuestion(q)) return false;
+    if (formType === "habits" && !hasNeatCards && isStepsQuestion(q)) {
+      return false;
+    }
+
+    return true;
+  });
 
   // Organize questions into sections based on pages
   const sections = (() => {
-    if (
-      pages.length > 1 ||
-      (pages.length === 1 && pages[0]?.id !== "default")
-    ) {
+    if (hasStructuredPages(pages)) {
       // Structured format: group visible questions by page
       return pages
         .map((page) => ({
@@ -308,26 +368,40 @@ export function DynamicFormModal({
         .filter((section) => section.questions.length > 0);
     }
 
-    // Legacy fallback: split into thirds
+    // Legacy fallback: split into thirds.
+    //
+    // IMPORTANTE: el particionado se hace sobre la lista COMPLETA de preguntas
+    // (incluyendo las que hoy están ocultas por condicionales), no sobre
+    // `visibleQuestions`. Antes se slice-aba `visibleQuestions` directamente
+    // y cuando un condicional activaba una pregunta su longitud cambiaba —
+    // las preguntas "saltaban" de sección en vivo mientras el cliente
+    // respondía.
+    //
+    // Con esta versión, cada pregunta queda asignada a una sección fija
+    // (derivada de su posición en `questions`), y cada sección filtra
+    // `visibleQuestions` para mostrar sólo las que pasan el condicional.
+    // La asignación sección→pregunta es estable.
+    const habitsTotal = questions.length;
+    const firstCut = Math.ceil(habitsTotal / 3);
+    const secondCut = Math.ceil((habitsTotal * 2) / 3);
+    const idSection1 = new Set(questions.slice(0, firstCut).map((q) => q.id));
+    const idSection2 = new Set(
+      questions.slice(firstCut, secondCut).map((q) => q.id)
+    );
+
     return [
       {
         title:
           formType === "checkins" ? "Progreso y Logros" : "Energía y Bienestar",
         icon:
           formType === "checkins" ? "solar:cup-star-bold" : "solar:bolt-bold",
-        questions: visibleQuestions.slice(
-          0,
-          Math.ceil(visibleQuestions.length / 3)
-        ),
+        questions: visibleQuestions.filter((q) => idSection1.has(q.id)),
       },
       {
         title: formType === "checkins" ? "Desafíos y Metas" : "Nutrición",
         icon:
           formType === "checkins" ? "solar:target-bold" : "solar:plate-bold",
-        questions: visibleQuestions.slice(
-          Math.ceil(visibleQuestions.length / 3),
-          Math.ceil((visibleQuestions.length * 2) / 3)
-        ),
+        questions: visibleQuestions.filter((q) => idSection2.has(q.id)),
       },
       {
         title: formType === "checkins" ? "Mediciones" : "Descanso",
@@ -335,8 +409,8 @@ export function DynamicFormModal({
           formType === "checkins"
             ? "solar:ruler-bold"
             : "solar:moon-sleep-bold",
-        questions: visibleQuestions.slice(
-          Math.ceil((visibleQuestions.length * 2) / 3)
+        questions: visibleQuestions.filter(
+          (q) => !idSection1.has(q.id) && !idSection2.has(q.id)
         ),
       },
     ].filter((section) => section.questions.length > 0);
@@ -362,19 +436,13 @@ export function DynamicFormModal({
         question.subQuestions
           .filter((sq) => sq.enabled && sq.required)
           .forEach((sq) => {
-            if (
-              answers[sq.id] === undefined ||
-              answers[sq.id] === "" ||
-              answers[sq.id] === null
-            ) {
+            if (isEmptyAnswer(sq.type, answers[sq.id])) {
               currentErrors[sq.id] = "Este campo es obligatorio";
             }
           });
       } else if (
         question.required &&
-        (answers[question.id] === undefined ||
-          answers[question.id] === "" ||
-          answers[question.id] === null)
+        isEmptyAnswer(question.type, answers[question.id])
       ) {
         currentErrors[question.id] = "Este campo es obligatorio";
       }
@@ -404,12 +472,12 @@ export function DynamicFormModal({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/forms/responses/${clientId}`, {
+      const response = await clientFetch(`/api/forms/responses/${clientId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           form_type: formType,
-          response_date: targetDate || new Date().toISOString().split("T")[0],
+          response_date: targetDate || getLocalTodayYmd(),
           answers,
           metadata: {
             submitted_from: "mobile",
@@ -809,6 +877,146 @@ export function DynamicFormModal({
                         ))}
                       </div>
                     )}
+                    {sub.type === "choice" &&
+                      (() => {
+                        const subChoices = sub.choices ?? [];
+                        const subSelectedId =
+                          typeof subValue === "string" ? subValue : null;
+                        const subSelectedExists =
+                          subSelectedId !== null &&
+                          subChoices.some((c) => c.id === subSelectedId);
+
+                        return (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {subChoices.map((choice) => {
+                                const isSelected = subSelectedId === choice.id;
+
+                                return (
+                                  <button
+                                    key={choice.id}
+                                    className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body ${
+                                      isSelected
+                                        ? "border-primary bg-primary text-white"
+                                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
+                                    } ${isViewMode ? "cursor-default" : ""}`}
+                                    disabled={isViewMode}
+                                    type="button"
+                                    onClick={() =>
+                                      handleAnswerChange(sub.id, choice.id)
+                                    }
+                                  >
+                                    {choice.icon && (
+                                      <Icon
+                                        className={`text-lg ${
+                                          isSelected
+                                            ? "text-white"
+                                            : "text-primary"
+                                        }`}
+                                        icon={choice.icon}
+                                      />
+                                    )}
+                                    <span className="text-center leading-tight">
+                                      {choice.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {subSelectedId !== null && !subSelectedExists && (
+                              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-2 py-1.5">
+                                <Icon
+                                  icon="solar:info-circle-linear"
+                                  width={12}
+                                />
+                                <span>
+                                  Respuesta original:{" "}
+                                  <strong>opción eliminada</strong>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    {sub.type === "multi_choice" &&
+                      (() => {
+                        const subChoices = sub.choices ?? [];
+                        const subSelectedIds: string[] = Array.isArray(subValue)
+                          ? subValue
+                          : [];
+                        const subMissingIds = subSelectedIds.filter(
+                          (id) => !subChoices.some((c) => c.id === id)
+                        );
+
+                        return (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {subChoices.map((choice) => {
+                                const isSelected = subSelectedIds.includes(
+                                  choice.id
+                                );
+
+                                return (
+                                  <button
+                                    key={choice.id}
+                                    className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body relative ${
+                                      isSelected
+                                        ? "border-primary bg-primary text-white"
+                                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
+                                    } ${isViewMode ? "cursor-default" : ""}`}
+                                    disabled={isViewMode}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isViewMode) return;
+                                      const next = isSelected
+                                        ? subSelectedIds.filter(
+                                            (id) => id !== choice.id
+                                          )
+                                        : [...subSelectedIds, choice.id];
+
+                                      handleAnswerChange(sub.id, next);
+                                    }}
+                                  >
+                                    {isSelected && (
+                                      <Icon
+                                        className="absolute top-0.5 right-0.5 text-white"
+                                        icon="solar:check-circle-bold"
+                                        width={12}
+                                      />
+                                    )}
+                                    {choice.icon && (
+                                      <Icon
+                                        className={`text-lg ${
+                                          isSelected
+                                            ? "text-white"
+                                            : "text-primary"
+                                        }`}
+                                        icon={choice.icon}
+                                      />
+                                    )}
+                                    <span className="text-center leading-tight">
+                                      {choice.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {subMissingIds.length > 0 && (
+                              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-2 py-1.5">
+                                <Icon
+                                  icon="solar:info-circle-linear"
+                                  width={12}
+                                />
+                                <span>
+                                  {subMissingIds.length === 1
+                                    ? "1 opción previamente seleccionada fue eliminada"
+                                    : `${subMissingIds.length} opciones previamente seleccionadas fueron eliminadas`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     {sub.type === "photo" &&
                       (() => {
                         const subPhotoUrl = subValue as string | undefined;
@@ -901,6 +1109,126 @@ export function DynamicFormModal({
               })}
           </div>
         );
+
+      case "choice": {
+        const choices = question.choices ?? [];
+        const selectedId = typeof value === "string" ? value : null;
+        const selectedExists =
+          selectedId !== null && choices.some((c) => c.id === selectedId);
+
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {choices.map((choice) => {
+                const isSelected = selectedId === choice.id;
+
+                return (
+                  <button
+                    key={choice.id}
+                    className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body ${
+                      isSelected
+                        ? "border-primary bg-primary text-white"
+                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
+                    } ${isViewMode ? "cursor-default" : ""}`}
+                    disabled={isViewMode}
+                    type="button"
+                    onClick={() => handleAnswerChange(question.id, choice.id)}
+                  >
+                    {choice.icon && (
+                      <Icon
+                        className={`text-xl ${
+                          isSelected ? "text-white" : "text-primary"
+                        }`}
+                        icon={choice.icon}
+                      />
+                    )}
+                    <span className="text-center leading-tight">
+                      {choice.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Historic fallback: stored id no longer exists in choices. */}
+            {selectedId !== null && !selectedExists && (
+              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-3 py-2">
+                <Icon icon="solar:info-circle-linear" width={14} />
+                <span>
+                  Respuesta original: <strong>opción eliminada</strong>
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      case "multi_choice": {
+        const choices = question.choices ?? [];
+        const selectedIds: string[] = Array.isArray(value) ? value : [];
+        const missingIds = selectedIds.filter(
+          (id) => !choices.some((c) => c.id === id)
+        );
+
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {choices.map((choice) => {
+                const isSelected = selectedIds.includes(choice.id);
+
+                return (
+                  <button
+                    key={choice.id}
+                    className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body relative ${
+                      isSelected
+                        ? "border-primary bg-primary text-white"
+                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
+                    } ${isViewMode ? "cursor-default" : ""}`}
+                    disabled={isViewMode}
+                    type="button"
+                    onClick={() => {
+                      if (isViewMode) return;
+                      const next = isSelected
+                        ? selectedIds.filter((id) => id !== choice.id)
+                        : [...selectedIds, choice.id];
+
+                      handleAnswerChange(question.id, next);
+                    }}
+                  >
+                    {isSelected && (
+                      <Icon
+                        className="absolute top-1 right-1 text-white"
+                        icon="solar:check-circle-bold"
+                        width={14}
+                      />
+                    )}
+                    {choice.icon && (
+                      <Icon
+                        className={`text-xl ${
+                          isSelected ? "text-white" : "text-primary"
+                        }`}
+                        icon={choice.icon}
+                      />
+                    )}
+                    <span className="text-center leading-tight">
+                      {choice.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {missingIds.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-3 py-2">
+                <Icon icon="solar:info-circle-linear" width={14} />
+                <span>
+                  {missingIds.length === 1
+                    ? "1 opción previamente seleccionada fue eliminada"
+                    : `${missingIds.length} opciones previamente seleccionadas fueron eliminadas`}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      }
 
       default:
         return (

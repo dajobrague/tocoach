@@ -18,8 +18,14 @@ export type CheckInScheduleInput = Partial<CheckInSchedule> | null | undefined;
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
-/** Seven-day windows from Unix epoch; used for biweekly parity (see `isBiweeklyInstantActive`). */
+/** Seven-day windows from Unix epoch; used for N-week cadence parity (see `isIntervalInstantActive`). */
 const WEEK_MS = 7 * MS_PER_DAY;
+/**
+ * Upper bound for `interval_weeks`. Clients can ask for up to a ~quarterly cadence
+ * before the search windows in `findOpenCheckInWindow` / `findLastTriggerOnOrBefore`
+ * need re-tuning.
+ */
+const MAX_INTERVAL_WEEKS = 12;
 
 const SPANISH_DAYS = [
   "Domingo",
@@ -178,15 +184,60 @@ function wallClockToUtc(
   return new Date(guessMs);
 }
 
-/** Biweekly: active on “even” epoch weeks (`floor(ms / WEEK_MS) % 2 === 0`). */
-function isBiweeklyInstantActive(utcMs: number): boolean {
-  return Math.floor(utcMs / WEEK_MS) % 2 === 0;
+/**
+ * Whether `utcMs` falls on an "active" week for a cadence of one trigger every
+ * `intervalWeeks` weeks. Anchored at the Unix epoch so that `intervalWeeks === 2`
+ * reproduces the legacy biweekly parity (`floor(ms / WEEK_MS) % 2 === 0`).
+ *
+ * `intervalWeeks <= 1` → always active (plain weekly).
+ */
+function isIntervalInstantActive(
+  utcMs: number,
+  intervalWeeks: number
+): boolean {
+  if (!Number.isFinite(intervalWeeks) || intervalWeeks <= 1) return true;
+
+  const n = Math.min(
+    MAX_INTERVAL_WEEKS,
+    Math.max(1, Math.round(intervalWeeks))
+  );
+
+  if (n === 1) return true;
+
+  return Math.floor(utcMs / WEEK_MS) % n === 0;
 }
 
 function normalizeFrequency(f: CheckInFrequency | undefined): CheckInFrequency {
   if (f === "weekly" || f === "biweekly" || f === "custom") return f;
 
   return DEFAULT_CHECKIN_SCHEDULE.frequency;
+}
+
+/**
+ * How far back/forward to walk calendar days when searching for triggers.
+ * Scales with the cadence so an `interval_weeks = 6` schedule still finds at
+ * least a couple of prior triggers.
+ */
+function maxSearchDaysFor(intervalWeeks: number): number {
+  const n = Math.max(1, Math.round(intervalWeeks) || 1);
+
+  // 120d covers ~17 weekly / ~8 fortnightly periods; scale up proportionally
+  // for larger intervals, capped at a year to keep loops bounded.
+  return Math.min(400, Math.max(120, n * 60));
+}
+
+function normalizeIntervalWeeks(raw: unknown): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_CHECKIN_SCHEDULE.interval_weeks;
+  }
+
+  const n = Math.round(raw);
+
+  if (!Number.isInteger(n) || n < 1) {
+    return DEFAULT_CHECKIN_SCHEDULE.interval_weeks;
+  }
+
+  return Math.min(MAX_INTERVAL_WEEKS, n);
 }
 
 /**
@@ -212,10 +263,29 @@ export function getScheduleOrDefault(
   const custom_name =
     customRaw.length > 0 ? customRaw : DEFAULT_CHECKIN_SCHEDULE.custom_name;
 
+  // Silent legacy migration: `biweekly` → `weekly` + interval_weeks=2.
+  // Only applied when the caller didn't explicitly set interval_weeks,
+  // so an already-normalised row keeps its explicit value.
+  const rawFrequency = normalizeFrequency(schedule.frequency);
+  const rawInterval = schedule.interval_weeks;
+  let frequency: CheckInFrequency = rawFrequency;
+  let interval_weeks: number;
+
+  if (rawFrequency === "biweekly") {
+    frequency = "weekly";
+    interval_weeks =
+      typeof rawInterval === "number" && Number.isFinite(rawInterval)
+        ? normalizeIntervalWeeks(rawInterval)
+        : 2;
+  } else {
+    interval_weeks = normalizeIntervalWeeks(rawInterval);
+  }
+
   return {
     ...DEFAULT_CHECKIN_SCHEDULE,
     ...schedule,
-    frequency: normalizeFrequency(schedule.frequency),
+    frequency,
+    interval_weeks,
     days_of_week: (() => {
       const raw = Array.isArray(schedule.days_of_week)
         ? schedule.days_of_week
@@ -329,11 +399,11 @@ export function isDueNow(
 
   if (p.hour !== th || p.minute !== tm) return false;
 
-  if (s.frequency !== "biweekly") return true;
+  if (s.interval_weeks <= 1) return true;
 
   const trigger = wallClockToUtc(p.year, p.month, p.day, th, tm, s.timezone);
 
-  return isBiweeklyInstantActive(trigger.getTime());
+  return isIntervalInstantActive(trigger.getTime(), s.interval_weeks);
 }
 
 /**
@@ -358,7 +428,7 @@ export function getNextCheckInDate(
   const s = getScheduleOrDefault(schedule);
   const [th, tm] = parseTime(s.time);
   const anchor = getZonedParts(fromDate, s.timezone);
-  const maxDays = s.frequency === "biweekly" ? 400 : 120;
+  const maxDays = maxSearchDaysFor(s.interval_weeks);
 
   for (let delta = 0; delta <= maxDays; delta++) {
     const [y, mo, d] = addCalendarDays(
@@ -375,7 +445,7 @@ export function getNextCheckInDate(
     const t = trigger.getTime();
 
     if (t <= fromDate.getTime()) continue;
-    if (s.frequency === "biweekly" && !isBiweeklyInstantActive(t)) continue;
+    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
 
     return trigger;
   }
@@ -416,7 +486,7 @@ function findLastTriggerOnOrBefore(
   const [th, tm] = parseTime(s.time);
   const anchor = getZonedParts(referenceDate, s.timezone);
   let best: Date | null = null;
-  const maxDays = s.frequency === "biweekly" ? 400 : 120;
+  const maxDays = maxSearchDaysFor(s.interval_weeks);
 
   for (let delta = 0; delta <= maxDays; delta++) {
     const [y, mo, d] = addCalendarDays(
@@ -433,7 +503,7 @@ function findLastTriggerOnOrBefore(
     const t = trigger.getTime();
 
     if (t > referenceDate.getTime()) continue;
-    if (s.frequency === "biweekly" && !isBiweeklyInstantActive(t)) continue;
+    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
     if (!best || t > best.getTime()) best = trigger;
   }
 
@@ -453,7 +523,7 @@ function findOpenCheckInWindow(
   const anchor = getZonedParts(now, s.timezone);
   let bestT: number | null = null;
   let bestStart: Date | null = null;
-  const maxDays = s.frequency === "biweekly" ? 400 : 120;
+  const maxDays = maxSearchDaysFor(s.interval_weeks);
   const n = now.getTime();
 
   for (let delta = 0; delta <= maxDays; delta++) {
@@ -471,7 +541,7 @@ function findOpenCheckInWindow(
     const t = trigger.getTime();
 
     if (t > n) continue;
-    if (s.frequency === "biweekly" && !isBiweeklyInstantActive(t)) continue;
+    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
 
     const deadlineMs = getCheckInDeadline(s, trigger).getTime();
 
@@ -691,14 +761,21 @@ export function formatScheduleDescription(
   const [h, m] = parseTime(s.time);
   const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   const days = formatDaysSpanish(s.days_of_week);
+  const n = s.interval_weeks;
 
-  if (s.frequency === "biweekly") {
+  // Legacy alias: some rows may still arrive with `biweekly` in-flight.
+  // `getScheduleOrDefault` normalises these to interval_weeks=2, but guard anyway.
+  if (s.frequency === "biweekly" && n < 2) {
     return `Cada dos semanas, los ${days} a las ${timeStr}`;
   }
 
-  if (s.days_of_week.length <= 1) {
+  if (n <= 1) {
     return `Cada ${days} a las ${timeStr}`;
   }
 
-  return `Cada ${days} a las ${timeStr}`;
+  if (n === 2) {
+    return `Cada dos semanas, los ${days} a las ${timeStr}`;
+  }
+
+  return `Cada ${n} semanas, los ${days} a las ${timeStr}`;
 }
