@@ -307,15 +307,18 @@ export function ChartEditPanel({
             />
           </div>
 
-          {/* CHART TYPE */}
+          {/* CHART TYPE — split into two sections so the constraint is
+              obvious. Multi-series types (Apiladas / Anillo) need a
+              multi-series source (today: Macros, Entrenamiento). */}
           <div>
             <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
               Tipo de gráfica
             </p>
+
             <div className="flex flex-wrap gap-1.5">
-              {CHART_TYPES.map((t) => {
-                const compatible = isMulti ? t.multi : !t.multi;
+              {CHART_TYPES.filter((t) => !t.multi).map((t) => {
                 const active = config.chart_type === t.id;
+                const compatible = !isMulti;
 
                 return (
                   <button
@@ -327,9 +330,14 @@ export function ChartEditPanel({
                         ? "bg-default-200 border-foreground/30 text-foreground"
                         : compatible
                           ? "bg-default-50 border-default-200 hover:bg-default-100"
-                          : "opacity-30 cursor-not-allowed border-default-100"
+                          : "opacity-40 cursor-not-allowed border-default-100 line-through"
                     }`}
                     disabled={!compatible}
+                    title={
+                      compatible
+                        ? undefined
+                        : "Esta métrica es de varias series — usa Apiladas o Anillo"
+                    }
                     type="button"
                     onClick={() => handleChartTypeChange(t.id)}
                   >
@@ -339,11 +347,59 @@ export function ChartEditPanel({
                 );
               })}
             </div>
+
+            <p className="text-[10px] font-semibold tracking-wider text-foreground/40 uppercase mt-3 mb-1.5">
+              Varias series
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {CHART_TYPES.filter((t) => t.multi).map((t) => {
+                const active = config.chart_type === t.id;
+                const compatible = isMulti;
+
+                return (
+                  <button
+                    key={t.id}
+                    aria-label={t.label}
+                    aria-pressed={active}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
+                      active
+                        ? "bg-default-200 border-foreground/30 text-foreground"
+                        : compatible
+                          ? "bg-default-50 border-default-200 hover:bg-default-100"
+                          : "opacity-40 cursor-not-allowed border-default-100 line-through"
+                    }`}
+                    disabled={!compatible}
+                    title={
+                      compatible
+                        ? undefined
+                        : "Solo disponible con métricas de varias series (p. ej. Macros, Entrenamiento)"
+                    }
+                    type="button"
+                    onClick={() => handleChartTypeChange(t.id)}
+                  >
+                    <Icon icon={t.icon} width={12} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            {!isMulti ? (
+              <p className="text-[10px] text-foreground/40 mt-2 leading-relaxed">
+                <Icon
+                  className="inline mr-0.5 -mt-0.5"
+                  icon="solar:info-circle-bold"
+                  width={11}
+                />
+                Apiladas y Anillo necesitan una métrica de varias series. Cambia
+                primero la métrica a <strong>Macros</strong> o{" "}
+                <strong>Entrenamiento</strong> para activarlas.
+              </p>
+            ) : null}
             {!isMulti &&
             (config.chart_type === "ring" ||
               config.chart_type === "stacked_bar") ? (
               <p className="text-[10px] text-warning mt-1">
-                Esta combinación no es válida — selecciona un tipo 1-D.
+                Combinación inválida — selecciona un tipo de una serie.
               </p>
             ) : null}
           </div>
