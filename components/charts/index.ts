@@ -6,6 +6,9 @@
 export { ChartCard } from "./chart-card";
 export { ChartRenderer } from "./chart-renderer";
 export { ChartErrorBoundary } from "./error-boundary";
+export { ChartEditPanel } from "./edit-panel";
+export { ChartSurface } from "./surface/chart-surface";
+export { synthesizeDemoBuckets } from "./demo-data";
 export {
   iconForChartType,
   formatNumber,
