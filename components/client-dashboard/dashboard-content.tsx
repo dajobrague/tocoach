@@ -6,11 +6,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
+import { ChartsSection } from "@/components/client-dashboard/charts-section";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
 import { clientFetch } from "@/lib/auth/client-token-storage";
+import { USE_NEW_CHART_SYSTEM } from "@/lib/charts";
 import {
   CaloriesChart,
   MacrosRing,
@@ -27,7 +29,11 @@ import {
   resolveSleepHoursAnswer,
   resolveStepsAnswer,
 } from "@/lib/forms/analytics-keys";
-import { formResponsesToSubmittedAtPayload } from "@/lib/forms/client-helpers";
+import {
+  formResponsesToSubmittedAtPayload,
+  getLocalTodayYmd,
+  getLocalYmd,
+} from "@/lib/forms/client-helpers";
 import { aggregateWeightByCheckInPeriods } from "@/lib/forms/checkin-chart-periods";
 import {
   chartPeriodCountForRange,
@@ -184,7 +190,15 @@ export function DashboardContent() {
       const d = new Date();
 
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0]!;
+      // Use the LOCAL Y-M-D so it matches the user's clock and the `label`
+      // / `dayName` we render below (both of those use `toLocaleDateString`,
+      // which is also local). Previously this used `toISOString()` which
+      // returns UTC — for users in CEST around 00:00–02:00 local, or LATAM
+      // before midnight, the saved `date` could end up on a different
+      // calendar day than the visible label. That mismatch was the root
+      // cause of "el botón dice un día y al entrar al modal aparece otro"
+      // (Alexis Inca's ticket).
+      const dateStr = getLocalYmd(d);
 
       days.push({
         date: dateStr,
@@ -367,7 +381,10 @@ export function DashboardContent() {
   }, [periodLabels, habitGroups, checkinSchedule.timezone]);
 
   const todaySteps = useMemo(() => {
-    const t = new Date().toISOString().split("T")[0] ?? "";
+    // `response_date` is saved with the user's local Y-M-D (see comment on
+    // `getLocalTodayYmd`). Comparing against a UTC-derived "today" silently
+    // missed the user's own row when their local day differed from UTC.
+    const t = getLocalTodayYmd();
     const row = dailyResponses.find((r: FormResponse) => r.response_date === t);
 
     return resolveStepsAnswer(row?.answers) ?? 0;
@@ -507,9 +524,7 @@ export function DashboardContent() {
             logoUrl={logoUrl}
             tenantSlug={tenantSlug}
             trainerName={trainerName}
-            onOpenDailyForm={() =>
-              setSelectedDayForForm(new Date().toISOString().split("T")[0]!)
-            }
+            onOpenDailyForm={() => setSelectedDayForForm(getLocalTodayYmd())}
             onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
           />
 
@@ -675,97 +690,122 @@ export function DashboardContent() {
               <Tab key="12m" title="12 Meses" />
             </Tabs>
 
-            {/* Weight Tracker */}
-            {weightHistory.some((d) => d.weight > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  {checkinSchedule.enabled && (
-                    <p className="text-xs font-semibold text-foreground/70 tracking-wide mb-2">
-                      {checkinSchedule.custom_name}
-                    </p>
-                  )}
-                  <WeightChart
-                    currentValue={
-                      weightHistory[weightHistory.length - 1]?.weight || 0
-                    }
-                    data={weightHistory}
-                    schedule={checkinSchedule}
-                  />
-                </CardBody>
-              </Card>
-            )}
+            {/*
+              CHART RENDERING — gated by USE_NEW_CHART_SYSTEM (lib/charts).
+              When the flag is on, ChartsSection talks to /api/charts/clients/
+              [clientId]/snapshot and renders the trainer's chosen template
+              (or per-client override). When off, the legacy bespoke charts
+              render with the locally-computed history arrays.
 
-            {/* Sleep Tracker */}
-            {sleepHistory.some((d) => d.hours > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  <SleepChart
-                    currentValue={
-                      sleepHistory[sleepHistory.length - 1]?.hours || 0
-                    }
-                    data={sleepHistory}
-                    schedule={checkinSchedule}
-                  />
-                </CardBody>
-              </Card>
-            )}
+              The legacy block below is intentionally preserved as a runtime
+              fallback for ~2 weeks post-launch. Once telemetry is clean, a
+              follow-up PR removes the flag, the legacy components, and all
+              the local chart-history useMemo blocks above.
+            */}
+            {USE_NEW_CHART_SYSTEM ? (
+              <ChartsSection
+                clientId={clientId}
+                selectedPeriod={selectedPeriod}
+              />
+            ) : (
+              <>
+                {/* Weight Tracker (legacy) */}
+                {weightHistory.some((d) => d.weight > 0) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      {checkinSchedule.enabled && (
+                        <p className="text-xs font-semibold text-foreground/70 tracking-wide mb-2">
+                          {checkinSchedule.custom_name}
+                        </p>
+                      )}
+                      <WeightChart
+                        currentValue={
+                          weightHistory[weightHistory.length - 1]?.weight || 0
+                        }
+                        data={weightHistory}
+                        schedule={checkinSchedule}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
 
-            {/* Calories Tracker */}
-            {calorieHistory.some((d) => d.calories > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  <CaloriesChart
-                    currentValue={
-                      calorieHistory[calorieHistory.length - 1]?.calories || 0
-                    }
-                    data={calorieHistory}
-                    schedule={checkinSchedule}
-                  />
-                </CardBody>
-              </Card>
-            )}
+                {/* Sleep Tracker (legacy) */}
+                {sleepHistory.some((d) => d.hours > 0) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      <SleepChart
+                        currentValue={
+                          sleepHistory[sleepHistory.length - 1]?.hours || 0
+                        }
+                        data={sleepHistory}
+                        schedule={checkinSchedule}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
 
-            {/* Protein Tracker */}
-            {proteinHistory.some((d) => d.protein > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  <ProteinChart
-                    currentValue={
-                      proteinHistory[proteinHistory.length - 1]?.protein || 0
-                    }
-                    data={proteinHistory}
-                    schedule={checkinSchedule}
-                  />
-                </CardBody>
-              </Card>
-            )}
+                {/* Calories Tracker (legacy) */}
+                {calorieHistory.some((d) => d.calories > 0) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      <CaloriesChart
+                        currentValue={
+                          calorieHistory[calorieHistory.length - 1]?.calories ||
+                          0
+                        }
+                        data={calorieHistory}
+                        schedule={checkinSchedule}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
 
-            {/* Macros Distribution */}
-            {(avgMacros.protein > 0 ||
-              avgMacros.carbs > 0 ||
-              avgMacros.fats > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  <MacrosRing
-                    carbs={avgMacros.carbs}
-                    fats={avgMacros.fats}
-                    protein={avgMacros.protein}
-                  />
-                </CardBody>
-              </Card>
-            )}
+                {/* Protein Tracker (legacy) */}
+                {proteinHistory.some((d) => d.protein > 0) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      <ProteinChart
+                        currentValue={
+                          proteinHistory[proteinHistory.length - 1]?.protein ||
+                          0
+                        }
+                        data={proteinHistory}
+                        schedule={checkinSchedule}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
 
-            {/* Training Activity */}
-            {trainingActivity.some((d) => d.strength > 0 || d.cardio > 0) && (
-              <Card>
-                <CardBody className="p-4">
-                  <TrainingActivityChart
-                    data={trainingActivity}
-                    periodTotal={trainingPeriodTotal}
-                    schedule={checkinSchedule}
-                  />
-                </CardBody>
-              </Card>
+                {/* Macros Distribution (legacy) */}
+                {(avgMacros.protein > 0 ||
+                  avgMacros.carbs > 0 ||
+                  avgMacros.fats > 0) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      <MacrosRing
+                        carbs={avgMacros.carbs}
+                        fats={avgMacros.fats}
+                        protein={avgMacros.protein}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
+
+                {/* Training Activity (legacy) */}
+                {trainingActivity.some(
+                  (d) => d.strength > 0 || d.cardio > 0
+                ) && (
+                  <Card>
+                    <CardBody className="p-4">
+                      <TrainingActivityChart
+                        data={trainingActivity}
+                        periodTotal={trainingPeriodTotal}
+                        schedule={checkinSchedule}
+                      />
+                    </CardBody>
+                  </Card>
+                )}
+              </>
             )}
 
             {/* NEAT Tracker - Only show if NEAT cards configured and applicable today */}

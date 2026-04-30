@@ -37,7 +37,16 @@ import {
 } from "@/lib/forms/types";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
 
-const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
+// Accepts the legacy 5-key client period selector (7d / 30d / 3m / 6m / 12m)
+// plus the trainer-side 90d shortcut. Anything unknown defaults to 30d.
+const RANGE_DAYS: Record<string, number> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  "3m": 90,
+  "6m": 180,
+  "12m": 365,
+};
 const MAX_BUCKETS = 60;
 
 function parseRange(rangeParam: string | null): { from: Date; to: Date } {
