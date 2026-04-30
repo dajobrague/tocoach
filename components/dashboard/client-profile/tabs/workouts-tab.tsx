@@ -407,12 +407,23 @@ export default function WorkoutsTab({
     setSelectedSessionId(sessionId);
     setIsAddExerciseModalOpen(true);
 
-    // Fetch library exercises (strength category only for workouts)
+    // Fetch library exercises.
+    //
+    // Historically this fetch hard-coded `category=strength&limit=100`.
+    // That caused two real-world bugs reported by trainers:
+    //   1. Exercises saved with any category other than `strength` (or with
+    //      an empty/legacy category) were invisible in this modal even
+    //      though the trainer had created them — see e.g. tickets from
+    //      Pablo Carboneras, Isaac Català and Raúl Herrera (Apr 23–26).
+    //   2. Trainers with >100 entries in the library only saw the most
+    //      recent 100 because the Autocomplete filters client-side over
+    //      `defaultItems` and never re-queries the server.
+    // We now drop the category filter (the trainer is the right person to
+    // decide which library entry fits a workout slot) and bump the limit
+    // to 500 — comfortably above any current library size we've seen.
     setIsLoadingLibrary(true);
     try {
-      const response = await fetch(
-        "/api/exercises?category=strength&limit=100"
-      );
+      const response = await fetch("/api/exercises?limit=500");
       const result = await response.json();
 
       if (result.success) {

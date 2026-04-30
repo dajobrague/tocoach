@@ -132,5 +132,43 @@ export function useInstantSave(
     [debounceMs, runSave]
   );
 
-  return { status, error, save };
+  // Identity-stable result object.
+  //
+  // Returning a fresh `{ status, error, save }` literal on each render forced
+  // any consumer that put the result into a `useCallback`/`useMemo`/`useEffect`
+  // dependency array to recompute every render — and when a downstream
+  // component fed that recomputed callback into one of its own effects (see
+  // `CheckInScheduleEditor`'s `onScheduleChange`), the effect re-fired every
+  // render, looping `save()` indefinitely. The visible symptom was a save
+  // status badge that cycled "Guardando / Error al guardar" every couple of
+  // seconds with no user input.
+  //
+  // We expose `status` and `error` as getters on a single object held in a
+  // ref. The object reference never changes; reads of `.status`/`.error`
+  // always return the latest React state. React still re-renders on state
+  // change (because the underlying useState updates), so consumers of
+  // `<InstantSaveBadge status={save.status} />` still see UI updates.
+  const statusRef = useRef(status);
+  const errorRef = useRef(error);
+  const saveRef = useRef(save);
+
+  statusRef.current = status;
+  errorRef.current = error;
+  saveRef.current = save;
+
+  const stableResultRef = useRef<UseInstantSaveResult | null>(null);
+
+  if (!stableResultRef.current) {
+    stableResultRef.current = {
+      get status() {
+        return statusRef.current;
+      },
+      get error() {
+        return errorRef.current;
+      },
+      save: (value, opts) => saveRef.current(value, opts),
+    };
+  }
+
+  return stableResultRef.current;
 }

@@ -25,7 +25,7 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   formatScheduleDescription,
@@ -437,11 +437,29 @@ export function CheckInScheduleEditor({
     setInitialized(false);
   }, [clientId, variant, scheduleSyncRevision]);
 
+  // Keep the latest `onScheduleChange` reachable from inside the effect below
+  // without making the effect itself depend on the callback's reference.
+  //
+  // Why a ref instead of `[draft, onScheduleChange]` deps: some consumers
+  // memoize the callback unstably (e.g. `useCallback(..., [hookResult])`
+  // where the hook returns a fresh object literal each render). With the
+  // callback in the dep array, the effect re-fires on every parent render —
+  // the schedule save handler then calls `save()` on each fire, and that
+  // save's `setStatus("saving")` triggers the next render → the next fire,
+  // creating an infinite save loop. By snapshotting the callback in a ref
+  // and depending only on `draft`, the effect fires exactly when the schedule
+  // truly changes.
+  const onScheduleChangeRef = useRef(onScheduleChange);
+
+  useEffect(() => {
+    onScheduleChangeRef.current = onScheduleChange;
+  }, [onScheduleChange]);
+
   useEffect(() => {
     if (draft) {
-      onScheduleChange?.(draft);
+      onScheduleChangeRef.current?.(draft);
     }
-  }, [draft, onScheduleChange]);
+  }, [draft]);
 
   useEffect(() => {
     if (data && !initialized) {

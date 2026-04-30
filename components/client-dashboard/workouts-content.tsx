@@ -44,10 +44,24 @@ type SessionStatus = "completed" | "pending" | "rest" | "in-progress";
 interface ScheduledSession {
   id: string;
   sessionId: string; // Original session ID from database
+  /** Row id from `scheduled_sessions` if one exists for this slot; null
+   * when the slot is purely template-driven and has never been touched. */
+  scheduledSessionId: string | null;
+  /** Server-format YYYY-MM-DD string for this slot. Used as the
+   * `scheduledDate` field when creating a `scheduled_sessions` row from the
+   * "Marcar como completado" action so the new row lines up with any
+   * exercise logs that already reference this date. */
+  scheduledDateStr: string;
   date: Date;
   dayLabel: string;
   sessionName: string;
   status: SessionStatus;
+  /** True only when `scheduled_sessions.status === 'completed'` (i.e. set by
+   * an explicit user action, not derived from logs). Drives the "Marcar
+   * como pendiente" item in the dropdown — we never expose that for sessions
+   * whose `completed` came from logs because re-rendering would just
+   * derive it back to `completed` and the user would see no effect. */
+  isExplicitlyCompleted: boolean;
   exercises: any[];
   duration?: number;
   completedAt?: Date;
@@ -209,6 +223,102 @@ export function WorkoutsContent() {
     return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
   };
 
+  // ── Manual session-completion mutation ──────────────────────────────────
+  //
+  // Some workouts can never be marked "completed" via the derived logic —
+  // typically those composed entirely of free-text exercises (no
+  // `exercise_id` to log against). For those, and as an explicit override
+  // for any session, the user can mark the session as done from the dropdown.
+  //
+  // Why two endpoints: `scheduled_sessions` rows are created lazily — only
+  // when the user reschedules or logs an exercise. A "fresh" template slot
+  // therefore has no row to PUT into. We POST first to create one with
+  // `status: "completed"`, otherwise we PUT the existing row.
+  const [pendingCompletionId, setPendingCompletionId] = useState<string | null>(
+    null
+  );
+
+  const refreshSessionsAfterStatusChange = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["client", "scheduledSessions", clientId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["client", "exerciseLogs", clientId],
+    });
+  };
+
+  const setSessionStatus = async (
+    session: any,
+    nextStatus: "completed" | "scheduled"
+  ) => {
+    if (!clientId) return;
+    setPendingCompletionId(session.id);
+    try {
+      const completedAt =
+        nextStatus === "completed" ? new Date().toISOString() : null;
+
+      if (session.scheduledSessionId) {
+        const res = await fetch(
+          `/api/clients/${clientId}/scheduled-sessions/${session.scheduledSessionId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: nextStatus, completedAt }),
+          }
+        );
+        const data = await res.json();
+
+        if (!data.success) {
+          console.error("[Workouts] Mark session status PUT failed:", data);
+        }
+      } else {
+        // No scheduled_sessions row yet — create one with the desired status.
+        // Only "completed" makes sense as an initial state from this UI; we
+        // don't expose creating a "scheduled" row out of nowhere.
+        if (nextStatus !== "completed") return;
+
+        const res = await fetch(`/api/clients/${clientId}/scheduled-sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            scheduledDate: session.scheduledDateStr,
+            status: "completed",
+          }),
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          console.error("[Workouts] Mark session status POST failed:", data);
+
+          return;
+        }
+
+        // POST doesn't accept `completedAt`, so update it in a follow-up PUT
+        // when we know the new row id.
+        const newId = data.scheduledSession?.id;
+
+        if (newId && completedAt) {
+          await fetch(`/api/clients/${clientId}/scheduled-sessions/${newId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ completedAt }),
+          });
+        }
+      }
+      refreshSessionsAfterStatusChange();
+    } catch (err) {
+      console.error("[Workouts] Mark session status error:", err);
+    } finally {
+      setPendingCompletionId(null);
+    }
+  };
+
+  const handleMarkAsCompleted = (session: any) =>
+    setSessionStatus(session, "completed");
+  const handleMarkAsPending = (session: any) =>
+    setSessionStatus(session, "scheduled");
+
   const getWeekNumber = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
@@ -255,14 +365,24 @@ export function WorkoutsContent() {
       }
     }
 
-    // Shared helper: compute status & progress for a session on a given date
+    // Shared helper: compute status & progress for a session on a given date.
+    //
+    // Status resolution order (most authoritative first):
+    //   1. Explicit persisted status in `scheduled_sessions.status === 'completed'`
+    //      — set by the user via "Marcar como completado". This wins because it's
+    //      a direct user statement; we never want to demote it back to derived.
+    //   2. Derived status from logged exercises — counts library-linked exercises
+    //      (those with `exercise_id`) as the denominator. Sessions composed
+    //      entirely of free-text exercises (no `exercise_id` to log against)
+    //      stay "pending" until the user marks them complete manually — that's
+    //      a concession we make because there is no log row to count.
     const buildCard = (
       templateSession: any,
       sessionDate: Date,
       dayOffset: number,
       dateStr: string,
       dayOfWeek: string,
-      scheduledSessionId: string | null
+      realScheduled: any | null
     ) => {
       const exercises: any[] = templateSession.exercises || [];
       const trackableExercises = exercises
@@ -282,10 +402,22 @@ export function WorkoutsContent() {
         loggedSet.has(e.eid)
       ).length;
 
+      const persistedStatus =
+        typeof realScheduled?.status === "string"
+          ? (realScheduled.status as string).toLowerCase()
+          : null;
+      const isExplicitlyCompleted = persistedStatus === "completed";
+
       let status: SessionStatus = "pending";
       let progress = 0;
 
-      if (dayOffset > 0) {
+      if (isExplicitlyCompleted) {
+        // User said it's done. Trust it — even if logs are missing or the
+        // session is in the future (rare but legal: e.g. they completed an
+        // alternate workout earlier and want this slot off the queue).
+        status = "completed";
+        progress = 100;
+      } else if (dayOffset > 0) {
         status = "pending";
       } else if (totalExercises > 0 && loggedCount > 0) {
         if (loggedCount >= totalExercises) {
@@ -307,7 +439,7 @@ export function WorkoutsContent() {
       const sessionData: any = {
         id: `${templateSession.id}-${dayOffset}`,
         sessionId: templateSession.id,
-        scheduledSessionId,
+        scheduledSessionId: realScheduled?.id ?? null,
         date: sessionDate,
         dayLabel,
         sessionName: templateSession.name,
@@ -315,12 +447,17 @@ export function WorkoutsContent() {
         exercises: templateSession.exercises,
         progress,
         dayOfWeek: dayOfWeek || "",
+        // Carry the persisted-status flag so the UI can show "Marcar como
+        // pendiente" only on sessions that are completed via explicit user
+        // action (not via derived logs).
+        isExplicitlyCompleted,
+        scheduledDateStr: dateStr,
       };
 
       if (status === "completed") {
-        sessionData.completedAt = new Date(
-          sessionDate.getTime() + 2 * 60 * 60 * 1000
-        );
+        sessionData.completedAt = realScheduled?.completed_at
+          ? new Date(realScheduled.completed_at)
+          : new Date(sessionDate.getTime() + 2 * 60 * 60 * 1000);
       }
 
       return sessionData;
@@ -367,7 +504,7 @@ export function WorkoutsContent() {
               dayOffset,
               dateStr,
               dayOfWeek,
-              realScheduled?.id ?? null
+              realScheduled ?? null
             )
           );
         }
@@ -400,7 +537,7 @@ export function WorkoutsContent() {
           dayDiff,
           ss.scheduled_date,
           dayOfWeek,
-          ss.id
+          ss
         )
       );
     }
@@ -588,44 +725,102 @@ export function WorkoutsContent() {
                 />
               )}
 
-              {/* Session Actions Menu — only for today or future */}
+              {/* Session Actions Menu.
+                  Items are conditional on the session's relative date and
+                  current status:
+                    – "Reprogramar" → today or future
+                    – "Marcar como completado" → today or past, not already
+                      completed (works even for sessions that can never be
+                      auto-completed via logs, e.g. all-free-text routines)
+                      – "Marcar como pendiente" → only for sessions explicitly
+                      marked complete by the user (we don't allow demoting a
+                      session whose `completed` status came from logs because
+                      the next render would just re-derive it back to
+                      `completed` and the user would think nothing happened) */}
               {(() => {
                 const now = new Date();
 
                 now.setHours(0, 0, 0, 0);
+                const isFutureOrToday = session.date >= now;
+                const isTodayOrPast = session.date <= now || isToday;
+                const canReschedule = isFutureOrToday;
+                const canMarkCompleted =
+                  isTodayOrPast && session.status !== "completed";
+                const canMarkPending = session.isExplicitlyCompleted === true;
 
-                return session.date >= now;
-              })() && (
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Dropdown placement="bottom-end">
-                    <DropdownTrigger>
-                      <Button
-                        isIconOnly
-                        className={
-                          isToday
-                            ? "text-white bg-transparent hover:bg-white/10 data-[hover=true]:bg-white/10"
-                            : "text-foreground"
-                        }
-                        size="sm"
-                        variant="light"
-                      >
-                        <Icon icon="solar:menu-dots-bold" width={20} />
-                      </Button>
-                    </DropdownTrigger>
-                    <DropdownMenu aria-label="Session actions">
-                      <DropdownItem
-                        key="reschedule"
-                        startContent={
-                          <Icon icon="solar:calendar-mark-linear" width={18} />
-                        }
-                        onPress={() => handleOpenReschedule(session)}
-                      >
-                        Reprogramar
-                      </DropdownItem>
-                    </DropdownMenu>
-                  </Dropdown>
-                </div>
-              )}
+                if (!canReschedule && !canMarkCompleted && !canMarkPending) {
+                  return null;
+                }
+
+                const items: React.ReactElement[] = [];
+
+                if (canReschedule) {
+                  items.push(
+                    <DropdownItem
+                      key="reschedule"
+                      startContent={
+                        <Icon icon="solar:calendar-mark-linear" width={18} />
+                      }
+                      onPress={() => handleOpenReschedule(session)}
+                    >
+                      Reprogramar
+                    </DropdownItem>
+                  );
+                }
+
+                if (canMarkCompleted) {
+                  items.push(
+                    <DropdownItem
+                      key="mark-completed"
+                      startContent={
+                        <Icon icon="solar:check-circle-bold" width={18} />
+                      }
+                      onPress={() => handleMarkAsCompleted(session)}
+                    >
+                      Marcar como completado
+                    </DropdownItem>
+                  );
+                }
+
+                if (canMarkPending) {
+                  items.push(
+                    <DropdownItem
+                      key="mark-pending"
+                      startContent={
+                        <Icon icon="solar:undo-left-round-linear" width={18} />
+                      }
+                      onPress={() => handleMarkAsPending(session)}
+                    >
+                      Marcar como pendiente
+                    </DropdownItem>
+                  );
+                }
+
+                return (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Dropdown placement="bottom-end">
+                      <DropdownTrigger>
+                        <Button
+                          isIconOnly
+                          className={
+                            isToday
+                              ? "text-white bg-transparent hover:bg-white/10 data-[hover=true]:bg-white/10"
+                              : "text-foreground"
+                          }
+                          isDisabled={pendingCompletionId === session.id}
+                          size="sm"
+                          variant="light"
+                        >
+                          <Icon icon="solar:menu-dots-bold" width={20} />
+                        </Button>
+                      </DropdownTrigger>
+                      <DropdownMenu aria-label="Session actions">
+                        {items}
+                      </DropdownMenu>
+                    </Dropdown>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
