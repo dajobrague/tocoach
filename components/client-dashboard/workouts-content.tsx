@@ -254,16 +254,21 @@ export function WorkoutsContent() {
     if (!clientId) return;
     setPendingCompletionId(session.id);
     try {
-      const completedAt =
-        nextStatus === "completed" ? new Date().toISOString() : null;
-
+      // We deliberately do NOT send `completedAt`. The `scheduled_sessions`
+      // table currently has no `completed_at` column in production, but the
+      // PUT endpoint at `app/api/clients/[clientId]/scheduled-sessions/[sessionId]/route.ts`
+      // still tries to write to it whenever the field is present, which makes
+      // PostgREST reject the entire UPDATE with PGRST204 and the user's
+      // status change silently fails (Railway logs 30 abr 15:32+).
+      // The status flag alone is enough for the derived/persisted-status
+      // logic in `buildCard` to decide whether the session is completed.
       if (session.scheduledSessionId) {
         const res = await fetch(
           `/api/clients/${clientId}/scheduled-sessions/${session.scheduledSessionId}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: nextStatus, completedAt }),
+            body: JSON.stringify({ status: nextStatus }),
           }
         );
         const data = await res.json();
@@ -292,18 +297,6 @@ export function WorkoutsContent() {
           console.error("[Workouts] Mark session status POST failed:", data);
 
           return;
-        }
-
-        // POST doesn't accept `completedAt`, so update it in a follow-up PUT
-        // when we know the new row id.
-        const newId = data.scheduledSession?.id;
-
-        if (newId && completedAt) {
-          await fetch(`/api/clients/${clientId}/scheduled-sessions/${newId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ completedAt }),
-          });
         }
       }
       refreshSessionsAfterStatusChange();

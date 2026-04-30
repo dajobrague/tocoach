@@ -63,7 +63,15 @@ export async function PUT(
     }
 
     if (status !== undefined) updateData.status = status;
-    if (completedAt !== undefined) updateData.completed_at = completedAt;
+    // NOTE: `completed_at` column does NOT exist on `scheduled_sessions` in
+    // production. Writing to it returned PostgREST error PGRST204 ("Could
+    // not find the 'completed_at' column ... in the schema cache") and
+    // rejected the entire UPDATE — observed in Railway logs on
+    // 2026-04-30 15:32+ when the new "Marcar como completado" UI started
+    // sending the field. We accept `completedAt` in the body for backwards
+    // compatibility but we no longer write it. If the column is added later,
+    // restore: `if (completedAt !== undefined) updateData.completed_at = completedAt;`
+    void completedAt;
     if (notes !== undefined) updateData.notes = notes;
 
     // Update the scheduled session
