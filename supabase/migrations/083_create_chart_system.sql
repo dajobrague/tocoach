@@ -209,6 +209,16 @@ COMMENT ON POLICY chart_config_audit_app_layer ON chart_config_audit IS
 -- SEED: starter template para todos los trainers existentes.
 -- Reproduce las 6 gráficas que el dashboard muestra hoy. ON CONFLICT DO NOTHING
 -- preserva cualquier plantilla ya personalizada al re-aplicar la migración.
+--
+-- IMPORTANTE: filtramos por trainers cuyo tenant_host EXISTE en la tabla
+-- tenants. La tabla `trainers` tiene un (1+) registros con tenant_host
+-- huérfano (p.ej. 'javimoreno' sin fila correspondiente en `tenants`),
+-- restos de configuraciones incompletas o tenants borrados. Sin este
+-- filtro el FK trainer_chart_templates.tenant_host -> tenants(host) fallaría
+-- y abortaría la migración entera. Esos trainers sin tenant válido no
+-- pueden usar la plataforma de todos modos; su chart template queda sin
+-- crear y, si llegan a tener un tenant válido en el futuro, lib/charts/
+-- server/template-loader.ts hará lazy-create al primer GET.
 -- ============================================================================
 
 INSERT INTO trainer_chart_templates (tenant_host, trainer_id, charts, auto_apply_to_new_clients)
@@ -285,6 +295,9 @@ SELECT
     ),
     true
 FROM trainers t
+WHERE EXISTS (
+    SELECT 1 FROM tenants tn WHERE tn.host = t.tenant_host
+)
 ON CONFLICT (tenant_host, trainer_id) DO NOTHING;
 
 COMMIT;
