@@ -35,6 +35,12 @@ const dashboardSidebarItems: SidebarItem[] = [
     title: "Plantillas de Programas",
   },
   {
+    key: "charts-template",
+    href: "/trainer/dashboard/charts-template",
+    icon: "solar:chart-square-linear",
+    title: "Plantilla de Gráficas",
+  },
+  {
     key: "exercise-library",
     href: "/trainer/dashboard/exercise-library",
     icon: "solar:dumbbell-linear",

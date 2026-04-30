@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 
 import AccessTab from "./tabs/access-tab";
 import CardioTab from "./tabs/cardio-tab";
+import ChartsTab from "./tabs/charts-tab";
 import FormsTab from "./tabs/forms-tab";
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
@@ -14,6 +15,7 @@ import WorkoutsTab from "./tabs/workouts-tab";
 
 const TAB_ITEMS = [
   { key: "progress", label: "Progreso", icon: "solar:chart-line-duotone" },
+  { key: "charts", label: "Gráficas", icon: "solar:chart-square-bold" },
   { key: "workouts", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
   { key: "cardio", label: "Cardio", icon: "solar:heart-pulse-bold" },
   { key: "neat", label: "NEAT", icon: "solar:walking-bold" },
@@ -87,6 +89,7 @@ export default function ClientProfileTabs({
       <div className="bg-gray-50">
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
           {selectedTab === "progress" && <ProgressTab clientId={clientId} />}
+          {selectedTab === "charts" && <ChartsTab clientId={clientId} />}
           {selectedTab === "workouts" && (
             <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />
           )}

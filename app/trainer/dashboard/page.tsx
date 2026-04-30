@@ -15,6 +15,7 @@ import MetricasContent from "@/components/dashboard/metricas-content";
 import dashboardSidebarItems from "@/components/dashboard/sidebar-items";
 import TemplatesContent from "@/components/dashboard/templates-content";
 import TopNavigation from "@/components/dashboard/top-navigation";
+import { ChartSurface } from "@/components/charts/surface/chart-surface";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface TrainerSession {
@@ -326,6 +327,21 @@ export default function TrainerDashboard() {
         return <InventoryContent />;
       case "templates":
         return <TemplatesContent />;
+      case "charts-template":
+        return (
+          <div className="trainer-app max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="mb-4">
+              <h1 className="text-2xl font-bold text-foreground">
+                Plantilla de gráficas
+              </h1>
+              <p className="text-xs text-foreground/40 mt-1">
+                Plantilla de gráficas que se aplicará por defecto a todos tus
+                clientes.
+              </p>
+            </div>
+            <ChartSurface mode="trainer-template" />
+          </div>
+        );
       case "exercise-library":
         return <ExerciseLibraryContent />;
       case "messaging":
