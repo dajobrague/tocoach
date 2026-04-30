@@ -16,7 +16,23 @@
 
 import type { ChartConfig, ChartsDocument } from "./types";
 
-import { randomUUID } from "node:crypto";
+/**
+ * Isomorphic UUID generator. Node ≥19 and all modern browsers expose
+ * `globalThis.crypto.randomUUID()`. Avoids importing `node:crypto`,
+ * which would break the client bundle.
+ */
+function randomUUID(): string {
+  if (typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  // Fallback for environments without crypto.randomUUID — produces a v4-shaped string.
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => {
+    const n = Number(c);
+
+    return (n ^ (Math.floor(Math.random() * 16) >> (n / 4))).toString(16);
+  });
+}
 
 export function buildStarterCharts(): ChartConfig[] {
   return [

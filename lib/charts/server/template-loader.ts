@@ -14,12 +14,65 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChartsDocument } from "../types";
 
 import { buildStarterDocument } from "../starter";
+import { chartConfigSchema } from "../validation";
 
 export interface TemplateRecord {
   id: string;
   charts: ChartsDocument;
   auto_apply_to_new_clients: boolean;
   updated_at: string;
+}
+
+/**
+ * Filter out invalid charts from a ChartsDocument so a single corrupted
+ * entry doesn't lock the trainer out of the editor. Logs each dropped
+ * chart's issues to the server console for diagnosis.
+ *
+ * Why this is necessary:
+ *   - The PUT endpoint validates strictly (returns 422 on any bad chart).
+ *   - GET historically returned whatever was in the DB.
+ *   - If a corrupt save happened in the past (unknown chart_type, missing
+ *     `color`, etc.), GET hands the bad data back to the client; subsequent
+ *     PUTs fail forever because the local doc still contains the bad chart.
+ *   - Stripping bad charts on read lets the editor recover automatically;
+ *     the trainer just sees fewer charts and can re-add what they want.
+ */
+export function sanitizeChartsDocument(raw: unknown): ChartsDocument {
+  if (!raw || typeof raw !== "object") {
+    return { version: 1, charts: [] };
+  }
+  const doc = raw as Record<string, unknown>;
+  const rawCharts = Array.isArray(doc.charts) ? doc.charts : [];
+  const cleaned: unknown[] = [];
+  let dropped = 0;
+
+  for (const c of rawCharts) {
+    const r = chartConfigSchema.safeParse(c);
+
+    if (r.success) {
+      cleaned.push(r.data);
+    } else {
+      dropped += 1;
+      console.warn(
+        "[charts] dropping invalid chart from stored doc:",
+        JSON.stringify(c),
+        "issues:",
+        JSON.stringify(r.error.issues)
+      );
+    }
+  }
+  if (dropped > 0) {
+    console.warn(
+      `[charts] sanitizeChartsDocument: dropped ${dropped} invalid chart(s)`
+    );
+  }
+  // Renumber positions to match new array order.
+  const charts = cleaned.map((c, i) => ({
+    ...(c as Record<string, unknown>),
+    position: i,
+  }));
+
+  return { version: 1, charts: charts as ChartsDocument["charts"] };
 }
 
 /**
@@ -42,7 +95,10 @@ export async function loadOrCreateTrainerTemplate(
     .maybeSingle();
 
   if (existing.data) {
-    return existing.data as TemplateRecord;
+    return {
+      ...(existing.data as TemplateRecord),
+      charts: sanitizeChartsDocument(existing.data.charts),
+    };
   }
 
   // Lazy-create with the starter shape.
@@ -74,10 +130,16 @@ export async function loadOrCreateTrainerTemplate(
       );
     }
 
-    return reread.data as TemplateRecord;
+    return {
+      ...(reread.data as TemplateRecord),
+      charts: sanitizeChartsDocument(reread.data.charts),
+    };
   }
 
-  return insert.data as TemplateRecord;
+  return {
+    ...(insert.data as TemplateRecord),
+    charts: sanitizeChartsDocument(insert.data.charts),
+  };
 }
 
 /**
@@ -107,7 +169,7 @@ export async function loadClientChartConfig(
   return data
     ? {
         id: data.id,
-        charts: data.charts as ChartsDocument,
+        charts: sanitizeChartsDocument(data.charts),
         updated_at: data.updated_at,
       }
     : null;

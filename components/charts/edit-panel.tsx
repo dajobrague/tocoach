@@ -204,8 +204,21 @@ export function ChartEditPanel({
 
     if (nextWantsMulti && !isMulti) return; // disabled — should be visually
     if (!nextWantsMulti && isMulti) return;
+
+    // Aggregation reset rules:
+    //   - ring REQUIRES range_total
+    //   - kpi tolerates any aggregation
+    //   - everything else requires a time-bucketed aggregation, so any
+    //     "range_total" carry-over from a previous chart_type must be
+    //     reset to "checkin_period". This was the bug that caused 422s
+    //     when switching ring → stacked_bar.
     const nextAggregation: Aggregation =
-      next === "ring" ? "range_total" : config.aggregation;
+      next === "ring"
+        ? "range_total"
+        : config.aggregation === "range_total" && next !== "kpi"
+          ? "checkin_period"
+          : config.aggregation;
+
     const nextColor: ColorToken | ColorToken[] = nextWantsMulti
       ? Array.isArray(config.color)
         ? config.color

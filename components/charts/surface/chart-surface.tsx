@@ -37,6 +37,7 @@ import { ChartEditPanel } from "@/components/charts/edit-panel";
 import { synthesizeDemoBuckets } from "@/components/charts/demo-data";
 import { useChartTemplate, useDataSources } from "@/lib/charts/hooks";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { buildStarterDocument } from "@/lib/charts/starter";
 
 type SurfaceMode = "trainer-template" | "trainer-client" | "client-readonly";
 
@@ -272,15 +273,38 @@ export function ChartSurface({ mode }: Props) {
             {editMode ? "Vista previa" : "Editar"}
           </Button>
           {mode === "trainer-template" ? (
-            <Button
-              color="warning"
-              size="sm"
-              startContent={<Icon icon="solar:refresh-bold" width={14} />}
-              variant="flat"
-              onPress={() => setShowApplyToAll(true)}
-            >
-              Aplicar a todos
-            </Button>
+            <>
+              <Button
+                size="sm"
+                startContent={<Icon icon="solar:restart-bold" width={14} />}
+                variant="bordered"
+                onPress={() => {
+                  if (
+                    typeof window !== "undefined" &&
+                    !window.confirm(
+                      "Esto reemplazará tu plantilla actual con las 6 gráficas por defecto. ¿Continuar?"
+                    )
+                  ) {
+                    return;
+                  }
+                  const starter = buildStarterDocument();
+
+                  setDoc(starter);
+                  void autosave.flushNow();
+                }}
+              >
+                Restaurar default
+              </Button>
+              <Button
+                color="warning"
+                size="sm"
+                startContent={<Icon icon="solar:refresh-bold" width={14} />}
+                variant="flat"
+                onPress={() => setShowApplyToAll(true)}
+              >
+                Aplicar a todos
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
