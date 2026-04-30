@@ -34,8 +34,23 @@ interface ApiErr {
   details?: unknown;
 }
 
+/**
+ * Send a 401 to /trainer/login so the user is bounced cleanly instead of
+ * sitting on a broken page while React Query retries.
+ */
+function handleUnauthorized(): void {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/trainer/login")) return;
+  window.location.replace("/trainer/login");
+}
+
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: "same-origin" });
+
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error("unauthorized (401)");
+  }
   const json = (await res.json()) as ApiOk<T> | ApiErr;
 
   if (!res.ok || !json.success) {
@@ -132,6 +147,12 @@ export function useChartTemplate() {
   return useQuery({
     queryKey: ["charts", "template"],
     queryFn: () => apiGet<TemplateData>("/api/charts/template"),
+    retry: (failureCount, err) => {
+      // Don't retry auth errors — handleUnauthorized already redirected.
+      if (err instanceof Error && err.message.includes("401")) return false;
+
+      return failureCount < 2;
+    },
   });
 }
 
@@ -177,6 +198,11 @@ export function useDataSources() {
     queryKey: ["charts", "data-sources"],
     queryFn: () => apiGet<ChartDataSource[]>("/api/charts/data-sources"),
     staleTime: 5 * 60 * 1000, // catalog rarely changes during a session
+    retry: (failureCount, err) => {
+      if (err instanceof Error && err.message.includes("401")) return false;
+
+      return failureCount < 2;
+    },
   });
 }
 

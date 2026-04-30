@@ -345,7 +345,16 @@ export function ChartSurface({ mode }: Props) {
             />
           );
         })}
-        {editMode ? <AddChartCard sources={sources} onAdd={handleAdd} /> : null}
+        {editMode ? (
+          <AddChartCard
+            isLoading={sourcesQuery.isLoading}
+            sources={sources}
+            onAdd={handleAdd}
+            {...(sourcesQuery.error
+              ? { error: sourcesQuery.error as Error }
+              : {})}
+          />
+        ) : null}
       </div>
 
       {/* Empty state when zero charts */}
@@ -382,9 +391,13 @@ export function ChartSurface({ mode }: Props) {
 
 function AddChartCard({
   sources,
+  isLoading,
+  error,
   onAdd,
 }: {
   sources: ChartDataSource[];
+  isLoading: boolean;
+  error?: Error | null;
   onAdd: (sourceId: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -427,38 +440,70 @@ function AddChartCard({
             <Icon icon="solar:close-circle-bold" width={18} />
           </button>
         </div>
-        <input
-          aria-label="Buscar métrica"
-          className="w-full text-xs px-2 py-1 rounded border border-default-200 focus:border-foreground/40 outline-none"
-          placeholder="Buscar…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <div className="overflow-y-auto max-h-[180px] -mx-1">
-          {filtered.map((s) => (
-            <button
-              key={s.id}
-              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
-              type="button"
-              onClick={() => {
-                void onAdd(s.id);
-                setOpen(false);
-                setFilter("");
-              }}
-            >
-              {s.icon ? <Icon icon={s.icon} width={14} /> : null}
-              <span className="flex-1">{s.label}</span>
-              {s.unit ? (
-                <span className="text-foreground/40 text-[10px]">{s.unit}</span>
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-foreground/40">
+            <Icon
+              className="animate-spin"
+              icon="solar:loading-bold"
+              width={20}
+            />
+            <span className="text-xs">Cargando métricas…</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-danger/80">
+            <Icon icon="solar:danger-triangle-bold" width={20} />
+            <span className="text-xs font-medium">
+              No se pudieron cargar las métricas
+            </span>
+            <span className="text-[10px] text-foreground/40">
+              {error.message}
+            </span>
+          </div>
+        ) : sources.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-foreground/40">
+            <Icon icon="solar:info-circle-bold" width={20} />
+            <span className="text-xs">
+              No hay métricas disponibles todavía.
+            </span>
+          </div>
+        ) : (
+          <>
+            <input
+              aria-label="Buscar métrica"
+              className="w-full text-xs px-2 py-1 rounded border border-default-200 focus:border-foreground/40 outline-none"
+              placeholder="Buscar…"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <div className="overflow-y-auto max-h-[180px] -mx-1">
+              {filtered.map((s) => (
+                <button
+                  key={s.id}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
+                  type="button"
+                  onClick={() => {
+                    void onAdd(s.id);
+                    setOpen(false);
+                    setFilter("");
+                  }}
+                >
+                  {s.icon ? <Icon icon={s.icon} width={14} /> : null}
+                  <span className="flex-1">{s.label}</span>
+                  {s.unit ? (
+                    <span className="text-foreground/40 text-[10px]">
+                      {s.unit}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+              {filtered.length === 0 ? (
+                <p className="text-xs text-foreground/40 text-center py-3">
+                  Ninguna coincidencia.
+                </p>
               ) : null}
-            </button>
-          ))}
-          {filtered.length === 0 ? (
-            <p className="text-xs text-foreground/40 text-center py-3">
-              Ninguna coincidencia.
-            </p>
-          ) : null}
-        </div>
+            </div>
+          </>
+        )}
       </CardBody>
     </Card>
   );
