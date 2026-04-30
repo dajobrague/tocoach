@@ -206,6 +206,12 @@ export interface ChartDataSource {
    * icons; the form-question adapter omits it.
    */
   icon?: string;
+  /**
+   * Optional fixed upper bound on the Y-axis. Set on rating-type sources
+   * (mood / energy / stress) so Recharts doesn't auto-scale to 10.5 when
+   * a data point hits 10. Renderers respect this for line / area / bar.
+   */
+  y_max?: number;
   /** 1-D vs multi-series. Drives chart-type validation. */
   dimensions: 1 | "multi";
   /**

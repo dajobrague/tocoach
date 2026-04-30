@@ -38,6 +38,8 @@ interface Props {
   orphan?: boolean;
   icon?: string;
   unit?: string;
+  /** Forwarded to the renderer; comes from adapter.metadata.y_max. */
+  yMax?: number;
   series?: ReadonlyArray<{ id: string; label: string }>;
   editable?: boolean;
   editOverlay?: React.ReactNode;
@@ -80,6 +82,7 @@ export function ChartCard({
   orphan,
   icon,
   unit,
+  yMax,
   series,
   editable,
   editOverlay,
@@ -185,6 +188,7 @@ export function ChartCard({
               buckets={buckets!}
               config={config}
               {...(series !== undefined ? { series } : {})}
+              {...(yMax !== undefined ? { yMax } : {})}
             />
           </ChartErrorBoundary>
         )}

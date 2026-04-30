@@ -364,6 +364,9 @@ export function ChartSurface({ mode }: Props) {
               {...(adapter?.metadata.unit !== undefined
                 ? { unit: adapter.metadata.unit }
                 : {})}
+              {...(adapter?.metadata.y_max !== undefined
+                ? { yMax: adapter.metadata.y_max }
+                : {})}
               orphan={!adapter}
               {...(series !== undefined ? { series } : {})}
             />

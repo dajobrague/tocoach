@@ -39,6 +39,8 @@ interface Props {
   unit?: string;
   showAverageLine?: boolean;
   targetZone?: TargetZone;
+  /** Optional fixed Y-axis ceiling (e.g. 10 for rating-style metrics). */
+  yMax?: number;
 }
 
 export function BarRenderer({
@@ -47,6 +49,7 @@ export function BarRenderer({
   unit,
   showAverageLine,
   targetZone,
+  yMax,
 }: Props) {
   const palette = resolveColor(color);
   const data = buckets.map((b) => ({
@@ -84,6 +87,9 @@ export function BarRenderer({
           axisLine={false}
           tick={{ fontSize: 10, fill: "#9ca3af" }}
           tickLine={false}
+          {...(yMax !== undefined
+            ? { domain: [0, yMax] as [number, number] }
+            : {})}
           {...(unit !== undefined ? { unit } : {})}
         />
         <Tooltip

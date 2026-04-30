@@ -225,10 +225,17 @@ INSERT INTO trainer_chart_templates (tenant_host, trainer_id, charts, auto_apply
 SELECT
     t.tenant_host,
     t.id,
+    -- Default starter (post-feedback shape):
+    --   Peso (área), Calorías (barras+avg), Proteína (barras+avg),
+    --   Hidratos (barras+avg), Grasas (barras+avg), Sueño (barras con
+    --   target 7-9h margen 1h), Entrenamiento (apiladas fuerza+cardio).
+    -- Sin MACROS ring: la suma de gramos entre macros no es magnitud
+    -- significativa (los macros tienen kcal/g distintas). Cada macro va
+    -- en su propia gráfica de barras para que el trainer y el cliente
+    -- vean la evolución diaria de cada uno por separado.
     jsonb_build_object(
         'version', 1,
         'charts', jsonb_build_array(
-            -- 0. PESO: AreaChart con gradiente, fuente checkin weight, sin avg line
             jsonb_build_object(
                 'id', gen_random_uuid(),
                 'position', 0,
@@ -238,21 +245,9 @@ SELECT
                 'color', 'weight-amber',
                 'aggregation', 'checkin_period'
             ),
-            -- 1. SUEÑO: BarChart con target zone 7-9h y margen amarillo de 1h
             jsonb_build_object(
                 'id', gen_random_uuid(),
                 'position', 1,
-                'label', 'SUEÑO',
-                'source', jsonb_build_object('kind', 'catalog', 'id', 'sleep_hours'),
-                'chart_type', 'bar',
-                'color', 'sleep-emerald',
-                'target_zone', jsonb_build_object('min', 7, 'max', 9, 'margin', 1),
-                'aggregation', 'checkin_period'
-            ),
-            -- 2. CALORÍAS: BarChart con avg line
-            jsonb_build_object(
-                'id', gen_random_uuid(),
-                'position', 2,
                 'label', 'CALORÍAS',
                 'source', jsonb_build_object('kind', 'catalog', 'id', 'calories'),
                 'chart_type', 'bar',
@@ -260,31 +255,49 @@ SELECT
                 'aggregation', 'checkin_period',
                 'show_average_line', true
             ),
-            -- 3. PROTEÍNA: AreaChart con avg line
             jsonb_build_object(
                 'id', gen_random_uuid(),
-                'position', 3,
+                'position', 2,
                 'label', 'PROTEÍNA',
                 'source', jsonb_build_object('kind', 'catalog', 'id', 'protein'),
-                'chart_type', 'area',
+                'chart_type', 'bar',
                 'color', 'protein-indigo',
                 'aggregation', 'checkin_period',
                 'show_average_line', true
             ),
-            -- 4. MACROS: ring multi-serie sobre todo el rango (range_total)
+            jsonb_build_object(
+                'id', gen_random_uuid(),
+                'position', 3,
+                'label', 'HIDRATOS',
+                'source', jsonb_build_object('kind', 'catalog', 'id', 'carbs'),
+                'chart_type', 'bar',
+                'color', 'carbs-emerald-deep',
+                'aggregation', 'checkin_period',
+                'show_average_line', true
+            ),
             jsonb_build_object(
                 'id', gen_random_uuid(),
                 'position', 4,
-                'label', 'MACROS',
-                'source', jsonb_build_object('kind', 'catalog', 'id', 'macros_breakdown'),
-                'chart_type', 'ring',
-                'color', jsonb_build_array('protein-indigo', 'carbs-emerald-deep', 'fats-amber-deep'),
-                'aggregation', 'range_total'
+                'label', 'GRASAS',
+                'source', jsonb_build_object('kind', 'catalog', 'id', 'fats'),
+                'chart_type', 'bar',
+                'color', 'fats-amber-deep',
+                'aggregation', 'checkin_period',
+                'show_average_line', true
             ),
-            -- 5. ENTRENAMIENTO: stacked_bar (fuerza + cardio)
             jsonb_build_object(
                 'id', gen_random_uuid(),
                 'position', 5,
+                'label', 'SUEÑO',
+                'source', jsonb_build_object('kind', 'catalog', 'id', 'sleep_hours'),
+                'chart_type', 'bar',
+                'color', 'sleep-emerald',
+                'target_zone', jsonb_build_object('min', 7, 'max', 9, 'margin', 1),
+                'aggregation', 'checkin_period'
+            ),
+            jsonb_build_object(
+                'id', gen_random_uuid(),
+                'position', 6,
                 'label', 'ENTRENAMIENTO',
                 'source', jsonb_build_object('kind', 'catalog', 'id', 'training_breakdown'),
                 'chart_type', 'stacked_bar',

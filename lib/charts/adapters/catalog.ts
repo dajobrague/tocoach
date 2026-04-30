@@ -62,6 +62,7 @@ interface FormResponse1DSpec {
   label: string;
   unit?: string;
   icon?: string;
+  y_max?: number;
   category: "checkin" | "habit";
   formType: FormType;
   resolve: (r: FormResponse) => number | null;
@@ -75,6 +76,7 @@ function formResponse1D(spec: FormResponse1DSpec): DataAdapter {
     label: spec.label,
     ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
     ...(spec.icon !== undefined ? { icon: spec.icon } : {}),
+    ...(spec.y_max !== undefined ? { y_max: spec.y_max } : {}),
     category: spec.category,
     dimensions: 1,
     default_chart_type: spec.default_chart_type,
@@ -176,7 +178,8 @@ const protein = formResponse1D({
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveProteinAnswer(r.answers),
-  default_chart_type: "area",
+  // Macros reset every day — bars are more honest than a continuous area.
+  default_chart_type: "bar",
   default_color: "protein-indigo",
 });
 
@@ -188,7 +191,7 @@ const carbs = formResponse1D({
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveCarbsAnswer(r.answers),
-  default_chart_type: "area",
+  default_chart_type: "bar",
   default_color: "carbs-emerald-deep",
 });
 
@@ -200,7 +203,7 @@ const fats = formResponse1D({
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveFatsAnswer(r.answers),
-  default_chart_type: "area",
+  default_chart_type: "bar",
   default_color: "fats-amber-deep",
 });
 
@@ -216,14 +219,16 @@ const water = formResponse1D({
   default_color: "water-sky",
 });
 
+// Rating-style metrics: 1-10 scale, daily reset → bar with fixed Y-axis.
 const mood = formResponse1D({
   id: "mood",
   label: "Ánimo",
   icon: "solar:smile-circle-bold",
+  y_max: 10,
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["mood", "animo", "ánimo"]),
-  default_chart_type: "line",
+  default_chart_type: "bar",
   default_color: "mood-violet",
 });
 
@@ -231,10 +236,11 @@ const energy = formResponse1D({
   id: "energy",
   label: "Energía",
   icon: "solar:bolt-bold",
+  y_max: 10,
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["energy", "energia", "energía"]),
-  default_chart_type: "line",
+  default_chart_type: "bar",
   default_color: "mood-violet",
 });
 
@@ -242,10 +248,11 @@ const stress = formResponse1D({
   id: "stress",
   label: "Estrés",
   icon: "solar:shield-warning-bold",
+  y_max: 10,
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["stress", "estres", "estrés"]),
-  default_chart_type: "line",
+  default_chart_type: "bar",
   default_color: "mood-violet",
 });
 

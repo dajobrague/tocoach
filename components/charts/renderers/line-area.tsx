@@ -42,6 +42,8 @@ interface Props {
   unit?: string;
   showAverageLine?: boolean;
   targetZone?: TargetZone;
+  /** Optional fixed Y-axis ceiling. */
+  yMax?: number;
   /** Stable id used to scope the gradient `<defs>`. */
   gradientId: string;
 }
@@ -53,6 +55,7 @@ export function LineAreaRenderer({
   unit,
   showAverageLine,
   targetZone,
+  yMax,
   gradientId,
 }: Props) {
   const palette = resolveColor(color);
@@ -104,9 +107,16 @@ export function LineAreaRenderer({
           axisLine={false}
           tick={{ fontSize: 10, fill: "#9ca3af" }}
           tickLine={false}
-          {...(numeric.length > 0
-            ? { domain: [min - domainPad, max + domainPad] as [number, number] }
-            : {})}
+          {...(yMax !== undefined
+            ? { domain: [0, yMax] as [number, number] }
+            : numeric.length > 0
+              ? {
+                  domain: [min - domainPad, max + domainPad] as [
+                    number,
+                    number,
+                  ],
+                }
+              : {})}
           {...(unit !== undefined ? { unit } : {})}
         />
         <Tooltip

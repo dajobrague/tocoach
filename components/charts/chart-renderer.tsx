@@ -29,9 +29,11 @@ interface Props {
   buckets: BucketedPoint[];
   /** Required for stacked_bar and ring; ignored for 1-D charts. */
   series?: ReadonlyArray<{ id: string; label: string }>;
+  /** Optional fixed Y-axis ceiling; comes from the resolved adapter. */
+  yMax?: number;
 }
 
-export function ChartRenderer({ config, buckets, series }: Props) {
+export function ChartRenderer({ config, buckets, series, yMax }: Props) {
   switch (config.chart_type) {
     case "line":
     case "area": {
@@ -48,6 +50,7 @@ export function ChartRenderer({ config, buckets, series }: Props) {
           {...(config.target_zone !== undefined
             ? { targetZone: config.target_zone }
             : {})}
+          {...(yMax !== undefined ? { yMax } : {})}
           variant={config.chart_type}
         />
       );
@@ -65,6 +68,7 @@ export function ChartRenderer({ config, buckets, series }: Props) {
           {...(config.target_zone !== undefined
             ? { targetZone: config.target_zone }
             : {})}
+          {...(yMax !== undefined ? { yMax } : {})}
         />
       );
     }
