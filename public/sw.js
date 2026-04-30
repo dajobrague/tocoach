@@ -1,9 +1,17 @@
 // TopCoach Service Worker
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
+//
+// IMPORTANT — bumping the cache version:
+// When a deploy needs to invalidate cached bundles for all clients, bump
+// the trailing version on BOTH constants below (e.g. v7 → v8). The activate
+// handler deletes any cache whose name doesn't match these two, so the bump
+// also frees up storage on the user's device.
+// Pair this with the no-cache headers on /sw.js in next.config.js so the
+// new sw.js bytes actually reach the browser.
 
-const CACHE_NAME = "topcoach-v6";
-const STATIC_CACHE_NAME = "topcoach-static-v6";
+const CACHE_NAME = "topcoach-v7";
+const STATIC_CACHE_NAME = "topcoach-static-v7";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -145,6 +153,19 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("sync", (event) => {
   console.log("[SW] Background sync event:", event.tag);
   // Implementation for offline data sync will be added in future phases
+});
+
+// Allow the page to ask this worker to activate immediately. Today the
+// install handler already calls `self.skipWaiting()` unconditionally, so
+// this message is a no-op in the current flow. It's here so we can later
+// switch to a toast-based update UX ("nueva versión disponible — recargar")
+// without having to redeploy the worker first: the page would call
+//   navigator.serviceWorker.controller?.postMessage({ type: "SKIP_WAITING" })
+// and the worker would activate when the user opts in.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 // Handle push notifications (future implementation)

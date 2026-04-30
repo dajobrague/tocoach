@@ -26,6 +26,9 @@ export interface ClientSession {
   tenant_slug: string; // The tenant slug they belong to
   email: string;
   full_name?: string;
+  // Set when an admin impersonates this client. Carries the admin's id for
+  // audit logging; absent on regular client logins.
+  impersonatedBy?: string;
   iat: number;
   exp: number;
 }

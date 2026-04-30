@@ -3,7 +3,7 @@ import { SignJWT } from "jose";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
-// Verify admin authentication
+// Verify admin authentication (mirror of the trainer impersonate route)
 async function verifyAdminAuth(request: NextRequest) {
   const sessionCookie = request.cookies.get("admin-session");
 
@@ -28,7 +28,6 @@ async function verifyAdminAuth(request: NextRequest) {
       return null;
     }
 
-    // Check if user is admin
     const { data: adminUser, error } = await supabase
       .from("admin_users")
       .select("id, email, role, status")
@@ -50,9 +49,10 @@ async function verifyAdminAuth(request: NextRequest) {
       return null;
     }
 
-    console.log("[AdminAuth] Admin verified successfully for impersonate", {
-      adminId: adminUser.id,
-    });
+    console.log(
+      "[AdminAuth] Admin verified successfully for client impersonate",
+      { adminId: adminUser.id }
+    );
 
     return adminUser;
   } catch (error) {
@@ -64,11 +64,10 @@ async function verifyAdminAuth(request: NextRequest) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ trainerId: string }> }
+  { params }: { params: Promise<{ trainerId: string; clientId: string }> }
 ) {
-  const { trainerId } = await params;
+  const { trainerId, clientId } = await params;
 
-  // Verify admin authentication
   const admin = await verifyAdminAuth(request);
 
   if (!admin) {
@@ -78,21 +77,7 @@ export async function POST(
   try {
     const supabase = createSupabaseClient();
 
-    // Verify trainer exists
-    const { data: trainer, error: trainerError } = await supabase
-      .from("trainers")
-      .select("id, email, full_name, status")
-      .eq("id", trainerId)
-      .single();
-
-    if (trainerError || !trainer) {
-      return NextResponse.json(
-        { error: "Entrenador no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    // Get tenant/subdomain for this trainer
+    // Resolve the trainer's tenant — needed for the slug in the redirect URL.
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
       .select("host, slug")
@@ -107,51 +92,76 @@ export async function POST(
       );
     }
 
-    // Generate impersonation token (5 minutes expiry)
+    // The URL nests clientId under trainerId, but we still enforce the
+    // ownership constraint server-side: clients.tenant holds the trainer's
+    // UUID. Without this, a typo'd URL could mint a session for a client
+    // that doesn't belong to the trainer the admin is viewing.
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id, email, name, last_name, status, tenant")
+      .eq("id", clientId)
+      .eq("tenant", trainerId)
+      .single();
+
+    if (clientError || !client) {
+      return NextResponse.json(
+        {
+          error: "Cliente no encontrado o no pertenece a este entrenador",
+        },
+        { status: 404 }
+      );
+    }
+
+    // Note: we deliberately skip status / password gating here. Impersonation
+    // is the support tool for exactly the broken accounts (no password set,
+    // status="Inactivo", etc.).
+
+    const fullName = `${client.name ?? ""} ${client.last_name ?? ""}`.trim();
+
+    // Generate impersonation token (5 minutes expiry) — same TTL as trainer
+    // impersonation. Distinct `type` so the consume endpoint can refuse
+    // trainer impersonation tokens and vice versa.
     const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
     const impersonationToken = await new SignJWT({
-      trainerId: trainer.id,
-      trainerEmail: trainer.email,
-      tenantHost: tenant.host,
+      clientId: String(client.id),
+      clientEmail: client.email,
+      clientFullName: fullName,
       tenantSlug: tenant.slug,
+      tenantHost: tenant.host,
       adminId: admin.id,
       adminEmail: admin.email,
-      type: "impersonation",
+      type: "client_impersonation",
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
-      .setExpirationTime("5m") // 5 minutes
+      .setExpirationTime("5m")
       .sign(secret);
 
-    // Log impersonation event
     console.log(
-      `[Impersonation] Admin ${admin.email} (${admin.id}) is impersonating trainer ${trainer.email} (${trainer.id})`
+      `[ClientImpersonation] Admin ${admin.email} (${admin.id}) is impersonating client ${client.email} (id=${client.id}) under tenant ${tenant.slug}`
     );
 
-    // All tenants live under the same app origin and are routed by slug
-    // (see middleware.ts). `tenant.host` is a legacy column from the
-    // pre-slug architecture and is NOT a routable domain — using it here
-    // produced broken impersonation URLs.
-    const impersonationUrl = `${request.nextUrl.origin}/${tenant.slug}/auth/impersonate?token=${impersonationToken}`;
+    const impersonationUrl = `${request.nextUrl.origin}/${tenant.slug}/auth/client-impersonate?token=${impersonationToken}`;
 
     return NextResponse.json(
       {
         success: true,
         url: impersonationUrl,
-        trainer: {
-          name: trainer.full_name,
-          email: trainer.email,
-          subdomain: tenant.host,
-          slug: tenant.slug,
+        client: {
+          id: client.id,
+          email: client.email,
+          fullName,
+          status: client.status,
+          tenantSlug: tenant.slug,
         },
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error("[Impersonation] Error:", error);
+    console.error("[ClientImpersonation] Error:", error);
 
     return NextResponse.json(
-      { error: "Error al generar enlace de impersonación" },
+      { error: "Error al generar enlace de impersonación de cliente" },
       { status: 500 }
     );
   }

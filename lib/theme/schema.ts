@@ -43,15 +43,20 @@ export const themeSchema = z.object({
   fonts: z.object({
     heading: z.object({
       family: z.string().min(1, "Heading font family is required"),
-      weight: fontWeightSchema
-        .min(500, "Heading font weight must be 500-700")
-        .max(700, "Heading font weight must be 500-700"),
+      // Accept any standard CSS weight (100-900). The previous narrow
+      // 500-700 range silently rejected valid trainer themes whose setup
+      // wizard had saved `weight: 400` (e.g. Roboto/Inter heading). Those
+      // tenants were falling back to the default TopCoach theme without
+      // anyone realizing — see [CSS Gen DB] Theme validation failed logs.
+      // 400-weight headings can look thin, but a trainer's chosen palette
+      // applied imperfectly is far better than the default brand entirely.
+      weight: fontWeightSchema,
     }),
     body: z.object({
       family: z.string().min(1, "Body font family is required"),
-      weight: fontWeightSchema
-        .min(400, "Body font weight must be 400-500")
-        .max(500, "Body font weight must be 400-500"),
+      // Same reasoning: relax to the full 100-900 standard range so we
+      // accept whatever the trainer's wizard / brand-settings page saved.
+      weight: fontWeightSchema,
     }),
   }),
 

@@ -182,7 +182,8 @@ export async function middleware(request: NextRequest) {
       pathAfterSlug === "/login" ||
       pathAfterSlug === "/forgot-password" ||
       pathAfterSlug === "/reset-password" ||
-      pathAfterSlug === "/auth/impersonate";
+      pathAfterSlug === "/auth/impersonate" ||
+      pathAfterSlug === "/auth/client-impersonate";
 
     const isProtectedRoute =
       pathAfterSlug === "/" ||

@@ -64,35 +64,35 @@ export async function createTrainerSession(
 }
 
 /**
- * Get the current trainer session from cookies
+ * Get the current trainer session from cookies.
+ *
+ * Returns `null` when the request is not authenticated as a trainer — this is
+ * EXPECTED, not an error: many endpoints (e.g. `/api/forms/responses/[clientId]`)
+ * call both `getTrainerSession()` and `getClientSession()` and accept either
+ * one. Logging every "no cookie" call as a warn/error generated thousands of
+ * false-positive entries in Railway and drowned real errors. We now log
+ * exclusively when a token IS present but fails verification — that's the
+ * only path that actually warrants attention (expired, tampered, or wrong
+ * signing key).
  */
 export async function getTrainerSession(): Promise<TrainerSession | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(TRAINER_COOKIE_NAME)?.value;
 
-    console.log("[Trainer Session] Reading session:", {
-      cookieName: TRAINER_COOKIE_NAME,
-      hasToken: !!token,
-      tokenLength: token?.length,
-      tokenPreview: token?.substring(0, 20) + "...",
-    });
-
     if (!token) {
-      console.warn("[Trainer Session] No token found in cookies");
-
+      // No cookie → caller is anonymous or authenticated via a different
+      // session type. Silent return is the contract.
       return null;
     }
 
-    console.log("[Trainer Session] Attempting JWT verification...");
     const { payload } = await jwtVerify(token, JWT_SECRET);
-
-    console.log("[Trainer Session] Session verified successfully:", {
-      trainerId: (payload as unknown as TrainerSession).trainer_id,
-    });
 
     return payload as unknown as TrainerSession;
   } catch (error) {
+    // Token was present but failed `jwtVerify` (expired, malformed, or
+    // signed by a rotated/different key). This is the only branch worth
+    // logging — keeping it at `error` so it surfaces in production.
     console.error("[Trainer Session] JWT verification failed:", {
       error: error instanceof Error ? error.message : String(error),
       errorType: error?.constructor?.name,

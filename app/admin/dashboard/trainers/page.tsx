@@ -54,12 +54,6 @@ export default function TrainersManagementPage() {
   const [impersonatingTrainerId, setImpersonatingTrainerId] = React.useState<
     string | null
   >(null);
-  const [isLocalhost, setIsLocalhost] = React.useState(true);
-
-  // Detect if running on localhost
-  React.useEffect(() => {
-    setIsLocalhost(window.location.hostname === "localhost");
-  }, []);
 
   const fetchTrainers = React.useCallback(async () => {
     setIsLoading(true);
@@ -355,19 +349,13 @@ export default function TrainersManagementPage() {
                     <TableCell>
                       <a
                         className="group inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
-                        href={
-                          isLocalhost
-                            ? `http://localhost:3000/${trainer.tenant_slug}`
-                            : `https://${trainer.tenant_host}`
-                        }
+                        href={`/${trainer.tenant_slug}`}
                         rel="noopener noreferrer"
                         target="_blank"
                         title="Ver portal del cliente"
                       >
                         <code className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded group-hover:bg-slate-200 transition-colors">
-                          {isLocalhost
-                            ? `/${trainer.tenant_slug}`
-                            : trainer.tenant_host}
+                          /{trainer.tenant_slug}
                         </code>
                         <Icon
                           className="text-slate-400 group-hover:text-slate-600 transition-colors text-sm"
@@ -418,6 +406,15 @@ export default function TrainersManagementPage() {
                           </Button>
                         </DropdownTrigger>
                         <DropdownMenu aria-label="Actions">
+                          <DropdownItem
+                            key="details"
+                            startContent={<Icon icon="solar:eye-bold" />}
+                            onPress={() => {
+                              window.location.href = `/admin/dashboard/trainers/${trainer.id}`;
+                            }}
+                          >
+                            Ver detalles y clientes
+                          </DropdownItem>
                           <DropdownItem
                             key="impersonate"
                             className="text-primary"

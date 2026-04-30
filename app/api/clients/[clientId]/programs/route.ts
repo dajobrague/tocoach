@@ -149,12 +149,22 @@ export async function GET(
       const program = programsMap.get(clientProgram.program_id);
 
       if (!program) {
-        console.warn(
-          "[Programs API] Program not found for client_program:",
-          clientProgram.id,
-          "program_id:",
-          clientProgram.program_id
-        );
+        // When filtering by category, a missing entry in `programsMap` is
+        // EXPECTED for any clientProgram whose program belongs to a
+        // different category — the SQL filter on `metadata->>category`
+        // legitimately excluded it. Logging that as a warning produced
+        // hundreds of false-positive entries per day in Railway logs and
+        // drowned real referential-integrity issues. We only warn when
+        // `category` is unset (no filter), which is the same gate that
+        // the cleanup branch above uses for the same reason.
+        if (!category) {
+          console.warn(
+            "[Programs API] Program not found for client_program:",
+            clientProgram.id,
+            "program_id:",
+            clientProgram.program_id
+          );
+        }
         continue;
       }
 

@@ -7,6 +7,53 @@ import React, {
   useReducer,
 } from "react";
 
+/**
+ * Pick a sensible heading weight from a font's available weights.
+ *
+ * Strategy: prefer the LIGHTEST available weight that's still ≥ 600
+ * (semibold). If the font doesn't support 600+, fall back to the heaviest
+ * weight present. If `weights` is empty/undefined, default to 600.
+ *
+ * Example outputs (heading):
+ *   [400, 600, 700]              → 600
+ *   [300, 400, 500, 600, 700]    → 600  // Inter
+ *   [300, 400, 500, 700]         → 700  // Roboto (no 600)
+ *   [400, 700]                   → 700  // Merriweather
+ *   [300, 400, 500]              → 500  // body-only font; pick heaviest
+ *   []                           → 600
+ */
+export function pickHeadingWeight(weights: number[] | undefined): number {
+  if (!weights || weights.length === 0) return 600;
+  const heading = weights.filter((w) => w >= 600).sort((a, b) => a - b);
+
+  if (heading.length > 0) return heading[0]!;
+
+  // No bold-enough weight available — pick the heaviest we have.
+  return Math.max(...weights);
+}
+
+/**
+ * Pick a sensible body weight: prefer the heaviest available weight that's
+ * still ≤ 500 (regular/medium). Fall back to the lightest weight if the
+ * font doesn't support ≤ 500 (rare).
+ *
+ * Example outputs (body):
+ *   [300, 400, 500, 600, 700]    → 500  // Inter
+ *   [300, 400, 700]              → 400  // Lato
+ *   [400]                        → 400
+ *   [600, 700]                   → 600  // edge case
+ *   []                           → 400
+ */
+export function pickBodyWeight(weights: number[] | undefined): number {
+  if (!weights || weights.length === 0) return 400;
+  const body = weights.filter((w) => w <= 500).sort((a, b) => b - a);
+
+  if (body.length > 0) return body[0]!;
+
+  // No regular-enough weight — pick the lightest we have.
+  return Math.min(...weights);
+}
+
 // Types for the setup wizard state
 export interface SetupWizardState {
   // Domain settings
@@ -630,14 +677,25 @@ export function SetupWizardProvider({
         },
 
         // Fonts configuration (required by DB)
+        //
+        // Pick the lightest available weight ≥ 600 for headings, and ≤ 500
+        // for body. The previous code used `weights[1]` as a positional
+        // shortcut, which broke for fonts whose weight arrays don't start
+        // with a heading-appropriate value: e.g. Roboto's `[300, 400, 500,
+        // 700]` and Inter's `[300, 400, 500, 600, 700]` both yielded
+        // `weights[1] === 400` — a body weight, not a heading weight. The
+        // saved heading.weight then failed schema validation (which used
+        // to require 500-700) and the tenant fell back to the default
+        // TopCoach theme without anyone noticing. The `pickWeight` helpers
+        // below pick semantically correct defaults for ANY weights array.
         fonts: {
           heading: {
             family: `${state.fonts.heading.family}, system-ui, sans-serif`,
-            weight: state.fonts.heading.weights[1] || 600, // Default to semibold
+            weight: pickHeadingWeight(state.fonts.heading.weights),
           },
           body: {
             family: `${state.fonts.body.family}, system-ui, sans-serif`,
-            weight: state.fonts.body.weights[1] || 400, // Default to regular
+            weight: pickBodyWeight(state.fonts.body.weights),
           },
         },
 

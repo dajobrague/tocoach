@@ -32,6 +32,30 @@ const nextConfig = {
   // Security headers
   async headers() {
     return [
+      // Service worker must NEVER be cached at the HTTP layer. If a CDN or
+      // browser caches `/sw.js`, `registration.update()` compares against
+      // a stale copy and never detects new deploys — clients get pinned to
+      // an old service worker (and therefore old bundle cache) for up to
+      // 24h, the SW spec's hard cap. Forcing no-store here, combined with
+      // `updateViaCache: "none"` on the register() call, guarantees that
+      // every update() check hits origin and sees fresh bytes.
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+          {
+            key: "Service-Worker-Allowed",
+            value: "/",
+          },
+        ],
+      },
       {
         source: "/:path*",
         headers: [
