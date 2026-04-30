@@ -184,7 +184,7 @@ const carbs = formResponse1D({
   id: "carbs",
   label: "Carbohidratos",
   unit: "g",
-  icon: "solar:bread-bold",
+  icon: "solar:dish-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveCarbsAnswer(r.answers),

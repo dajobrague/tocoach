@@ -137,6 +137,24 @@ export function ChartSurface({ mode }: Props) {
     return doc.charts.find((c) => c.id === editingId) ?? null;
   }, [doc, editingId]);
 
+  // Compute demo data + adapter metadata once per (doc, sources) change.
+  // Without this, every keystroke / hover re-runs the synthesizer for every
+  // chart, which is the cause of the "page takes forever" feel.
+  const renderData = useMemo(() => {
+    if (!doc) return [];
+
+    return doc.charts.map((chart) => {
+      const adapter = resolveAdapter(chart.source);
+      const buckets = synthesizeDemoBuckets(chart, adapter?.metadata);
+      const series = adapter?.metadata.series?.map((s) => ({
+        id: s.id,
+        label: s.label,
+      }));
+
+      return { chart, adapter, buckets, series };
+    });
+  }, [doc]);
+
   const handleChartChange = (next: ChartConfig): void => {
     if (!doc) return;
     const idx = doc.charts.findIndex((c) => c.id === next.id);
@@ -215,33 +233,30 @@ export function ChartSurface({ mode }: Props) {
 
   return (
     <div>
-      {/* Header */}
+      {/* Header (toolbar — page chrome owns the H1) */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h2 className="text-lg font-semibold">Plantilla de gráficas</h2>
-          <p className="text-xs text-foreground/50">
-            Las gráficas que verán todos tus clientes por defecto.{" "}
-            <span
-              className={
-                autosave.state === "saving"
-                  ? "text-foreground/70"
-                  : autosave.state === "saved"
-                    ? "text-emerald-600"
-                    : autosave.state === "error"
-                      ? "text-danger"
-                      : "text-foreground/40"
-              }
-            >
-              {autosave.state === "saving"
-                ? "Guardando…"
+        <p className="text-xs text-foreground/50">
+          Las gráficas que verán todos tus clientes por defecto.{" "}
+          <span
+            className={
+              autosave.state === "saving"
+                ? "text-foreground/70"
                 : autosave.state === "saved"
-                  ? "Cambios guardados"
+                  ? "text-emerald-600"
                   : autosave.state === "error"
-                    ? "Error al guardar"
-                    : "Cambios automáticos activados"}
-            </span>
-          </p>
-        </div>
+                    ? "text-danger"
+                    : "text-foreground/40"
+            }
+          >
+            {autosave.state === "saving"
+              ? "Guardando…"
+              : autosave.state === "saved"
+                ? "Cambios guardados"
+                : autosave.state === "error"
+                  ? "Error al guardar"
+                  : "Cambios automáticos activados"}
+          </span>
+        </p>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -272,48 +287,42 @@ export function ChartSurface({ mode }: Props) {
 
       {/* Grid */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-        {doc.charts.map((chart, idx) => {
-          const adapter = resolveAdapter(chart.source);
-          const buckets = synthesizeDemoBuckets(chart, adapter?.metadata);
-          const series = adapter?.metadata.series?.map((s) => ({
-            id: s.id,
-            label: s.label,
-          }));
+        {renderData.map(({ chart, adapter, buckets, series }, idx) => {
           const overlay = editMode ? (
             <>
               <button
                 aria-label="Subir"
-                className="w-7 h-7 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
+                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
                 disabled={idx === 0}
                 type="button"
                 onClick={() => void handleMove(chart.id, -1)}
               >
-                <Icon icon="solar:alt-arrow-up-bold" width={12} />
+                <Icon icon="solar:alt-arrow-up-bold" width={10} />
               </button>
               <button
                 aria-label="Bajar"
-                className="w-7 h-7 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
+                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
                 disabled={idx === doc.charts.length - 1}
                 type="button"
                 onClick={() => void handleMove(chart.id, 1)}
               >
-                <Icon icon="solar:alt-arrow-down-bold" width={12} />
+                <Icon icon="solar:alt-arrow-down-bold" width={10} />
               </button>
               <button
                 aria-label="Editar"
-                className="w-7 h-7 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center"
+                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center"
                 type="button"
                 onClick={() => setEditingId(chart.id)}
               >
-                <Icon icon="solar:pen-bold" width={12} />
+                <Icon icon="solar:pen-bold" width={10} />
               </button>
               <button
                 aria-label="Eliminar"
-                className="w-7 h-7 rounded-full bg-danger/10 hover:bg-danger/20 flex items-center justify-center text-danger"
+                className="w-6 h-6 rounded-full bg-default-100 hover:bg-danger/10 hover:text-danger flex items-center justify-center text-foreground/60"
                 type="button"
                 onClick={() => void handleDelete(chart.id)}
               >
-                <Icon icon="solar:trash-bin-trash-bold" width={12} />
+                <Icon icon="solar:trash-bin-trash-bold" width={10} />
               </button>
             </>
           ) : null;
@@ -389,9 +398,12 @@ function AddChartCard({
   );
 
   if (!open) {
+    // NOTE: avoid any class name containing "primary" — the trainer-app theme
+    // has `.trainer-app [class*="primary"]` with !important that forces a
+    // black bg + white text. We use foreground/* hover states instead.
     return (
       <button
-        className="rounded-xl border-2 border-dashed border-default-200 hover:border-primary/40 hover:bg-primary/5 p-6 flex flex-col items-center justify-center gap-2 text-foreground/50 hover:text-foreground/70 transition-colors min-h-[200px]"
+        className="rounded-xl border-2 border-dashed border-default-300 bg-default-50 hover:border-foreground/30 hover:bg-default-100 p-6 flex flex-col items-center justify-center gap-2 text-foreground/50 hover:text-foreground/70 transition-colors min-h-[200px] cursor-pointer"
         type="button"
         onClick={() => setOpen(true)}
       >
@@ -417,7 +429,7 @@ function AddChartCard({
         </div>
         <input
           aria-label="Buscar métrica"
-          className="w-full text-xs px-2 py-1 rounded border border-default-200 focus:border-primary outline-none"
+          className="w-full text-xs px-2 py-1 rounded border border-default-200 focus:border-foreground/40 outline-none"
           placeholder="Buscar…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}

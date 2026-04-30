@@ -91,13 +91,13 @@ export function avgNonNull(buckets: BucketedPoint[]): number | null {
 export function iconForChartType(chartType: ChartType): string {
   switch (chartType) {
     case "line":
-      return "solar:graph-up-bold";
+      return "solar:chart-bold";
     case "area":
       return "solar:chart-bold";
     case "bar":
       return "solar:chart-square-bold";
     case "stacked_bar":
-      return "solar:bar-chair-bold";
+      return "solar:chart-square-bold";
     case "ring":
       return "solar:chart-2-bold";
     case "kpi":

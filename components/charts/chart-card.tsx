@@ -65,7 +65,7 @@ function CardEmpty({ message }: { message: string }) {
 function CardOrphan() {
   return (
     <div className="flex flex-col items-center justify-center h-40 gap-2 text-foreground/40">
-      <Icon icon="solar:link-broken-bold" width={28} />
+      <Icon icon="solar:close-circle-bold" width={28} />
       <p className="text-xs font-medium">Esta pregunta ya no existe</p>
       <p className="text-[10px] text-foreground/30">
         Edita la gráfica para elegir otra fuente
@@ -132,28 +132,30 @@ export function ChartCard({
 
   return (
     <Card className="relative" radius="lg" shadow="sm">
-      {editable && editOverlay ? (
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-          {editOverlay}
-        </div>
-      ) : null}
       <CardBody>
-        {/* Header: label + current value + icon. KPI hides the value here
-            because the body itself IS the big number. */}
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-            {config.label}
-          </p>
-          <div
-            className="p-1.5 rounded-full"
-            style={{ backgroundColor: palette.soft }}
-          >
-            <Icon
-              icon={resolvedIcon}
-              style={{ color: palette.stroke }}
-              width={16}
-            />
+        {/* Header: icon (left) + label + current value below. Edit overlay
+            sits to the right of the label, separate from the metric icon. */}
+        <div className="flex items-center justify-between mb-1 gap-2 min-h-[28px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="p-1.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: palette.soft }}
+            >
+              <Icon
+                icon={resolvedIcon}
+                style={{ color: palette.stroke }}
+                width={16}
+              />
+            </div>
+            <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate">
+              {config.label}
+            </p>
           </div>
+          {editable && editOverlay ? (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {editOverlay}
+            </div>
+          ) : null}
         </div>
         {config.chart_type !== "kpi" ? (
           <p className="text-4xl font-bold mb-3 text-foreground tabular-nums">

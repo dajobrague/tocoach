@@ -8,6 +8,8 @@
 
 "use client";
 
+import { Button } from "@heroui/react";
+import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -51,17 +53,39 @@ export default function ChartsTemplatePage() {
 
   if (!ready) {
     return (
-      <div className="trainer-app min-h-screen flex items-center justify-center">
+      <div className="trainer-app min-h-screen flex items-center justify-center bg-background">
         <p className="text-sm text-foreground/40">Cargando…</p>
       </div>
     );
   }
 
   return (
-    <div className="trainer-app min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="trainer-app min-h-screen bg-background">
+      {/* Top bar — keeps the page anchored to the dashboard chrome
+          (without dragging the whole sidebar/SPA in). */}
+      <header className="border-b border-default-200 bg-content1">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-3">
+          <Button
+            isIconOnly
+            aria-label="Volver al dashboard"
+            size="sm"
+            variant="light"
+            onPress={() => router.push("/trainer/dashboard")}
+          >
+            <Icon icon="solar:alt-arrow-left-bold" width={18} />
+          </Button>
+          <div className="flex-1">
+            <p className="text-[11px] text-foreground/40 uppercase tracking-wider">
+              Trainer · Configuración
+            </p>
+            <h1 className="text-base font-semibold">Plantilla de gráficas</h1>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-6 py-6">
         <ChartSurface mode="trainer-template" />
-      </div>
+      </main>
     </div>
   );
 }

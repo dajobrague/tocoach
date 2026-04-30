@@ -50,13 +50,13 @@ const CHART_TYPES: {
   icon: string;
   multi: boolean;
 }[] = [
-  { id: "line", label: "Línea", icon: "solar:graph-up-bold", multi: false },
+  { id: "line", label: "Línea", icon: "solar:chart-bold", multi: false },
   { id: "area", label: "Área", icon: "solar:chart-bold", multi: false },
   { id: "bar", label: "Barras", icon: "solar:chart-square-bold", multi: false },
   {
     id: "stacked_bar",
     label: "Apiladas",
-    icon: "solar:bar-chair-bold",
+    icon: "solar:chart-square-bold",
     multi: true,
   },
   { id: "ring", label: "Anillo", icon: "solar:chart-2-bold", multi: true },
@@ -324,7 +324,7 @@ export function ChartEditPanel({
                     aria-pressed={active}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
                       active
-                        ? "bg-primary/10 border-primary/30 text-foreground"
+                        ? "bg-default-200 border-foreground/30 text-foreground"
                         : compatible
                           ? "bg-default-50 border-default-200 hover:bg-default-100"
                           : "opacity-30 cursor-not-allowed border-default-100"
