@@ -77,3 +77,6 @@ temp/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Superpowers brainstorm artifacts
+.superpowers/
