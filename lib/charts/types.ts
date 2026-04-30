@@ -199,6 +199,13 @@ export interface ChartDataSource {
   unit?: string;
   /** Grouping for the data-source picker. */
   category: "checkin" | "habit" | "exercise" | "neat";
+  /**
+   * Optional iconify id (e.g. "solar:body-bold") used by the chart card
+   * header. When absent, the renderer derives a generic icon from
+   * chart_type. Catalog adapters set this to preserve today's per-metric
+   * icons; the form-question adapter omits it.
+   */
+  icon?: string;
   /** 1-D vs multi-series. Drives chart-type validation. */
   dimensions: 1 | "multi";
   /**

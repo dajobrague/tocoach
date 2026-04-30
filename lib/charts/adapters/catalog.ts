@@ -61,6 +61,7 @@ interface FormResponse1DSpec {
   id: CatalogId;
   label: string;
   unit?: string;
+  icon?: string;
   category: "checkin" | "habit";
   formType: FormType;
   resolve: (r: FormResponse) => number | null;
@@ -73,6 +74,7 @@ function formResponse1D(spec: FormResponse1DSpec): DataAdapter {
     id: spec.id,
     label: spec.label,
     ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
+    ...(spec.icon !== undefined ? { icon: spec.icon } : {}),
     category: spec.category,
     dimensions: 1,
     default_chart_type: spec.default_chart_type,
@@ -106,6 +108,7 @@ const weight = formResponse1D({
   id: "weight",
   label: "Peso",
   unit: "kg",
+  icon: "solar:body-bold",
   category: "checkin",
   formType: "checkins",
   resolve: resolveByKey(["weight", "peso", "weight_kg", "peso_kg"]),
@@ -117,6 +120,7 @@ const bodyFat = formResponse1D({
   id: "body_fat",
   label: "Grasa corporal",
   unit: "%",
+  icon: "solar:scale-bold",
   category: "checkin",
   formType: "checkins",
   resolve: resolveByKey([
@@ -133,6 +137,7 @@ const sleepHours = formResponse1D({
   id: "sleep_hours",
   label: "Sueño",
   unit: "h",
+  icon: "solar:moon-sleep-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveSleepHoursAnswer(r.answers),
@@ -143,6 +148,7 @@ const sleepHours = formResponse1D({
 const steps = formResponse1D({
   id: "steps",
   label: "Pasos",
+  icon: "solar:walking-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveStepsAnswer(r.answers),
@@ -154,6 +160,7 @@ const calories = formResponse1D({
   id: "calories",
   label: "Calorías",
   unit: "kcal",
+  icon: "solar:fire-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveCaloriesAnswer(r.answers),
@@ -165,6 +172,7 @@ const protein = formResponse1D({
   id: "protein",
   label: "Proteína",
   unit: "g",
+  icon: "solar:health-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveProteinAnswer(r.answers),
@@ -176,6 +184,7 @@ const carbs = formResponse1D({
   id: "carbs",
   label: "Carbohidratos",
   unit: "g",
+  icon: "solar:bread-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveCarbsAnswer(r.answers),
@@ -187,6 +196,7 @@ const fats = formResponse1D({
   id: "fats",
   label: "Grasas",
   unit: "g",
+  icon: "solar:bottle-bold",
   category: "habit",
   formType: "habits",
   resolve: (r) => resolveFatsAnswer(r.answers),
@@ -198,6 +208,7 @@ const water = formResponse1D({
   id: "water",
   label: "Agua",
   unit: "L",
+  icon: "solar:waterdrop-bold",
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["water", "agua", "water_liters", "litros_agua"]),
@@ -208,6 +219,7 @@ const water = formResponse1D({
 const mood = formResponse1D({
   id: "mood",
   label: "Ánimo",
+  icon: "solar:smile-circle-bold",
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["mood", "animo", "ánimo"]),
@@ -218,6 +230,7 @@ const mood = formResponse1D({
 const energy = formResponse1D({
   id: "energy",
   label: "Energía",
+  icon: "solar:bolt-bold",
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["energy", "energia", "energía"]),
@@ -228,6 +241,7 @@ const energy = formResponse1D({
 const stress = formResponse1D({
   id: "stress",
   label: "Estrés",
+  icon: "solar:shield-warning-bold",
   category: "habit",
   formType: "habits",
   resolve: resolveByKey(["stress", "estres", "estrés"]),
@@ -260,6 +274,7 @@ const macrosBreakdown: DataAdapter = {
   metadata: {
     id: "macros_breakdown",
     label: "Macros",
+    icon: "solar:chart-2-bold",
     category: "habit",
     dimensions: "multi",
     series: MACROS_SERIES,
@@ -341,6 +356,7 @@ const trainingBreakdown: DataAdapter = {
   metadata: {
     id: "training_breakdown",
     label: "Entrenamiento",
+    icon: "solar:dumbbell-bold",
     category: "exercise",
     dimensions: "multi",
     series: TRAINING_SERIES,
