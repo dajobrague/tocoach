@@ -21,13 +21,21 @@
  */
 
 import type { FormType } from "./types";
-import type { CatalogId, ChartConfig, DataSourceRef } from "./types";
+import type { CatalogId, DataSourceRef } from "./types";
 import type { DataAdapter } from "./adapters/types";
+import type { ChartConfigInput } from "./validation";
 
 import { z } from "zod";
 
 import { CATALOG_BY_ID, CATALOG_ADAPTERS } from "./adapters/catalog";
 import { buildFormQuestionAdapter } from "./adapters/form-question";
+
+/**
+ * Registry-validation accepts the zod-inferred shape (ChartConfigInput)
+ * so the API routes can chain `parsed.data.charts → validateDocument…`
+ * without an extra cast under exactOptionalPropertyTypes.
+ */
+type ChartLike = ChartConfigInput;
 
 // ─── Resolve ──────────────────────────────────────────────────────────────
 
@@ -141,7 +149,7 @@ export function listAvailableSources(
  * the caller can format the error consistently with the structural pass.
  */
 export function validateChartConfigWithRegistry(
-  cfg: ChartConfig,
+  cfg: ChartLike,
   index = 0
 ): { valid: true } | { valid: false; issues: z.core.$ZodIssue[] } {
   const issues: z.core.$ZodIssue[] = [];
@@ -207,7 +215,7 @@ export function validateChartConfigWithRegistry(
  * issues from each chart's pass.
  */
 export function validateDocumentWithRegistry(
-  charts: ReadonlyArray<ChartConfig>
+  charts: ReadonlyArray<ChartLike>
 ): { valid: true } | { valid: false; issues: z.core.$ZodIssue[] } {
   const all: z.core.$ZodIssue[] = [];
 
