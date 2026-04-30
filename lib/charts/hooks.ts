@@ -254,6 +254,49 @@ export function useResetClientCharts(clientId: number | string) {
       qc.invalidateQueries({
         queryKey: ["charts", "client", String(clientId)],
       });
+      qc.invalidateQueries({
+        queryKey: ["charts", "snapshot", String(clientId)],
+      });
+    },
+  });
+}
+
+// ─── Hooks: snapshot (config + bucketed data) ─────────────────────────────
+
+export interface SnapshotData {
+  source: "override" | "template";
+  effective_charts: ChartsDocument;
+  schedule: unknown;
+  range: { from: string; to: string };
+  /** Bucketed values keyed by ChartConfig.id. */
+  buckets: Record<
+    string,
+    {
+      buckets: Array<{
+        label: string;
+        value: number | null | Record<string, number | null>;
+        periodTooltip?: string;
+      }>;
+      aggregationFallback: boolean;
+    }
+  >;
+}
+
+export function useClientSnapshot(
+  clientId: number | string,
+  range: "7d" | "30d" | "90d" = "30d"
+) {
+  return useQuery({
+    queryKey: ["charts", "snapshot", String(clientId), range],
+    queryFn: () =>
+      apiGet<SnapshotData>(
+        `/api/charts/clients/${clientId}/snapshot?range=${range}`
+      ),
+    enabled: clientId !== "" && clientId !== 0,
+    retry: (failureCount, err) => {
+      if (err instanceof Error && err.message.includes("401")) return false;
+
+      return failureCount < 2;
     },
   });
 }

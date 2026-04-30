@@ -1,25 +1,29 @@
 /**
  * <ChartSurface>
  *
- * Top-level component used by all three chart UIs (trainer template,
- * per-client editor, client read-only). Differentiated by `mode`:
+ * Top-level component used by all three chart UIs. Differentiated by `mode`:
  *
  *   - "trainer-template" — edits the trainer's chart template
  *     (autosaves to /api/charts/template). Uses synthesized demo data.
- *   - "trainer-client"   — edits a per-client override (Phase 6).
- *   - "client-readonly"  — renders charts only, no edit affordances (Phase 7).
+ *   - "trainer-client"   — edits a per-client override (autosaves to
+ *     /api/charts/clients/[clientId]). Uses real client data via the
+ *     snapshot endpoint. First save creates an override row.
+ *   - "client-readonly"  — renders charts only, no edit affordances.
+ *     Uses real client data via the snapshot endpoint. (Wired in Phase 7.)
  *
  * Owns:
  *   - the editable in-memory document
  *   - the autosave loop (ETag + debounce)
  *   - add / reorder / delete (these flush immediately)
  *   - the edit panel state (which chart is being edited)
- *   - the apply-to-all dialog
+ *   - the apply-to-all dialog (template mode only)
+ *   - the reset-to-template confirmation (per-client mode only)
  */
 
 "use client";
 
 import type {
+  BucketedPoint,
   ChartConfig,
   ChartDataSource,
   ChartsDocument,
@@ -30,12 +34,20 @@ import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ApplyToAllConfirm } from "./apply-to-all-confirm";
-import { useAutosave } from "./use-autosave";
+import { useAutosave, type AutosaveSaveFn } from "./use-autosave";
 
 import { ChartCard } from "@/components/charts/chart-card";
 import { ChartEditPanel } from "@/components/charts/edit-panel";
 import { synthesizeDemoBuckets } from "@/components/charts/demo-data";
-import { useChartTemplate, useDataSources } from "@/lib/charts/hooks";
+import {
+  useChartTemplate,
+  useClientCharts,
+  useClientSnapshot,
+  useDataSources,
+  useResetClientCharts,
+  useUpdateChartTemplate,
+  useUpdateClientCharts,
+} from "@/lib/charts/hooks";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { buildStarterDocument } from "@/lib/charts/starter";
 
@@ -43,6 +55,8 @@ type SurfaceMode = "trainer-template" | "trainer-client" | "client-readonly";
 
 interface Props {
   mode: SurfaceMode;
+  /** Required for trainer-client and client-readonly. Ignored otherwise. */
+  clientId?: number | string;
 }
 
 function newChartId(): string {
@@ -83,40 +97,106 @@ function buildAddChartConfig(
   };
 }
 
-export function ChartSurface({ mode }: Props) {
+export function ChartSurface({ mode, clientId }: Props) {
+  // ─── Data hooks (call all of them; they no-op when not needed) ─────────
   const tplQuery = useChartTemplate();
+  const clientQuery = useClientCharts(clientId ?? "");
   const sourcesQuery = useDataSources();
+  // Real client data via snapshot — only relevant for trainer-client /
+  // client-readonly. Disabled when no clientId.
+  const snapshotQuery = useClientSnapshot(clientId ?? "");
 
-  // Local editable doc — mirrors the server's, but we apply optimistic
-  // edits here and let useAutosave ship them.
+  // Mutation hooks — same caveat: call unconditionally, pick the right one.
+  const tplMut = useUpdateChartTemplate();
+  const clientMut = useUpdateClientCharts(clientId ?? "");
+  const resetMut = useResetClientCharts(clientId ?? "");
+
+  // Local editable doc state.
   const [doc, setDoc] = useState<ChartsDocument | null>(null);
   const [etag, setEtag] = useState<string>("");
   const [autoApply, setAutoApply] = useState<boolean>(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showApplyToAll, setShowApplyToAll] = useState(false);
-  const [editMode, setEditMode] = useState(true);
+  const [editMode, setEditMode] = useState(mode === "trainer-template");
+
+  // Pick the active query based on mode for initial load.
+  const activeQuery = mode === "trainer-template" ? tplQuery : clientQuery;
+  const sourceFlag =
+    mode === "trainer-client" && clientQuery.data
+      ? clientQuery.data.source
+      : null;
 
   // Initial sync from query → local state.
   useEffect(() => {
-    if (tplQuery.data && doc === null) {
+    if (mode === "trainer-template" && tplQuery.data && doc === null) {
       setDoc(tplQuery.data.charts);
       setEtag(tplQuery.data.updated_at);
       setAutoApply(tplQuery.data.auto_apply_to_new_clients);
+    } else if (
+      mode !== "trainer-template" &&
+      clientQuery.data &&
+      doc === null
+    ) {
+      setDoc(clientQuery.data.charts);
+      setEtag(clientQuery.data.updated_at);
     }
-  }, [tplQuery.data]);
+  }, [tplQuery.data, clientQuery.data, mode]);
+
+  // Build the saver function for autosave. Disabled in client-readonly.
+  const save: AutosaveSaveFn = useMemo(
+    () => async (vars) => {
+      if (mode === "trainer-template") {
+        const r = await tplMut.mutateAsync(vars);
+
+        if (r.etagConflict) return { etagConflict: r.etagConflict };
+
+        return {
+          data: {
+            charts: r.data.charts,
+            updated_at: r.data.updated_at,
+          },
+        };
+      }
+      if (mode === "trainer-client") {
+        // Per-client mutate doesn't accept auto_apply_to_new_clients.
+        const { auto_apply_to_new_clients: _drop, ...rest } = vars;
+
+        void _drop;
+        const r = await clientMut.mutateAsync(rest);
+
+        if (r.etagConflict) return { etagConflict: r.etagConflict };
+
+        return {
+          data: {
+            charts: r.data.charts,
+            updated_at: r.data.updated_at,
+          },
+        };
+      }
+
+      // client-readonly never saves.
+      return {};
+    },
+    [mode, tplMut, clientMut]
+  );
 
   const autosave = useAutosave({
     doc: doc ?? { version: 1, charts: [] },
     etag,
-    paused: doc === null || mode !== "trainer-template",
-    autoApplyToNewClients: autoApply,
+    paused: doc === null || mode === "client-readonly",
+    save,
+    ...(mode === "trainer-template"
+      ? { autoApplyToNewClients: autoApply }
+      : {}),
     onSaved: setEtag,
     onConflict: () => {
-      // Refetch and replace local doc; in-flight edits are lost. The spec
-      // outlines a richer "merge" UX that will land later.
-      void tplQuery.refetch().then((res) => {
+      void activeQuery.refetch().then((res) => {
         if (res.data) {
-          setDoc(res.data.charts);
+          setDoc(
+            "charts" in res.data
+              ? res.data.charts
+              : (res.data as ChartsDocument)
+          );
           setEtag(res.data.updated_at);
         }
       });
@@ -138,15 +218,26 @@ export function ChartSurface({ mode }: Props) {
     return doc.charts.find((c) => c.id === editingId) ?? null;
   }, [doc, editingId]);
 
-  // Compute demo data + adapter metadata once per (doc, sources) change.
-  // Without this, every keystroke / hover re-runs the synthesizer for every
-  // chart, which is the cause of the "page takes forever" feel.
+  // Compute renderable buckets per chart. In trainer-template, synthesize.
+  // In trainer-client / client-readonly, prefer real snapshot data; fall
+  // back to demo for charts not in the snapshot (e.g. a freshly-added one).
   const renderData = useMemo(() => {
     if (!doc) return [];
+    const snapshotBuckets = snapshotQuery.data?.buckets;
 
     return doc.charts.map((chart) => {
       const adapter = resolveAdapter(chart.source);
-      const buckets = synthesizeDemoBuckets(chart, adapter?.metadata);
+      let buckets: BucketedPoint[];
+
+      if (
+        mode !== "trainer-template" &&
+        snapshotBuckets &&
+        snapshotBuckets[chart.id]
+      ) {
+        buckets = snapshotBuckets[chart.id]!.buckets as BucketedPoint[];
+      } else {
+        buckets = synthesizeDemoBuckets(chart, adapter?.metadata);
+      }
       const series = adapter?.metadata.series?.map((s) => ({
         id: s.id,
         label: s.label,
@@ -154,7 +245,9 @@ export function ChartSurface({ mode }: Props) {
 
       return { chart, adapter, buckets, series };
     });
-  }, [doc]);
+  }, [doc, snapshotQuery.data, mode]);
+
+  // ─── Editing handlers ──────────────────────────────────────────────────
 
   const handleChartChange = (next: ChartConfig): void => {
     if (!doc) return;
@@ -213,8 +306,36 @@ export function ChartSurface({ mode }: Props) {
     await autosave.flushNow();
   };
 
+  const handleResetToTemplate = async (): Promise<void> => {
+    if (mode !== "trainer-client") return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Esto eliminará la personalización de este cliente y volverá a aplicar la plantilla del trainer. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    try {
+      await resetMut.mutateAsync();
+      // Refetch client config to pick up the (now templated) doc.
+      const res = await clientQuery.refetch();
+
+      if (res.data) {
+        setDoc(res.data.charts);
+        setEtag(res.data.updated_at);
+      }
+    } catch (err) {
+      console.error("[charts] reset to template failed:", err);
+    }
+  };
+
   const isLoading =
-    tplQuery.isLoading || sourcesQuery.isLoading || doc === null;
+    sourcesQuery.isLoading ||
+    (mode === "trainer-template"
+      ? tplQuery.isLoading
+      : clientQuery.isLoading) ||
+    doc === null;
 
   if (isLoading) {
     return (
@@ -232,124 +353,185 @@ export function ChartSurface({ mode }: Props) {
     );
   }
 
+  // Banner: per-client mode, when source is "template" (no override yet).
+  // Tells the trainer "any edit will create a customization for this client."
+  const showInheritanceBanner =
+    mode === "trainer-client" && sourceFlag === "template";
+  const showOverrideBanner =
+    mode === "trainer-client" && sourceFlag === "override";
+
+  const isReadOnly = mode === "client-readonly";
+
   return (
     <div>
-      {/* Header (toolbar — page chrome owns the H1) */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <p className="text-xs text-foreground/50">
-          Las gráficas que verán todos tus clientes por defecto.{" "}
-          <span
-            className={
-              autosave.state === "saving"
-                ? "text-foreground/70"
-                : autosave.state === "saved"
-                  ? "text-emerald-600"
-                  : autosave.state === "error"
-                    ? "text-danger"
-                    : "text-foreground/40"
-            }
-          >
-            {autosave.state === "saving"
-              ? "Guardando…"
-              : autosave.state === "saved"
-                ? "Cambios guardados"
-                : autosave.state === "error"
-                  ? "Error al guardar"
-                  : "Cambios automáticos activados"}
-          </span>
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            startContent={
-              <Icon
-                icon={editMode ? "solar:eye-bold" : "solar:pen-bold"}
-                width={14}
-              />
-            }
-            variant="bordered"
-            onPress={() => setEditMode((v) => !v)}
-          >
-            {editMode ? "Vista previa" : "Editar"}
-          </Button>
-          {mode === "trainer-template" ? (
+          {mode === "trainer-template"
+            ? "Las gráficas que verán todos tus clientes por defecto."
+            : mode === "trainer-client"
+              ? "Personalización de gráficas para este cliente."
+              : "Tus gráficas."}
+          {!isReadOnly ? (
             <>
+              {" "}
+              <span
+                className={
+                  autosave.state === "saving"
+                    ? "text-foreground/70"
+                    : autosave.state === "saved"
+                      ? "text-emerald-600"
+                      : autosave.state === "error"
+                        ? "text-danger"
+                        : "text-foreground/40"
+                }
+              >
+                {autosave.state === "saving"
+                  ? "Guardando…"
+                  : autosave.state === "saved"
+                    ? "Cambios guardados"
+                    : autosave.state === "error"
+                      ? "Error al guardar"
+                      : "Cambios automáticos activados"}
+              </span>
+            </>
+          ) : null}
+        </p>
+        {!isReadOnly ? (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              startContent={
+                <Icon
+                  icon={editMode ? "solar:eye-bold" : "solar:pen-bold"}
+                  width={14}
+                />
+              }
+              variant="bordered"
+              onPress={() => setEditMode((v) => !v)}
+            >
+              {editMode ? "Vista previa" : "Editar"}
+            </Button>
+            {mode === "trainer-template" ? (
+              <>
+                <Button
+                  size="sm"
+                  startContent={<Icon icon="solar:restart-bold" width={14} />}
+                  variant="bordered"
+                  onPress={() => {
+                    if (
+                      typeof window !== "undefined" &&
+                      !window.confirm(
+                        "Esto reemplazará tu plantilla actual con las gráficas por defecto. ¿Continuar?"
+                      )
+                    ) {
+                      return;
+                    }
+                    const starter = buildStarterDocument();
+
+                    setDoc(starter);
+                    void autosave.flushNow();
+                  }}
+                >
+                  Restaurar default
+                </Button>
+                <Button
+                  color="warning"
+                  size="sm"
+                  startContent={<Icon icon="solar:refresh-bold" width={14} />}
+                  variant="flat"
+                  onPress={() => setShowApplyToAll(true)}
+                >
+                  Aplicar a todos
+                </Button>
+              </>
+            ) : null}
+            {mode === "trainer-client" && sourceFlag === "override" ? (
               <Button
                 size="sm"
                 startContent={<Icon icon="solar:restart-bold" width={14} />}
                 variant="bordered"
-                onPress={() => {
-                  if (
-                    typeof window !== "undefined" &&
-                    !window.confirm(
-                      "Esto reemplazará tu plantilla actual con las 6 gráficas por defecto. ¿Continuar?"
-                    )
-                  ) {
-                    return;
-                  }
-                  const starter = buildStarterDocument();
-
-                  setDoc(starter);
-                  void autosave.flushNow();
-                }}
+                onPress={() => void handleResetToTemplate()}
               >
-                Restaurar default
+                Restablecer a plantilla
               </Button>
-              <Button
-                color="warning"
-                size="sm"
-                startContent={<Icon icon="solar:refresh-bold" width={14} />}
-                variant="flat"
-                onPress={() => setShowApplyToAll(true)}
-              >
-                Aplicar a todos
-              </Button>
-            </>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      {/* Inheritance banner (per-client mode) */}
+      {showInheritanceBanner && editMode ? (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-default-50 border border-default-200 text-xs text-foreground/70 flex items-start gap-2">
+          <Icon
+            className="mt-0.5 flex-shrink-0"
+            icon="solar:info-circle-bold"
+            width={14}
+          />
+          <span>
+            Este cliente está usando la plantilla por defecto. Cualquier cambio
+            que hagas aquí creará una versión personalizada para él, sin afectar
+            a tus otros clientes.
+          </span>
+        </div>
+      ) : null}
+      {showOverrideBanner && editMode ? (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-default-50 border border-default-200 text-xs text-foreground/70 flex items-start gap-2">
+          <Icon
+            className="mt-0.5 flex-shrink-0"
+            icon="solar:user-id-bold"
+            width={14}
+          />
+          <span>
+            Este cliente tiene una configuración personalizada. Los cambios que
+            hagas en la plantilla del trainer no le afectarán hasta que pulses
+            "Restablecer a plantilla".
+          </span>
+        </div>
+      ) : null}
 
       {/* Grid */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         {renderData.map(({ chart, adapter, buckets, series }, idx) => {
-          const overlay = editMode ? (
-            <>
-              <button
-                aria-label="Subir"
-                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
-                disabled={idx === 0}
-                type="button"
-                onClick={() => void handleMove(chart.id, -1)}
-              >
-                <Icon icon="solar:alt-arrow-up-bold" width={10} />
-              </button>
-              <button
-                aria-label="Bajar"
-                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
-                disabled={idx === doc.charts.length - 1}
-                type="button"
-                onClick={() => void handleMove(chart.id, 1)}
-              >
-                <Icon icon="solar:alt-arrow-down-bold" width={10} />
-              </button>
-              <button
-                aria-label="Editar"
-                className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center"
-                type="button"
-                onClick={() => setEditingId(chart.id)}
-              >
-                <Icon icon="solar:pen-bold" width={10} />
-              </button>
-              <button
-                aria-label="Eliminar"
-                className="w-6 h-6 rounded-full bg-default-100 hover:bg-danger/10 hover:text-danger flex items-center justify-center text-foreground/60"
-                type="button"
-                onClick={() => void handleDelete(chart.id)}
-              >
-                <Icon icon="solar:trash-bin-trash-bold" width={10} />
-              </button>
-            </>
-          ) : null;
+          const overlay =
+            editMode && !isReadOnly ? (
+              <>
+                <button
+                  aria-label="Subir"
+                  className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
+                  disabled={idx === 0}
+                  type="button"
+                  onClick={() => void handleMove(chart.id, -1)}
+                >
+                  <Icon icon="solar:alt-arrow-up-bold" width={10} />
+                </button>
+                <button
+                  aria-label="Bajar"
+                  className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
+                  disabled={idx === doc.charts.length - 1}
+                  type="button"
+                  onClick={() => void handleMove(chart.id, 1)}
+                >
+                  <Icon icon="solar:alt-arrow-down-bold" width={10} />
+                </button>
+                <button
+                  aria-label="Editar"
+                  className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center"
+                  type="button"
+                  onClick={() => setEditingId(chart.id)}
+                >
+                  <Icon icon="solar:pen-bold" width={10} />
+                </button>
+                <button
+                  aria-label="Eliminar"
+                  className="w-6 h-6 rounded-full bg-default-100 hover:bg-danger/10 hover:text-danger flex items-center justify-center text-foreground/60"
+                  type="button"
+                  onClick={() => void handleDelete(chart.id)}
+                >
+                  <Icon icon="solar:trash-bin-trash-bold" width={10} />
+                </button>
+              </>
+            ) : null;
 
           return (
             <ChartCard
@@ -357,7 +539,7 @@ export function ChartSurface({ mode }: Props) {
               buckets={buckets}
               config={chart}
               editOverlay={overlay}
-              editable={editMode}
+              editable={editMode && !isReadOnly}
               {...(adapter?.metadata.icon !== undefined
                 ? { icon: adapter.metadata.icon }
                 : {})}
@@ -372,7 +554,7 @@ export function ChartSurface({ mode }: Props) {
             />
           );
         })}
-        {editMode ? (
+        {editMode && !isReadOnly ? (
           <AddChartCard
             isLoading={sourcesQuery.isLoading}
             sources={sources}
@@ -384,14 +566,20 @@ export function ChartSurface({ mode }: Props) {
         ) : null}
       </div>
 
-      {/* Empty state when zero charts */}
+      {/* Empty state */}
       {doc.charts.length === 0 && !editMode ? (
         <div className="flex flex-col items-center justify-center py-12 gap-2 text-foreground/50">
           <Icon icon="solar:chart-2-linear" width={36} />
-          <p className="text-sm">Tu plantilla está vacía.</p>
-          <Button size="sm" variant="flat" onPress={() => setEditMode(true)}>
-            Empezar a editar
-          </Button>
+          <p className="text-sm">
+            {mode === "trainer-template"
+              ? "Tu plantilla está vacía."
+              : "Sin gráficas configuradas."}
+          </p>
+          {!isReadOnly ? (
+            <Button size="sm" variant="flat" onPress={() => setEditMode(true)}>
+              Empezar a editar
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -405,7 +593,7 @@ export function ChartSurface({ mode }: Props) {
         onClose={() => setEditingId(null)}
       />
 
-      {/* Apply-to-all */}
+      {/* Apply-to-all (template only) */}
       <ApplyToAllConfirm
         isOpen={showApplyToAll}
         onClose={() => setShowApplyToAll(false)}
@@ -438,9 +626,6 @@ function AddChartCard({
   );
 
   if (!open) {
-    // NOTE: avoid any class name containing "primary" — the trainer-app theme
-    // has `.trainer-app [class*="primary"]` with !important that forces a
-    // black bg + white text. We use foreground/* hover states instead.
     return (
       <button
         className="rounded-xl border-2 border-dashed border-default-300 bg-default-50 hover:border-foreground/30 hover:bg-default-100 p-6 flex flex-col items-center justify-center gap-2 text-foreground/50 hover:text-foreground/70 transition-colors min-h-[200px] cursor-pointer"
