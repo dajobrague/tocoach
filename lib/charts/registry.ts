@@ -24,11 +24,14 @@ import type { FormType } from "./types";
 import type { CatalogId, DataSourceRef } from "./types";
 import type { DataAdapter } from "./adapters/types";
 import type { ChartConfigInput } from "./validation";
+import type { FormConfigData, QuestionConfig } from "@/lib/forms/types";
 
 import { z } from "zod";
 
 import { CATALOG_BY_ID, CATALOG_ADAPTERS } from "./adapters/catalog";
 import { buildFormQuestionAdapter } from "./adapters/form-question";
+
+import { normalizeFormConfig } from "@/lib/forms/types";
 
 /**
  * Registry-validation accepts the zod-inferred shape (ChartConfigInput)
@@ -62,28 +65,52 @@ export function resolveAdapter(ref: DataSourceRef): DataAdapter | undefined {
 // ─── Numeric form question discovery ──────────────────────────────────────
 
 /**
- * Subset of the form_templates row we read. `questions_config` is a JSONB
- * array of `{ id, type, label, unit?, ... }` per question.
+ * Subset of the form_templates row we read. `questions_config` is JSONB
+ * but its concrete shape can be EITHER:
+ *   - the legacy flat array `QuestionConfig[]`, or
+ *   - the new structured wrapper `{ pages, questions }` (`FormConfigData`).
  *
- * The shape is loose because question definitions evolve — we only
- * promise to read `id`, `type`, `label`, and `unit` from each entry.
+ * `normalizeFormConfig` from @/lib/forms/types handles both. We treat the
+ * raw value as `unknown` here and normalize before reading questions.
  */
 export interface FormTemplateRow {
   form_type: FormType;
-  questions_config: ReadonlyArray<{
-    id: string;
-    type: string;
-    label?: string;
-    unit?: string;
-  }>;
+  questions_config: unknown;
 }
 
-const NUMERIC_QUESTION_TYPES = new Set([
-  "number",
-  "integer",
-  "decimal",
-  "float",
-]);
+/**
+ * Question types we accept as numeric. The codebase's `QuestionType` enum
+ * is `rating | number | text | boolean | photo | group | choice |
+ * multi_choice` — only `number` and `rating` produce numeric answers
+ * suitable for charting.
+ */
+const NUMERIC_QUESTION_TYPES = new Set(["number", "rating"]);
+
+function isQuestionConfigArray(v: unknown): v is QuestionConfig[] {
+  return Array.isArray(v);
+}
+
+function isStructuredFormConfig(v: unknown): v is FormConfigData {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    "questions" in (v as Record<string, unknown>)
+  );
+}
+
+/**
+ * Pull a flat `QuestionConfig[]` out of a `questions_config` JSONB cell,
+ * handling both legacy and structured shapes. Returns an empty array when
+ * the cell is null / malformed (so the API route stays a 200, not a 500).
+ */
+function extractQuestions(raw: unknown): QuestionConfig[] {
+  if (isQuestionConfigArray(raw) || isStructuredFormConfig(raw)) {
+    return normalizeFormConfig(raw).questions;
+  }
+
+  return [];
+}
 
 /**
  * Enumerate every numeric question across the trainer's form templates
@@ -97,12 +124,16 @@ export function buildFormQuestionAdaptersFromTemplates(
 
   for (const tpl of templates) {
     if (tpl.form_type !== "checkins" && tpl.form_type !== "habits") continue;
-    for (const q of tpl.questions_config) {
+    const questions = extractQuestions(tpl.questions_config);
+
+    for (const q of questions) {
       if (!NUMERIC_QUESTION_TYPES.has(String(q.type).toLowerCase())) continue;
       if (!q.id) continue;
+      // Skip disabled questions — matches what the form renderer does.
+      if (q.enabled === false) continue;
       out.push(
         buildFormQuestionAdapter({
-          formType: tpl.form_type as FormType,
+          formType: tpl.form_type,
           questionId: q.id,
           label: q.label || q.id,
           ...(q.unit !== undefined ? { unit: q.unit } : {}),
