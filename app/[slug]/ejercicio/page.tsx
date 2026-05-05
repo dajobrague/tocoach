@@ -1,4 +1,4 @@
-import { WorkoutsContent } from "@/components/client-dashboard/workouts-content";
+import { WorkoutsContent } from "@/components/client-dashboard/workouts/workouts-content";
 
 export default function EjercicioPage() {
   // Shared data (session, tenant, client profile) is fetched once in the
