@@ -197,6 +197,16 @@ export default function WorkoutsTab({
   });
   const [libraryExercises, setLibraryExercises] = useState<any[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  // Server-side search state. The initial fetch caps at 500 entries so the
+  // Autocomplete can render an instant "browse" list, but trainers with
+  // bigger libraries (Pablo Carboneras, Isaac Català, Raúl Herrera) were
+  // missing items that exist in the library — the Autocomplete filters
+  // `defaultItems` client-side and never re-queried. We now debounce a
+  // server-search on `onInputChange` so anything in the library is
+  // discoverable regardless of size.
+  const [librarySearchTerm, setLibrarySearchTerm] = useState("");
+  const [librarySearchResults, setLibrarySearchResults] = useState<any[]>([]);
+  const [isSearchingLibrary, setIsSearchingLibrary] = useState(false);
   const [programForm, setProgramForm] = useState({
     name: "",
     division: "",
@@ -242,6 +252,39 @@ export default function WorkoutsTab({
   useEffect(() => {
     fetchPrograms();
   }, [clientId]);
+
+  // Debounced server-side library search. Empty input falls back to the
+  // initial `libraryExercises` browse list; non-empty input replaces it
+  // with `?search=` results so libraries beyond the initial fetch cap are
+  // still searchable. 250ms keeps it responsive without spamming the API.
+  useEffect(() => {
+    const term = librarySearchTerm.trim();
+
+    if (!term) {
+      setLibrarySearchResults([]);
+
+      return;
+    }
+
+    setIsSearchingLibrary(true);
+    const handle = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ search: term, limit: "50" });
+        const res = await fetch(`/api/exercises?${params.toString()}`);
+        const data = await res.json();
+
+        if (data.success) {
+          setLibrarySearchResults(data.exercises || []);
+        }
+      } catch (err) {
+        console.error("Error searching library exercises:", err);
+      } finally {
+        setIsSearchingLibrary(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [librarySearchTerm]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -437,7 +480,11 @@ export default function WorkoutsTab({
   };
 
   const handleSelectLibraryExercise = (exerciseId: string) => {
-    const exercise = libraryExercises.find((ex) => ex.id === exerciseId);
+    // Look in both the initial browse list and the live search results —
+    // a trainer can pick from either depending on whether they were typing.
+    const exercise =
+      libraryExercises.find((ex) => ex.id === exerciseId) ??
+      librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
       // Auto-fill form with exercise defaults
@@ -1539,13 +1586,21 @@ export default function WorkoutsTab({
                   classNames={{
                     base: "w-full",
                   }}
-                  defaultItems={libraryExercises}
                   inputProps={{
                     classNames: {
                       inputWrapper: "h-12",
                     },
                   }}
-                  isLoading={isLoadingLibrary}
+                  // Switch between the initial browse list (empty input)
+                  // and live server-search results (non-empty input). HeroUI
+                  // skips its built-in client-side filter when `items` is
+                  // controlled, so we own filtering via the API.
+                  isLoading={isLoadingLibrary || isSearchingLibrary}
+                  items={
+                    librarySearchTerm.trim().length > 0
+                      ? librarySearchResults
+                      : libraryExercises
+                  }
                   label="Buscar ejercicio en tu biblioteca"
                   placeholder="Escribe para buscar..."
                   selectedKey={exerciseForm.exerciseId || null}
@@ -1556,6 +1611,7 @@ export default function WorkoutsTab({
                       width={20}
                     />
                   }
+                  onInputChange={setLibrarySearchTerm}
                   onSelectionChange={(key) => {
                     if (key) {
                       handleSelectLibraryExercise(key as string);
