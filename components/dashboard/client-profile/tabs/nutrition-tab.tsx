@@ -260,6 +260,7 @@ function mapPlanWithNewOption(
 }
 
 import {
+  addToast,
   Badge,
   Button,
   Card,
@@ -591,7 +592,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     })
   );
 
-  const handleMealDragEnd = (dayId: string, event: DragEndEvent) => {
+  const handleMealDragEnd = async (dayId: string, event: DragEndEvent) => {
     const { active, over } = event;
 
     if (!over || active.id === over.id || !nutritionPlan) return;
@@ -605,6 +606,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
     if (oldIndex === -1 || newIndex === -1) return;
 
+    // Snapshot the previous meals order so we can revert if the server
+    // PATCH fails. The previous fire-and-forget pattern silently lost
+    // the new order on a network blip — Carlos Torres reported items
+    // jumping back to the bottom after edits.
+    const previousMeals = day.meals;
     const reorderedMeals = arrayMove(day.meals, oldIndex, newIndex);
 
     setNutritionPlan((prev) => {
@@ -623,13 +629,42 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       meal_order: i,
     }));
 
-    fetch("/api/nutrition/meals", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reorder: reorderPayload }),
-    }).catch((err) =>
-      console.error("[Nutrition] Failed to persist meal reorder:", err)
-    );
+    try {
+      const res = await fetch("/api/nutrition/meals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reorder: reorderPayload }),
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok || json?.success === false) {
+        throw new Error(json?.error ?? "No se pudo guardar el orden");
+      }
+    } catch (err) {
+      console.error("[Nutrition] Failed to persist meal reorder:", err);
+
+      // Revert local state — without this the trainer thinks the order
+      // was saved and only discovers otherwise on the next page load.
+      setNutritionPlan((prev) => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          days: prev.days.map((d) =>
+            d.id === dayId ? { ...d, meals: previousMeals } : d
+          ),
+        };
+      });
+
+      addToast({
+        title: "No se pudo guardar el orden",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Revisa tu conexión e inténtalo de nuevo.",
+        color: "danger",
+      });
+    }
   };
 
   // Fetch nutrition plans for this client
