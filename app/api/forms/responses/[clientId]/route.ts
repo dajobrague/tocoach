@@ -250,17 +250,30 @@ export async function POST(
     const body: FormResponseSubmission = await request.json();
     const { form_type, response_date, answers, metadata } = body;
 
-    // Habits can only be submitted for the last 3 days (today, yesterday, day before)
+    // Habits can only be submitted for the last 3 days (today, yesterday,
+    // day before). We compare in pure date-only space and allow ±1 day of
+    // slack on each side: the client computes `response_date` from its
+    // local clock (`getLocalTodayYmd`) while the server only knows UTC, so
+    // a Spaniard at 00:30 local sends "today-local" while UTC is still
+    // "yesterday" — the previous strict window rejected that as a future
+    // date and 400'd legit submissions near local midnight. A 1-day
+    // tolerance covers every populated timezone offset (UTC-12..UTC+14)
+    // without meaningfully widening the abuse surface.
     if (form_type === "habits" && response_date) {
-      const now = new Date();
-      const todayStr = now.toISOString().split("T")[0]!;
-      const target = new Date(response_date + "T12:00:00Z");
-      const todayDate = new Date(todayStr + "T12:00:00Z");
-      const diffDays = Math.round(
-        (todayDate.getTime() - target.getTime()) / 86400000
-      );
+      const todayUtcStr = new Date().toISOString().split("T")[0]!;
+      const targetMs = Date.parse(`${response_date}T00:00:00Z`);
+      const todayMs = Date.parse(`${todayUtcStr}T00:00:00Z`);
 
-      if (diffDays < 0 || diffDays > 2) {
+      if (Number.isNaN(targetMs)) {
+        return NextResponse.json(
+          { success: false, error: "Fecha inválida" },
+          { status: 400 }
+        );
+      }
+
+      const diffDays = Math.round((todayMs - targetMs) / 86400000);
+
+      if (diffDays < -1 || diffDays > 3) {
         return NextResponse.json(
           {
             success: false,
