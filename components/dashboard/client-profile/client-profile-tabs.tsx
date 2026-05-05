@@ -7,6 +7,7 @@ import AccessTab from "./tabs/access-tab";
 import CardioTab from "./tabs/cardio-tab";
 import ChartsTab from "./tabs/charts-tab";
 import FormsTab from "./tabs/forms-tab";
+import MicrocycleTab from "./tabs/microcycle-tab";
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
 import ProgressTab from "./tabs/progress-tab";
@@ -17,6 +18,7 @@ const TAB_ITEMS = [
   { key: "progress", label: "Progreso", icon: "solar:chart-line-duotone" },
   { key: "charts", label: "Gráficas", icon: "solar:chart-square-bold" },
   { key: "workouts", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
+  { key: "microcycle", label: "Plan semanal", icon: "solar:calendar-bold" },
   { key: "cardio", label: "Cardio", icon: "solar:heart-pulse-bold" },
   { key: "neat", label: "NEAT", icon: "solar:walking-bold" },
   { key: "nutrition", label: "Nutrición", icon: "fluent:food-20-filled" },
@@ -92,6 +94,9 @@ export default function ClientProfileTabs({
           {selectedTab === "charts" && <ChartsTab clientId={clientId} />}
           {selectedTab === "workouts" && (
             <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />
+          )}
+          {selectedTab === "microcycle" && (
+            <MicrocycleTab clientId={clientId} />
           )}
           {selectedTab === "cardio" && (
             <CardioTab clientId={clientId} clientName={clientName ?? ""} />
