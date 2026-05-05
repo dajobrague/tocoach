@@ -175,6 +175,17 @@ export async function POST(request: NextRequest) {
       `[Setup Password] Password set for client: ${client.email} in tenant: ${tenantSlug}`
     );
 
+    console.log(
+      `[Client Login:LOOP] client_login_success`,
+      JSON.stringify({
+        event: "client_login_success",
+        clientId: String(client.id),
+        tenantSlug,
+        timestamp: Date.now(),
+        flow: "setup-password",
+      })
+    );
+
     return finalResponse;
   } catch (error) {
     console.error("[Setup Password] Unexpected error:", error);

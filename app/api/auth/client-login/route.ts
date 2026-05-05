@@ -153,6 +153,16 @@ export async function POST(request: NextRequest) {
       `[Client Login] Authenticated: ${client.email} for tenant: ${tenantSlug}`
     );
 
+    console.log(
+      `[Client Login:LOOP] client_login_success`,
+      JSON.stringify({
+        event: "client_login_success",
+        clientId: String(client.id),
+        tenantSlug,
+        timestamp: Date.now(),
+      })
+    );
+
     return finalResponse;
   } catch (error) {
     console.error("[Client Login] Unexpected error:", error);
