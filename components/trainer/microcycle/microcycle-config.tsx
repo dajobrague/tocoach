@@ -97,7 +97,14 @@ export default function MicrocycleConfig({ clientId }: Props) {
   }
 
   const availableSessions: Session[] = data?.available_sessions ?? [];
-  const noActiveProgram = !data?.microcycle && availableSessions.length === 0;
+  // El servidor devuelve program: null SOLO cuando el cliente no tiene
+  // un programa activo asignado a este trainer. Programa con cero
+  // sesiones todavía cuenta como "tiene programa" — el trainer puede
+  // armar el microciclo (probablemente todo descanso) y volver luego
+  // de crear sesiones desde Entrenamientos.
+  const noActiveProgram = !data?.program;
+  const programHasNoSessions =
+    !noActiveProgram && availableSessions.length === 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -155,6 +162,13 @@ export default function MicrocycleConfig({ clientId }: Props) {
       ) : (
         <div className="flex flex-col gap-6 lg:flex-row">
           <section className="flex-1 rounded-lg bg-white p-4 shadow-sm">
+            {programHasNoSessions ? (
+              <div className="mb-4 rounded-md border border-default-200 bg-default-50 p-3 text-xs text-default-700">
+                Este programa todavía no tiene sesiones. Agrégalas desde la
+                pestaña <strong>Entrenamientos</strong> para poder asignarlas a
+                los días del microciclo.
+              </div>
+            ) : null}
             <ul className="divide-y divide-gray-100">
               {days.map((day) => (
                 <li key={day}>
