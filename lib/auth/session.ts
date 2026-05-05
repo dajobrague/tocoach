@@ -3,9 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-in-production"
-);
+import { JWT_SECRET_BYTES as JWT_SECRET } from "./jwt-secret";
 
 const TRAINER_COOKIE_NAME = "trainer-session";
 const ADMIN_COOKIE_NAME = "admin-session";

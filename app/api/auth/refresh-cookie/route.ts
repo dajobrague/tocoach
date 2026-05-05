@@ -23,10 +23,7 @@ import {
   extractBearerToken,
   setClientSessionCookie,
 } from "@/lib/auth/client-session";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-in-production"
-);
+import { JWT_SECRET_BYTES as JWT_SECRET } from "@/lib/auth/jwt-secret";
 
 export async function POST(request: NextRequest) {
   try {

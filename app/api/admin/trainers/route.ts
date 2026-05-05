@@ -1,6 +1,7 @@
 // Admin trainers management API
 import { NextRequest, NextResponse } from "next/server";
 
+import { JWT_SECRET_BYTES } from "@/lib/auth/jwt-secret";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { TEMP_PASSWORD_TRAINER } from "@/lib/constants/auth";
 
@@ -20,11 +21,8 @@ async function verifyAdminAuth(request: NextRequest) {
   try {
     // Verify JWT token
     const { jwtVerify } = await import("jose");
-    const JWT_SECRET = new TextEncoder().encode(
-      process.env.JWT_SECRET || "fallback-secret-change-in-production"
-    );
 
-    const { payload } = await jwtVerify(sessionCookie, JWT_SECRET);
+    const { payload } = await jwtVerify(sessionCookie, JWT_SECRET_BYTES);
     const userId = (payload as any).trainer_id;
 
     if (!userId) {

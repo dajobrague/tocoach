@@ -3,11 +3,8 @@ import type { ClientSession } from "@/lib/auth/client-session";
 import { NextRequest, NextResponse } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 
+import { JWT_SECRET_BYTES as JWT_SECRET } from "@/lib/auth/jwt-secret";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-in-production"
-);
 
 const isProduction = process.env.NODE_ENV === "production";
 
