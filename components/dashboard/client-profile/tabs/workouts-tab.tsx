@@ -222,7 +222,6 @@ export default function WorkoutsTab({
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [sessionForm, setSessionForm] = useState({
     name: "",
-    daysOfWeek: [] as string[],
   });
 
   // Fetch programs from API
@@ -757,7 +756,6 @@ export default function WorkoutsTab({
     setSelectedProgramId(null);
     setSessionForm({
       name: "",
-      daysOfWeek: [],
     });
   };
 
@@ -812,9 +810,6 @@ export default function WorkoutsTab({
     // Populate form with session data
     setSessionForm({
       name: session.name,
-      daysOfWeek: Array.isArray(session.dayOfWeek)
-        ? session.dayOfWeek
-        : [session.dayOfWeek],
     });
     setSelectedSessionId(sessionId);
     setSelectedProgramId(program.programId);
@@ -827,7 +822,6 @@ export default function WorkoutsTab({
     setSelectedProgramId(null);
     setSessionForm({
       name: "",
-      daysOfWeek: [],
     });
   };
 
@@ -2776,33 +2770,6 @@ export default function WorkoutsTab({
                       setSessionForm({ ...sessionForm, name: value })
                     }
                   />
-                  <Select
-                    isRequired
-                    label="Días de la Semana"
-                    placeholder="Selecciona uno o más días"
-                    selectedKeys={sessionForm.daysOfWeek}
-                    selectionMode="multiple"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:calendar-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const values = Array.from(keys) as string[];
-
-                      setSessionForm({ ...sessionForm, daysOfWeek: values });
-                    }}
-                  >
-                    <SelectItem key="Lun">Lunes</SelectItem>
-                    <SelectItem key="Mar">Martes</SelectItem>
-                    <SelectItem key="Mie">Miércoles</SelectItem>
-                    <SelectItem key="Jue">Jueves</SelectItem>
-                    <SelectItem key="Vie">Viernes</SelectItem>
-                    <SelectItem key="Sab">Sábado</SelectItem>
-                    <SelectItem key="Dom">Domingo</SelectItem>
-                  </Select>
                 </div>
               </div>
 
@@ -2911,33 +2878,6 @@ export default function WorkoutsTab({
                       setSessionForm({ ...sessionForm, name: value })
                     }
                   />
-                  <Select
-                    isRequired
-                    label="Días de la Semana"
-                    placeholder="Selecciona uno o más días"
-                    selectedKeys={sessionForm.daysOfWeek}
-                    selectionMode="multiple"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:calendar-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const values = Array.from(keys) as string[];
-
-                      setSessionForm({ ...sessionForm, daysOfWeek: values });
-                    }}
-                  >
-                    <SelectItem key="Lun">Lunes</SelectItem>
-                    <SelectItem key="Mar">Martes</SelectItem>
-                    <SelectItem key="Mie">Miércoles</SelectItem>
-                    <SelectItem key="Jue">Jueves</SelectItem>
-                    <SelectItem key="Vie">Viernes</SelectItem>
-                    <SelectItem key="Sab">Sábado</SelectItem>
-                    <SelectItem key="Dom">Domingo</SelectItem>
-                  </Select>
                 </div>
               </div>
             </div>
