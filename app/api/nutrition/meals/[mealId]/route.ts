@@ -5,38 +5,32 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 async function assertMealTrainerAccess(
   supabase: ReturnType<typeof createSupabaseClient>,
-  trainerId: string,
+  tenantHost: string,
   mealId: string
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const { data: existingMeal, error: checkError } = await supabase
+  // Single-query ownership check via `tenant_host`. Replaces the prior
+  // meal → day → plan → trainer chain (3 sequential round-trips per
+  // request) which dominated edit latency in the trainer nutrition UI
+  // (Carlos Torres, "tarda muchísimo en eliminar/modificar"). All
+  // nutrition_meals rows carry `tenant_host` (verified populated), so a
+  // single equality on the trainer's session tenant is equivalent.
+  const { data, error } = await supabase
     .from("nutrition_meals")
-    .select("id, nutrition_day_id")
-    .eq("id", mealId)
-    .single();
-
-  if (checkError || !existingMeal) {
-    return { ok: false, status: 404, error: "Comida no encontrada" };
-  }
-
-  const { data: day, error: dayError } = await supabase
-    .from("nutrition_days")
-    .select("nutrition_plan_id")
-    .eq("id", existingMeal.nutrition_day_id)
-    .single();
-
-  if (dayError || !day) {
-    return { ok: false, status: 404, error: "Día no encontrado" };
-  }
-
-  const { data: plan, error: planError } = await supabase
-    .from("nutrition_plans")
     .select("id")
-    .eq("id", day.nutrition_plan_id)
-    .eq("trainer_id", trainerId)
-    .single();
+    .eq("id", mealId)
+    .eq("tenant_host", tenantHost)
+    .maybeSingle();
 
-  if (planError || !plan) {
-    return { ok: false, status: 403, error: "No autorizado" };
+  if (error) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Error al verificar comida",
+    };
+  }
+
+  if (!data) {
+    return { ok: false, status: 404, error: "Comida no encontrada" };
   }
 
   return { ok: true };
@@ -62,7 +56,7 @@ export async function GET(
     const { mealId } = await params;
     const access = await assertMealTrainerAccess(
       supabase,
-      session.trainer_id,
+      session.tenant_host,
       mealId
     );
 
@@ -180,7 +174,7 @@ export async function PATCH(
 
     const access = await assertMealTrainerAccess(
       supabase,
-      session.trainer_id,
+      session.tenant_host,
       mealId
     );
 
@@ -213,6 +207,7 @@ export async function PATCH(
       .from("nutrition_meals")
       .update(updateData)
       .eq("id", mealId)
+      .eq("tenant_host", session.tenant_host)
       .select()
       .single();
 
@@ -263,7 +258,7 @@ export async function DELETE(
 
     const access = await assertMealTrainerAccess(
       supabase,
-      session.trainer_id,
+      session.tenant_host,
       mealId
     );
 
@@ -278,7 +273,8 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from("nutrition_meals")
       .delete()
-      .eq("id", mealId);
+      .eq("id", mealId)
+      .eq("tenant_host", session.tenant_host);
 
     if (deleteError) {
       console.error("[Nutrition Meals API] Error deleting meal:", deleteError);

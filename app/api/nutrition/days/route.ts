@@ -52,13 +52,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Batch update day_order for each day
+    // Batch update day_order for each day, scoped to the caller's
+    // tenant. Without the tenant filter the PATCH would have happily
+    // reordered another trainer's days if the UUIDs were passed in.
     const updatePromises = reorder.map(
       (item: { id: string; day_order: number }) =>
         supabase
           .from("nutrition_days")
           .update({ day_order: item.day_order })
           .eq("id", item.id)
+          .eq("tenant_host", session.tenant_host)
     );
 
     const results = await Promise.all(updatePromises);

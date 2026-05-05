@@ -28,12 +28,17 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Scope each update to the caller's tenant. Without this, the
+    // PATCH would happily reorder meals belonging to any other trainer
+    // if their UUIDs were passed in. Adding the filter to the UPDATE
+    // makes the check authoritative without a separate round-trip.
     const updatePromises = reorder.map(
       (item: { id: string; meal_order: number }) =>
         supabase
           .from("nutrition_meals")
           .update({ meal_order: item.meal_order })
           .eq("id", item.id)
+          .eq("tenant_host", session.tenant_host)
     );
 
     const results = await Promise.all(updatePromises);

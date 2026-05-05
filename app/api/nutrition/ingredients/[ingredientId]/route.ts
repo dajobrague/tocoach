@@ -44,76 +44,42 @@ export async function PATCH(
       body
     );
 
-    // Verify the ingredient belongs to a meal/day/plan owned by this trainer
+    // Single-query ownership check via `tenant_host`. The previous
+    // ingredient → meal → day → plan → trainer chain was 4 sequential
+    // round-trips and dominated edit latency in the trainer UI for any
+    // ingredient field change (Carlos Torres, "tarda muchísimo en
+    // modificar cantidades"). Every nutrition_* table carries
+    // `tenant_host` as a denormalized scope key (verified populated
+    // across all rows), so a single equality on the trainer's session
+    // tenant is sufficient and equivalent to the prior chain. The
+    // subsequent UPDATE re-applies the same `tenant_host` filter as a
+    // belt-and-braces guard against a stale `existingIngredient`.
     const { data: existingIngredient, error: checkError } = await supabase
       .from("nutrition_ingredients")
-      .select("id, nutrition_meal_id")
+      .select("id")
       .eq("id", ingredientId)
-      .single();
+      .eq("tenant_host", session.tenant_host)
+      .maybeSingle();
 
-    if (checkError || !existingIngredient) {
+    if (checkError) {
       console.error(
-        "[Nutrition Ingredients API] Ingredient not found:",
+        "[Nutrition Ingredients API] Ownership check failed:",
         checkError
       );
-      timer.end({ ingredient_id: ingredientId, status: 404 });
+      timer.end({ ingredient_id: ingredientId, status: 500 });
 
       return NextResponse.json(
-        { success: false, error: "Ingrediente no encontrado" },
-        { status: 404 }
+        { success: false, error: "Error al verificar ingrediente" },
+        { status: 500 }
       );
     }
 
-    // Verify through meal -> day -> plan -> trainer
-    const { data: meal, error: mealError } = await supabase
-      .from("nutrition_meals")
-      .select("nutrition_day_id")
-      .eq("id", existingIngredient.nutrition_meal_id)
-      .single();
-
-    if (mealError || !meal) {
-      console.error("[Nutrition Ingredients API] Meal not found:", mealError);
+    if (!existingIngredient) {
       timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
-        { success: false, error: "Comida no encontrada" },
+        { success: false, error: "Ingrediente no encontrado o no autorizado" },
         { status: 404 }
-      );
-    }
-
-    const { data: day, error: dayError } = await supabase
-      .from("nutrition_days")
-      .select("nutrition_plan_id")
-      .eq("id", meal.nutrition_day_id)
-      .single();
-
-    if (dayError || !day) {
-      console.error("[Nutrition Ingredients API] Day not found:", dayError);
-      timer.end({ ingredient_id: ingredientId, status: 404 });
-
-      return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", day.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Ingredients API] Plan not found or unauthorized:",
-        planError
-      );
-      timer.end({ ingredient_id: ingredientId, status: 403 });
-
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
       );
     }
 
@@ -134,6 +100,7 @@ export async function PATCH(
       .from("nutrition_ingredients")
       .update(updateData)
       .eq("id", ingredientId)
+      .eq("tenant_host", session.tenant_host)
       .select()
       .single();
 
@@ -199,76 +166,35 @@ export async function DELETE(
       ingredientId
     );
 
-    // Verify the ingredient belongs to a meal/day/plan owned by this trainer
+    // Single-query ownership check via `tenant_host` — see PATCH above
+    // for full rationale. The DELETE itself re-applies `tenant_host` so
+    // a stale ownership lookup can never delete cross-tenant.
     const { data: existingIngredient, error: checkError } = await supabase
       .from("nutrition_ingredients")
-      .select("id, nutrition_meal_id")
+      .select("id")
       .eq("id", ingredientId)
-      .single();
+      .eq("tenant_host", session.tenant_host)
+      .maybeSingle();
 
-    if (checkError || !existingIngredient) {
+    if (checkError) {
       console.error(
-        "[Nutrition Ingredients API] Ingredient not found:",
+        "[Nutrition Ingredients API] Ownership check failed:",
         checkError
       );
-      timer.end({ ingredient_id: ingredientId, status: 404 });
+      timer.end({ ingredient_id: ingredientId, status: 500 });
 
       return NextResponse.json(
-        { success: false, error: "Ingrediente no encontrado" },
-        { status: 404 }
+        { success: false, error: "Error al verificar ingrediente" },
+        { status: 500 }
       );
     }
 
-    // Verify through meal -> day -> plan -> trainer
-    const { data: meal, error: mealError } = await supabase
-      .from("nutrition_meals")
-      .select("nutrition_day_id")
-      .eq("id", existingIngredient.nutrition_meal_id)
-      .single();
-
-    if (mealError || !meal) {
-      console.error("[Nutrition Ingredients API] Meal not found:", mealError);
+    if (!existingIngredient) {
       timer.end({ ingredient_id: ingredientId, status: 404 });
 
       return NextResponse.json(
-        { success: false, error: "Comida no encontrada" },
+        { success: false, error: "Ingrediente no encontrado o no autorizado" },
         { status: 404 }
-      );
-    }
-
-    const { data: day, error: dayError } = await supabase
-      .from("nutrition_days")
-      .select("nutrition_plan_id")
-      .eq("id", meal.nutrition_day_id)
-      .single();
-
-    if (dayError || !day) {
-      console.error("[Nutrition Ingredients API] Day not found:", dayError);
-      timer.end({ ingredient_id: ingredientId, status: 404 });
-
-      return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", day.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Ingredients API] Plan not found or unauthorized:",
-        planError
-      );
-      timer.end({ ingredient_id: ingredientId, status: 403 });
-
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
       );
     }
 
@@ -276,7 +202,8 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from("nutrition_ingredients")
       .delete()
-      .eq("id", ingredientId);
+      .eq("id", ingredientId)
+      .eq("tenant_host", session.tenant_host);
 
     if (deleteError) {
       console.error(

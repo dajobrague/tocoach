@@ -28,39 +28,30 @@ export async function PATCH(
 
     console.log("[Nutrition Days API] Updating day:", dayId, body);
 
-    // Verify the day belongs to a plan owned by this trainer
+    // Single-query ownership check via `tenant_host`. Replaces the prior
+    // day → plan → trainer chain (2 sequential round-trips). All
+    // nutrition_days rows carry `tenant_host` (verified populated). The
+    // UPDATE below re-applies the same filter.
     const { data: existingDay, error: checkError } = await supabase
       .from("nutrition_days")
-      .select("id, nutrition_plan_id")
+      .select("id")
       .eq("id", dayId)
-      .single();
+      .eq("tenant_host", session.tenant_host)
+      .maybeSingle();
 
-    if (checkError || !existingDay) {
-      console.error("[Nutrition Days API] Day not found:", checkError);
+    if (checkError) {
+      console.error("[Nutrition Days API] Ownership check failed:", checkError);
 
       return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
+        { success: false, error: "Error al verificar día" },
+        { status: 500 }
       );
     }
 
-    // Verify the plan belongs to this trainer
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", existingDay.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Days API] Plan not found or unauthorized:",
-        planError
-      );
-
+    if (!existingDay) {
       return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
+        { success: false, error: "Día no encontrado o no autorizado" },
+        { status: 404 }
       );
     }
 
@@ -79,6 +70,7 @@ export async function PATCH(
       .from("nutrition_days")
       .update(updateData)
       .eq("id", dayId)
+      .eq("tenant_host", session.tenant_host)
       .select()
       .single();
 
@@ -127,39 +119,27 @@ export async function DELETE(
 
     console.log("[Nutrition Days API] Deleting day:", dayId);
 
-    // Verify the day belongs to a plan owned by this trainer
+    // Single-query ownership check via `tenant_host` — see PATCH above.
     const { data: existingDay, error: checkError } = await supabase
       .from("nutrition_days")
-      .select("id, nutrition_plan_id")
+      .select("id")
       .eq("id", dayId)
-      .single();
+      .eq("tenant_host", session.tenant_host)
+      .maybeSingle();
 
-    if (checkError || !existingDay) {
-      console.error("[Nutrition Days API] Day not found:", checkError);
+    if (checkError) {
+      console.error("[Nutrition Days API] Ownership check failed:", checkError);
 
       return NextResponse.json(
-        { success: false, error: "Día no encontrado" },
-        { status: 404 }
+        { success: false, error: "Error al verificar día" },
+        { status: 500 }
       );
     }
 
-    // Verify the plan belongs to this trainer
-    const { data: plan, error: planError } = await supabase
-      .from("nutrition_plans")
-      .select("id")
-      .eq("id", existingDay.nutrition_plan_id)
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    if (planError || !plan) {
-      console.error(
-        "[Nutrition Days API] Plan not found or unauthorized:",
-        planError
-      );
-
+    if (!existingDay) {
       return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403 }
+        { success: false, error: "Día no encontrado o no autorizado" },
+        { status: 404 }
       );
     }
 
@@ -167,7 +147,8 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from("nutrition_days")
       .delete()
-      .eq("id", dayId);
+      .eq("id", dayId)
+      .eq("tenant_host", session.tenant_host);
 
     if (deleteError) {
       console.error("[Nutrition Days API] Error deleting day:", deleteError);
