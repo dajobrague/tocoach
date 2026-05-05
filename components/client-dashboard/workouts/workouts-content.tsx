@@ -27,7 +27,7 @@ import { PastWorkoutsList } from "./past-workouts-list";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log-modal";
+import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log/exercise-log-modal";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useExerciseLogs, usePrograms } from "@/lib/hooks/use-client-queries";
 
