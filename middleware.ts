@@ -227,6 +227,17 @@ export async function middleware(request: NextRequest) {
           response.headers.set("x-pathname", pathname);
 
           console.log(
+            `[Middleware:CLIENT:LOOP] client_session_missing`,
+            JSON.stringify({
+              event: "client_session_missing",
+              slug,
+              pathname,
+              correlationId,
+              userAgent: request.headers.get("user-agent") || "unknown",
+            })
+          );
+
+          console.log(
             `[Middleware:CLIENT] ${request.method} ${pathname} → /${slug}/login (guest)`,
             {
               slug,
@@ -243,6 +254,17 @@ export async function middleware(request: NextRequest) {
         const loginUrl = new URL(`/${slug}/login`, request.url);
 
         loginUrl.searchParams.set("redirect", pathAfterSlug);
+
+        console.log(
+          `[Middleware:CLIENT:LOOP] client_session_missing`,
+          JSON.stringify({
+            event: "client_session_missing",
+            slug,
+            pathname,
+            correlationId,
+            userAgent: request.headers.get("user-agent") || "unknown",
+          })
+        );
 
         console.log(
           `[Middleware:CLIENT] ${request.method} ${pathname} → redirect to /${slug}/login (no session)`,
