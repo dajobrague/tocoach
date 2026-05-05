@@ -59,13 +59,7 @@ export interface Session {
   description?: string;
   session_order?: number;
   duration_minutes?: number;
-  session_type?:
-    | "strength"
-    | "cardio"
-    | "flexibility"
-    | "sports"
-    | "recovery"
-    | "other";
+  session_type?: SessionType;
   intensity_level?: "low" | "moderate" | "high";
   equipment_needed?: string[];
   notes?: string;
@@ -353,4 +347,74 @@ export interface ExerciseLogSet {
   set_number: number;
   reps: number | null;
   weight_kg: number | null;
+}
+
+// === Session type (extracted for reuse across microcycles and elsewhere) ===
+
+export type SessionType =
+  | "strength"
+  | "cardio"
+  | "flexibility"
+  | "sports"
+  | "recovery"
+  | "other";
+
+// === Microcycles ===
+
+export interface Microcycle {
+  id: string;
+  tenant_host: string;
+  client_program_id: string;
+  duration_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MicrocycleSlot {
+  id: string;
+  microcycle_id: string;
+  day_index: number;
+  session_id: string | null; // null = descanso explícito
+  created_at: string;
+}
+
+export interface MicrocycleWithSlots extends Microcycle {
+  slots: MicrocycleSlot[];
+}
+
+// View model que combina slot + sesión expandida (para el cliente).
+// Lo devuelve GET /api/client/microcycle, ya con descansos implícitos
+// completados hasta duration_days (decisión c en §1 de bloque-1-spec.md).
+
+export interface MicrocycleSlotView {
+  day_index: number;
+  type: "session" | "rest";
+  session?: {
+    id: string;
+    name: string;
+    session_type: SessionType;
+    duration_minutes: number | null;
+  };
+}
+
+// === Exercise history (modal de ejercicio) ===
+
+export interface ExerciseHistoryEntry {
+  scheduled_date: string;
+  exercise_log_id: string;
+  sets: Array<{
+    set_number: number;
+    reps: number;
+    weight_kg: number | null;
+  }>;
+}
+
+export interface ExerciseHistoryResponse {
+  exercise_id: string;
+  recent: ExerciseHistoryEntry[]; // últimas N, orden descendente
+  pr: {
+    weight_kg: number;
+    reps: number;
+    achieved_at: string; // scheduled_date del set ganador
+  } | null;
 }
