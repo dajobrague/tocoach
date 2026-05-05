@@ -86,11 +86,9 @@ export default function MicrocycleConfig({ clientId }: Props) {
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold text-foreground">
-            Plan semanal
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900">Plan semanal</h2>
           {data?.program ? (
-            <p className="text-xs text-default-500">
+            <p className="text-xs text-gray-500">
               Programa <span className="font-medium">{data.program.name}</span>
               {data.start_date ? (
                 <>
@@ -102,7 +100,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
               ) : null}
             </p>
           ) : null}
-          <p className="text-sm text-default-500 max-w-md">
+          <p className="text-sm text-gray-500 max-w-md">
             Configura el orden ideal de la semana. Tu cliente lo verá como
             referencia y podrá hacer las sesiones en el orden que prefiera.
           </p>
@@ -138,9 +136,9 @@ export default function MicrocycleConfig({ clientId }: Props) {
         </div>
       ) : (
         <div className="flex flex-col gap-6 lg:flex-row">
-          <section className="flex-1 rounded-lg bg-content1 p-3 shadow-sm">
+          <section className="flex-1 rounded-lg bg-white p-3 shadow-sm">
             {programHasNoSessions ? (
-              <div className="mb-4 rounded-md border border-default-200 bg-default-50 p-3 text-xs text-default-700">
+              <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
                 Este programa todavía no tiene sesiones. Agrégalas desde la
                 pestaña <strong>Entrenamientos</strong> para poder asignarlas a
                 los días del microciclo.

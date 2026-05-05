@@ -27,17 +27,17 @@ export default function MicrocycleDurationSelector({
     <div className="flex flex-col gap-2 w-full">
       <div className="flex items-center justify-between">
         <label
-          className="text-xs font-semibold uppercase text-default-500"
+          className="text-xs font-semibold uppercase text-gray-500"
           htmlFor="microcycle-duration"
         >
           Duración del ciclo
         </label>
-        <span className="text-sm font-semibold text-foreground tabular-nums">
+        <span className="text-sm font-semibold text-gray-900 tabular-nums">
           {value} {value === 1 ? "día" : "días"}
         </span>
       </div>
       <input
-        className="w-full accent-primary disabled:opacity-50"
+        className="w-full accent-blue-500 disabled:opacity-50"
         disabled={isDisabled}
         id="microcycle-duration"
         max={MAX_DAYS}

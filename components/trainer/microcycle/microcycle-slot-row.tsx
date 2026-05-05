@@ -68,8 +68,8 @@ export default function MicrocycleSlotRow({
       aria-pressed={isSelected}
       className={`flex w-full items-center gap-3 py-3 px-2 rounded-md text-left transition-colors border-[1.5px] ${
         isSelected
-          ? "bg-primary/10 border-primary"
-          : "border-transparent hover:bg-default-100"
+          ? "bg-blue-50 border-blue-500"
+          : "border-transparent hover:bg-gray-50"
       } ${isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       role="button"
       tabIndex={isDisabled ? -1 : 0}
@@ -86,22 +86,22 @@ export default function MicrocycleSlotRow({
     >
       <div
         className={`w-12 shrink-0 text-sm font-semibold ${
-          isSelected ? "text-primary" : "text-default-700"
+          isSelected ? "text-blue-600" : "text-gray-700"
         }`}
       >
         Día {dayIndex}
       </div>
 
       {session ? (
-        <span className="flex-1 text-sm text-foreground truncate">
+        <span className="flex-1 text-sm text-gray-900 truncate">
           {session.name}
         </span>
       ) : isSelected ? (
-        <span className="flex-1 text-sm text-primary font-medium">
+        <span className="flex-1 text-sm text-blue-600 font-medium">
           Toca una sesión del panel
         </span>
       ) : (
-        <span className="flex-1 text-sm text-default-400">— Descanso —</span>
+        <span className="flex-1 text-sm text-gray-400">— Descanso —</span>
       )}
 
       <div className="shrink-0 flex items-center gap-2">
@@ -134,7 +134,7 @@ export default function MicrocycleSlotRow({
             onPress={onRemove}
           >
             <Icon
-              className="text-default-500"
+              className="text-gray-500"
               icon="solar:close-circle-linear"
               width={18}
             />
