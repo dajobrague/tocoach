@@ -148,7 +148,7 @@ export async function POST(
     const {
       sessionId,
       exerciseId,
-      scheduledDate,
+      scheduledDate: scheduledDateRaw,
       sets,
       videoUrl,
       durationCompleted,
@@ -162,6 +162,22 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "No autorizado" },
         { status: 403 }
+      );
+    }
+
+    // scheduledDate ahora es opcional. El camino correcto es que el cliente
+    // calcule la fecha local con getLocalTodayYmd() (lib/forms/client-helpers.ts)
+    // y la mande en el body — esa función no es válida en servidor porque
+    // depende del huso del navegador. Fallback defensivo a UTC hoy si el
+    // cliente no la mandó: puede tener ±24h de deriva en clientes con TZ
+    // muy alejada, pero evita romper la request.
+    let scheduledDate: string = scheduledDateRaw;
+
+    if (!scheduledDate) {
+      scheduledDate = new Date().toISOString().slice(0, 10);
+      console.warn(
+        "[Exercise Logs API] scheduledDate missing in body, defaulted to UTC today:",
+        { clientId, scheduledDate }
       );
     }
 
@@ -323,6 +339,16 @@ export async function POST(
       }
     }
 
+    // Si los logs cubren todos los session_exercises del template, marcamos
+    // scheduled_sessions.status = 'completed'. Best-effort: errores aquí no
+    // fallan el guardado del log, solo dejan el status sin actualizar.
+    await maybeMarkScheduledCompleted(
+      supabase,
+      scheduledSessionId,
+      sessionId,
+      parseInt(clientId)
+    );
+
     const flattenedLog: any = {
       ...exerciseLog,
       scheduled_date: scheduledDate,
@@ -357,5 +383,67 @@ export async function POST(
       { success: false, error: "Error interno del servidor" },
       { status: 500 }
     );
+  }
+}
+
+// Marca scheduled_sessions.status = 'completed' cuando los exercise_logs
+// del cliente cubren todos los session_exercises del template. Best-effort:
+// si algo falla, log y sigue (el guardado del log ya hizo commit).
+async function maybeMarkScheduledCompleted(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  scheduledSessionId: string,
+  sessionId: string,
+  clientId: number
+) {
+  try {
+    const [{ data: logs, error: logsError }, { data: tmpl, error: tmplError }] =
+      await Promise.all([
+        supabase
+          .from("exercise_logs")
+          .select("exercise_id")
+          .eq("scheduled_session_id", scheduledSessionId)
+          .eq("client_id", clientId),
+        supabase
+          .from("session_exercises")
+          .select("exercise_id")
+          .eq("session_id", sessionId),
+      ]);
+
+    if (logsError || tmplError) {
+      console.warn("[Exercise Logs API] completion check fetch failed:", {
+        logsError: logsError?.message,
+        tmplError: tmplError?.message,
+      });
+
+      return;
+    }
+
+    const required = new Set((tmpl ?? []).map((r) => r.exercise_id));
+    const logged = new Set((logs ?? []).map((r) => r.exercise_id));
+    const allCovered =
+      required.size > 0 && Array.from(required).every((id) => logged.has(id));
+
+    if (!allCovered) return;
+
+    const { error: updateError } = await supabase
+      .from("scheduled_sessions")
+      .update({
+        status: "completed",
+        completion_date: new Date().toISOString(),
+      })
+      .eq("id", scheduledSessionId)
+      .neq("status", "completed");
+
+    if (updateError) {
+      console.warn(
+        "[Exercise Logs API] failed to mark scheduled_sessions completed:",
+        { scheduledSessionId, error: updateError.message }
+      );
+    }
+  } catch (error) {
+    console.warn("[Exercise Logs API] completion check threw:", {
+      scheduledSessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
