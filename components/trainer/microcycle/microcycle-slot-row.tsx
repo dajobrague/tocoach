@@ -20,15 +20,18 @@ const TYPE_LABEL: Record<SessionType, string> = {
   other: "Otro",
 };
 
+// Mapeo legible en ambos modos (light + dark). NO usar "primary" — es
+// el brand y queda muy oscuro como chip. Todos con variant="flat" para
+// que HeroUI dé background tintado + foreground legible automático.
 const TYPE_COLOR: Record<
   SessionType,
-  "primary" | "danger" | "warning" | "secondary" | "success" | "default"
+  "danger" | "warning" | "secondary" | "success" | "default"
 > = {
-  strength: "primary",
+  strength: "secondary",
   cardio: "danger",
-  flexibility: "secondary",
-  sports: "warning",
-  recovery: "success",
+  flexibility: "warning",
+  sports: "success",
+  recovery: "default",
   other: "default",
 };
 
@@ -65,8 +68,8 @@ export default function MicrocycleSlotRow({
       aria-pressed={isSelected}
       className={`flex w-full items-center gap-3 py-3 px-2 rounded-md text-left transition-colors ${
         isSelected
-          ? "bg-primary/5 ring-1 ring-primary/40"
-          : "hover:bg-default-50"
+          ? "bg-primary/10 ring-2 ring-primary"
+          : "hover:bg-default-100"
       } ${isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       role="button"
       tabIndex={isDisabled ? -1 : 0}

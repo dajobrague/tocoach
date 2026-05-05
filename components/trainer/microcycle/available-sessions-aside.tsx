@@ -31,15 +31,18 @@ const TYPE_LABEL: Record<SessionType, string> = {
   other: "Otro",
 };
 
+// Mapeo legible en ambos modos. NO usar "primary" (brand color es muy
+// oscuro como chip). Todos con variant="flat" → HeroUI da bg tintado +
+// fg legible automático en light/dark.
 const TYPE_COLOR: Record<
   SessionType,
-  "primary" | "danger" | "warning" | "secondary" | "success" | "default"
+  "danger" | "warning" | "secondary" | "success" | "default"
 > = {
-  strength: "primary",
+  strength: "secondary",
   cardio: "danger",
-  flexibility: "secondary",
-  sports: "warning",
-  recovery: "success",
+  flexibility: "warning",
+  sports: "success",
+  recovery: "default",
   other: "default",
 };
 
@@ -74,8 +77,8 @@ export default function AvailableSessionsAside({
                 <button
                   className={`w-full text-left rounded-md border px-3 py-2 transition-colors ${
                     highlighted
-                      ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
-                      : "border-default-200 hover:bg-default-50"
+                      ? "border-primary bg-primary/10 hover:bg-primary/15"
+                      : "border-default-200 bg-content1 hover:bg-default-100"
                   } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                   disabled={isDisabled}
                   type="button"
