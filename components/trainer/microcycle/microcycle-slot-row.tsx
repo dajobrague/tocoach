@@ -66,10 +66,10 @@ export default function MicrocycleSlotRow({
     <div
       aria-disabled={isDisabled}
       aria-pressed={isSelected}
-      className={`flex w-full items-center gap-3 py-3 px-2 rounded-md text-left transition-colors ${
+      className={`flex w-full items-center gap-3 py-3 px-2 rounded-md text-left transition-colors border-[1.5px] ${
         isSelected
-          ? "bg-primary/10 ring-2 ring-primary"
-          : "hover:bg-default-100"
+          ? "bg-primary/10 border-primary"
+          : "border-transparent hover:bg-default-100"
       } ${isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       role="button"
       tabIndex={isDisabled ? -1 : 0}
