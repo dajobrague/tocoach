@@ -33,32 +33,68 @@ export async function loadActiveOwnedProgram(
   trainerIdOrNull: string | null,
   correlationId: string
 ): Promise<OwnedProgram | null> {
+  const all = await loadAllActiveOwnedPrograms(
+    supabase,
+    clientId,
+    trainerIdOrNull,
+    correlationId
+  );
+
+  return all[0] ?? null;
+}
+
+// Devuelve TODOS los client_programs activos del cliente (un cliente
+// puede tener fuerza + cardio activos a la vez). Ordenados por
+// start_date desc — el primero es el "primario" para el microciclo.
+// Filtra por status === 'active' en JS (insensible a mayúsculas/
+// espacios) replicando el patrón de /api/client/programs.
+export async function loadAllActiveOwnedPrograms(
+  supabase: Supabase,
+  clientId: string,
+  trainerIdOrNull: string | null,
+  correlationId: string
+): Promise<OwnedProgram[]> {
   let query = supabase
     .from("client_programs")
-    .select("id, program_id, tenant_host, start_date")
-    .eq("client_id", clientId)
-    .eq("status", "active")
-    .order("start_date", { ascending: false })
-    .limit(1);
+    .select("id, program_id, tenant_host, start_date, status");
+
+  query = query.eq("client_id", clientId);
 
   if (trainerIdOrNull) {
     query = query.eq("trainer_id", trainerIdOrNull);
   }
 
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query;
 
   if (error) {
-    console.error(`${LOG_PREFIX} Error resolving active program:`, {
+    console.error(`${LOG_PREFIX} Error resolving active programs:`, {
       correlationId,
       clientId,
       trainerId: trainerIdOrNull,
       error: error.message,
     });
 
-    return null;
+    return [];
   }
 
-  return data ?? null;
+  return (data ?? [])
+    .filter(
+      (cp) =>
+        typeof cp.status === "string" &&
+        cp.status.trim().toLowerCase() === "active"
+    )
+    .sort((a, b) => {
+      const aDate = a.start_date ?? "";
+      const bDate = b.start_date ?? "";
+
+      return aDate < bDate ? 1 : aDate > bDate ? -1 : 0;
+    })
+    .map((cp) => ({
+      id: cp.id,
+      program_id: cp.program_id,
+      tenant_host: cp.tenant_host,
+      start_date: cp.start_date,
+    }));
 }
 
 export async function loadMicrocycleWithSlots(

@@ -1,9 +1,14 @@
 // GET / PUT /api/clients/[clientId]/microcycle
 // Endpoints trainer-side para configurar el microciclo (plan semanal) de
-// un cliente sobre su programa activo. Replica el patrón de los otros
-// endpoints trainer-on-client (ej. /api/clients/[clientId]/programs):
-// auth con getTrainerSession + check de ownership implícito vía
-// client_programs.trainer_id = session.trainer_id.
+// un cliente. El microciclo se ancla al client_program más reciente
+// (UNIQUE constraint en microcycles.client_program_id), pero las sesiones
+// disponibles para los slots se traen de TODOS los programas activos del
+// cliente — un cliente típicamente tiene fuerza + cardio simultáneamente
+// y el trainer debe poder mezclar ambos en el plan semanal.
+//
+// Replica el patrón de los otros endpoints trainer-on-client: auth con
+// getTrainerSession + check de ownership implícito vía client_programs
+// .trainer_id = session.trainer_id.
 
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
@@ -11,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
-  loadActiveOwnedProgram,
+  loadAllActiveOwnedPrograms,
   loadMicrocycleWithSlots,
   replaceSlots,
   upsertMicrocycle,
@@ -24,8 +29,9 @@ interface RouteContext {
   params: Promise<{ clientId: string }>;
 }
 
-// GET — devuelve microciclo + sesiones del programa activo (sin expandir
-// descansos implícitos: la UI del entrenador trabaja con slots crudos).
+// GET — devuelve microciclo + sesiones de TODOS los programas activos
+// del cliente (sin expandir descansos implícitos: la UI del entrenador
+// trabaja con slots crudos).
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -43,48 +49,51 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
     const { clientId } = await params;
 
-    const ownedProgram = await loadActiveOwnedProgram(
+    const activePrograms = await loadAllActiveOwnedPrograms(
       supabase,
       clientId,
       session.trainer_id,
       correlationId
     );
 
-    if (!ownedProgram) {
+    if (activePrograms.length === 0) {
       return NextResponse.json(
         { success: false, error: "Programa activo no encontrado" },
         { status: 404 }
       );
     }
 
+    // Programa primario (más reciente): el microciclo se ancla aquí
+    // (UNIQUE constraint en microcycles.client_program_id). Si más
+    // adelante se quiere un microciclo "global" no anclado a un programa,
+    // habrá que cambiar el schema.
+    const primary = activePrograms[0]!;
+    const programIds = activePrograms.map((p) => p.program_id);
+
     const microcycle = await loadMicrocycleWithSlots(
       supabase,
-      ownedProgram.id,
+      primary.id,
       correlationId
     );
 
     const [
       { data: availableSessions, error: sessionsError },
-      { data: programRow, error: programError },
+      { data: programRows, error: programError },
     ] = await Promise.all([
       supabase
         .from("sessions")
         .select(
           "id, tenant_host, program_id, trainer_id, name, description, session_order, duration_minutes, session_type, intensity_level, equipment_needed, notes, metadata, created_at, updated_at"
         )
-        .eq("program_id", ownedProgram.program_id)
+        .in("program_id", programIds)
         .order("session_order", { ascending: true }),
-      supabase
-        .from("programs")
-        .select("id, name")
-        .eq("id", ownedProgram.program_id)
-        .maybeSingle(),
+      supabase.from("programs").select("id, name").in("id", programIds),
     ]);
 
     if (sessionsError) {
       console.error(`${LOG_PREFIX} Error fetching available sessions:`, {
         correlationId,
-        programId: ownedProgram.program_id,
+        programIds,
         error: sessionsError.message,
       });
 
@@ -95,19 +104,31 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     }
 
     if (programError) {
-      console.warn(`${LOG_PREFIX} Failed to load program info:`, {
+      console.warn(`${LOG_PREFIX} Failed to load programs info:`, {
         correlationId,
-        programId: ownedProgram.program_id,
+        programIds,
         error: programError.message,
       });
     }
+
+    // El campo `program` (singular) sigue apuntando al primario para
+    // compatibilidad con la UI actual; `programs` (plural) trae todos
+    // por si más adelante el header quiere mostrar la lista completa.
+    const programsByid = new Map(
+      (programRows ?? []).map((p) => [p.id, { id: p.id, name: p.name }])
+    );
+    const primaryProgram = programsByid.get(primary.program_id) ?? null;
+    const allPrograms = programIds
+      .map((id) => programsByid.get(id))
+      .filter((p): p is { id: string; name: string } => p !== undefined);
 
     return NextResponse.json({
       success: true,
       microcycle,
       available_sessions: availableSessions ?? [],
-      program: programRow ?? null,
-      start_date: ownedProgram.start_date,
+      program: primaryProgram,
+      programs: allPrograms,
+      start_date: primary.start_date,
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} GET unexpected error:`, {
@@ -122,10 +143,11 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
   }
 }
 
-// PUT — crea o reemplaza el microciclo del cliente. Estrategia: upsert del
-// microcycle por client_program_id, luego DELETE+INSERT de los slots
-// (más simple que diff incremental y suficiente para la frecuencia
-// esperada de cambios — ver §4.2 de bloque-1-spec.md).
+// PUT — crea o reemplaza el microciclo del cliente. Estrategia: upsert
+// del microcycle ancla al programa primario, luego DELETE+INSERT de los
+// slots (ver §4.2 de bloque-1-spec.md). Las sesiones referenciadas
+// pueden venir de cualquier programa activo del cliente, no solo del
+// primario — un cliente con fuerza + cardio puede mezclar.
 
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -163,23 +185,26 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const ownedProgram = await loadActiveOwnedProgram(
+    const activePrograms = await loadAllActiveOwnedPrograms(
       supabase,
       clientId,
       session.trainer_id,
       correlationId
     );
 
-    if (!ownedProgram) {
+    if (activePrograms.length === 0) {
       return NextResponse.json(
         { success: false, error: "Programa activo no encontrado" },
         { status: 404 }
       );
     }
 
-    // Verifica que las sesiones referenciadas existen y pertenecen a este
-    // mismo programa. Evita que un payload malicioso enlace sesiones de
-    // otro tenant o de otro programa.
+    const primary = activePrograms[0]!;
+    const programIds = activePrograms.map((p) => p.program_id);
+
+    // Validación: cada session_id en el payload debe pertenecer a ALGÚN
+    // programa activo del cliente (no necesariamente el primario).
+    // Evita que un payload malicioso enlace sesiones de otro tenant.
     const sessionIdsInBody = validation.value.slots
       .map((s) => s.session_id)
       .filter((s): s is string => s !== null);
@@ -189,7 +214,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         .from("sessions")
         .select("id")
         .in("id", sessionIdsInBody)
-        .eq("program_id", ownedProgram.program_id);
+        .in("program_id", programIds);
 
       if (foundError) {
         console.error(`${LOG_PREFIX} Error validating session ownership:`, {
@@ -210,7 +235,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         return NextResponse.json(
           {
             success: false,
-            error: `Algunas sesiones no pertenecen al programa activo: ${invalid.join(", ")}`,
+            error: `Algunas sesiones no pertenecen a los programas activos del cliente: ${invalid.join(", ")}`,
           },
           { status: 400 }
         );
@@ -219,7 +244,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const microcycleId = await upsertMicrocycle(
       supabase,
-      ownedProgram,
+      primary,
       validation.value.duration_days,
       correlationId
     );
@@ -247,7 +272,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const microcycle = await loadMicrocycleWithSlots(
       supabase,
-      ownedProgram.id,
+      primary.id,
       correlationId
     );
 
