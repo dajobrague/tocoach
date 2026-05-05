@@ -83,7 +83,7 @@ export function WorkoutsContent() {
 
   const isLoading = isLoadingAvailable;
   const error = availableError ? (availableError as Error).message : null;
-  const hasActiveProgram = Boolean(availableData?.program);
+  const hasActiveProgram = (availableData?.programs?.length ?? 0) > 0;
   const todayYmd = getLocalTodayYmd();
 
   return (

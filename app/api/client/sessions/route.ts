@@ -1,8 +1,11 @@
 // GET /api/client/sessions
-// Lista las sesiones del programa activo del cliente autenticado.
-// Es la fuente de "Escoge tu siguiente entrenamiento" en la pantalla
-// principal del cliente. Sin programa activo → { program: null, sessions: [] }
-// y la UI muestra un empty state.
+// Lista las sesiones de TODOS los programas activos del cliente
+// (clásico: el mismo cliente suele tener un programa de fuerza Y uno de
+// cardio activos a la vez). Es la fuente de "Escoge tu siguiente
+// entrenamiento" en la pantalla principal del cliente.
+//
+// Sin programas activos → { program: null, programs: [], sessions: [] }
+// y la UI muestra empty state.
 
 /* eslint-disable no-console */
 import type { SessionType } from "@/types/training";
@@ -20,6 +23,12 @@ interface SessionListItem {
   session_type: SessionType | null;
   duration_minutes: number | null;
   exercise_count: number;
+  program_id: string;
+}
+
+interface ProgramSummary {
+  id: string;
+  name: string;
 }
 
 export async function GET(_request: NextRequest) {
@@ -38,68 +47,90 @@ export async function GET(_request: NextRequest) {
 
     const clientId = session.client_id;
 
-    const { data: clientProgram, error: clientProgramError } = await supabase
+    // Sin filtro de status en el WHERE — replicamos el patrón de
+    // /api/client/programs y filtramos en JS por robustez (mayúsculas,
+    // espacios, etc.). El select trae start_date para ordenar luego.
+    const { data: clientPrograms, error: clientProgramsError } = await supabase
       .from("client_programs")
-      .select("id, program_id")
-      .eq("client_id", clientId)
-      .eq("status", "active")
-      .order("start_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select("id, program_id, status, start_date")
+      .eq("client_id", clientId);
 
-    if (clientProgramError) {
-      console.error(`${LOG_PREFIX} Error fetching client_program:`, {
+    if (clientProgramsError) {
+      console.error(`${LOG_PREFIX} Error fetching client_programs:`, {
         correlationId,
         clientId,
-        error: clientProgramError.message,
+        error: clientProgramsError.message,
       });
 
       return NextResponse.json(
-        { success: false, error: "Error al obtener el programa activo" },
+        { success: false, error: "Error al obtener los programas" },
         { status: 500 }
       );
     }
 
-    if (!clientProgram) {
+    const activeClientPrograms = (clientPrograms ?? [])
+      .filter(
+        (cp) =>
+          typeof cp.status === "string" &&
+          cp.status.trim().toLowerCase() === "active"
+      )
+      .sort((a, b) => {
+        const aDate = a.start_date ?? "";
+        const bDate = b.start_date ?? "";
+
+        return aDate < bDate ? 1 : aDate > bDate ? -1 : 0;
+      });
+
+    console.log(`${LOG_PREFIX} client_programs lookup:`, {
+      correlationId,
+      clientId,
+      total: clientPrograms?.length ?? 0,
+      active: activeClientPrograms.length,
+      statusesSeen: Array.from(
+        new Set((clientPrograms ?? []).map((cp) => cp.status))
+      ),
+    });
+
+    if (activeClientPrograms.length === 0) {
       return NextResponse.json({
         success: true,
         program: null,
+        programs: [],
         sessions: [],
       });
     }
 
-    const { data: program, error: programError } = await supabase
-      .from("programs")
-      .select("id, name")
-      .eq("id", clientProgram.program_id)
-      .maybeSingle();
+    const programIds = Array.from(
+      new Set(activeClientPrograms.map((cp) => cp.program_id))
+    );
 
-    if (programError || !program) {
-      console.error(`${LOG_PREFIX} Error fetching program:`, {
+    const [programsResult, sessionsResult] = await Promise.all([
+      supabase.from("programs").select("id, name").in("id", programIds),
+      supabase
+        .from("sessions")
+        .select("id, name, session_type, duration_minutes, program_id")
+        .in("program_id", programIds)
+        .order("session_order", { ascending: true }),
+    ]);
+
+    if (programsResult.error) {
+      console.error(`${LOG_PREFIX} Error fetching programs:`, {
         correlationId,
-        clientId,
-        programId: clientProgram.program_id,
-        error: programError?.message,
+        programIds,
+        error: programsResult.error.message,
       });
 
       return NextResponse.json(
-        { success: false, error: "Error al obtener el programa" },
+        { success: false, error: "Error al obtener los programas" },
         { status: 500 }
       );
     }
 
-    const { data: sessions, error: sessionsError } = await supabase
-      .from("sessions")
-      .select("id, name, session_type, duration_minutes")
-      .eq("program_id", clientProgram.program_id)
-      .order("session_order", { ascending: true });
-
-    if (sessionsError) {
+    if (sessionsResult.error) {
       console.error(`${LOG_PREFIX} Error fetching sessions:`, {
         correlationId,
-        clientId,
-        programId: clientProgram.program_id,
-        error: sessionsError.message,
+        programIds,
+        error: sessionsResult.error.message,
       });
 
       return NextResponse.json(
@@ -108,15 +139,41 @@ export async function GET(_request: NextRequest) {
       );
     }
 
-    const sessionList: SessionListItem[] = await attachExerciseCounts(
+    const programsMap = new Map<string, ProgramSummary>();
+
+    for (const p of programsResult.data ?? []) {
+      programsMap.set(p.id, { id: p.id, name: p.name });
+    }
+
+    // Mantén el orden por programa (más reciente primero) y luego por
+    // session_order dentro de cada programa.
+    const sessions = sessionsResult.data ?? [];
+    const sessionList = await attachExerciseCounts(
       supabase,
-      sessions ?? [],
+      sessions,
       correlationId
     );
 
+    sessionList.sort((a, b) => {
+      const aIdx = programIds.indexOf(a.program_id);
+      const bIdx = programIds.indexOf(b.program_id);
+
+      return aIdx - bIdx;
+    });
+
+    // `program` (singular) se mantiene por compatibilidad con la spec
+    // original — apunta al primer programa activo (más reciente). La UI
+    // típicamente solo lo usa para detectar "hay programa activo".
+    // `programs` (plural) es la fuente correcta cuando el cliente tiene
+    // varios programas activos.
+    const programsArray: ProgramSummary[] = programIds
+      .map((id) => programsMap.get(id))
+      .filter((p): p is ProgramSummary => p !== undefined);
+
     return NextResponse.json({
       success: true,
-      program: { id: program.id, name: program.name },
+      program: programsArray[0] ?? null,
+      programs: programsArray,
       sessions: sessionList,
     });
   } catch (error) {
@@ -142,6 +199,7 @@ async function attachExerciseCounts(
     name: string;
     session_type: SessionType | null;
     duration_minutes: number | null;
+    program_id: string;
   }>,
   correlationId: string
 ): Promise<SessionListItem[]> {
@@ -173,5 +231,6 @@ async function attachExerciseCounts(
     session_type: s.session_type ?? null,
     duration_minutes: s.duration_minutes ?? null,
     exercise_count: counts.get(s.id) ?? 0,
+    program_id: s.program_id,
   }));
 }

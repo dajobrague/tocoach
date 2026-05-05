@@ -15,16 +15,24 @@ export interface AvailableSession {
   session_type: SessionType | null;
   duration_minutes: number | null;
   exercise_count: number;
+  program_id?: string; // presente cuando hay >1 programa activo (fuerza+cardio)
+}
+
+export interface ProgramSummary {
+  id: string;
+  name: string;
 }
 
 export interface AvailableSessionsData {
-  program: { id: string; name: string } | null;
+  program: ProgramSummary | null;
+  programs: ProgramSummary[];
   sessions: AvailableSession[];
 }
 
 interface ApiResponse {
   success: boolean;
-  program: { id: string; name: string } | null;
+  program: ProgramSummary | null;
+  programs?: ProgramSummary[];
   sessions: AvailableSession[];
   error?: string;
 }
@@ -37,7 +45,11 @@ async function fetchAvailableSessions(): Promise<AvailableSessionsData> {
     throw new Error(data.error ?? "Error al cargar las sesiones disponibles");
   }
 
-  return { program: data.program, sessions: data.sessions };
+  return {
+    program: data.program,
+    programs: data.programs ?? (data.program ? [data.program] : []),
+    sessions: data.sessions,
+  };
 }
 
 export function useAvailableSessions() {
