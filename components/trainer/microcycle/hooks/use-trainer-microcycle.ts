@@ -5,9 +5,11 @@ import type { MicrocycleWithSlots, Session } from "@/types/training";
 
 import { useQuery } from "@tanstack/react-query";
 
+export type AvailableTrainerSession = Session & { exercise_count: number };
+
 export interface TrainerMicrocycleData {
   microcycle: MicrocycleWithSlots | null;
-  available_sessions: Session[];
+  available_sessions: AvailableTrainerSession[];
   program: { id: string; name: string } | null;
   start_date: string | null;
 }
@@ -15,7 +17,7 @@ export interface TrainerMicrocycleData {
 interface ApiResponse {
   success: boolean;
   microcycle: MicrocycleWithSlots | null;
-  available_sessions: Session[];
+  available_sessions: AvailableTrainerSession[];
   program: { id: string; name: string } | null;
   start_date: string | null;
   error?: string;

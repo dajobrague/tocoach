@@ -1,22 +1,53 @@
-// Panel lateral (desktop) o sección debajo (mobile) con la biblioteca de
-// sesiones del programa: nombres y count de ejercicios. Es read-only —
-// la creación de sesiones vive en la pestaña "Entrenamientos" del cliente.
-// Si la sesión no tiene ejercicios todavía, mostramos "0 ejercicios" para
-// que el trainer note que necesita armar el contenido antes.
+// Panel lateral del editor del Plan Semanal. Las sesiones del programa
+// son CLICKABLES (Trabajo 3 §5.6): tap en una sesión la asigna al slot
+// seleccionado o, si no hay seleccionado, al primer slot vacío.
+//
+// Cuando hay un slot seleccionado, las cards reciben un highlight sutil
+// (border info) para señalar que son la próxima acción esperada.
 
-import type { Session } from "@/types/training";
+import type { Session, SessionType } from "@/types/training";
 
-import { Card, CardBody, CardHeader } from "@heroui/react";
+import { Card, CardBody, CardHeader, Chip } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
-interface Props {
-  sessions: Session[];
-  exerciseCounts?: Record<string, number>;
+interface AvailableSession extends Session {
+  exercise_count?: number;
 }
+
+interface Props {
+  sessions: AvailableSession[];
+  /** True cuando hay un slot seleccionado en el panel principal. */
+  highlighted: boolean;
+  isDisabled?: boolean;
+  onSelectSession: (sessionId: string) => void;
+}
+
+const TYPE_LABEL: Record<SessionType, string> = {
+  strength: "Fuerza",
+  cardio: "Cardio",
+  flexibility: "Flexibilidad",
+  sports: "Deportes",
+  recovery: "Descanso activo",
+  other: "Otro",
+};
+
+const TYPE_COLOR: Record<
+  SessionType,
+  "primary" | "danger" | "warning" | "secondary" | "success" | "default"
+> = {
+  strength: "primary",
+  cardio: "danger",
+  flexibility: "secondary",
+  sports: "warning",
+  recovery: "success",
+  other: "default",
+};
 
 export default function AvailableSessionsAside({
   sessions,
-  exerciseCounts,
+  highlighted,
+  isDisabled = false,
+  onSelectSession,
 }: Props) {
   return (
     <Card shadow="sm">
@@ -38,26 +69,57 @@ export default function AvailableSessionsAside({
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {sessions.map((s) => {
-              const count = exerciseCounts?.[s.id] ?? 0;
-
-              return (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between rounded-md border border-default-200 px-3 py-2"
+            {sessions.map((s) => (
+              <li key={s.id}>
+                <button
+                  className={`w-full text-left rounded-md border px-3 py-2 transition-colors ${
+                    highlighted
+                      ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
+                      : "border-default-200 hover:bg-default-50"
+                  } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={isDisabled}
+                  type="button"
+                  onClick={() => onSelectSession(s.id)}
                 >
-                  <span className="text-sm text-default-700 truncate pr-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    {s.session_type ? (
+                      <Chip
+                        color={TYPE_COLOR[s.session_type]}
+                        size="sm"
+                        variant="flat"
+                      >
+                        {TYPE_LABEL[s.session_type]}
+                      </Chip>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="text-[11px] text-default-500 font-body">
+                      {formatMeta(s)}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-foreground truncate">
                     {s.name}
-                  </span>
-                  <span className="text-xs text-default-500 shrink-0">
-                    {count} {count === 1 ? "ejercicio" : "ejercicios"}
-                  </span>
-                </li>
-              );
-            })}
+                  </p>
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </CardBody>
     </Card>
   );
+}
+
+function formatMeta(s: AvailableSession): string {
+  if (s.session_type === "cardio" && s.duration_minutes) {
+    return `${s.duration_minutes} min`;
+  }
+  if (typeof s.exercise_count === "number" && s.exercise_count > 0) {
+    return `${s.exercise_count} ${s.exercise_count === 1 ? "ejercicio" : "ejercicios"}`;
+  }
+  if (s.duration_minutes) {
+    return `${s.duration_minutes} min`;
+  }
+
+  return "Sin ejercicios";
 }

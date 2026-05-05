@@ -90,6 +90,33 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       supabase.from("programs").select("id, name").in("id", programIds),
     ]);
 
+    // Conteo de session_exercises por sesión, en una sola query agregada,
+    // para que el aside del editor muestre "X ejercicios" sin más fetches
+    // del cliente.
+    const sessionIds = (availableSessions ?? []).map((s) => s.id);
+    const exerciseCounts = new Map<string, number>();
+
+    if (sessionIds.length > 0) {
+      const { data: rows, error: countError } = await supabase
+        .from("session_exercises")
+        .select("session_id")
+        .in("session_id", sessionIds);
+
+      if (countError) {
+        console.warn(`${LOG_PREFIX} Failed to count session_exercises:`, {
+          correlationId,
+          error: countError.message,
+        });
+      } else {
+        for (const row of rows ?? []) {
+          exerciseCounts.set(
+            row.session_id,
+            (exerciseCounts.get(row.session_id) ?? 0) + 1
+          );
+        }
+      }
+    }
+
     if (sessionsError) {
       console.error(`${LOG_PREFIX} Error fetching available sessions:`, {
         correlationId,
@@ -122,10 +149,15 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       .map((id) => programsByid.get(id))
       .filter((p): p is { id: string; name: string } => p !== undefined);
 
+    const sessionsWithCount = (availableSessions ?? []).map((s) => ({
+      ...s,
+      exercise_count: exerciseCounts.get(s.id) ?? 0,
+    }));
+
     return NextResponse.json({
       success: true,
       microcycle,
-      available_sessions: availableSessions ?? [],
+      available_sessions: sessionsWithCount,
       program: primaryProgram,
       programs: allPrograms,
       start_date: primary.start_date,
