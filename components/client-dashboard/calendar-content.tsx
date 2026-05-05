@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { getLocalTodayYmd, getLocalYmd } from "@/lib/forms/client-helpers";
 import {
   getMockCalendarEvents,
   type MockCalendarEvent,
@@ -73,7 +74,10 @@ export function CalendarContent() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0]!;
+  // Use the user's LOCAL Y-M-D so calendar cells highlight the correct
+  // "today". `toISOString()` here would silently mark yesterday/tomorrow
+  // depending on the user's offset from UTC at the moment they open the page.
+  const today = getLocalTodayYmd();
 
   // Group events by date
   const eventsByDate = useMemo(() => {
@@ -113,7 +117,12 @@ export function CalendarContent() {
     for (let i = startingDayOfWeek - 1; i >= 0; i--) {
       const day = prevMonthLastDay - i;
       const date = new Date(year, month - 1, day);
-      const dateStr = date.toISOString().split("T")[0]!;
+      // `new Date(year, month, day)` returns midnight LOCAL — calling
+      // `toISOString()` then converts to UTC, which can shift the day
+      // (e.g. España UTC+2 → "1 may 00:00 CEST" becomes "30 abr 22:00 UTC").
+      // Use the local Y-M-D so the cell's stored key matches what the user
+      // sees painted in that grid square.
+      const dateStr = getLocalYmd(date);
 
       days.push({
         date: dateStr,
@@ -127,7 +136,8 @@ export function CalendarContent() {
     // Add current month's days
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dateStr = date.toISOString().split("T")[0]!;
+      // Local Y-M-D — see comment in the previous loop above.
+      const dateStr = getLocalYmd(date);
 
       days.push({
         date: dateStr,
@@ -143,7 +153,8 @@ export function CalendarContent() {
 
     for (let day = 1; day <= remainingDays; day++) {
       const date = new Date(year, month + 1, day);
-      const dateStr = date.toISOString().split("T")[0]!;
+      // Local Y-M-D — see comment in the previous-month loop above.
+      const dateStr = getLocalYmd(date);
 
       days.push({
         date: dateStr,

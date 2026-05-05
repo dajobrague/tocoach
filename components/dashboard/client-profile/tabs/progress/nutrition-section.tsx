@@ -27,6 +27,7 @@ import {
   resolveFatsAnswer,
   resolveProteinAnswer,
 } from "@/lib/forms/analytics-keys";
+import { getLocalYmd } from "@/lib/forms/client-helpers";
 
 const DATE_RANGES = [
   { key: "30", label: "30 días" },
@@ -229,7 +230,10 @@ function ConsistencyGrid({ data }: { data: NutritionPoint[] }) {
       const days: { date: string; logged: boolean; dayName: string }[] = [];
 
       for (let d = 0; d < 7; d++) {
-        const ds = cursor.toISOString().split("T")[0]!;
+        // `loggedDates` are local Y-M-D from the API; compare with the
+        // local Y-M-D of `cursor` so the "days with data" count matches
+        // what the trainer actually sees on their calendar.
+        const ds = getLocalYmd(cursor);
         const isFuture = cursor > end;
 
         days.push({
@@ -240,7 +244,7 @@ function ConsistencyGrid({ data }: { data: NutritionPoint[] }) {
         cursor.setDate(cursor.getDate() + 1);
       }
       result.push({
-        weekLabel: fmtDate(weekStart.toISOString().split("T")[0]!),
+        weekLabel: fmtDate(getLocalYmd(weekStart)),
         days,
       });
     }
@@ -347,8 +351,10 @@ export function NutritionProgressView({ clientId }: { clientId: string }) {
     const startDate = new Date();
 
     startDate.setDate(startDate.getDate() - parseInt(daysRange));
-    const start = startDate.toISOString().split("T")[0];
-    const end = endDate.toISOString().split("T")[0];
+    // Local Y-M-D so the API range includes/excludes the right boundary
+    // days for the trainer's timezone.
+    const start = getLocalYmd(startDate);
+    const end = getLocalYmd(endDate);
 
     try {
       const res = await fetch(
@@ -421,7 +427,10 @@ export function NutritionProgressView({ clientId }: { clientId: string }) {
       const ws = new Date(d);
 
       ws.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      const key = ws.toISOString().split("T")[0]!;
+      // Local Y-M-D — `ws` is built from local components above; UTC
+      // conversion would group some Sunday/Monday boundary points into the
+      // wrong week for trainers far from UTC.
+      const key = getLocalYmd(ws);
 
       if (!weeks[key]) weeks[key] = [];
       weeks[key].push(p);

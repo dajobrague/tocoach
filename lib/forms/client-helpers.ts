@@ -24,6 +24,23 @@ export function getLocalTodayYmd(date: Date = new Date()): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * Same as {@link getLocalTodayYmd} but with a name that signals intent when
+ * used for an arbitrary date (not "today"). Prefer this when migrating away
+ * from `someDate.toISOString().split("T")[0]` — using `toISOString()` for a
+ * locally-computed Date silently shifts the day across the UTC boundary
+ * (e.g. España UTC+2 a la 1am local muestra "ayer" en UTC; Argentina UTC-3
+ * a las 22h local muestra "mañana" en UTC). This helper formats with the
+ * browser's local components so the YYYY-MM-DD matches what the user sees
+ * on their clock — which is what `response_date`, calendar cells, and any
+ * UI key tied to "the day the user is in" actually need.
+ *
+ * Browser-only — see the caveat on {@link getLocalTodayYmd}.
+ */
+export function getLocalYmd(date: Date): string {
+  return getLocalTodayYmd(date);
+}
+
 import {
   DEFAULT_CHECKIN_SCHEDULE,
   getCheckInPeriodEnd,

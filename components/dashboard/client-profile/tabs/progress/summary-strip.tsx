@@ -6,6 +6,8 @@ import { useMemo } from "react";
 
 import { StatCard } from "./ui-atoms";
 
+import { getLocalTodayYmd, getLocalYmd } from "@/lib/forms/client-helpers";
+
 export function SummaryStrip({
   logs,
   stepsData,
@@ -28,7 +30,10 @@ export function SummaryStrip({
 
     if (activeDates.size > 0) {
       const sorted = [...activeDates].sort().reverse();
-      const today = new Date().toISOString().split("T")[0]!;
+      // `activeDates` come from `scheduled_date` (already local Y-M-D in
+      // DB); compare against the trainer's local "today" so the streak
+      // doesn't break artificially around the UTC midnight boundary.
+      const today = getLocalTodayYmd();
       const mostRecent = sorted[0]!;
       const daysDiff = Math.floor(
         (new Date(today).getTime() - new Date(mostRecent).getTime()) / 86400000
@@ -37,7 +42,7 @@ export function SummaryStrip({
       if (daysDiff <= 1) {
         let cursor = new Date(mostRecent);
 
-        while (activeDates.has(cursor.toISOString().split("T")[0]!)) {
+        while (activeDates.has(getLocalYmd(cursor))) {
           streak++;
           cursor.setDate(cursor.getDate() - 1);
         }

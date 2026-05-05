@@ -32,6 +32,7 @@ import {
   type VerticalVideoPlayerHandle,
 } from "@/components/client-dashboard/vertical-video-player-modal";
 import { VideoPlayerModal } from "@/components/client-dashboard/video-player-modal";
+import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
   useExerciseLogs,
   usePrograms,
@@ -194,7 +195,10 @@ export function WorkoutsContent() {
   const handleOpenReschedule = (session: any) => {
     setSelectedRescheduleSession({
       sessionName: session.sessionName,
-      currentDate: session.date.toISOString().split("T")[0],
+      // Local Y-M-D — `session.date` is constructed at local midnight (see
+      // sessionDate logic below); `toISOString()` would shift the day across
+      // the UTC boundary for users far from UTC.
+      currentDate: getLocalYmd(session.date),
       scheduledSessionId: session.scheduledSessionId ?? null,
       sessionId: session.sessionId,
     });
@@ -475,7 +479,11 @@ export function WorkoutsContent() {
         );
 
         if (matchingSession) {
-          const dateStr = sessionDate.toISOString().slice(0, 10);
+          // Local Y-M-D — `sessionDate` is local midnight built from
+          // `today` + dayOffset (both local). `toISOString()` would shift
+          // the day for users in non-UTC offsets, breaking template-slot
+          // matching against the local-date keys we use elsewhere.
+          const dateStr = getLocalYmd(sessionDate);
 
           // If this slot was rescheduled to another date, skip it
           if (rescheduledAwaySlots.has(`${matchingSession.id}::${dateStr}`)) {
@@ -1091,7 +1099,7 @@ export function WorkoutsContent() {
                           {/* Show logged data if exists */}
                           {isExerciseLogged(
                             (exercise.exercise_id || "") as string,
-                            session.date.toISOString().split("T")[0] as string
+                            getLocalYmd(session.date) as string
                           ) && (
                             <div
                               className={`mt-2 p-2 rounded ${isToday ? "bg-white/10" : "bg-success/10"} border ${isToday ? "border-white/20" : "border-success/20"}`}
@@ -1437,9 +1445,7 @@ export function WorkoutsContent() {
                             e.stopPropagation();
                             const exerciseId = (exercise.exercise_id ||
                               "") as string;
-                            const dateStr = session.date
-                              .toISOString()
-                              .split("T")[0] as string;
+                            const dateStr = getLocalYmd(session.date);
                             const existingLog = getExerciseLog(
                               exerciseId,
                               dateStr
@@ -1455,7 +1461,7 @@ export function WorkoutsContent() {
                         >
                           {isExerciseLogged(
                             (exercise.exercise_id || "") as string,
-                            session.date.toISOString().split("T")[0] as string
+                            getLocalYmd(session.date) as string
                           ) ? (
                             <Icon
                               className="text-success"

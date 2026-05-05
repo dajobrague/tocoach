@@ -1,5 +1,7 @@
 import type { ExerciseLog, ExerciseGroup } from "./types";
 
+import { getLocalYmd } from "@/lib/forms/client-helpers";
+
 const CARDIO_CATEGORIES = new Set(["cardio"]);
 
 export function isCardio(category: string): boolean {
@@ -35,9 +37,13 @@ export function buildDateRange(days: string): { start: string; end: string } {
 
   start.setDate(start.getDate() - parseInt(days));
 
+  // Local Y-M-D so the range matches what the trainer sees on their
+  // calendar. `toISOString()` would silently shift one or both ends across
+  // the UTC boundary depending on the trainer's timezone, dropping logs
+  // that were recorded near midnight local.
   return {
-    start: start.toISOString().split("T")[0]!,
-    end: end.toISOString().split("T")[0]!,
+    start: getLocalYmd(start),
+    end: getLocalYmd(end),
   };
 }
 

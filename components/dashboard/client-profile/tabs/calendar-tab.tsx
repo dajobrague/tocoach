@@ -12,6 +12,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { getLocalYmd } from "@/lib/forms/client-helpers";
+
 interface CalendarTabProps {
   clientId: string;
 }
@@ -166,7 +168,11 @@ export default function CalendarTab({ clientId }: CalendarTabProps) {
                 currentDate.getMonth(),
                 dayNumber
               );
-              const dateString = dayDate.toISOString().split("T")[0]!;
+              // Local Y-M-D — `dayDate` is built from local components above;
+              // UTC conversion would label calendar cells with the wrong day
+              // for trainers in non-UTC offsets, missing data on dates that
+              // straddle the UTC boundary.
+              const dateString = getLocalYmd(dayDate);
               const isToday =
                 dayDate.toDateString() === new Date().toDateString();
               const hasData = hasDataForDate(dateString);

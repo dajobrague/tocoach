@@ -5,6 +5,8 @@ import type { ExerciseLog, StepsPoint } from "./types";
 import { useMemo } from "react";
 import { ActivityCalendar } from "react-activity-calendar";
 
+import { getLocalYmd } from "@/lib/forms/client-helpers";
+
 const SPANISH_LABELS = {
   months: [
     "ene",
@@ -80,7 +82,11 @@ export function ActivityHeatmap({
     const cursor = new Date(start);
 
     while (cursor <= end) {
-      const dateStr = cursor.toISOString().split("T")[0]!;
+      // Local Y-M-D so each heatmap cell aligns with the local calendar
+      // day shown to the trainer. `toISOString()` here would attribute
+      // activity to the wrong cell for trainers in non-UTC offsets when
+      // the cursor lands near midnight local.
+      const dateStr = getLocalYmd(cursor);
       const exerciseCount = exerciseMap.get(dateStr) ?? 0;
       const hasSteps = stepsSet.has(dateStr);
       const totalCount = exerciseCount + (hasSteps ? 1 : 0);
