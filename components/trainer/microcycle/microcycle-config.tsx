@@ -161,7 +161,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
         </div>
       ) : (
         <div className="flex flex-col gap-6 lg:flex-row">
-          <section className="flex-1 rounded-lg bg-white p-4 shadow-sm">
+          <section className="flex-1 rounded-lg bg-content1 p-4 shadow-sm">
             {programHasNoSessions ? (
               <div className="mb-4 rounded-md border border-default-200 bg-default-50 p-3 text-xs text-default-700">
                 Este programa todavía no tiene sesiones. Agrégalas desde la
@@ -169,7 +169,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
                 los días del microciclo.
               </div>
             ) : null}
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-default-200">
               {days.map((day) => (
                 <li key={day}>
                   <MicrocycleSlotRow

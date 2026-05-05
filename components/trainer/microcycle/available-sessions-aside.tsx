@@ -19,7 +19,7 @@ export default function AvailableSessionsAside({
   exerciseCounts,
 }: Props) {
   return (
-    <Card className="bg-white" shadow="sm">
+    <Card shadow="sm">
       <CardHeader className="flex items-center gap-2 pb-2">
         <Icon
           className="text-default-500"
@@ -44,7 +44,7 @@ export default function AvailableSessionsAside({
               return (
                 <li
                   key={s.id}
-                  className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2"
+                  className="flex items-center justify-between rounded-md border border-default-200 px-3 py-2"
                 >
                   <span className="text-sm text-default-700 truncate pr-2">
                     {s.name}

@@ -46,7 +46,7 @@ export function CalendarHeader({
               aria-selected={isActive}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
                 isActive
-                  ? "bg-white text-foreground shadow-sm"
+                  ? "bg-content2 text-foreground shadow-sm"
                   : "text-default-500 hover:text-default-700"
               }`}
               role="tab"
