@@ -4,22 +4,18 @@ import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
 import AccessTab from "./tabs/access-tab";
-import CardioTab from "./tabs/cardio-tab";
 import ChartsTab from "./tabs/charts-tab";
 import FormsTab from "./tabs/forms-tab";
-import MicrocycleTab from "./tabs/microcycle-tab";
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
 import ProgressTab from "./tabs/progress-tab";
 import SupplementsTab from "./tabs/supplements-tab";
-import WorkoutsTab from "./tabs/workouts-tab";
+import TrainingTabs from "./tabs/training-tabs";
 
 const TAB_ITEMS = [
   { key: "progress", label: "Progreso", icon: "solar:chart-line-duotone" },
   { key: "charts", label: "Gráficas", icon: "solar:chart-square-bold" },
-  { key: "workouts", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
-  { key: "microcycle", label: "Plan semanal", icon: "solar:calendar-bold" },
-  { key: "cardio", label: "Cardio", icon: "solar:heart-pulse-bold" },
+  { key: "training", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
   { key: "neat", label: "NEAT", icon: "solar:walking-bold" },
   { key: "nutrition", label: "Nutrición", icon: "fluent:food-20-filled" },
   { key: "supplements", label: "Suplementos", icon: "solar:health-bold" },
@@ -92,14 +88,8 @@ export default function ClientProfileTabs({
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
           {selectedTab === "progress" && <ProgressTab clientId={clientId} />}
           {selectedTab === "charts" && <ChartsTab clientId={clientId} />}
-          {selectedTab === "workouts" && (
-            <WorkoutsTab clientId={clientId} clientName={clientName ?? ""} />
-          )}
-          {selectedTab === "microcycle" && (
-            <MicrocycleTab clientId={clientId} />
-          )}
-          {selectedTab === "cardio" && (
-            <CardioTab clientId={clientId} clientName={clientName ?? ""} />
+          {selectedTab === "training" && (
+            <TrainingTabs clientId={clientId} clientName={clientName ?? ""} />
           )}
           {selectedTab === "neat" && <NeatTab clientId={clientId} />}
           {selectedTab === "nutrition" && <NutritionTab clientId={clientId} />}
