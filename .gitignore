@@ -80,3 +80,33 @@ playwright/.cache/
 
 # Superpowers brainstorm artifacts
 .superpowers/
+
+# AI agent installs and per-machine plugin config (ruflo / claude-flow /
+# Claude Code project skills + MCP). These are installed locally per
+# developer and shouldn't be shared via git. If you ever want to track
+# something specific (e.g. a shared Claude Code project settings file)
+# use `git add -f` to bypass these.
+.claude/
+.claude-flow/
+.mcp.json
+
+# Cursor IDE per-workspace state
+.cursor/
+
+# Throwaway investigation/repro scripts at repo root (anchored so
+# matching helper modules deeper in the tree are NOT ignored).
+/_investigate-*
+/_tmp_*
+
+# Image dumps that land at repo root from screenshot tools and chat
+# pastes — keep them out of the working tree by default.
+/Captura de pantalla*
+/Screenshot*
+/WhatsApp Image*
+
+# Husky 9 internal directory — regenerated on install
+.husky/_/
+
+# Lint / build caches
+.eslintcache
+.turbo/
