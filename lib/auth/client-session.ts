@@ -13,10 +13,12 @@ const isProduction = process.env.NODE_ENV === "production";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: isProduction,
-  // SameSite=None requires Secure flag — browsers silently reject the cookie
-  // without it.  Use "lax" in development (localhost) and "none" in production
-  // (needed for iframe embedding).
-  sameSite: isProduction ? ("none" as const) : ("lax" as const),
+  // Lax: sent on top-level GET navigations from any origin, including links
+  // shared via WhatsApp, email, etc. Not affected by Safari ITP or Chrome's
+  // third-party cookie deprecation because Lax cookies are first-party by
+  // definition. Iframe embedding of the client portal is not supported; if
+  // that requirement returns, revisit (likely Partitioned/CHIPS).
+  sameSite: "lax" as const,
   path: "/",
   maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
 };
