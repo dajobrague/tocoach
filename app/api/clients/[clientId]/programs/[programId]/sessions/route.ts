@@ -146,16 +146,51 @@ export async function PUT(
 
     console.log("[Sessions API] Updating session:", sessionId, body);
 
+    // Build a partial update so only fields the caller actually supplied are
+    // written. When `daysOfWeek` changes, merge it INTO the existing metadata
+    // jsonb instead of replacing the whole column — sessions accumulate other
+    // state under metadata (progress, original_plan_date set during
+    // reschedules) and the previous wholesale overwrite was wiping that on
+    // every weekly-pattern edit (Sete Marsal, "se reinicia el progreso al
+    // modificar días semanales").
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (name !== undefined) {
+      updateData.name = name;
+    }
+
+    if (daysOfWeek !== undefined) {
+      const { data: existing, error: fetchError } = await supabase
+        .from("sessions")
+        .select("metadata")
+        .eq("id", sessionId)
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      if (fetchError || !existing) {
+        console.error(
+          "[Sessions API] Session not found or unauthorized:",
+          fetchError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Sesión no encontrada o no autorizada" },
+          { status: 404 }
+        );
+      }
+
+      const prevMetadata =
+        (existing.metadata as Record<string, unknown> | null) ?? {};
+
+      updateData.metadata = { ...prevMetadata, days_of_week: daysOfWeek };
+    }
+
     // Update the session
     const { data: updatedSession, error: sessionError } = await supabase
       .from("sessions")
-      .update({
-        name,
-        metadata: {
-          days_of_week: daysOfWeek,
-        },
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", sessionId)
       .eq("trainer_id", session.trainer_id)
       .select()
