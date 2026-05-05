@@ -14,6 +14,7 @@ import { Icon } from "@iconify/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { ActiveSessionView } from "./active-session-view";
 import {
   AvailableSessionsList,
   type OpenLogPayload,
@@ -62,6 +63,14 @@ export function WorkoutsContent() {
     useState<OpenLogPayload | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isMicrocycleModalOpen, setIsMicrocycleModalOpen] = useState(false);
+  // activeSessionId: id de la sesión que el cliente eligió "Comenzar". Si
+  // no es null, la pantalla cambia al modo activa (ActiveSessionView).
+  // Estado en memoria — al recargar, vuelve al modo lista.
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  const activeSession = activeSessionId
+    ? (availableData?.sessions.find((s) => s.id === activeSessionId) ?? null)
+    : null;
 
   const handleLogExercise = (payload: OpenLogPayload) => {
     setSelectedExercise(payload);
@@ -153,14 +162,22 @@ export function WorkoutsContent() {
               </Card>
             ) : null}
 
-            {!isLoading && !error && hasActiveProgram ? (
+            {!isLoading && !error && hasActiveProgram && activeSession ? (
+              <ActiveSessionView
+                exerciseLogs={exerciseLogs}
+                programs={programs}
+                scheduledDate={todayYmd}
+                session={activeSession}
+                onExit={() => setActiveSessionId(null)}
+                onLogExercise={handleLogExercise}
+              />
+            ) : null}
+
+            {!isLoading && !error && hasActiveProgram && !activeSession ? (
               <>
                 <AvailableSessionsList
                   availableSessions={availableData?.sessions ?? []}
-                  exerciseLogs={exerciseLogs}
-                  programs={programs}
-                  scheduledDate={todayYmd}
-                  onLogExercise={handleLogExercise}
+                  onActivate={setActiveSessionId}
                 />
 
                 {microcycle ? (
