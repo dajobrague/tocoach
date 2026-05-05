@@ -17,6 +17,7 @@ export interface OwnedProgram {
   id: string;
   program_id: string;
   tenant_host: string;
+  start_date: string;
 }
 
 const LOG_PREFIX = "[Microcycle DB]";
@@ -34,7 +35,7 @@ export async function loadActiveOwnedProgram(
 ): Promise<OwnedProgram | null> {
   let query = supabase
     .from("client_programs")
-    .select("id, program_id, tenant_host")
+    .select("id, program_id, tenant_host, start_date")
     .eq("client_id", clientId)
     .eq("status", "active")
     .order("start_date", { ascending: false })

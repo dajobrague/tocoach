@@ -63,13 +63,23 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       correlationId
     );
 
-    const { data: availableSessions, error: sessionsError } = await supabase
-      .from("sessions")
-      .select(
-        "id, tenant_host, program_id, trainer_id, name, description, session_order, duration_minutes, session_type, intensity_level, equipment_needed, notes, metadata, created_at, updated_at"
-      )
-      .eq("program_id", ownedProgram.program_id)
-      .order("session_order", { ascending: true });
+    const [
+      { data: availableSessions, error: sessionsError },
+      { data: programRow, error: programError },
+    ] = await Promise.all([
+      supabase
+        .from("sessions")
+        .select(
+          "id, tenant_host, program_id, trainer_id, name, description, session_order, duration_minutes, session_type, intensity_level, equipment_needed, notes, metadata, created_at, updated_at"
+        )
+        .eq("program_id", ownedProgram.program_id)
+        .order("session_order", { ascending: true }),
+      supabase
+        .from("programs")
+        .select("id, name")
+        .eq("id", ownedProgram.program_id)
+        .maybeSingle(),
+    ]);
 
     if (sessionsError) {
       console.error(`${LOG_PREFIX} Error fetching available sessions:`, {
@@ -84,10 +94,20 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    if (programError) {
+      console.warn(`${LOG_PREFIX} Failed to load program info:`, {
+        correlationId,
+        programId: ownedProgram.program_id,
+        error: programError.message,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       microcycle,
       available_sessions: availableSessions ?? [],
+      program: programRow ?? null,
+      start_date: ownedProgram.start_date,
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} GET unexpected error:`, {
