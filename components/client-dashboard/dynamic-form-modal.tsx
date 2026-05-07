@@ -431,43 +431,93 @@ export function DynamicFormModal({
   const totalSteps = sections.length;
   const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0;
 
-  const handleNext = () => {
-    // Validate current section
-    const currentErrors: Record<string, string> = {};
+  /**
+   * Valida una sección y retorna el mapa de errores. Extraído para que
+   * `handleNext` y la validación cross-page del submit final compartan
+   * exactamente la misma lógica (antes solo se llamaba inline en
+   * handleNext y el submit no validaba globalmente — un required vacío
+   * en una página previa pasaba silencioso al server, que retornaba
+   * 400 sin mensaje claro al cliente).
+   */
+  const validateSection = (
+    section: (typeof sections)[number]
+  ): Record<string, string> => {
+    const sectionErrors: Record<string, string> = {};
 
-    currentSection.questions.forEach((question) => {
+    section.questions.forEach((question) => {
       if (question.required && !shouldShowQuestion(question)) return;
 
       if (question.type === "group" && question.subQuestions) {
-        // Validate required sub-questions
         question.subQuestions
           .filter((sq) => sq.enabled && sq.required)
           .forEach((sq) => {
             if (isEmptyAnswer(sq.type, answers[sq.id])) {
-              currentErrors[sq.id] = "Este campo es obligatorio";
+              sectionErrors[sq.id] = "Este campo es obligatorio";
             }
           });
       } else if (
         question.required &&
         isEmptyAnswer(question.type, answers[question.id])
       ) {
-        currentErrors[question.id] = "Este campo es obligatorio";
+        sectionErrors[question.id] = "Este campo es obligatorio";
       }
     });
 
-    if (Object.keys(currentErrors).length > 0) {
-      setErrors(currentErrors);
+    return sectionErrors;
+  };
+
+  const handleNext = () => {
+    // Avance entre páginas: solo validamos la sección actual. Si pasa,
+    // pasamos a la siguiente.
+    if (currentStep < totalSteps - 1) {
+      const stepErrors = validateSection(currentSection);
+
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors);
+
+        return;
+      }
+      setErrors({});
+      setCurrentStep(currentStep + 1);
+
+      return;
+    }
+
+    // Último paso → validamos TODAS las secciones antes de submit. Si
+    // hay errores en alguna sección previa (ej: una required que se
+    // activó condicionalmente después de que el cliente la pasó), las
+    // juntamos, saltamos al primer paso con error y avisamos por toast.
+    // Antes esto pasaba silencioso al server y el cliente veía
+    // "aprieto Enviar y no pasa nada".
+    const allErrors: Record<string, string> = {};
+    let firstErrorStep = -1;
+
+    sections.forEach((section, idx) => {
+      const sectionErrors = validateSection(section);
+
+      if (Object.keys(sectionErrors).length > 0) {
+        if (firstErrorStep < 0) firstErrorStep = idx;
+        Object.assign(allErrors, sectionErrors);
+      }
+    });
+
+    if (firstErrorStep >= 0) {
+      setErrors(allErrors);
+      setCurrentStep(firstErrorStep);
+      addToast({
+        title: "Faltan campos por completar",
+        description:
+          firstErrorStep === currentStep
+            ? "Revisa los campos marcados antes de enviar."
+            : `Revisa el paso ${firstErrorStep + 1} antes de enviar.`,
+        color: "warning",
+      });
 
       return;
     }
 
     setErrors({});
-
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      handleSubmit();
-    }
+    handleSubmit();
   };
 
   const handleBack = () => {
@@ -531,11 +581,60 @@ export function DynamicFormModal({
         setIsEditingExisting(false);
         onClose();
       } else {
-        addToast({
-          title: "Error",
-          description: data.error || "Error al enviar formulario",
-          color: "danger",
-        });
+        // Mapear errores de validación server-side al state local
+        // `errors` para que se vean inline en cada pregunta, en vez
+        // de mostrar un toast genérico "Respuestas inválidas" sin
+        // decir cuál pregunta. Aparte saltamos al primer paso que
+        // contenga un error para que el usuario lo vea sin scroll
+        // innecesario. Esto cubre, por ejemplo, foto que falló al
+        // upload silenciosamente, número fuera de rango, etc.
+        const serverErrors: Record<string, string> = {};
+
+        if (Array.isArray(data.errors)) {
+          for (const e of data.errors as Array<{
+            field?: string;
+            message?: string;
+          }>) {
+            if (e?.field && e?.message) {
+              serverErrors[e.field] = e.message;
+            }
+          }
+        }
+
+        if (Object.keys(serverErrors).length > 0) {
+          setErrors(serverErrors);
+
+          // Saltar a la primera sección que contenga un error
+          // mapeado. Si ninguna lo tiene (error de un campo
+          // condicional ahora oculto), nos quedamos donde estamos.
+          const firstStepWithError = sections.findIndex((s) =>
+            s.questions.some((q) => {
+              if (serverErrors[q.id]) return true;
+              if (q.type === "group" && q.subQuestions) {
+                return q.subQuestions.some((sq) => serverErrors[sq.id]);
+              }
+
+              return false;
+            })
+          );
+
+          if (firstStepWithError >= 0 && firstStepWithError !== currentStep) {
+            setCurrentStep(firstStepWithError);
+          }
+
+          addToast({
+            title: "Revisa los campos marcados",
+            description:
+              "Hay respuestas que necesitan corrección antes de enviar.",
+            color: "warning",
+          });
+        } else {
+          addToast({
+            title: "Error",
+            description: data.error || "Error al enviar formulario",
+            color: "danger",
+          });
+        }
       }
     } catch (error) {
       console.error("Error submitting form:", error);
