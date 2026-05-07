@@ -274,19 +274,25 @@ export function DashboardContent() {
     return days;
   }, [responsesByDate, todayYmd]);
 
+  // Weekday del anchor `todayYmd` (0=Domingo, 1=Lunes, … 6=Sábado).
+  // Memo separado para que `shouldShowNeatChart` y NeatChartCard
+  // compartan exactamente el mismo "hoy" — evita que el padre y el
+  // hijo divergan al cruzar medianoche.
+  const todayWeekday = useMemo(
+    () => new Date(`${todayYmd}T00:00:00`).getDay(),
+    [todayYmd]
+  );
+
   // Si el entrenador configuró tarjetas NEAT y al menos una aplica al
-  // weekday de hoy, mostramos el card de Actividad diaria. El `getDay`
-  // sale del anchor `todayYmd` para mantener consistencia con el resto
-  // (mismo refresh de medianoche).
+  // weekday de hoy, mostramos el card de Actividad diaria.
   const shouldShowNeatChart = useMemo(() => {
     if (!hasNeatCards || neatCards.length === 0) return false;
 
-    const today = new Date(`${todayYmd}T00:00:00`).getDay();
     const applicableCards = neatCards.filter(
       (card: ClientNeatCard) =>
         !card.weekdays ||
         card.weekdays.length === 0 ||
-        card.weekdays.includes(today)
+        card.weekdays.includes(todayWeekday)
     );
     const totalGoal = applicableCards.reduce(
       (sum: number, card: ClientNeatCard) => sum + (card.steps_goal || 0),
@@ -294,11 +300,14 @@ export function DashboardContent() {
     );
 
     return applicableCards.length > 0 && totalGoal > 0;
-  }, [hasNeatCards, neatCards, todayYmd]);
+  }, [hasNeatCards, neatCards, todayWeekday]);
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-20">
+      {/* pb-28 da clearance para iPhone con safe-area-inset (~34px) +
+          bottom-nav (~60px) + un buffer. Antes pb-20 dejaba la última
+          card del scroll tapada por unos 30px. */}
+      <div className="min-h-screen bg-background pb-28">
         <div className="max-w-lg mx-auto">
           {/* Top Header */}
           <ClientHeader
@@ -343,6 +352,10 @@ export function DashboardContent() {
               <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
                 {checkinSchedule.custom_name}
               </h2>
+              {/* `text-warning-foreground` (no `text-white`) — el
+                  theme define explícitamente el contrast pair de
+                  warning, así que pasa WCAG AA en cualquier tenant
+                  aunque el warning del entrenador sea muy claro. */}
               <button
                 aria-label={`Completar ${checkinSchedule.custom_name}`}
                 className="bg-warning cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
@@ -350,12 +363,12 @@ export function DashboardContent() {
                 onClick={() => setShowWeeklyFormModal(true)}
               >
                 <div className="max-w-lg mx-auto flex items-center justify-between">
-                  <span className="text-white text-xl font-medium">
+                  <span className="text-warning-foreground text-xl font-medium">
                     {`Completa tu ${checkinSchedule.custom_name}`}
                   </span>
                   <Icon
                     aria-hidden
-                    className="text-white text-3xl"
+                    className="text-warning-foreground text-3xl"
                     icon="solar:alt-arrow-right-bold"
                   />
                 </div>
@@ -565,6 +578,7 @@ export function DashboardContent() {
                   <NeatChartCard
                     neatCards={neatCards}
                     todaySteps={todaySteps}
+                    todayWeekday={todayWeekday}
                     weekSteps={weekSteps}
                   />
                 </CardBody>

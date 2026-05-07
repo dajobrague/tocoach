@@ -8,7 +8,10 @@ function getDateRange() {
   const today = new Date();
   const startDate = new Date(today);
 
-  startDate.setDate(today.getDate() - 14);
+  // -30d aguanta el selector de semana del cliente (que permite hasta
+  // 30 días atrás) — sin esto, el progreso de sesiones pasadas se vería
+  // vacío al abrir un día más viejo de 14 días.
+  startDate.setDate(today.getDate() - 30);
   const endDate = new Date(today);
 
   endDate.setDate(today.getDate() + 21);
@@ -127,14 +130,26 @@ async function fetchFormResponses(
   );
   const data = await response.json();
 
-  return data.success ? data.responses || [] : [];
+  // Throw en `!success` para que TanStack marque `isError`. Antes
+  // devolvíamos `[]` silenciosamente y la home no podía detectar
+  // fallos del backend (banner danger en dashboard-content depende
+  // de esto). Mismo patrón que `fetchSnapshot` en charts-section.
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.responses || [];
 }
 
 async function fetchNeatCards() {
   const response = await clientFetch("/api/client/neat");
   const data = await response.json();
 
-  return data.success ? data.cards || [] : [];
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.cards || [];
 }
 
 // ─── Query hooks ────────────────────────────────────────────────────────────
@@ -226,6 +241,50 @@ export function useLogExercise(clientId: string) {
       // no spinner, no content flash.
       queryClient.invalidateQueries({
         queryKey: ["client", "exerciseLogs", clientId],
+      });
+    },
+  });
+}
+
+// Borra exercise_logs del cliente. Soporta dos modos:
+//   { logId } → borra un solo registro
+//   { sessionId, scheduledDate } → borra todos los logs de una sesión
+//                                  en una fecha específica
+// Después de borrar invalida exerciseLogs y past-sessions para que la
+// UI refleje el cambio sin recarga manual.
+export function useDeleteExerciseLogs(clientId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      args: { logId: string } | { sessionId: string; scheduledDate: string }
+    ) => {
+      const params = new URLSearchParams();
+
+      if ("logId" in args) {
+        params.set("logId", args.logId);
+      } else {
+        params.set("sessionId", args.sessionId);
+        params.set("scheduledDate", args.scheduledDate);
+      }
+      const response = await clientFetch(
+        `/api/clients/${clientId}/exercise-logs?${params.toString()}`,
+        { method: "DELETE" }
+      );
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Error al borrar registro");
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["client", "exerciseLogs", clientId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["client", "past-sessions"],
       });
     },
   });

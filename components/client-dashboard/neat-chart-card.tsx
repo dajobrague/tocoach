@@ -48,6 +48,17 @@ export interface WeekStep {
 interface NeatChartCardProps {
   neatCards: ClientNeatCard[];
   todaySteps: number;
+  /**
+   * Weekday del "hoy" del padre (0=Domingo, … 6=Sábado). Antes este
+   * componente leía `new Date().getDay()` dentro del useMemo sin
+   * deps — si el cliente cruzaba medianoche con la app abierta, las
+   * cards aplicables al día anterior se filtraban con un weekday
+   * stale y `totalGoal` quedaba en 0, ocultando la tarjeta. Ahora
+   * llega como prop desde `dashboard-content` (que ya refresca su
+   * `todayYmd` cada minuto + en window focus), garantizando que padre
+   * e hijo siempre comparten el mismo "hoy".
+   */
+  todayWeekday: number;
   /** Últimos 7 días en orden cronológico (más antiguo → hoy). */
   weekSteps?: WeekStep[];
 }
@@ -55,15 +66,15 @@ interface NeatChartCardProps {
 export function NeatChartCard({
   neatCards,
   todaySteps,
+  todayWeekday,
   weekSteps,
 }: NeatChartCardProps) {
   const { applicableCards, totalGoal, percentage } = useMemo(() => {
-    const today = new Date().getDay();
     const applicable = neatCards.filter(
       (card) =>
         !card.weekdays ||
         card.weekdays.length === 0 ||
-        card.weekdays.includes(today)
+        card.weekdays.includes(todayWeekday)
     );
     const goal = applicable.reduce(
       (sum, card) => sum + (card.steps_goal || 0),
@@ -72,7 +83,7 @@ export function NeatChartCard({
     const pct = goal > 0 ? (todaySteps / goal) * 100 : 0;
 
     return { applicableCards: applicable, totalGoal: goal, percentage: pct };
-  }, [neatCards, todaySteps]);
+  }, [neatCards, todaySteps, todayWeekday]);
 
   // Si no hay cards aplicables o meta, ocultamos el contenido. El
   // `shouldShowNeatChart` del padre normalmente ya nos protege, pero
