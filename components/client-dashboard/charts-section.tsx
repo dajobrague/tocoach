@@ -203,7 +203,7 @@ function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
         <ul className="mt-3 divide-y divide-default-100/60">
           {charts.map(({ chart, adapter }) => {
             const colorToken = Array.isArray(chart.color)
-              ? chart.color[0]!
+              ? (chart.color[0] ?? "neutral-slate")
               : chart.color;
             const palette = resolveColor(colorToken);
             const icon =

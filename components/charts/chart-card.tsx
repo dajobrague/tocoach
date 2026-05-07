@@ -135,8 +135,11 @@ export function ChartCard({
 
   // Header icon: prefer an explicit metadata icon, fall back to the chart-type one.
   const resolvedIcon = icon ?? iconForChartType(config.chart_type);
+  // Fallback a `neutral-slate` si el array está vacío (config corrupta
+  // del trainer). Antes era `[0]!` que puede dar undefined en runtime
+  // y crashear `resolveColor` — ahora degrada gracefully al gris neutro.
   const colorToken = Array.isArray(config.color)
-    ? config.color[0]!
+    ? (config.color[0] ?? "neutral-slate")
     : config.color;
   const palette = resolveColor(colorToken);
 

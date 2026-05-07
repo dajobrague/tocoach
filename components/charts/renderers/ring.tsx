@@ -70,7 +70,9 @@ export function RingRenderer({ buckets, colors, series, unit }: Props) {
     const value = seriesValues[s.id] ?? 0;
     const pct = total > 0 ? (value / total) * 100 : 0;
     const deg = (value / total) * 360;
-    const palette = resolveColor(colors[i] ?? colors[colors.length - 1]!);
+    const palette = resolveColor(
+      colors[i] ?? colors[colors.length - 1] ?? "neutral-slate"
+    );
 
     stops.push(`${palette.stroke} ${cursor}deg ${cursor + deg}deg`);
     legend.push({

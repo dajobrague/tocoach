@@ -122,7 +122,7 @@ export function StackedBarRenderer({ buckets, colors, series }: Props) {
           />
           {series.map((s, i) => {
             const palette = resolveColor(
-              colors[i] ?? colors[colors.length - 1]!
+              colors[i] ?? colors[colors.length - 1] ?? "neutral-slate"
             );
 
             return (
@@ -140,7 +140,9 @@ export function StackedBarRenderer({ buckets, colors, series }: Props) {
       </ResponsiveContainer>
       <div className="flex items-center gap-4 mt-1 justify-center flex-wrap">
         {series.map((s, i) => {
-          const palette = resolveColor(colors[i] ?? colors[colors.length - 1]!);
+          const palette = resolveColor(
+            colors[i] ?? colors[colors.length - 1] ?? "neutral-slate"
+          );
 
           return (
             <div key={s.id} className="flex items-center gap-1.5">

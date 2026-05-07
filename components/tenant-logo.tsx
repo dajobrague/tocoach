@@ -37,7 +37,20 @@ export function TenantLogo({
     setHasError(false);
   }, [src]);
 
-  if (hasError || !src) {
+  // Las blob URLs son session-scoped: solo viven mientras el documento
+  // que las creó esté vivo. Si el `tenant.logo_url` tiene un blob URL
+  // de OTRO origen (típicamente un valor leakeado de prod a dev, o de
+  // una sesión vieja), el browser bloquea la carga con
+  // "Not allowed to load local resource" y mete error en consola antes
+  // de que el `onError` del <Image> lo atrape. Detectamos el patrón y
+  // saltamos directo al fallback.
+  const isForeignBlob =
+    typeof src === "string" &&
+    src.startsWith("blob:") &&
+    typeof window !== "undefined" &&
+    !src.startsWith(`blob:${window.location.origin}`);
+
+  if (hasError || !src || isForeignBlob) {
     if (!showFallback) return null;
 
     return (
@@ -60,7 +73,6 @@ export function TenantLogo({
       className={className}
       height={height}
       priority={priority}
-      quality={90}
       sizes="(max-width: 768px) 80px, 80px"
       src={src}
       width={width}
