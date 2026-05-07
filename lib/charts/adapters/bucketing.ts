@@ -16,13 +16,11 @@ import type { CheckInSchedule, FormResponse } from "@/lib/forms/types";
 import type { Aggregation, DateRange } from "../types";
 
 import {
-  formatPeriodRangeLabel,
   formatPeriodTooltipSpan,
   generatePeriodLabels,
   groupResponsesByPeriod,
   toYmdInTimezone,
 } from "@/lib/forms/chart-helpers";
-import { getNextCheckInDate } from "@/lib/forms/schedule";
 
 const MONTH_ABBR_ES = [
   "Ene",
@@ -146,47 +144,18 @@ export function generateBuckets(
     return weeks;
   }
 
-  // checkin_period — un bucket por ciclo entre check-ins.
-  //
-  // Cada bucket cubre desde el inicio del check-in (e.g., Lun 12:00)
-  // hasta UN MILISEGUNDO antes del próximo check-in (Lun siguiente
-  // 12:00, exclusivo). Antes el bucket end era `p.end` que es el
-  // SUBMISSION DEADLINE del check-in (trigger + grace_period_hours,
-  // típicamente 48h). Eso significa que para un schedule semanal
-  // Mon 12:00 + 48h, cada bucket cubría sólo Mon-Wed 12:00 — y los
-  // 4-5 días restantes (Wed 12:00 → próx Mon 12:00) caían en un
-  // AGUJERO de agregación: respuestas del cliente con response_date
-  // de Thursday-Sunday se descartaban silenciosamente del chart.
-  //
-  // Para CHECK-INS semanales (que sólo se llenan dentro del grace
-  // window) el comportamiento no cambia: las respuestas siguen
-  // cayendo en el mismo bucket. Para HABITS diarios, ahora todos
-  // los días de la semana se aglomeran en su bucket correspondiente.
-  //
-  // El último bucket no tiene un "labels[i+1]" para inferir el
-  // próximo inicio, así que pedimos `getNextCheckInDate` desde el
-  // final del periodo. Para schedules con múltiples slots por
-  // semana, esa función ya respeta el siguiente slot legítimo.
+  // checkin_period
   const labels = generatePeriodLabels(
     schedule,
     Math.max(1, estimatePeriodCount(range, schedule))
   );
 
-  return labels.map((p, i) => {
-    const nextStart =
-      i + 1 < labels.length
-        ? labels[i + 1]!.start
-        : getNextCheckInDate(schedule, p.end);
-    const end = new Date(nextStart.getTime() - 1);
-    const label = formatPeriodRangeLabel(p.start, end, tz);
-
-    return {
-      start: p.start,
-      end,
-      label,
-      tooltip: formatPeriodTooltipSpan(p.start, end, tz),
-    };
-  });
+  return labels.map((p) => ({
+    start: p.start,
+    end: p.end,
+    label: p.label,
+    tooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
+  }));
 }
 
 /**
