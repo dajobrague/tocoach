@@ -328,6 +328,13 @@ export async function GET(
       range,
       formResponses,
       exerciseLogs,
+      // tz del browser que está mirando el chart. Los adapters lo
+      // propagan a generateBuckets/averageInWindow para que la
+      // agregación daily se alinee con el calendario del cliente
+      // (mismo huso del Registro Diario y del response_date que se
+      // guarda en submit). Para weekly/checkin_period los helpers
+      // siguen usando schedule.timezone.
+      clientTz: tzParam,
     };
 
     const buckets: Record<

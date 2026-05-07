@@ -79,11 +79,22 @@ export function buildFormQuestionAdapter(
         spec.formType === "checkins"
           ? ctx.formResponses.checkins
           : ctx.formResponses.habits;
-      const buckets = generateBuckets(ctx.range, aggregation, ctx.schedule);
+      const buckets = generateBuckets(
+        ctx.range,
+        aggregation,
+        ctx.schedule,
+        ctx.clientTz
+      );
 
       return buckets.map((w) => ({
         label: w.label,
-        value: averageInWindow(responses, w, resolve, ctx.schedule),
+        value: averageInWindow(
+          responses,
+          w,
+          resolve,
+          ctx.schedule,
+          ctx.clientTz
+        ),
         periodTooltip: w.tooltip,
       }));
     },

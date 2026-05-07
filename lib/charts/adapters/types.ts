@@ -47,6 +47,19 @@ export interface AdapterContext {
   };
   /** Pre-fetched exercise logs (training data). */
   exerciseLogs: ExerciseLogLike[];
+  /**
+   * Huso horario del CLIENTE que está mirando los charts (browser tz
+   * via Intl.DateTimeFormat). Usado por la agregación `daily` para
+   * que los buckets se alineen con el calendario que el cliente vive
+   * y, sobre todo, con el `response_date` que se guarda en huso
+   * browser cuando submitea formularios.
+   *
+   * Si está omitido, los helpers de bucketing caen al
+   * `schedule.timezone` (compat retro). Para charts en el dashboard
+   * del cliente este campo SIEMPRE viene presente; solo queda
+   * undefined si un caller interno no lo pasa.
+   */
+  clientTz?: string;
 }
 
 /**

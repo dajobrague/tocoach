@@ -93,11 +93,22 @@ function formResponse1D(spec: FormResponse1DSpec): DataAdapter {
         spec.formType === "checkins"
           ? ctx.formResponses.checkins
           : ctx.formResponses.habits;
-      const buckets = generateBuckets(ctx.range, aggregation, ctx.schedule);
+      const buckets = generateBuckets(
+        ctx.range,
+        aggregation,
+        ctx.schedule,
+        ctx.clientTz
+      );
 
       return buckets.map((w) => ({
         label: w.label,
-        value: averageInWindow(responses, w, spec.resolve, ctx.schedule),
+        value: averageInWindow(
+          responses,
+          w,
+          spec.resolve,
+          ctx.schedule,
+          ctx.clientTz
+        ),
         periodTooltip: w.tooltip,
       }));
     },
@@ -141,11 +152,22 @@ const weight: DataAdapter = {
       ...ctx.formResponses.checkins,
       ...ctx.formResponses.habits,
     ];
-    const buckets = generateBuckets(ctx.range, aggregation, ctx.schedule);
+    const buckets = generateBuckets(
+      ctx.range,
+      aggregation,
+      ctx.schedule,
+      ctx.clientTz
+    );
 
     return buckets.map((w) => ({
       label: w.label,
-      value: averageInWindow(responses, w, resolveWeightAnswer, ctx.schedule),
+      value: averageInWindow(
+        responses,
+        w,
+        resolveWeightAnswer,
+        ctx.schedule,
+        ctx.clientTz
+      ),
       periodTooltip: w.tooltip,
     }));
   },
@@ -404,20 +426,27 @@ const trainingBreakdown: DataAdapter = {
     default_color: TRAINING_SERIES.map((s) => s.default_color),
   },
   materialize(ctx, aggregation): BucketedPoint[] {
-    const buckets = generateBuckets(ctx.range, aggregation, ctx.schedule);
+    const buckets = generateBuckets(
+      ctx.range,
+      aggregation,
+      ctx.schedule,
+      ctx.clientTz
+    );
 
     return buckets.map((w) => {
       const strength = sumInWindow<ExerciseLogLike>(
         ctx.exerciseLogs,
         w,
         (log) => log.exercises?.category !== "cardio",
-        ctx.schedule
+        ctx.schedule,
+        ctx.clientTz
       );
       const cardio = sumInWindow<ExerciseLogLike>(
         ctx.exerciseLogs,
         w,
         (log) => log.exercises?.category === "cardio",
-        ctx.schedule
+        ctx.schedule,
+        ctx.clientTz
       );
 
       return {

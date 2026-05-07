@@ -133,13 +133,27 @@ function isoWeekStart(d: Date): Date {
  *
  * For `range_total` returns a single window spanning the whole range —
  * adapters that want to render a ring or single number consume this.
+ *
+ * `clientTz` (opcional, browser tz del usuario que mira el chart):
+ *   se usa para alinear los buckets DAILY con el calendario que el
+ *   cliente vive en su pantalla (mismo huso del Registro Diario y
+ *   del response_date guardado en submit). Si no se pasa, el daily
+ *   cae al schedule.timezone — comportamiento histórico, válido
+ *   cuando trainer y cliente están en el mismo huso. Para weekly y
+ *   checkin_period seguimos usando schedule.timezone porque esos
+ *   ciclos los define el trainer.
  */
 export function generateBuckets(
   range: DateRange,
   aggregation: Aggregation,
-  schedule: CheckInSchedule
+  schedule: CheckInSchedule,
+  clientTz?: string
 ): BucketWindow[] {
   const tz = schedule.timezone;
+  // Para el daily aggregation queremos alinear con el cliente; para
+  // los demás (weekly / checkin_period / range_total) seguimos con
+  // schedule.tz porque son ciclos definidos por el trainer.
+  const dailyTz = clientTz || tz;
 
   if (aggregation === "range_total") {
     return [
@@ -169,20 +183,20 @@ export function generateBuckets(
     // tz (`tzNoon`) como punto único — start y end del bucket
     // resuelven al MISMO YMD garantizado.
     const days: BucketWindow[] = [];
-    const fromYmd = toYmdInTimezone(range.from, tz);
-    const toYmd = toYmdInTimezone(range.to, tz);
+    const fromYmd = toYmdInTimezone(range.from, dailyTz);
+    const toYmd = toYmdInTimezone(range.to, dailyTz);
 
     let cursorYmd = fromYmd;
     let guard = 0;
 
     while (cursorYmd <= toYmd && guard++ < 400) {
-      const noon = tzNoon(cursorYmd, tz);
+      const noon = tzNoon(cursorYmd, dailyTz);
 
       days.push({
         start: noon,
         end: noon,
         label: dayLabelFromYmd(cursorYmd),
-        tooltip: formatPeriodTooltipSpan(noon, noon, tz),
+        tooltip: formatPeriodTooltipSpan(noon, noon, dailyTz),
       });
       cursorYmd = addDayYmd(cursorYmd);
     }
@@ -260,9 +274,14 @@ export function averageInWindow<T extends FormResponse>(
   responses: T[],
   window: BucketWindow,
   resolve: (r: T) => number | null,
-  schedule: CheckInSchedule
+  schedule: CheckInSchedule,
+  clientTz?: string
 ): number | null {
-  const tz = schedule.timezone;
+  // Si el bucket fue generado en clientTz (típicamente daily desde el
+  // dashboard del cliente), comparamos los YMDs en clientTz para
+  // matchear con el `response_date` guardado en huso browser. Si no
+  // viene clientTz, fallback a schedule.tz (compat retro).
+  const tz = clientTz || schedule.timezone;
   const startYmd = toYmdInTimezone(window.start, tz);
   const endYmd = toYmdInTimezone(window.end, tz);
 
@@ -293,9 +312,10 @@ export function sumInWindow<T extends { scheduled_date?: string | null }>(
   items: T[],
   window: BucketWindow,
   classifier: (item: T) => boolean,
-  schedule: CheckInSchedule
+  schedule: CheckInSchedule,
+  clientTz?: string
 ): number {
-  const tz = schedule.timezone;
+  const tz = clientTz || schedule.timezone;
   const startYmd = toYmdInTimezone(window.start, tz);
   const endYmd = toYmdInTimezone(window.end, tz);
 
