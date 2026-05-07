@@ -62,8 +62,21 @@ async function fetchSnapshot(
   clientId: string | number,
   range: string
 ): Promise<SnapshotResponse["data"]> {
+  // Pasamos la tz del browser para que el server compute el rango de
+  // fechas (fromYmd/toYmd del filtro SQL) en el huso del cliente. Sin
+  // esto, un cliente en LATAM/Pacífico que registra cerca de
+  // medianoche local podía quedar fuera del rango calculado en UTC y
+  // su submit no aparecía en charts hasta el día siguiente.
+  let tz = "UTC";
+
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // browsers muy viejos sin Intl — fallback a UTC.
+  }
+
   const res = await clientFetch(
-    `/api/charts/clients/${clientId}/snapshot?range=${encodeURIComponent(range)}`,
+    `/api/charts/clients/${clientId}/snapshot?range=${encodeURIComponent(range)}&tz=${encodeURIComponent(tz)}`,
     { cache: "no-store" }
   );
   const json = (await res.json()) as SnapshotResponse;

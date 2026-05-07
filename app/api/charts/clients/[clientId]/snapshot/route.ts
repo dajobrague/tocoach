@@ -49,15 +49,65 @@ const RANGE_DAYS: Record<string, number> = {
 };
 const MAX_BUCKETS = 60;
 
-function parseRange(rangeParam: string | null): { from: Date; to: Date } {
+/**
+ * Formato YYYY-MM-DD del Date `d` en el huso horario `tz`. Si `tz` no
+ * es una zona IANA válida, cae a YMD del clock del servidor (UTC en
+ * Vercel/Railway).
+ */
+function ymdInTz(d: Date, tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(d);
+    const m: Record<string, string> = {};
+
+    for (const p of parts) if (p.type !== "literal") m[p.type] = p.value;
+
+    return `${m.year}-${m.month}-${m.day}`;
+  } catch {
+    return ymd(d);
+  }
+}
+
+/**
+ * Calcula el rango del snapshot en huso horario del cliente.
+ *
+ * Antes este parser hacía `new Date()` + `getDate() - days` usando el
+ * clock del servidor (UTC en producción). Para un cliente en huso
+ * UTC-3 que registraba cerca de medianoche local, su `response_date`
+ * local podía quedar FUERA del rango "últimos 7 días" calculado por
+ * el server, y el snapshot no incluía la respuesta hasta el día
+ * siguiente. Síntoma cliente: "envío y nada se actualiza en charts".
+ *
+ * Ahora el frontend pasa `tz` en la URL (browser tz vía
+ * Intl.DateTimeFormat). El server computa "hoy" en esa tz y
+ * decrementa días desde ahí, así fromYmd/toYmd matchean la percepción
+ * de día del cliente.
+ *
+ * Devuelve fromYmd/toYmd para el filtro SQL, y from/to como Date
+ * (referencias absolutas) para los adapters que usan ms timestamps
+ * (ring/macros).
+ */
+function parseRange(
+  rangeParam: string | null,
+  tz: string
+): { from: Date; to: Date; fromYmd: string; toYmd: string } {
   const days = RANGE_DAYS[rangeParam ?? "30d"] ?? 30;
-  const to = new Date();
-  const from = new Date();
 
-  from.setDate(from.getDate() - days + 1);
-  from.setHours(0, 0, 0, 0);
+  const todayYmd = ymdInTz(new Date(), tz);
+  const todayUtcMs = Date.parse(`${todayYmd}T00:00:00Z`);
+  const fromMs = todayUtcMs - (days - 1) * 86400000;
+  const fromYmd = new Date(fromMs).toISOString().split("T")[0] ?? todayYmd;
 
-  return { from, to };
+  return {
+    from: new Date(fromMs),
+    to: new Date(todayUtcMs + 86400000),
+    fromYmd,
+    toYmd: todayYmd,
+  };
 }
 
 async function loadCheckinSchedule(
@@ -199,7 +249,10 @@ export async function GET(
   }
 
   const url = new URL(request.url);
-  const range = parseRange(url.searchParams.get("range"));
+  // tz del cliente viene del browser. Default UTC si el caller no lo
+  // pasa (compat retro / scripts internos).
+  const tzParam = url.searchParams.get("tz") || "UTC";
+  const range = parseRange(url.searchParams.get("range"), tzParam);
 
   try {
     const [effective, schedule, formResponses, exerciseLogs] =
@@ -216,13 +269,13 @@ export async function GET(
         loadFormResponses(supabase, {
           tenantHost: auth.tenantHost,
           clientIdBigint: auth.clientIdBigint,
-          fromYmd: ymd(range.from),
-          toYmd: ymd(range.to),
+          fromYmd: range.fromYmd,
+          toYmd: range.toYmd,
         }),
         loadExerciseLogs(supabase, {
           clientIdBigint: auth.clientIdBigint,
-          fromYmd: ymd(range.from),
-          toYmd: ymd(range.to),
+          fromYmd: range.fromYmd,
+          toYmd: range.toYmd,
         }),
       ]);
 

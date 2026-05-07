@@ -250,15 +250,16 @@ export async function POST(
     const body: FormResponseSubmission = await request.json();
     const { form_type, response_date, answers, metadata } = body;
 
-    // Habits can only be submitted for the last 3 days (today, yesterday,
-    // day before). We compare in pure date-only space and allow ±1 day of
-    // slack on each side: the client computes `response_date` from its
-    // local clock (`getLocalTodayYmd`) while the server only knows UTC, so
-    // a Spaniard at 00:30 local sends "today-local" while UTC is still
-    // "yesterday" — the previous strict window rejected that as a future
-    // date and 400'd legit submissions near local midnight. A 1-day
-    // tolerance covers every populated timezone offset (UTC-12..UTC+14)
-    // without meaningfully widening the abuse surface.
+    // Habits sólo se pueden enviar para los últimos 3 días (hoy, ayer,
+    // antier en el calendario del cliente). Comparamos en espacio
+    // YMD puro contra "hoy UTC" del servidor con tolerancia ±2 días
+    // por cada lado (rango efectivo [-2, 4]). Antes era [-1, 3] pero
+    // clientes en husos extremos (UTC-12 / UTC+14) podían tener su
+    // "antier" local cayendo fuera de esa ventana cuando el clock
+    // del server cruzaba medianoche UTC en otro momento del día. La
+    // ampliación a 2 días cubre cualquier huso poblado y mantiene la
+    // semántica de "últimos 3 días" — un atacante no gana nada
+    // significativo con este margen.
     if (form_type === "habits" && response_date) {
       const todayUtcStr = new Date().toISOString().split("T")[0]!;
       const targetMs = Date.parse(`${response_date}T00:00:00Z`);
@@ -273,7 +274,7 @@ export async function POST(
 
       const diffDays = Math.round((todayMs - targetMs) / 86400000);
 
-      if (diffDays < -1 || diffDays > 3) {
+      if (diffDays < -2 || diffDays > 4) {
         return NextResponse.json(
           {
             success: false,
