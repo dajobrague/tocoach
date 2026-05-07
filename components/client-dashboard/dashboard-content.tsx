@@ -12,57 +12,30 @@ import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import { USE_NEW_CHART_SYSTEM } from "@/lib/charts";
+import { resolveStepsAnswer } from "@/lib/forms/analytics-keys";
 import {
-  CaloriesChart,
-  MacrosRing,
-  ProteinChart,
-  SleepChart,
-  TrainingActivityChart,
-  WeightChart,
-} from "@/components/client-dashboard/progress-charts";
-import {
-  resolveCaloriesAnswer,
-  resolveCarbsAnswer,
-  resolveFatsAnswer,
-  resolveProteinAnswer,
-  resolveSleepHoursAnswer,
-  resolveStepsAnswer,
-} from "@/lib/forms/analytics-keys";
+  chartPeriodCountForRange,
+  daysToFetchForChartRange,
+  getChartDateRange,
+} from "@/lib/forms/chart-helpers";
 import {
   formResponsesToSubmittedAtPayload,
   getLocalTodayYmd,
   getLocalYmd,
 } from "@/lib/forms/client-helpers";
-import { aggregateWeightByCheckInPeriods } from "@/lib/forms/checkin-chart-periods";
-import {
-  chartPeriodCountForRange,
-  daysToFetchForChartRange,
-  formatPeriodTooltipSpan,
-  generatePeriodLabels,
-  getChartDateRange,
-  groupResponsesByPeriod,
-  responseTimestampMs,
-  toYmdInTimezone,
-} from "@/lib/forms/chart-helpers";
 import { getScheduleOrDefault, isCheckInDue } from "@/lib/forms/schedule";
 import {
   DEFAULT_CHECKIN_SCHEDULE,
   FormResponse,
   type CheckInSchedule,
 } from "@/lib/forms/types";
+import { useFormResponses, useNeatCards } from "@/lib/hooks/use-client-queries";
+import { ClientNeatCard } from "@/types";
 
 /** Weekly default schedule if parsing or chart math fails (Monday 12:00 Europe/Madrid). */
 const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
   ...DEFAULT_CHECKIN_SCHEDULE,
 };
-
-import {
-  useExerciseLogs,
-  useFormResponses,
-  useNeatCards,
-} from "@/lib/hooks/use-client-queries";
-import { ClientNeatCard } from "@/types";
 
 export function DashboardContent() {
   const {
@@ -151,8 +124,6 @@ export function DashboardContent() {
     isLoading: isLoadingDaily,
   } = useFormResponses(clientId, "habits", fetchDays);
 
-  const { data: exerciseLogs = [] } = useExerciseLogs(clientId);
-
   const { data: neatCards = [] as ClientNeatCard[] } = useNeatCards();
   const hasNeatCards = neatCards.length > 0;
 
@@ -217,169 +188,6 @@ export function DashboardContent() {
     return days;
   }, [dailyResponses]);
 
-  const periodLabels = useMemo(() => {
-    try {
-      return generatePeriodLabels(checkinSchedule, chartPeriodCount);
-    } catch {
-      return generatePeriodLabels(FALLBACK_CHECKIN_SCHEDULE, chartPeriodCount);
-    }
-  }, [checkinSchedule, chartPeriodCount]);
-
-  const habitGroups = useMemo(() => {
-    try {
-      return groupResponsesByPeriod(dailyResponses, checkinSchedule);
-    } catch {
-      return groupResponsesByPeriod(dailyResponses, FALLBACK_CHECKIN_SCHEDULE);
-    }
-  }, [dailyResponses, checkinSchedule]);
-
-  const weightLookbackDays = useMemo(() => {
-    try {
-      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
-
-      return Math.max(
-        1,
-        Math.ceil((Date.now() - from.getTime()) / 86400000) + 1
-      );
-    } catch {
-      const { from } = getChartDateRange(
-        FALLBACK_CHECKIN_SCHEDULE,
-        chartPeriodCount
-      );
-
-      return Math.max(
-        1,
-        Math.ceil((Date.now() - from.getTime()) / 86400000) + 1
-      );
-    }
-  }, [checkinSchedule, chartPeriodCount]);
-
-  const weightHistory = useMemo(() => {
-    try {
-      return aggregateWeightByCheckInPeriods(
-        checkinSchedule,
-        weeklyResponses,
-        dailyResponses,
-        selectedPeriod,
-        weightLookbackDays
-      );
-    } catch {
-      return aggregateWeightByCheckInPeriods(
-        FALLBACK_CHECKIN_SCHEDULE,
-        weeklyResponses,
-        dailyResponses,
-        selectedPeriod,
-        weightLookbackDays
-      );
-    }
-  }, [
-    checkinSchedule,
-    weeklyResponses,
-    dailyResponses,
-    selectedPeriod,
-    weightLookbackDays,
-  ]);
-
-  const sleepHistory = useMemo(() => {
-    try {
-      const tz = checkinSchedule.timezone;
-
-      return periodLabels.map((p) => {
-        const match = habitGroups.find(
-          (g) =>
-            g.periodStart.getTime() === p.start.getTime() &&
-            g.periodEnd.getTime() === p.end.getTime()
-        );
-        const list = match?.responses ?? [];
-        // Sólo promedia sobre días donde el cliente respondió horas de
-        // sueño. Un día sin respuesta no debería diluir el promedio a 0.
-        const reported = list
-          .map((r) => resolveSleepHoursAnswer(r.answers))
-          .filter((v): v is number => v !== null);
-        const hours =
-          reported.length === 0
-            ? 0
-            : reported.reduce((s, h) => s + h, 0) / reported.length;
-
-        return {
-          date: p.label,
-          hours,
-          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
-        };
-      });
-    } catch {
-      return [] as { date: string; hours: number; periodTooltip: string }[];
-    }
-  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
-
-  const calorieHistory = useMemo(() => {
-    try {
-      const tz = checkinSchedule.timezone;
-
-      return periodLabels.map((p) => {
-        const match = habitGroups.find(
-          (g) =>
-            g.periodStart.getTime() === p.start.getTime() &&
-            g.periodEnd.getTime() === p.end.getTime()
-        );
-        const list = match?.responses ?? [];
-        const reported = list
-          .map((r) => resolveCaloriesAnswer(r.answers))
-          .filter((v): v is number => v !== null);
-        const calories =
-          reported.length === 0
-            ? 0
-            : reported.reduce((s, c) => s + c, 0) / reported.length;
-
-        return {
-          date: p.label,
-          calories,
-          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
-        };
-      });
-    } catch {
-      return [] as {
-        date: string;
-        calories: number;
-        periodTooltip: string;
-      }[];
-    }
-  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
-
-  const proteinHistory = useMemo(() => {
-    try {
-      const tz = checkinSchedule.timezone;
-
-      return periodLabels.map((p) => {
-        const match = habitGroups.find(
-          (g) =>
-            g.periodStart.getTime() === p.start.getTime() &&
-            g.periodEnd.getTime() === p.end.getTime()
-        );
-        const list = match?.responses ?? [];
-        const reported = list
-          .map((r) => resolveProteinAnswer(r.answers))
-          .filter((v): v is number => v !== null);
-        const protein =
-          reported.length === 0
-            ? 0
-            : reported.reduce((s, v) => s + v, 0) / reported.length;
-
-        return {
-          date: p.label,
-          protein,
-          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
-        };
-      });
-    } catch {
-      return [] as {
-        date: string;
-        protein: number;
-        periodTooltip: string;
-      }[];
-    }
-  }, [periodLabels, habitGroups, checkinSchedule.timezone]);
-
   const todaySteps = useMemo(() => {
     // `response_date` is saved with the user's local Y-M-D (see comment on
     // `getLocalTodayYmd`). Comparing against a UTC-derived "today" silently
@@ -390,108 +198,38 @@ export function DashboardContent() {
     return resolveStepsAnswer(row?.answers) ?? 0;
   }, [dailyResponses]);
 
-  const avgMacros = useMemo(() => {
-    try {
-      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
-      const fromMs = from.getTime();
-      const scoped = dailyResponses.filter(
-        (r: FormResponse) => responseTimestampMs(r) >= fromMs
+  // Últimos 7 días en orden cronológico (más antiguo → hoy) para la tira
+  // semanal del NeatChartCard. Reusamos `dailyResponses` que ya viene
+  // cacheado por TanStack Query — no hay fetch adicional.
+  const weekSteps = useMemo(() => {
+    const now = new Date();
+    const todayYmd = getLocalTodayYmd();
+    const days: {
+      date: string;
+      weekday: number;
+      steps: number;
+      isToday: boolean;
+    }[] = [];
+
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(now);
+
+      d.setDate(now.getDate() - i);
+      const ymd = getLocalYmd(d);
+      const row = dailyResponses.find(
+        (r: FormResponse) => r.response_date === ymd
       );
 
-      // Un día cuenta como "con datos" si reportó al menos UNO de los 3
-      // macros (cualquiera, incluso con valor 0 — lo importante es que el
-      // cliente respondió algo). Usamos los resolvers para tolerar ids
-      // renombrados por el trainer.
-      type MacroRow = {
-        protein: number | null;
-        carbs: number | null;
-        fats: number | null;
-      };
-      const withData: MacroRow[] = scoped
-        .map(
-          (r: FormResponse): MacroRow => ({
-            protein: resolveProteinAnswer(r.answers),
-            carbs: resolveCarbsAnswer(r.answers),
-            fats: resolveFatsAnswer(r.answers),
-          })
-        )
-        .filter(
-          (m: MacroRow) =>
-            m.protein !== null || m.carbs !== null || m.fats !== null
-        );
-
-      if (withData.length === 0) return { protein: 0, carbs: 0, fats: 0 };
-
-      const totals = withData.reduce(
-        (
-          acc: { protein: number; carbs: number; fats: number },
-          m: MacroRow
-        ) => {
-          acc.protein += m.protein ?? 0;
-          acc.carbs += m.carbs ?? 0;
-          acc.fats += m.fats ?? 0;
-
-          return acc;
-        },
-        { protein: 0, carbs: 0, fats: 0 }
-      );
-
-      return {
-        protein: Math.round(totals.protein / withData.length),
-        carbs: Math.round(totals.carbs / withData.length),
-        fats: Math.round(totals.fats / withData.length),
-      };
-    } catch {
-      return { protein: 0, carbs: 0, fats: 0 };
-    }
-  }, [dailyResponses, checkinSchedule, chartPeriodCount]);
-
-  const trainingActivity = useMemo(() => {
-    try {
-      const tz = checkinSchedule.timezone;
-
-      return periodLabels.map((p) => {
-        const ymdStart = toYmdInTimezone(p.start, tz);
-        const ymdEnd = toYmdInTimezone(p.end, tz);
-        let strength = 0;
-        let cardio = 0;
-
-        exerciseLogs.forEach(
-          (log: {
-            scheduled_date?: string;
-            exercises?: { category?: string };
-          }) => {
-            const d = log.scheduled_date;
-
-            if (!d || d < ymdStart || d > ymdEnd) return;
-            if (log.exercises?.category === "cardio") cardio++;
-            else strength++;
-          }
-        );
-
-        return {
-          date: p.label,
-          strength,
-          cardio,
-          periodTooltip: formatPeriodTooltipSpan(p.start, p.end, tz),
-        };
+      days.push({
+        date: ymd,
+        weekday: d.getDay(),
+        steps: resolveStepsAnswer(row?.answers) ?? 0,
+        isToday: ymd === todayYmd,
       });
-    } catch {
-      return [] as {
-        date: string;
-        strength: number;
-        cardio: number;
-        periodTooltip: string;
-      }[];
     }
-  }, [periodLabels, exerciseLogs, checkinSchedule.timezone]);
 
-  const trainingPeriodTotal = useMemo(() => {
-    if (trainingActivity.length === 0) return 0;
-    const last = trainingActivity[trainingActivity.length - 1];
-
-    return (last?.strength ?? 0) + (last?.cardio ?? 0);
-  }, [trainingActivity]);
+    return days;
+  }, [dailyResponses]);
 
   // Check if we should show NEAT chart (has cards and applicable today)
   const shouldShowNeatChart = useMemo(() => {
@@ -661,8 +399,6 @@ export function DashboardContent() {
             }}
           />
 
-          {/* OLD Check-in Modal - removed, now using DynamicFormModal */}
-
           {/* Progress Section */}
           <div className="px-4 space-y-4">
             <h2 className="text-lg font-semibold font-heading text-foreground">
@@ -690,145 +426,37 @@ export function DashboardContent() {
               <Tab key="12m" title="12 Meses" />
             </Tabs>
 
-            {/*
-              CHART RENDERING — gated by USE_NEW_CHART_SYSTEM (lib/charts).
-              When the flag is on, ChartsSection talks to /api/charts/clients/
-              [clientId]/snapshot and renders the trainer's chosen template
-              (or per-client override). When off, the legacy bespoke charts
-              render with the locally-computed history arrays.
+            <ChartsSection
+              clientId={clientId}
+              selectedPeriod={selectedPeriod}
+            />
 
-              The legacy block below is intentionally preserved as a runtime
-              fallback for ~2 weeks post-launch. Once telemetry is clean, a
-              follow-up PR removes the flag, the legacy components, and all
-              the local chart-history useMemo blocks above.
-            */}
-            {USE_NEW_CHART_SYSTEM ? (
-              <ChartsSection
-                clientId={clientId}
-                selectedPeriod={selectedPeriod}
-              />
-            ) : (
-              <>
-                {/* Weight Tracker (legacy) */}
-                {weightHistory.some((d) => d.weight > 0) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      {checkinSchedule.enabled && (
-                        <p className="text-xs font-semibold text-foreground/70 tracking-wide mb-2">
-                          {checkinSchedule.custom_name}
-                        </p>
-                      )}
-                      <WeightChart
-                        currentValue={
-                          weightHistory[weightHistory.length - 1]?.weight || 0
-                        }
-                        data={weightHistory}
-                        schedule={checkinSchedule}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-
-                {/* Sleep Tracker (legacy) */}
-                {sleepHistory.some((d) => d.hours > 0) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      <SleepChart
-                        currentValue={
-                          sleepHistory[sleepHistory.length - 1]?.hours || 0
-                        }
-                        data={sleepHistory}
-                        schedule={checkinSchedule}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-
-                {/* Calories Tracker (legacy) */}
-                {calorieHistory.some((d) => d.calories > 0) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      <CaloriesChart
-                        currentValue={
-                          calorieHistory[calorieHistory.length - 1]?.calories ||
-                          0
-                        }
-                        data={calorieHistory}
-                        schedule={checkinSchedule}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-
-                {/* Protein Tracker (legacy) */}
-                {proteinHistory.some((d) => d.protein > 0) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      <ProteinChart
-                        currentValue={
-                          proteinHistory[proteinHistory.length - 1]?.protein ||
-                          0
-                        }
-                        data={proteinHistory}
-                        schedule={checkinSchedule}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-
-                {/* Macros Distribution (legacy) */}
-                {(avgMacros.protein > 0 ||
-                  avgMacros.carbs > 0 ||
-                  avgMacros.fats > 0) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      <MacrosRing
-                        carbs={avgMacros.carbs}
-                        fats={avgMacros.fats}
-                        protein={avgMacros.protein}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-
-                {/* Training Activity (legacy) */}
-                {trainingActivity.some(
-                  (d) => d.strength > 0 || d.cardio > 0
-                ) && (
-                  <Card>
-                    <CardBody className="p-4">
-                      <TrainingActivityChart
-                        data={trainingActivity}
-                        periodTotal={trainingPeriodTotal}
-                        schedule={checkinSchedule}
-                      />
-                    </CardBody>
-                  </Card>
-                )}
-              </>
-            )}
-
-            {/* NEAT Tracker - Only show if NEAT cards configured and applicable today */}
+            {/* Actividad diaria — antes "NEAT - ACTIVIDAD DIARIA". Se
+                muestra solo si el entrenador configuró tarjetas NEAT y al
+                menos una aplica hoy (ver `shouldShowNeatChart`). El
+                header ahora sigue el patrón de <ChartCard> (icono-left)
+                para que visualmente case con el resto de la sección. */}
             {shouldShowNeatChart && (
-              <Card>
-                <CardBody className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-foreground/70 tracking-wide">
-                      NEAT - ACTIVIDAD DIARIA
-                    </p>
-                    <div className="bg-success/10 p-1.5 rounded-full">
+              <Card radius="lg" shadow="sm">
+                <CardBody>
+                  <div className="flex items-center mb-3 gap-2 min-h-[28px]">
+                    <div className="bg-success/10 p-1.5 rounded-full flex-shrink-0">
                       <Icon
-                        className="text-success text-base"
+                        aria-hidden
+                        className="text-success"
                         icon="solar:walking-bold"
+                        width={16}
                       />
                     </div>
+                    <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate">
+                      Actividad diaria
+                    </p>
                   </div>
 
-                  {/* Radial Chart showing goal vs actual */}
                   <NeatChartCard
                     neatCards={neatCards}
-                    selectedPeriod={selectedPeriod}
                     todaySteps={todaySteps}
+                    weekSteps={weekSteps}
                   />
                 </CardBody>
               </Card>

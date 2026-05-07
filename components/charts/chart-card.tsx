@@ -3,7 +3,10 @@
  *
  * The wrapping card that <ChartSurface> repeats per chart in the grid.
  * Owns the visible header (label, current value, icon) and dispatches to
- * one of the four states: skeleton, empty, orphan, error, or rendered chart.
+ * one of three states: skeleton (loading), orphan (deleted source), or the
+ * rendered chart. When the rendered chart has no data we keep the chart
+ * silhouette visible and overlay a "Sin datos aún" watermark on top —
+ * never collapse to a blank card.
  *
  * Inputs:
  *   config       — the ChartConfig (label, source, chart_type, color, …)
@@ -28,7 +31,12 @@ import { useMemo } from "react";
 
 import { ChartErrorBoundary } from "./error-boundary";
 import { ChartRenderer } from "./chart-renderer";
-import { iconForChartType, latestNonNull, formatNumber } from "./utils";
+import {
+  iconForChartType,
+  isBucketsEmpty,
+  latestNonNull,
+  formatNumber,
+} from "./utils";
 
 import { resolveColor } from "@/lib/charts/palette";
 
@@ -55,11 +63,20 @@ function CardSkeleton() {
   );
 }
 
-function CardEmpty({ message }: { message: string }) {
+function NoDataOverlay() {
+  // Sits absolutely on top of the rendered chart silhouette (axes + grid)
+  // when all values are null/0, so the user sees the chart shape with a
+  // "no hay datos aún" hint instead of a fully empty box.
   return (
-    <div className="flex flex-col items-center justify-center h-40 gap-2 text-foreground/30">
-      <Icon icon="solar:chart-2-linear" width={28} />
-      <p className="text-xs font-medium">{message}</p>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 pointer-events-none rounded-md bg-content1/55 backdrop-blur-[1px]">
+      <Icon
+        className="text-foreground/30"
+        icon="solar:chart-2-linear"
+        width={26}
+      />
+      <p className="text-[11px] font-medium text-foreground/45 tracking-wide">
+        Sin datos aún
+      </p>
     </div>
   );
 }
@@ -124,14 +141,12 @@ export function ChartCard({
   const palette = resolveColor(colorToken);
 
   const isLoading = buckets === undefined;
-  const isEmpty =
-    !isLoading &&
-    !orphan &&
-    Array.isArray(buckets) &&
-    (buckets.length === 0 ||
-      buckets.every(
-        (b) => b.value === null || b.value === undefined || b.value === 0
-      ));
+  // The chart still renders its silhouette (axes/grid) when empty; a
+  // watermark overlay is added on top — see NoDataOverlay below. The
+  // emptiness rule is shared with ChartsSection's pendientes-checklist
+  // grouping (see utils.isBucketsEmpty) so the two paths never drift.
+  const noData =
+    !isLoading && !orphan && Array.isArray(buckets) && isBucketsEmpty(buckets);
 
   return (
     <Card className="relative" radius="lg" shadow="sm">
@@ -161,7 +176,11 @@ export function ChartCard({
           ) : null}
         </div>
         {config.chart_type !== "kpi" ? (
-          <p className="text-4xl font-bold mb-3 text-foreground tabular-nums">
+          <p
+            className={`text-4xl font-bold mb-3 tabular-nums ${
+              noData ? "text-foreground/30" : "text-foreground"
+            }`}
+          >
             {headerValue === null
               ? isLoading
                 ? ""
@@ -175,22 +194,28 @@ export function ChartCard({
           </p>
         ) : null}
 
-        {/* State branches */}
+        {/* State branches.
+            We intentionally render the chart silhouette even when there is
+            no data — Recharts draws axes + grid for null values, and the
+            ring/kpi renderers have their own empty-state visuals. The
+            watermark sits on top via <NoDataOverlay /> so the card never
+            collapses to "blank". */}
         {orphan ? (
           <CardOrphan />
         ) : isLoading ? (
           <CardSkeleton />
-        ) : isEmpty ? (
-          <CardEmpty message="Sin datos" />
         ) : (
-          <ChartErrorBoundary chartId={config.id}>
-            <ChartRenderer
-              buckets={buckets!}
-              config={config}
-              {...(series !== undefined ? { series } : {})}
-              {...(yMax !== undefined ? { yMax } : {})}
-            />
-          </ChartErrorBoundary>
+          <div className="relative">
+            <ChartErrorBoundary chartId={config.id}>
+              <ChartRenderer
+                buckets={buckets!}
+                config={config}
+                {...(series !== undefined ? { series } : {})}
+                {...(yMax !== undefined ? { yMax } : {})}
+              />
+            </ChartErrorBoundary>
+            {noData ? <NoDataOverlay /> : null}
+          </div>
         )}
       </CardBody>
     </Card>

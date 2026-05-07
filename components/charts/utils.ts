@@ -85,6 +85,31 @@ export function avgNonNull(buckets: BucketedPoint[]): number | null {
 }
 
 /**
+ * "No data" rule shared by ChartCard's overlay and ChartsSection's
+ * pendientes-checklist grouping. Empty array, or every bucket value is
+ * null/undefined/0 (multi-dim points: every sub-series is too).
+ *
+ * Pass an array — undefined means "still loading" and the caller decides.
+ */
+export function isBucketsEmpty(buckets: BucketedPoint[]): boolean {
+  if (buckets.length === 0) return true;
+
+  return buckets.every((b) => {
+    const v = b.value;
+
+    if (v === null || v === undefined) return true;
+    if (typeof v === "number") return v === 0;
+    if (typeof v === "object") {
+      return Object.values(
+        v as Record<string, number | null | undefined>
+      ).every((sv) => sv === null || sv === undefined || sv === 0);
+    }
+
+    return false;
+  });
+}
+
+/**
  * Generic fallback icon when the chart's data source has no `icon` set.
  * Form-question adapters land here.
  */
