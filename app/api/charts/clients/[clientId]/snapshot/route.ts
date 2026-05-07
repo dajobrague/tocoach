@@ -220,6 +220,18 @@ function getEffectiveAggregation(
   // bucket "Lun-Dom" o ninguno si la semana actual aún no terminó.
   if (rangeKey === "7d") return "daily";
 
+  // 30 Días → también daily (30 buckets, uno por día). Mismo patrón
+  // que 7d para mantener consistencia mental: cada bar = un día. Las
+  // bars en mobile quedan ~7px de ancho con 30 puntos en ~310px de
+  // canvas — finas pero legibles, especialmente para line/area que
+  // son la mayoría de los charts. Si en algún tenant los charts `bar`
+  // se sienten apretados, el ajuste fino se hace en el renderer
+  // (barSize) sin tocar la aggregation. La estructura del bucket
+  // (tz-aware del cliente, sin doble conteo) ya quedó resuelta para
+  // daily en commits anteriores, así que 30d hereda automáticamente
+  // ese fix.
+  if (rangeKey === "30d") return "daily";
+
   return fallback;
 }
 
