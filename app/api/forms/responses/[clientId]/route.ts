@@ -250,6 +250,17 @@ export async function POST(
     const body: FormResponseSubmission = await request.json();
     const { form_type, response_date, answers, metadata } = body;
 
+    // Single source-of-truth para la fecha del registro. El cliente
+    // (browser) siempre envía `response_date` calculado en huso local
+    // (ver `getLocalTodayYmd` en lib/forms/client-helpers.ts); este
+    // fallback UTC se usa solo si un caller no-browser (tests, scripts)
+    // omite el campo. Lo computamos UNA vez aquí y lo reusamos en la
+    // validación de window y en el upsert — antes había dos cómputos
+    // separados y un drift teórico cerca de medianoche si
+    // `response_date` venía como "" en lugar de undefined.
+    const resolvedDate =
+      response_date || new Date().toISOString().split("T")[0]!;
+
     // Habits sólo se pueden enviar para los últimos 3 días (hoy, ayer,
     // antier en el calendario del cliente). Comparamos en espacio
     // YMD puro contra "hoy UTC" del servidor con tolerancia ±2 días
@@ -260,9 +271,9 @@ export async function POST(
     // ampliación a 2 días cubre cualquier huso poblado y mantiene la
     // semántica de "últimos 3 días" — un atacante no gana nada
     // significativo con este margen.
-    if (form_type === "habits" && response_date) {
+    if (form_type === "habits") {
       const todayUtcStr = new Date().toISOString().split("T")[0]!;
-      const targetMs = Date.parse(`${response_date}T00:00:00Z`);
+      const targetMs = Date.parse(`${resolvedDate}T00:00:00Z`);
       const todayMs = Date.parse(`${todayUtcStr}T00:00:00Z`);
 
       if (Number.isNaN(targetMs)) {
@@ -305,7 +316,7 @@ export async function POST(
       );
     }
 
-    const { data: configRow, error: configFetchError } = await supabase
+    let { data: configRow, error: configFetchError } = await supabase
       .from("client_form_configs")
       .select("questions_config")
       .eq("client_id", clientId)
@@ -327,15 +338,45 @@ export async function POST(
       );
     }
 
+    // Si el cliente no tiene una row en `client_form_configs`,
+    // intentamos crearla desde el template del entrenador via la RPC
+    // `get_or_create_client_form_config` (definida en migration 020).
+    // Antes esto fallaba con 400 "El formulario no está configurado",
+    // mensaje técnico que el cliente no entendía cuando el entrenador
+    // recién había creado al cliente sin haber guardado el editor de
+    // formularios. La RPC también es idempotente, así que llamar
+    // dos veces no duplica.
     if (!configRow?.questions_config) {
-      return NextResponse.json(
+      const { data: createdRows, error: rpcError } = await supabase.rpc(
+        "get_or_create_client_form_config",
         {
-          success: false,
-          error:
-            "El formulario no está configurado para este cliente. El entrenador debe guardar la configuración antes de poder enviar respuestas.",
-        },
-        { status: 400 }
+          p_client_id: clientId,
+          p_form_type: form_type,
+          p_tenant_host: tenantHost,
+        }
       );
+
+      if (rpcError) {
+        console.error(
+          "[Forms Responses] get_or_create_client_form_config failed:",
+          rpcError
+        );
+      }
+
+      const createdRow = Array.isArray(createdRows) ? createdRows[0] : null;
+
+      if (createdRow?.questions_config) {
+        configRow = { questions_config: createdRow.questions_config };
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "El formulario aún no está disponible. Pídele a tu entrenador que lo configure.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const questionsConfig = configRow.questions_config;
@@ -393,14 +434,8 @@ export async function POST(
       );
     }
 
-    // El cliente (browser) siempre envía `response_date` calculado en huso
-    // local (ver `getLocalTodayYmd` en `lib/forms/client-helpers.ts`), así
-    // que esta rama UTC sólo se ejecuta si un llamador no-browser (tests,
-    // scripts) omite el campo. Para esos casos dejamos UTC como fallback
-    // defensivo — documentado para evitar que alguien "arregle" esto al
-    // huso del servidor sin entender las implicaciones.
-    const resolvedDate =
-      response_date || new Date().toISOString().split("T")[0];
+    // `resolvedDate` ya fue computado al inicio del handler (single
+    // source of truth — ver comentario arriba).
 
     // Preserve historical answers for questions that were renamed or disabled
     // after this day's response was first submitted. Without this merge, a

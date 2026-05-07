@@ -135,30 +135,48 @@ export function DynamicFormModal({
     fileInputRefs.current[questionId]?.click();
   };
 
-  // Load form configuration and check for existing response
+  // Load form configuration and check for existing response.
+  //
+  // Pasa un `cancelled` flag a las 3 funciones async para que, si el
+  // componente desmonta o el effect re-fires antes de que terminen
+  // los fetches (ej: cliente abre/cierra el modal rápido en mobile),
+  // los setState no se apliquen sobre el state actual con datos
+  // staleados de un fetch viejo. React 18 silencia el warning, pero
+  // sin esto un fetch lento de un modal anterior podía pisar el
+  // estado del modal nuevo.
   useEffect(() => {
-    if (isOpen) {
-      checkNeatCards();
-      fetchFormConfig();
-      checkExistingResponse();
-    }
+    if (!isOpen) return;
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+
+    checkNeatCards(isCancelled);
+    fetchFormConfig(isCancelled);
+    checkExistingResponse(isCancelled);
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, clientId, formType, targetDate]);
 
-  const checkNeatCards = async () => {
+  const checkNeatCards = async (isCancelled?: () => boolean) => {
     try {
       const response = await clientFetch("/api/client/neat");
+
+      if (isCancelled?.()) return;
       const data = await response.json();
 
+      if (isCancelled?.()) return;
       if (data.success) {
         setHasNeatCards((data.cards || []).length > 0);
       }
     } catch (error) {
+      if (isCancelled?.()) return;
       console.error("Error checking NEAT cards:", error);
       setHasNeatCards(true);
     }
   };
 
-  const checkExistingResponse = async () => {
+  const checkExistingResponse = async (isCancelled?: () => boolean) => {
     try {
       // `getLocalTodayYmd` usa el huso local del navegador. Con
       // `new Date().toISOString()` un cliente en LATAM a las 22h local queda
@@ -168,7 +186,11 @@ export function DynamicFormModal({
       const response = await clientFetch(
         `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${dateToCheck}&end_date=${dateToCheck}`
       );
+
+      if (isCancelled?.()) return;
       const data = await response.json();
+
+      if (isCancelled?.()) return;
 
       if (data.success && data.responses && data.responses.length > 0) {
         const existingResponse = data.responses[0];
@@ -187,6 +209,7 @@ export function DynamicFormModal({
         setAnswers({});
       }
     } catch (error) {
+      if (isCancelled?.()) return;
       console.error("Error checking existing response:", error);
       setIsEditingExisting(false);
       setIsViewMode(false);
@@ -206,14 +229,18 @@ export function DynamicFormModal({
     return getScheduleOrDefault(scheduleProp ?? fetchedCheckinSchedule ?? null);
   }, [formType, scheduleProp, fetchedCheckinSchedule]);
 
-  const fetchFormConfig = async () => {
+  const fetchFormConfig = async (isCancelled?: () => boolean) => {
     setIsLoading(true);
     setConfigError(null);
     try {
       const response = await clientFetch(
         `/api/forms/configs/${clientId}?form_type=${formType}`
       );
+
+      if (isCancelled?.()) return;
       const data = await response.json();
+
+      if (isCancelled?.()) return;
 
       if (data.success && data.config) {
         if (formType === "checkins") {
@@ -313,6 +340,7 @@ export function DynamicFormModal({
         );
       }
     } catch (error) {
+      if (isCancelled?.()) return;
       console.error("Error fetching form config:", error);
       if (formType === "checkins") {
         setFetchedCheckinSchedule(getScheduleOrDefault(null));
@@ -320,7 +348,7 @@ export function DynamicFormModal({
 
       setConfigError("Error de conexión al cargar el formulario.");
     } finally {
-      setIsLoading(false);
+      if (!isCancelled?.()) setIsLoading(false);
     }
   };
 
