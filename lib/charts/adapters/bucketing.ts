@@ -50,6 +50,56 @@ function dayLabel(d: Date): string {
   return `${d.getDate()} ${MONTH_ABBR_ES[d.getMonth()]}`;
 }
 
+/**
+ * Format Y-M-D string ("2026-05-07") como label corto "7 May".
+ * Usado por buckets diarios que iteran por string YMD (no Date) para
+ * evitar drift de huso entre construcción y comparación.
+ */
+function dayLabelFromYmd(ymd: string): string {
+  const [, m, d] = ymd.split("-").map(Number);
+  const monthIdx = (m ?? 1) - 1;
+
+  return `${d} ${MONTH_ABBR_ES[monthIdx] ?? ""}`;
+}
+
+/**
+ * Suma 1 día a un Y-M-D string. Robusto contra fines de mes/año
+ * porque delega en Date (UTC midnight + 24h, luego re-extrae YMD).
+ */
+function addDayYmd(ymd: string): string {
+  const ms = Date.parse(`${ymd}T00:00:00Z`);
+  const next = new Date(ms + 86400000);
+  const y = next.getUTCFullYear();
+  const m = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(next.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Construye un Date que representa "mediodía en la zona `tz` del día
+ * `ymd`". Usado como punto único para start/end de un bucket diario:
+ * tanto start como end resuelven al MISMO YMD via toYmdInTimezone,
+ * eliminando el doble conteo que causaba el bucket end=23:59:59 UTC
+ * cuando se evaluaba en husos al este de UTC.
+ *
+ * Algoritmo: probamos UTC mediodía como candidato; si la conversión
+ * a `tz` cae fuera del YMD esperado (por offsets extremos UTC+13/+14
+ * o UTC-12), shifteamos ±12h. Iteración acotada a ≤2 pasos.
+ */
+function tzNoon(ymd: string, tz: string): Date {
+  let candidate = Date.parse(`${ymd}T12:00:00Z`);
+
+  for (let i = 0; i < 2; i++) {
+    const got = toYmdInTimezone(new Date(candidate), tz);
+
+    if (got === ymd) return new Date(candidate);
+    candidate += got < ymd ? 12 * 3600 * 1000 : -12 * 3600 * 1000;
+  }
+
+  return new Date(candidate);
+}
+
 function endOfDay(d: Date): Date {
   const e = new Date(d);
 
@@ -103,20 +153,38 @@ export function generateBuckets(
   }
 
   if (aggregation === "daily") {
+    // Iteramos por strings YMD en huso del schedule, no por Date
+    // server-local. Antes generábamos cursor=startOfDay(range.from)
+    // y dayEnd=endOfDay(cursor) usando el clock del servidor (UTC en
+    // Vercel/Railway). El filtro `averageInWindow` después convertía
+    // esos boundaries a YMD en schedule.tz vía toYmdInTimezone, y
+    // como endOfDay=23:59:59 UTC cae en las 01:59 del DÍA SIGUIENTE
+    // en Madrid (UTC+2), el endYmd del bucket "May 6" terminaba en
+    // "2026-05-07". Resultado: una respuesta con response_date=
+    // "2026-05-07" caía DENTRO del rango YMD del bucket del 6 Y del
+    // bucket del 7 → doble conteo, dato duplicado en charts.
+    //
+    // Ahora construimos un YMD string en schedule.tz para cada
+    // bucket y armamos un Date "representativo" de mediodía en esa
+    // tz (`tzNoon`) como punto único — start y end del bucket
+    // resuelven al MISMO YMD garantizado.
     const days: BucketWindow[] = [];
-    const cursor = startOfDay(range.from);
-    const last = startOfDay(range.to);
+    const fromYmd = toYmdInTimezone(range.from, tz);
+    const toYmd = toYmdInTimezone(range.to, tz);
 
-    while (cursor <= last) {
-      const dayEnd = endOfDay(cursor);
+    let cursorYmd = fromYmd;
+    let guard = 0;
+
+    while (cursorYmd <= toYmd && guard++ < 400) {
+      const noon = tzNoon(cursorYmd, tz);
 
       days.push({
-        start: new Date(cursor),
-        end: dayEnd,
-        label: dayLabel(cursor),
-        tooltip: formatPeriodTooltipSpan(cursor, dayEnd, tz),
+        start: noon,
+        end: noon,
+        label: dayLabelFromYmd(cursorYmd),
+        tooltip: formatPeriodTooltipSpan(noon, noon, tz),
       });
-      cursor.setDate(cursor.getDate() + 1);
+      cursorYmd = addDayYmd(cursorYmd);
     }
 
     return days;
