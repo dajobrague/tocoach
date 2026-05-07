@@ -476,36 +476,52 @@ export function DashboardContent() {
             </div>
           )}
 
-          {/* Check-in modal */}
+          {/* Check-in modal. `onSuccess` invalida formResponses,
+              formConfig (puede haber cambiado el shape del check-in si
+              el trainer lo editó) Y `chartsSnapshot` con prefix-match
+              que cubre TODOS los selectedPeriod cacheados (7d/30d/etc).
+              Sin la invalidación de chartsSnapshot, las gráficas
+              quedaban hasta 60s con datos viejos tras un submit
+              exitoso — era la queja #1 de los clientes. El modal
+              espera el await antes de cerrar, así garantizamos que
+              el refetch llegó antes de que el usuario navegue. */}
           <DynamicFormModal
             clientId={clientId}
             formType="checkins"
             isOpen={showWeeklyFormModal}
             schedule={checkinSchedule}
             onClose={() => setShowWeeklyFormModal(false)}
-            onSuccess={() => {
-              // Invalidate weekly form responses — TanStack Query refetches
-              // in the background while keeping current data visible.
-              queryClient.invalidateQueries({
-                queryKey: ["client", "formResponses", clientId, "checkins"],
-              });
-              queryClient.invalidateQueries({
-                queryKey: ["client", "formConfig", clientId, "checkins"],
-              });
+            onSuccess={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formResponses", clientId, "checkins"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formConfig", clientId, "checkins"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "chartsSnapshot", String(clientId)],
+                }),
+              ]);
             }}
           />
 
-          {/* Daily Habits Modal */}
+          {/* Daily Habits Modal — mismo patrón que el check-in. */}
           <DynamicFormModal
             clientId={clientId}
             formType="habits"
             isOpen={selectedDayForForm !== null}
             targetDate={selectedDayForForm ?? undefined}
             onClose={() => setSelectedDayForForm(null)}
-            onSuccess={() => {
-              queryClient.invalidateQueries({
-                queryKey: ["client", "formResponses", clientId, "habits"],
-              });
+            onSuccess={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formResponses", clientId, "habits"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "chartsSnapshot", String(clientId)],
+                }),
+              ]);
             }}
           />
 

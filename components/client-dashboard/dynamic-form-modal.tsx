@@ -40,7 +40,14 @@ interface DynamicFormModalProps {
   formType: "checkins" | "habits";
   /** Resolved from dashboard; merged with API schedule when modal opens. */
   schedule?: CheckInSchedule | null;
-  onSuccess?: () => void;
+  /**
+   * Callback que el modal invoca tras un submit exitoso. Soporta
+   * versión async — el modal espera a que termine ANTES de cerrarse,
+   * para que el padre tenga tiempo de invalidar/refetchear sus
+   * queries. Si esto fuera fire-and-forget, el cliente cerraba la app
+   * antes de que el refetch llegara y al volver veía datos viejos.
+   */
+  onSuccess?: () => void | Promise<void>;
   /** YYYY-MM-DD date to fill/edit. Defaults to today when omitted. */
   targetDate?: string | undefined;
 }
@@ -489,11 +496,8 @@ export function DynamicFormModal({
       const data = await response.json();
 
       if (data.success) {
-        if (onSuccess) onSuccess();
-        setAnswers({});
-        setCurrentStep(0);
-        setIsEditingExisting(false);
-        onClose();
+        // Toast inmediato para feedback visible aunque el await del
+        // refetch tarde 0.5–1s.
         addToast({
           title: isEditingExisting
             ? "Registro actualizado"
@@ -503,6 +507,29 @@ export function DynamicFormModal({
             : "Tus respuestas se han guardado correctamente",
           color: "success",
         });
+
+        // Esperamos a que el padre termine sus invalidaciones/refetches
+        // ANTES de cerrar el modal. Antes era fire-and-forget: si el
+        // cliente cerraba la app o navegaba inmediatamente después del
+        // submit, el refetch nunca terminaba y al volver veía las
+        // gráficas con datos viejos. Si onSuccess falla (rare), no
+        // tumbamos la UI — el form SÍ se guardó server-side; el cache
+        // se refrescará por window-focus o el staleTime.
+        if (onSuccess) {
+          try {
+            await onSuccess();
+          } catch (err) {
+            console.error(
+              "[DynamicFormModal] post-save invalidation failed",
+              err
+            );
+          }
+        }
+
+        setAnswers({});
+        setCurrentStep(0);
+        setIsEditingExisting(false);
+        onClose();
       } else {
         addToast({
           title: "Error",

@@ -85,11 +85,19 @@ export function avgNonNull(buckets: BucketedPoint[]): number | null {
 }
 
 /**
- * "No data" rule shared by ChartCard's overlay and ChartsSection's
- * pendientes-checklist grouping. Empty array, or every bucket value is
- * null/undefined/0 (multi-dim points: every sub-series is too).
+ * "No data" rule shared por el overlay de ChartCard y el agrupador
+ * "Aún sin registrar" de ChartsSection. Array vacío, o todos los
+ * buckets tienen value null/undefined.
  *
- * Pass an array — undefined means "still loading" and the caller decides.
+ * IMPORTANTE: 0 es un valor LEGÍTIMO (cliente registra 0 pasos, 0 horas
+ * de sueño, día de descanso con 0 entrenamientos, etc.) — NO lo
+ * tratamos como ausencia. La aggregation server-side ya emite null
+ * explícito cuando no hay registros (averageInWindow devuelve null si
+ * count===0; sumInWindow devuelve 0 solo cuando hay logs en el rango
+ * pero ninguno aplica al filtro). Antes confundíamos esos dos casos y
+ * los charts con valores cero legítimos terminaban en pendientes.
+ *
+ * Pass un array — undefined significa "loading" y el caller decide.
  */
 export function isBucketsEmpty(buckets: BucketedPoint[]): boolean {
   if (buckets.length === 0) return true;
@@ -98,11 +106,11 @@ export function isBucketsEmpty(buckets: BucketedPoint[]): boolean {
     const v = b.value;
 
     if (v === null || v === undefined) return true;
-    if (typeof v === "number") return v === 0;
+    if (typeof v === "number") return false;
     if (typeof v === "object") {
       return Object.values(
         v as Record<string, number | null | undefined>
-      ).every((sv) => sv === null || sv === undefined || sv === 0);
+      ).every((sv) => sv === null || sv === undefined);
     }
 
     return false;
