@@ -73,12 +73,12 @@ export function BarRenderer({
           vertical={false}
         />
         <XAxis
-          angle={data.length > 10 ? -28 : 0}
+          angle={data.length > 8 ? -45 : 0}
           axisLine={false}
           dataKey="label"
-          height={data.length > 10 ? 46 : 24}
+          height={data.length > 8 ? 56 : 24}
           interval={xAxisInterval(data.length)}
-          textAnchor={data.length > 10 ? "end" : "middle"}
+          textAnchor={data.length > 8 ? "end" : "middle"}
           tick={{ fontSize: 9, fill: "#9ca3af" }}
           tickLine={false}
         />

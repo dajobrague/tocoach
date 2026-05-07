@@ -46,14 +46,11 @@ export interface BucketWindow {
   tooltip: string;
 }
 
-function dayLabel(d: Date): string {
-  return `${d.getDate()} ${MONTH_ABBR_ES[d.getMonth()]}`;
-}
-
 /**
  * Format Y-M-D string ("2026-05-07") como label corto "7 May".
- * Usado por buckets diarios que iteran por string YMD (no Date) para
- * evitar drift de huso entre construcción y comparación.
+ * Usado por buckets diarios y semanales que iteran por string YMD
+ * (no Date) para evitar drift de huso entre construcción y
+ * comparación.
  */
 function dayLabelFromYmd(ymd: string): string {
   const [, m, d] = ymd.split("-").map(Number);
@@ -67,13 +64,39 @@ function dayLabelFromYmd(ymd: string): string {
  * porque delega en Date (UTC midnight + 24h, luego re-extrae YMD).
  */
 function addDayYmd(ymd: string): string {
+  return addDaysYmd(ymd, 1);
+}
+
+/**
+ * Suma N días a un Y-M-D string. N puede ser negativo para restar.
+ * Delegamos en Date (UTC midnight + N * 24h) para manejar fines de
+ * mes/año correctamente sin DST drift (operamos siempre en UTC).
+ */
+function addDaysYmd(ymd: string, days: number): string {
   const ms = Date.parse(`${ymd}T00:00:00Z`);
-  const next = new Date(ms + 86400000);
+  const next = new Date(ms + days * 86400000);
   const y = next.getUTCFullYear();
   const m = String(next.getUTCMonth() + 1).padStart(2, "0");
   const d = String(next.getUTCDate()).padStart(2, "0");
 
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Devuelve el Y-M-D del lunes de la semana ISO que contiene `ymd`.
+ * Convención: domingo = fin de semana, lunes = inicio. Para un YMD
+ * que ya es lunes retorna el mismo valor.
+ *
+ * Operamos en UTC para que el cálculo de weekday sea estable y no
+ * dependa del huso del servidor.
+ */
+function mondayYmdOf(ymd: string): string {
+  const ms = Date.parse(`${ymd}T00:00:00Z`);
+  const day = new Date(ms).getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Distance back to Monday: 1→0, 2→1, 3→2, ..., 0→6 (Sun → 6 days back)
+  const back = day === 0 ? 6 : day - 1;
+
+  return addDaysYmd(ymd, -back);
 }
 
 /**
@@ -100,32 +123,10 @@ function tzNoon(ymd: string, tz: string): Date {
   return new Date(candidate);
 }
 
-function endOfDay(d: Date): Date {
-  const e = new Date(d);
-
-  e.setHours(23, 59, 59, 999);
-
-  return e;
-}
-
-function startOfDay(d: Date): Date {
-  const s = new Date(d);
-
-  s.setHours(0, 0, 0, 0);
-
-  return s;
-}
-
-function isoWeekStart(d: Date): Date {
-  // Monday-anchored week start.
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  const start = new Date(d);
-
-  start.setDate(start.getDate() + diff);
-
-  return startOfDay(start);
-}
+// Helpers `endOfDay` / `startOfDay` / `isoWeekStart` (Date-based,
+// server local) fueron reemplazados por iteración tz-aware por strings
+// YMD (`mondayYmdOf`, `addDaysYmd`, `tzNoon`) — ver comentarios en
+// los branches daily y weekly de generateBuckets más abajo.
 
 /**
  * Generate the bucket windows for a given range + aggregation. Used by
@@ -205,22 +206,31 @@ export function generateBuckets(
   }
 
   if (aggregation === "weekly") {
+    // Mismo patrón tz-aware que daily — iteramos por strings YMD de
+    // los lunes (y domingos) en `dailyTz` (clientTz si está, fallback
+    // schedule.tz). Antes el branch usaba `isoWeekStart(range.from)` y
+    // `endOfDay(weekEnd)` con el clock server-local, lo que producía
+    // boundaries que en schedule.tz caían en el día siguiente y
+    // generaban doble conteo en la transición Dom→Lun (igual al bug
+    // que fixeamos para daily).
     const weeks: BucketWindow[] = [];
-    const cursor = isoWeekStart(range.from);
+    const fromYmd = toYmdInTimezone(range.from, dailyTz);
+    const toYmd = toYmdInTimezone(range.to, dailyTz);
+    let mondayYmd = mondayYmdOf(fromYmd);
+    let guard = 0;
 
-    while (cursor <= range.to) {
-      const weekEnd = new Date(cursor);
-
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      const end = endOfDay(weekEnd);
+    while (mondayYmd <= toYmd && guard++ < 200) {
+      const sundayYmd = addDaysYmd(mondayYmd, 6);
+      const startNoon = tzNoon(mondayYmd, dailyTz);
+      const endNoon = tzNoon(sundayYmd, dailyTz);
 
       weeks.push({
-        start: new Date(cursor),
-        end,
-        label: dayLabel(cursor),
-        tooltip: formatPeriodTooltipSpan(cursor, end, tz),
+        start: startNoon,
+        end: endNoon,
+        label: dayLabelFromYmd(mondayYmd),
+        tooltip: formatPeriodTooltipSpan(startNoon, endNoon, dailyTz),
       });
-      cursor.setDate(cursor.getDate() + 7);
+      mondayYmd = addDaysYmd(mondayYmd, 7);
     }
 
     return weeks;

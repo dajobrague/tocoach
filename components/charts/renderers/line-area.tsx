@@ -94,12 +94,12 @@ export function LineAreaRenderer({
           vertical={false}
         />
         <XAxis
-          angle={data.length > 10 ? -28 : 0}
+          angle={data.length > 8 ? -45 : 0}
           axisLine={false}
           dataKey="label"
-          height={data.length > 10 ? 46 : 24}
+          height={data.length > 8 ? 56 : 24}
           interval={xAxisInterval(data.length)}
-          textAnchor={data.length > 10 ? "end" : "middle"}
+          textAnchor={data.length > 8 ? "end" : "middle"}
           tick={{ fontSize: 9, fill: "#9ca3af" }}
           tickLine={false}
         />
@@ -186,6 +186,17 @@ export function LineAreaRenderer({
               strokeWidth: 2,
             }}
             dataKey="value"
+            // Dot visible at every non-null point. With sparse data
+            // (e.g. a single check-in in the range) the area gradient
+            // can't fill between consecutive points, so without dots
+            // the chart appears empty even though data exists. Recharts
+            // skips dots for null/undefined values automatically.
+            dot={{
+              r: 2.5,
+              fill: palette.stroke,
+              stroke: "#fff",
+              strokeWidth: 1.5,
+            }}
             fill={`url(#${gradientId})`}
             stroke={palette.stroke}
             strokeWidth={2.5}
@@ -201,7 +212,14 @@ export function LineAreaRenderer({
               strokeWidth: 2,
             }}
             dataKey="value"
-            dot={false}
+            // Dot visible at every non-null point so single / sparse
+            // values still render. Recharts skips dots for null values.
+            dot={{
+              r: 2.5,
+              fill: palette.stroke,
+              stroke: "#fff",
+              strokeWidth: 1.5,
+            }}
             stroke={palette.stroke}
             strokeWidth={2.5}
             type="monotone"

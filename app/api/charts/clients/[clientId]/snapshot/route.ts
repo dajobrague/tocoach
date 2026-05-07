@@ -251,6 +251,17 @@ function getEffectiveAggregation(
   // ese fix.
   if (rangeKey === "30d") return "daily";
 
+  // 3 Meses (~90 días) → weekly (~13 buckets, uno por semana ISO
+  // Mon-Sun). Daily excedería el cap MAX_BUCKETS=60 y caería al
+  // fallback weekly de todas formas; preferimos hacer la decisión
+  // explícita aquí. 13 weekly bars en ~310px mobile = ~24px por slot,
+  // ~17px de bar visible. Cómodo. Las labels van rotadas -45° en los
+  // renderers cuando hay >8 buckets para que quepan sin truncar. La
+  // estructura tz-aware del weekly también quedó arreglada en este
+  // mismo commit (mismo patrón que daily — antes producía doble
+  // conteo en boundaries Dom→Lun).
+  if (rangeKey === "3m") return "weekly";
+
   return fallback;
 }
 
