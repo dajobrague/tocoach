@@ -145,14 +145,28 @@ export function DashboardContent() {
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
   const isErrorForms = isErrorWeekly || isErrorDaily;
 
-  // "Hoy" en Y-M-D del huso local. Lo guardamos en estado y lo
-  // refrescamos cada minuto + en window focus para que la página no
-  // se quede colgada en el día anterior si el cliente deja la app
-  // abierta cruzando medianoche (PWA en background, p.ej.). Antes,
-  // los memos `dailyFormDays` / `weekSteps` / `shouldShowNeatChart`
-  // calculaban `new Date()` directo en su body sin que la fecha
-  // estuviese en deps — el "Hoy" se quedaba congelado al primer
-  // render.
+  // "Hoy" en Y-M-D del huso local. Mantener este state alineado con
+  // `Intl.DateTimeFormat()` que usa el snapshot fetch evita que el
+  // dashboard se "atrase" después de medianoche.
+  //
+  // Tres mecanismos combinados para resistir todos los escenarios de
+  // tab abierta cruzando medianoche:
+  //
+  //  1. setTimeout one-shot apuntando a la PRÓXIMA medianoche local
+  //     exacta (+ reschedule al disparar). Da precisión de ms en
+  //     lugar de los hasta 60s del setInterval anterior.
+  //  2. document `visibilitychange` listener — dispara cuando la tab
+  //     pasa de hidden→visible (típico cuando el cliente vuelve a la
+  //     app desde otra pantalla, sin necesariamente cliquear). El
+  //     `window.focus` solo no cubría este caso.
+  //  3. setInterval de 60s como red de seguridad por si ambos
+  //     mecanismos anteriores no se disparan en algún navegador
+  //     poco amigable (PWA en standalone con throttling agresivo).
+  //
+  // Sin esto, Chrome/Safari throttean los timers en background y la
+  // gráfica (que usa Intl en cada fetch fresh) podía mostrar el día
+  // nuevo mientras "Registro Diario" seguía atascado en el día
+  // anterior.
   const [todayYmd, setTodayYmd] = useState(() => getLocalTodayYmd());
 
   useEffect(() => {
@@ -161,13 +175,37 @@ export function DashboardContent() {
 
       setTodayYmd((prev) => (prev === next ? prev : next));
     };
-    const interval = setInterval(refresh, 60_000);
+
+    let midnightTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextMidnight = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+
+      tomorrow.setDate(now.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      // 100ms de buffer para asegurar que `getLocalTodayYmd()` ya
+      // devuelva el día nuevo cuando dispara.
+      const msUntilMidnight = tomorrow.getTime() - now.getTime() + 100;
+
+      midnightTimeout = setTimeout(() => {
+        refresh();
+        scheduleNextMidnight();
+      }, msUntilMidnight);
+    };
+
+    scheduleNextMidnight();
+
+    const fallbackInterval = setInterval(refresh, 60_000);
 
     window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
 
     return () => {
-      clearInterval(interval);
+      if (midnightTimeout) clearTimeout(midnightTimeout);
+      clearInterval(fallbackInterval);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
 
