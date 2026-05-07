@@ -1,9 +1,9 @@
 "use client";
 
-import { Card, CardBody, Tab, Tabs } from "@heroui/react";
+import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { ChartsSection } from "@/components/client-dashboard/charts-section";
@@ -36,6 +36,19 @@ import { ClientNeatCard } from "@/types";
 const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
   ...DEFAULT_CHECKIN_SCHEDULE,
 };
+
+/**
+ * Opciones del selector de período de Progreso. Las keys deben matchear
+ * lo que `chartPeriodCountForRange` (lib/forms/chart-helpers) y el
+ * snapshot endpoint de charts entienden — no cambiar sin alinear ambos.
+ */
+const PERIOD_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "7d", label: "7 Días" },
+  { key: "30d", label: "30 Días" },
+  { key: "3m", label: "3 Meses" },
+  { key: "6m", label: "6 Meses" },
+  { key: "12m", label: "12 Meses" },
+];
 
 export function DashboardContent() {
   const {
@@ -117,17 +130,60 @@ export function DashboardContent() {
   const {
     data: weeklyResponses = [] as FormResponse[],
     isLoading: isLoadingWeekly,
+    isError: isErrorWeekly,
   } = useFormResponses(clientId, "checkins", fetchDays);
 
   const {
     data: dailyResponses = [] as FormResponse[],
     isLoading: isLoadingDaily,
+    isError: isErrorDaily,
   } = useFormResponses(clientId, "habits", fetchDays);
 
   const { data: neatCards = [] as ClientNeatCard[] } = useNeatCards();
   const hasNeatCards = neatCards.length > 0;
 
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
+  const isErrorForms = isErrorWeekly || isErrorDaily;
+
+  // "Hoy" en Y-M-D del huso local. Lo guardamos en estado y lo
+  // refrescamos cada minuto + en window focus para que la página no
+  // se quede colgada en el día anterior si el cliente deja la app
+  // abierta cruzando medianoche (PWA en background, p.ej.). Antes,
+  // los memos `dailyFormDays` / `weekSteps` / `shouldShowNeatChart`
+  // calculaban `new Date()` directo en su body sin que la fecha
+  // estuviese en deps — el "Hoy" se quedaba congelado al primer
+  // render.
+  const [todayYmd, setTodayYmd] = useState(() => getLocalTodayYmd());
+
+  useEffect(() => {
+    const refresh = () => {
+      const next = getLocalTodayYmd();
+
+      setTodayYmd((prev) => (prev === next ? prev : next));
+    };
+    const interval = setInterval(refresh, 60_000);
+
+    window.addEventListener("focus", refresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+
+  // Indexa las respuestas diarias por `response_date` una sola vez.
+  // Antes hacíamos `dailyResponses.find()` en cada uno de los memos
+  // siguientes (`dailyFormDays`, `weekSteps`, `todaySteps`) — con
+  // `fetchDays` hasta ~365 días eso era O(n·m) por render.
+  const responsesByDate = useMemo(() => {
+    const map = new Map<string, FormResponse>();
+
+    for (const r of dailyResponses) {
+      map.set(r.response_date, r);
+    }
+
+    return map;
+  }, [dailyResponses]);
 
   const showWeeklyBanner = useMemo(() => {
     if (isLoadingForms || isCheckinConfigLoading || !checkinSchedule.enabled) {
@@ -148,7 +204,11 @@ export function DashboardContent() {
     checkinSchedule,
     weeklyResponses,
   ]);
+  // Anclamos los memos del "calendario local" a `todayYmd` (estado
+  // refrescado por el effect de medianoche). Construir el Date desde
+  // `${ymd}T00:00:00` lo deja en huso local, igual que getLocalYmd.
   const dailyFormDays = useMemo(() => {
+    const anchor = new Date(`${todayYmd}T00:00:00`);
     const days: {
       date: string;
       label: string;
@@ -158,17 +218,9 @@ export function DashboardContent() {
     }[] = [];
 
     for (let i = 0; i < 3; i++) {
-      const d = new Date();
+      const d = new Date(anchor);
 
-      d.setDate(d.getDate() - i);
-      // Use the LOCAL Y-M-D so it matches the user's clock and the `label`
-      // / `dayName` we render below (both of those use `toLocaleDateString`,
-      // which is also local). Previously this used `toISOString()` which
-      // returns UTC — for users in CEST around 00:00–02:00 local, or LATAM
-      // before midnight, the saved `date` could end up on a different
-      // calendar day than the visible label. That mismatch was the root
-      // cause of "el botón dice un día y al entrar al modal aparece otro"
-      // (Alexis Inca's ticket).
+      d.setDate(anchor.getDate() - i);
       const dateStr = getLocalYmd(d);
 
       days.push({
@@ -179,31 +231,24 @@ export function DashboardContent() {
         }),
         dayName: d.toLocaleDateString("es-ES", { weekday: "long" }),
         isToday: i === 0,
-        isSubmitted: dailyResponses.some(
-          (r: FormResponse) => r.response_date === dateStr
-        ),
+        isSubmitted: responsesByDate.has(dateStr),
       });
     }
 
     return days;
-  }, [dailyResponses]);
+  }, [responsesByDate, todayYmd]);
 
   const todaySteps = useMemo(() => {
-    // `response_date` is saved with the user's local Y-M-D (see comment on
-    // `getLocalTodayYmd`). Comparing against a UTC-derived "today" silently
-    // missed the user's own row when their local day differed from UTC.
-    const t = getLocalTodayYmd();
-    const row = dailyResponses.find((r: FormResponse) => r.response_date === t);
+    const row = responsesByDate.get(todayYmd);
 
     return resolveStepsAnswer(row?.answers) ?? 0;
-  }, [dailyResponses]);
+  }, [responsesByDate, todayYmd]);
 
   // Últimos 7 días en orden cronológico (más antiguo → hoy) para la tira
-  // semanal del NeatChartCard. Reusamos `dailyResponses` que ya viene
-  // cacheado por TanStack Query — no hay fetch adicional.
+  // semanal del NeatChartCard. Reusa `responsesByDate` (Map) y se ancla
+  // a `todayYmd` para refrescar al cruzar medianoche.
   const weekSteps = useMemo(() => {
-    const now = new Date();
-    const todayYmd = getLocalTodayYmd();
+    const anchor = new Date(`${todayYmd}T00:00:00`);
     const days: {
       date: string;
       weekday: number;
@@ -212,13 +257,11 @@ export function DashboardContent() {
     }[] = [];
 
     for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date(now);
+      const d = new Date(anchor);
 
-      d.setDate(now.getDate() - i);
+      d.setDate(anchor.getDate() - i);
       const ymd = getLocalYmd(d);
-      const row = dailyResponses.find(
-        (r: FormResponse) => r.response_date === ymd
-      );
+      const row = responsesByDate.get(ymd);
 
       days.push({
         date: ymd,
@@ -229,13 +272,16 @@ export function DashboardContent() {
     }
 
     return days;
-  }, [dailyResponses]);
+  }, [responsesByDate, todayYmd]);
 
-  // Check if we should show NEAT chart (has cards and applicable today)
+  // Si el entrenador configuró tarjetas NEAT y al menos una aplica al
+  // weekday de hoy, mostramos el card de Actividad diaria. El `getDay`
+  // sale del anchor `todayYmd` para mantener consistencia con el resto
+  // (mismo refresh de medianoche).
   const shouldShowNeatChart = useMemo(() => {
     if (!hasNeatCards || neatCards.length === 0) return false;
 
-    const today = new Date().getDay();
+    const today = new Date(`${todayYmd}T00:00:00`).getDay();
     const applicableCards = neatCards.filter(
       (card: ClientNeatCard) =>
         !card.weekdays ||
@@ -248,7 +294,7 @@ export function DashboardContent() {
     );
 
     return applicableCards.length > 0 && totalGoal > 0;
-  }, [hasNeatCards, neatCards]);
+  }, [hasNeatCards, neatCards, todayYmd]);
 
   return (
     <>
@@ -266,14 +312,41 @@ export function DashboardContent() {
             onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
           />
 
-          {/* Check-in banner when schedule is enabled and current window is due */}
+          {/* Banner de error cuando falla la carga de respuestas. No
+              tumba la página — sigue mostrando el resto de secciones,
+              pero avisa al cliente que algo se cargó incompleto. */}
+          {isErrorForms && (
+            <div className="mb-4 px-4" role="alert">
+              <div className="rounded-large border border-danger/20 bg-danger/5 p-3 flex items-start gap-3">
+                <Icon
+                  aria-hidden
+                  className="text-danger flex-shrink-0 mt-0.5"
+                  icon="solar:danger-triangle-bold"
+                  width={20}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-danger">
+                    No pudimos cargar tus registros
+                  </p>
+                  <p className="text-[11px] text-foreground/60 mt-0.5">
+                    Recarga la página o vuelve a intentarlo en un momento.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Check-in banner cuando el schedule está activo y la
+              ventana actual está vencida. */}
           {showWeeklyBanner && (
             <div className="mb-4">
               <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
                 {checkinSchedule.custom_name}
               </h2>
               <button
+                aria-label={`Completar ${checkinSchedule.custom_name}`}
                 className="bg-warning cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
+                type="button"
                 onClick={() => setShowWeeklyFormModal(true)}
               >
                 <div className="max-w-lg mx-auto flex items-center justify-between">
@@ -281,6 +354,7 @@ export function DashboardContent() {
                     {`Completa tu ${checkinSchedule.custom_name}`}
                   </span>
                   <Icon
+                    aria-hidden
                     className="text-white text-3xl"
                     icon="solar:alt-arrow-right-bold"
                   />
@@ -289,8 +363,30 @@ export function DashboardContent() {
             </div>
           )}
 
-          {/* Daily Habits Section - 3-day cards */}
-          {!isLoadingForms && (
+          {/* Registro Diario — 3 cards (hoy + 2 anteriores). Reservamos
+              el alto durante el loading con skeleton para evitar CLS;
+              antes la sección entera aparecía de golpe. El estado
+              "hoy" usa tinte suave (border-[1.5px] primary +
+              bg-primary/10) en vez del fondo primary saturado de antes
+              — alinea la jerarquía visual con el resto de los cards de
+              Progreso y deja la pildora interna en su paleta natural
+              (success/warning) sin inversión a blanco. */}
+          {isLoadingForms ? (
+            <div className="mb-4 px-4">
+              <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
+                Registro Diario
+              </h2>
+              <div className="grid grid-cols-3 gap-2">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    aria-hidden
+                    className="rounded-xl bg-default-50 border-[1.5px] border-default-200 h-[100px] animate-pulse"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
             <div className="mb-4 px-4">
               <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
                 Registro Diario
@@ -299,63 +395,59 @@ export function DashboardContent() {
                 {dailyFormDays.map((day) => (
                   <button
                     key={day.date}
-                    className={`relative flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer border ${
-                      day.isSubmitted && day.isToday
-                        ? "border-primary bg-primary shadow-sm"
-                        : day.isSubmitted
-                          ? "border-default-200 bg-default-50"
-                          : day.isToday
-                            ? "border-primary bg-primary shadow-sm"
-                            : "border-default-200 bg-default-50"
+                    aria-label={`Abrir registro de ${day.dayName} ${day.label}${
+                      day.isToday ? ", hoy" : ""
+                    }, ${day.isSubmitted ? "enviado" : "pendiente"}`}
+                    className={`flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer shadow-sm border-[1.5px] ${
+                      day.isToday
+                        ? "border-primary bg-primary/10"
+                        : "border-default-200 bg-content1"
                     }`}
+                    type="button"
                     onClick={() => setSelectedDayForForm(day.date)}
                   >
-                    {day.isToday && (
-                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                        Hoy
-                      </span>
-                    )}
                     <span
-                      className={`text-sm font-bold capitalize mt-1 ${day.isToday ? "text-white" : "text-foreground"}`}
+                      className={`text-sm font-bold capitalize mt-1 ${
+                        day.isToday ? "text-primary" : "text-foreground"
+                      }`}
                     >
                       {day.label}
                     </span>
-                    <span
-                      className={`text-xs capitalize mb-2 ${day.isToday ? "text-white/70" : "text-foreground/50"}`}
-                    >
-                      {day.dayName}
-                    </span>
-                    {day.isSubmitted ? (
-                      <div
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${day.isToday ? "bg-white/20" : "bg-success/10"}`}
+                    <div className="flex items-baseline gap-1 mb-2">
+                      <span
+                        className={`text-xs capitalize ${
+                          day.isToday ? "text-primary/70" : "text-foreground/50"
+                        }`}
                       >
+                        {day.dayName}
+                      </span>
+                      {day.isToday ? (
+                        <span className="text-[9px] font-bold text-primary tracking-wider">
+                          · HOY
+                        </span>
+                      ) : null}
+                    </div>
+                    {day.isSubmitted ? (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10">
                         <Icon
-                          className={
-                            day.isToday ? "text-white" : "text-success"
-                          }
+                          aria-hidden
+                          className="text-success"
                           icon="solar:check-circle-bold"
                           width={14}
                         />
-                        <span
-                          className={`text-[11px] font-semibold ${day.isToday ? "text-white" : "text-success"}`}
-                        >
+                        <span className="text-[11px] font-semibold text-success">
                           Enviado
                         </span>
                       </div>
                     ) : (
-                      <div
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${day.isToday ? "bg-white/20" : "bg-warning/10"}`}
-                      >
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10">
                         <Icon
-                          className={
-                            day.isToday ? "text-white" : "text-warning-600"
-                          }
+                          aria-hidden
+                          className="text-warning-600"
                           icon="solar:clock-circle-bold"
                           width={14}
                         />
-                        <span
-                          className={`text-[11px] font-semibold ${day.isToday ? "text-white" : "text-warning-600"}`}
-                        >
+                        <span className="text-[11px] font-semibold text-warning-600">
                           Pendiente
                         </span>
                       </div>
@@ -405,26 +497,38 @@ export function DashboardContent() {
               Progreso
             </h2>
 
-            {/* Time Period Selector */}
-            <Tabs
-              fullWidth
-              classNames={{
-                tabList: "gap-2",
-                cursor: "w-full",
-                tab: "px-3 h-9",
-              }}
-              color="primary"
-              selectedKey={selectedPeriod}
-              size="sm"
-              variant="bordered"
-              onSelectionChange={(key) => setSelectedPeriod(key as string)}
+            {/* Selector de período. Usamos el mismo patrón de segmented
+                control manual que `training-tabs.tsx` (track soft +
+                pill activa con shadow) en lugar de <Tabs> de HeroUI —
+                el variant="bordered" + color="primary" se sentía como
+                control de formulario y desfasaba visualmente con los
+                cards soft de abajo. */}
+            <div
+              aria-label="Seleccionar período de progreso"
+              className="flex rounded-lg bg-default-100 p-1 w-full"
+              role="tablist"
             >
-              <Tab key="7d" title="7 Días" />
-              <Tab key="30d" title="30 Días" />
-              <Tab key="3m" title="3 Meses" />
-              <Tab key="6m" title="6 Meses" />
-              <Tab key="12m" title="12 Meses" />
-            </Tabs>
+              {PERIOD_OPTIONS.map(({ key, label }) => {
+                const isActive = selectedPeriod === key;
+
+                return (
+                  <button
+                    key={key}
+                    aria-selected={isActive}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-xs transition ${
+                      isActive
+                        ? "bg-content1 text-foreground shadow-sm font-medium"
+                        : "text-default-500 hover:text-default-700 font-normal"
+                    }`}
+                    role="tab"
+                    type="button"
+                    onClick={() => setSelectedPeriod(key)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
 
             <ChartsSection
               clientId={clientId}
