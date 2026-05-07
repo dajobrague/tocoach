@@ -365,12 +365,27 @@ export function DashboardContent() {
 
           {/* Registro Diario — 3 cards (hoy + 2 anteriores). Reservamos
               el alto durante el loading con skeleton para evitar CLS;
-              antes la sección entera aparecía de golpe. El estado
-              "hoy" usa tinte suave (border-[1.5px] primary +
-              bg-primary/10) en vez del fondo primary saturado de antes
-              — alinea la jerarquía visual con el resto de los cards de
-              Progreso y deja la pildora interna en su paleta natural
-              (success/warning) sin inversión a blanco. */}
+              antes la sección entera aparecía de golpe.
+
+              Estrategia de color theme-safe (multi-tenant: cada
+              entrenador tiene un primary distinto, desde teal saturado
+              a azul pastel — no podemos asumir luminancia). Las 3
+              cards comparten `bg-content1` neutro y la diferenciación
+              de "hoy" es solo borde + chip:
+
+                · `border-2 border-primary` — borde grueso para que se
+                  perciba como acento, no línea fina.
+                · Chip "HOY" sólido con `bg-primary text-primary-foreground`,
+                  el ÚNICO par theme-token con contraste garantizado por
+                  el tailwind.config.js (cada tenant define el foreground
+                  explícito al hacer override del primary). En cualquier
+                  tenant el chip se lee.
+
+              Antes intentamos `bg-primary/10` y `bg-primary-50` como
+              fondo del card — en tenants con primary saturado el texto
+              negro encima quedaba ilegible y la pildora warning encima
+              se enturbiaba. Ahora todo el contenido interno vive sobre
+              fondo neutro y conserva su contraste natural. */}
           {isLoadingForms ? (
             <div className="mb-4 px-4">
               <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
@@ -398,32 +413,22 @@ export function DashboardContent() {
                     aria-label={`Abrir registro de ${day.dayName} ${day.label}${
                       day.isToday ? ", hoy" : ""
                     }, ${day.isSubmitted ? "enviado" : "pendiente"}`}
-                    className={`flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer shadow-sm border-[1.5px] ${
-                      day.isToday
-                        ? "border-primary bg-primary/10"
-                        : "border-default-200 bg-content1"
+                    className={`flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer shadow-sm border-2 bg-content1 ${
+                      day.isToday ? "border-primary" : "border-default-200"
                     }`}
                     type="button"
                     onClick={() => setSelectedDayForForm(day.date)}
                   >
-                    <span
-                      className={`text-sm font-bold capitalize mt-1 ${
-                        day.isToday ? "text-primary" : "text-foreground"
-                      }`}
-                    >
+                    <span className="text-sm font-bold capitalize mt-1 text-foreground">
                       {day.label}
                     </span>
-                    <div className="flex items-baseline gap-1 mb-2">
-                      <span
-                        className={`text-xs capitalize ${
-                          day.isToday ? "text-primary/70" : "text-foreground/50"
-                        }`}
-                      >
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-xs capitalize text-foreground/60">
                         {day.dayName}
                       </span>
                       {day.isToday ? (
-                        <span className="text-[9px] font-bold text-primary tracking-wider">
-                          · HOY
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded leading-none">
+                          Hoy
                         </span>
                       ) : null}
                     </div>
