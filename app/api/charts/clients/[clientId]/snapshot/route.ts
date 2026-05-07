@@ -18,6 +18,7 @@ import type {
   Aggregation,
   BucketedPoint,
   ChartConfig,
+  ChartType,
 } from "@/lib/charts/types";
 import type {
   AdapterContext,
@@ -212,8 +213,26 @@ function ymd(d: Date): string {
  */
 function getEffectiveAggregation(
   rangeKey: string,
-  fallback: Aggregation
+  fallback: Aggregation,
+  chartType: ChartType
 ): Aggregation {
+  // Guards defensivos por chart_type — el override de "daily para
+  // 7d/30d" tiene sentido para line/area/bar/kpi pero rompería la
+  // intención del trainer en otros tipos:
+  //
+  //   - `range_total` (típicamente ring, o un KPI deliberado de
+  //     "promedio del periodo") está pensado para 1 solo bucket. No
+  //     debe fragmentarse en buckets diarios — perdería su semántica.
+  //   - `stacked_bar` (training breakdown: fuerza+cardio apilados):
+  //     30 bars apiladas en mobile (~310px) son ~10px cada una con
+  //     dos segmentos verticales — visualmente saturado. Mantenemos
+  //     la elección del trainer (típicamente checkin_period o weekly)
+  //     que produce 4-5 bars chunky y legibles. En 7d una stacked_bar
+  //     diaria con 7 bars sigue siendo razonable, pero por consistencia
+  //     y safety preferimos que sea SIEMPRE el trainer quien decida.
+  if (fallback === "range_total") return "range_total";
+  if (chartType === "stacked_bar") return fallback;
+
   // 7 Días → siempre daily (7 buckets, uno por día). El cliente espera
   // ver el día a día de la última semana sin importar qué eligió el
   // trainer. Sin esto, un chart con `checkin_period` mostraba un solo
@@ -255,7 +274,11 @@ function materializeWithCap(
     // orphan empty-state.
     return { buckets: [], aggregationFallback: false };
   }
-  const effectiveAgg = getEffectiveAggregation(rangeKey, chart.aggregation);
+  const effectiveAgg = getEffectiveAggregation(
+    rangeKey,
+    chart.aggregation,
+    chart.chart_type
+  );
 
   let buckets = adapter.materialize(ctx, effectiveAgg);
   let fallback = false;
