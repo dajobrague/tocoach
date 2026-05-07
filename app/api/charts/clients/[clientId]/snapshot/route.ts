@@ -190,12 +190,51 @@ function ymd(d: Date): string {
 }
 
 /**
+ * Decide la `aggregation` efectiva del chart según el rango que el
+ * cliente seleccionó en el dashboard. La `chart.aggregation` que el
+ * trainer guarda funciona como FALLBACK — solo se usa cuando el rango
+ * no impone un override.
+ *
+ * Por qué existe este override:
+ *   El trainer típicamente configura cada chart con un `aggregation`
+ *   pensado para un rango "típico" (e.g. weekly check-in periods). El
+ *   cliente puede mirar 7d / 30d / 3m / 6m / 12m. Si forzamos siempre
+ *   la aggregation del trainer, el 7d puede mostrar 1 solo bucket
+ *   (poco informativo) y el 12m puede explotar a 365 puntos (ilegible).
+ *
+ *   Para cada rango elegimos la granularidad que maximiza información
+ *   sin saturar la pantalla. Empezamos con 7d → daily; los demás
+ *   rangos los iremos afinando uno por uno.
+ *
+ * NOTA: este es el primero de una serie iterativa. Hoy solo está
+ * cableado 7d. 30d / 3m / 6m / 12m caen al fallback del trainer hasta
+ * que se decida por separado el comportamiento exacto de cada uno.
+ */
+function getEffectiveAggregation(
+  rangeKey: string,
+  fallback: Aggregation
+): Aggregation {
+  // 7 Días → siempre daily (7 buckets, uno por día). El cliente espera
+  // ver el día a día de la última semana sin importar qué eligió el
+  // trainer. Sin esto, un chart con `checkin_period` mostraba un solo
+  // bucket "Lun-Dom" o ninguno si la semana actual aún no terminó.
+  if (rangeKey === "7d") return "daily";
+
+  return fallback;
+}
+
+/**
  * Materialize one chart, with auto-fallback from too-fine an aggregation
  * to weekly when the bucket count would exceed the cap.
+ *
+ * `rangeKey` se usa para decidir la aggregation efectiva (ver
+ * `getEffectiveAggregation`). La `chart.aggregation` queda como
+ * fallback para rangos sin override explícito.
  */
 function materializeWithCap(
   chart: ChartConfig,
-  ctx: AdapterContext
+  ctx: AdapterContext,
+  rangeKey: string
 ): { buckets: BucketedPoint[]; aggregationFallback: boolean } {
   const adapter = resolveAdapter(chart.source);
 
@@ -204,10 +243,12 @@ function materializeWithCap(
     // orphan empty-state.
     return { buckets: [], aggregationFallback: false };
   }
-  let buckets = adapter.materialize(ctx, chart.aggregation);
+  const effectiveAgg = getEffectiveAggregation(rangeKey, chart.aggregation);
+
+  let buckets = adapter.materialize(ctx, effectiveAgg);
   let fallback = false;
 
-  if (buckets.length > MAX_BUCKETS && chart.aggregation === "daily") {
+  if (buckets.length > MAX_BUCKETS && effectiveAgg === "daily") {
     buckets = adapter.materialize(ctx, "weekly" as Aggregation);
     fallback = true;
   }
@@ -252,7 +293,10 @@ export async function GET(
   // tz del cliente viene del browser. Default UTC si el caller no lo
   // pasa (compat retro / scripts internos).
   const tzParam = url.searchParams.get("tz") || "UTC";
-  const range = parseRange(url.searchParams.get("range"), tzParam);
+  // `rangeKey` (string crudo "7d"/"30d"/...) se pasa a
+  // `materializeWithCap` para que decida la aggregation efectiva.
+  const rangeKey = url.searchParams.get("range") ?? "30d";
+  const range = parseRange(rangeKey, tzParam);
 
   try {
     const [effective, schedule, formResponses, exerciseLogs] =
@@ -292,7 +336,7 @@ export async function GET(
     > = {};
 
     for (const chart of effective.charts.charts) {
-      buckets[chart.id] = materializeWithCap(chart, ctx);
+      buckets[chart.id] = materializeWithCap(chart, ctx, rangeKey);
     }
 
     return NextResponse.json({
