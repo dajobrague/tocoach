@@ -1,5 +1,5 @@
 // Wrapper que agrupa las tres pestañas relacionadas con entrenamiento
-// (Plan Semanal, Entrenamientos, Cardio) bajo un solo padre.
+// (Microciclo, Entrenamientos, Cardio) bajo un solo padre.
 // Renderiza un segmented control manual (mismo patrón que el toolbar
 // del calendario): container gris claro + pill activa con fondo
 // blanco + shadow sutil + peso 500. NO usa color="primary" porque en
@@ -17,7 +17,7 @@ import WorkoutsTab from "./workouts-tab";
 type SubTabKey = "microcycle" | "workouts" | "cardio";
 
 const SUB_TABS: { key: SubTabKey; label: string; icon: string }[] = [
-  { key: "microcycle", label: "Plan Semanal", icon: "solar:calendar-bold" },
+  { key: "microcycle", label: "Microciclo", icon: "solar:calendar-bold" },
   {
     key: "workouts",
     label: "Entrenamientos",

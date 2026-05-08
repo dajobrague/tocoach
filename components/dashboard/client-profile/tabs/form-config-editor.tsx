@@ -181,6 +181,20 @@ export default function FormConfigEditor({
     fullQuestion: string;
   } | null>(null);
 
+  // Edit sub-question modal (rename only — id is immutable)
+  const [editingSubQuestion, setEditingSubQuestion] = useState<{
+    parentId: string;
+    subId: string;
+    label: string;
+  } | null>(null);
+
+  // Confirmación al eliminar un sub-item
+  const [subQuestionToDelete, setSubQuestionToDelete] = useState<{
+    parentId: string;
+    subId: string;
+    label: string;
+  } | null>(null);
+
   // Add-question modal
   const {
     isOpen: isAddOpen,
@@ -351,6 +365,77 @@ export default function FormConfigEditor({
             subQuestions: q.subQuestions.map((sq) =>
               sq.id === subId ? { ...sq, icon } : sq
             ),
+          };
+        }
+
+        return q;
+      }),
+    });
+  };
+
+  // Solo edita `label`. El `id` queda inmutable porque es la clave que
+  // indexa `form_responses.answers` y el path en storage para fotos.
+  const updateSubQuestionLabel = (
+    parentId: string,
+    subId: string,
+    label: string
+  ) => {
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) => {
+        if (q.id === parentId && q.subQuestions) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions.map((sq) =>
+              sq.id === subId ? { ...sq, label } : sq
+            ),
+          };
+        }
+
+        return q;
+      }),
+    });
+  };
+
+  // Añade un sub-item a un grupo. El tipo, ícono base y unidad se infieren
+  // del primer sub-item existente para mantener coherencia (un grupo de
+  // fotos sólo añade fotos; uno de medidas en cm sólo añade medidas en cm).
+  // Si el grupo está vacío, cae a `text` como tipo por defecto.
+  const addSubQuestion = (parentId: string) => {
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) => {
+        if (q.id !== parentId) return q;
+
+        const subs = q.subQuestions ?? [];
+        const firstSub = subs[0];
+        const inferredType: QuestionType = firstSub?.type ?? "text";
+        const inferredIcon = firstSub?.icon ?? "solar:question-circle-bold";
+        const inferredUnit = firstSub?.unit;
+
+        const newSub: QuestionConfig = {
+          id: `custom_${inferredType}_${Date.now()}`,
+          label: "Nuevo elemento",
+          icon: inferredIcon,
+          type: inferredType,
+          enabled: true,
+          required: false,
+          ...(inferredUnit ? { unit: inferredUnit } : {}),
+        };
+
+        return { ...q, subQuestions: [...subs, newSub] };
+      }),
+    });
+  };
+
+  const deleteSubQuestion = (parentId: string, subId: string) => {
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) => {
+        if (q.id === parentId && q.subQuestions) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions.filter((sq) => sq.id !== subId),
           };
         }
 
@@ -1116,8 +1201,92 @@ export default function FormConfigEditor({
                                               {sub.enabled ? "On" : "Off"}
                                             </span>
                                           </div>
+
+                                          <Dropdown>
+                                            <DropdownTrigger>
+                                              <button
+                                                className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors p-1 rounded hover:bg-gray-100"
+                                                type="button"
+                                              >
+                                                <Icon
+                                                  icon="solar:menu-dots-bold"
+                                                  width={14}
+                                                />
+                                              </button>
+                                            </DropdownTrigger>
+                                            <DropdownMenu aria-label="Opciones del elemento">
+                                              <DropdownItem
+                                                key="rename"
+                                                startContent={
+                                                  <Icon
+                                                    className="text-gray-500"
+                                                    icon="solar:pen-2-linear"
+                                                    width={16}
+                                                  />
+                                                }
+                                                onPress={() =>
+                                                  setEditingSubQuestion({
+                                                    parentId: question.id,
+                                                    subId: sub.id,
+                                                    label: sub.label,
+                                                  })
+                                                }
+                                              >
+                                                Renombrar
+                                              </DropdownItem>
+                                              <DropdownItem
+                                                key="delete"
+                                                className="text-danger"
+                                                color="danger"
+                                                startContent={
+                                                  <Icon
+                                                    icon="solar:trash-bin-2-linear"
+                                                    width={16}
+                                                  />
+                                                }
+                                                onPress={() =>
+                                                  setSubQuestionToDelete({
+                                                    parentId: question.id,
+                                                    subId: sub.id,
+                                                    label: sub.label,
+                                                  })
+                                                }
+                                              >
+                                                Eliminar
+                                              </DropdownItem>
+                                            </DropdownMenu>
+                                          </Dropdown>
                                         </div>
                                       ))}
+                                    </div>
+
+                                    <div className="px-4 py-3 ml-12">
+                                      <Button
+                                        className="w-full font-semibold border-dashed"
+                                        size="sm"
+                                        startContent={
+                                          <Icon
+                                            icon="solar:add-circle-bold"
+                                            width={16}
+                                          />
+                                        }
+                                        variant="bordered"
+                                        onPress={() =>
+                                          addSubQuestion(question.id)
+                                        }
+                                      >
+                                        {(() => {
+                                          const firstType =
+                                            question.subQuestions?.[0]?.type;
+
+                                          if (firstType === "photo")
+                                            return "Añadir foto";
+                                          if (firstType === "number")
+                                            return "Añadir medida";
+
+                                          return "Añadir elemento";
+                                        })()}
+                                      </Button>
                                     </div>
                                   </div>
                                 )}
@@ -1383,6 +1552,140 @@ export default function FormConfigEditor({
               }}
             >
               Guardar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ────────────────────────────────────────────────────────────
+          Rename Sub-question Modal (label only — id is immutable)
+      ──────────────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!editingSubQuestion}
+        placement="center"
+        size="md"
+        onClose={() => setEditingSubQuestion(null)}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-slate-100">
+                <Icon
+                  className="text-gray-700"
+                  icon="solar:pen-2-bold"
+                  width={22}
+                />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">
+                  Renombrar elemento
+                </h3>
+                <p className="text-sm text-gray-500 font-normal">
+                  Solo cambia el nombre que ven los clientes
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody className="space-y-3">
+            <Input
+              autoFocus
+              label="Nombre"
+              placeholder="Ej: Foto lateral, Cuello"
+              value={editingSubQuestion?.label || ""}
+              variant="bordered"
+              onValueChange={(v) =>
+                setEditingSubQuestion((prev) =>
+                  prev ? { ...prev, label: v } : null
+                )
+              }
+            />
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+              Renombrar no afecta respuestas históricas — siguen ligadas a este
+              elemento aunque cambies el nombre.
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setEditingSubQuestion(null)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-gray-900 text-white font-semibold"
+              isDisabled={!editingSubQuestion?.label.trim()}
+              onPress={() => {
+                if (editingSubQuestion && editingSubQuestion.label.trim()) {
+                  updateSubQuestionLabel(
+                    editingSubQuestion.parentId,
+                    editingSubQuestion.subId,
+                    editingSubQuestion.label.trim()
+                  );
+                  setEditingSubQuestion(null);
+                }
+              }}
+            >
+              Guardar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ────────────────────────────────────────────────────────────
+          Delete Sub-question Confirmation Modal
+      ──────────────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!subQuestionToDelete}
+        placement="center"
+        size="md"
+        onClose={() => setSubQuestionToDelete(null)}
+      >
+        <ModalContent>
+          <ModalHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-100">
+                <Icon
+                  className="text-red-600"
+                  icon="solar:trash-bin-2-bold"
+                  width={22}
+                />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">
+                  Eliminar elemento
+                </h3>
+                <p className="text-sm text-gray-500 font-normal">
+                  &quot;{subQuestionToDelete?.label}&quot;
+                </p>
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+              <p className="font-semibold mb-1">Respuestas históricas</p>
+              <p>
+                Las respuestas que los clientes ya enviaron para este elemento
+                permanecen guardadas en la base de datos, pero dejan de
+                visualizarse en formularios futuros y en el editor.
+              </p>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setSubQuestionToDelete(null)}>
+              Cancelar
+            </Button>
+            <Button
+              className="text-white font-semibold"
+              color="danger"
+              startContent={<Icon icon="solar:trash-bin-2-bold" width={16} />}
+              onPress={() => {
+                if (subQuestionToDelete) {
+                  deleteSubQuestion(
+                    subQuestionToDelete.parentId,
+                    subQuestionToDelete.subId
+                  );
+                  setSubQuestionToDelete(null);
+                }
+              }}
+            >
+              Eliminar
             </Button>
           </ModalFooter>
         </ModalContent>
