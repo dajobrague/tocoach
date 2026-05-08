@@ -157,13 +157,26 @@ export function SideShell({
       </div>
 
       {/*
-        Sidebar's onSelect prop type collides with Listbox's DOM onSelect
-        event in the HeroUI types (intersection of two incompatible
-        signatures). Runtime is correct — Sidebar destructures the prop and
-        calls it with a string key. We cast to satisfy the type-checker.
+        `key={activeKey}` forces Sidebar to remount whenever the URL changes
+        so its internal selection state re-initializes from the new
+        defaultSelectedKey. Without this, navigating to a different page (or
+        reloading) leaves the Sidebar showing whichever item the user last
+        clicked. The component itself is small and stateless beyond
+        selection, so remounting is cheap.
+
+        The onSelect cast bypasses HeroUI's intersection-type collision
+        between Listbox's DOM onSelect and Sidebar's (key: string) signature.
+        Runtime is correct — Sidebar destructures and calls onSelect(key).
       */}
       <Sidebar
+        key={activeKey || "metricas"}
         defaultSelectedKey={activeKey || "metricas"}
+        iconClassName="group-data-[selected=true]:text-slate-900"
+        itemClasses={{
+          base: "data-[selected=true]:bg-slate-100 data-[selected=true]:border-l-4 data-[selected=true]:border-slate-900 data-[selected=true]:rounded-l-none data-[selected=true]:pl-2",
+          title:
+            "group-data-[selected=true]:text-slate-900 group-data-[selected=true]:font-semibold",
+        }}
         items={sidebarItems}
         sectionClasses={{
           heading:
