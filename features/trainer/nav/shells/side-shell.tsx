@@ -17,10 +17,7 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import React from "react";
 
-import Sidebar, {
-  SidebarItemType,
-  type SidebarItem,
-} from "@/components/dashboard/sidebar";
+import Sidebar, { type SidebarItem } from "@/components/dashboard/sidebar";
 import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
 import { TRAINER_NAV } from "@/features/trainer/nav/nav-items";
 
@@ -35,33 +32,32 @@ interface SideShellProps {
   onLogout: () => void;
 }
 
-/** Convert TRAINER_NAV into the SidebarItem[] format expected by `<Sidebar>`. */
+/**
+ * Convert TRAINER_NAV into the SidebarItem[] format expected by `<Sidebar>`.
+ * In the side shell, grouped items (e.g. Plantillas) are flattened directly
+ * into the section so every child is visible without an accordion click.
+ */
 function buildSidebarItems(unreadMessages: number): SidebarItem[] {
   const out: SidebarItem[] = [];
 
   for (const section of TRAINER_NAV) {
-    const sectionItems: SidebarItem[] = section.items.map((item) => {
+    const sectionItems: SidebarItem[] = [];
+
+    for (const item of section.items) {
       if (item.items && item.items.length > 0) {
-        const nested: SidebarItem = {
-          key: item.key,
-          title: item.title,
-          icon: item.icon,
-          type: SidebarItemType.Nest,
-          items: item.items.map((child) => {
-            const leaf: SidebarItem = {
-              key: child.key,
-              title: child.title,
-              icon: child.icon,
-            };
+        for (const child of item.items) {
+          const leaf: SidebarItem = {
+            key: child.key,
+            title: child.title,
+            icon: child.icon,
+          };
 
-            if (child.href) leaf.href = child.href;
-
-            return leaf;
-          }),
-        };
-
-        return nested;
+          if (child.href) leaf.href = child.href;
+          sectionItems.push(leaf);
+        }
+        continue;
       }
+
       const sidebarItem: SidebarItem = {
         key: item.key,
         title: item.title,
@@ -82,8 +78,8 @@ function buildSidebarItems(unreadMessages: number): SidebarItem[] {
         );
       }
 
-      return sidebarItem;
-    });
+      sectionItems.push(sidebarItem);
+    }
 
     out.push({
       key: `section-${section.key}`,
