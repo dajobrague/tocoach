@@ -66,13 +66,21 @@ export const AVERAGE_LINE_CHART_TYPES = TARGET_ZONE_CHART_TYPES;
 /**
  * How data points are bucketed inside the dashboard's selected range.
  * - daily: one bucket per day
- * - weekly: one bucket per ISO week
+ * - weekly: one bucket per ISO week (Mon-Sun)
+ * - biweekly: one bucket per 2 weeks (anchored al mismo lunes que weekly).
+ *   Usado por el override de 6m para mantener ~13 buckets cómodos en
+ *   mobile sin caer en monthly que se siente demasiado coarse.
  * - checkin_period: bucketed by the trainer's check-in schedule (e.g.
  *   weekly Mon-Sun, biweekly, etc.) — uses CheckInSchedule from lib/forms.
  * - range_total: a single value for the whole range. Required for `ring`
  *   (which is non-temporal) and allowed for `kpi`.
  */
-export type Aggregation = "daily" | "weekly" | "checkin_period" | "range_total";
+export type Aggregation =
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "checkin_period"
+  | "range_total";
 
 // ─── Data sources ──────────────────────────────────────────────────────────
 

@@ -45,6 +45,7 @@ const chartTypeSchema = z.enum([
 const aggregationSchema = z.enum([
   "daily",
   "weekly",
+  "biweekly",
   "checkin_period",
   "range_total",
 ] as const);

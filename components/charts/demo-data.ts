@@ -146,6 +146,11 @@ export function buildDemoBucketSpecs(
         out.push({ label: `S-${i}`, daysSpanned: 7 });
       }
       break;
+    case "biweekly":
+      for (let i = bucketCount - 1; i >= 0; i -= 1) {
+        out.push({ label: `Q-${i}`, daysSpanned: 14 });
+      }
+      break;
     case "checkin_period":
       for (let i = bucketCount - 1; i >= 0; i -= 1) {
         out.push({ label: `P-${i}`, daysSpanned: 7 });

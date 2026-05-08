@@ -262,6 +262,15 @@ function getEffectiveAggregation(
   // conteo en boundaries Dom→Lun).
   if (rangeKey === "3m") return "weekly";
 
+  // 6 Meses (~180 días) → biweekly (~13 buckets, uno cada 2 semanas).
+  // Mantiene la misma densidad visual que 3m (~13 buckets en mobile)
+  // — el cliente ve un selector de período donde cada step solo
+  // cambia el "ancho temporal" de cada bar, no la cantidad de bars.
+  // Weekly daría 26 bars de ~8px cada una (denso, ruidoso para
+  // tendencias semestrales); monthly daría sólo 6 bars (demasiado
+  // coarse para charts de bienestar). Biweekly es el sweet spot.
+  if (rangeKey === "6m") return "biweekly";
+
   return fallback;
 }
 

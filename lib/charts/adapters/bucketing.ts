@@ -205,35 +205,40 @@ export function generateBuckets(
     return days;
   }
 
-  if (aggregation === "weekly") {
-    // Mismo patrón tz-aware que daily — iteramos por strings YMD de
-    // los lunes (y domingos) en `dailyTz` (clientTz si está, fallback
-    // schedule.tz). Antes el branch usaba `isoWeekStart(range.from)` y
-    // `endOfDay(weekEnd)` con el clock server-local, lo que producía
-    // boundaries que en schedule.tz caían en el día siguiente y
-    // generaban doble conteo en la transición Dom→Lun (igual al bug
-    // que fixeamos para daily).
-    const weeks: BucketWindow[] = [];
+  if (aggregation === "weekly" || aggregation === "biweekly") {
+    // Weekly y biweekly comparten lógica: anclamos al lunes de la
+    // semana ISO en `dailyTz` (clientTz si está, fallback schedule.tz)
+    // e iteramos por strings YMD con stride 7 ó 14 días. Mismo patrón
+    // tz-aware que daily — antes usábamos isoWeekStart(range.from) +
+    // endOfDay(weekEnd) en clock del servidor lo que causaba doble
+    // conteo en la transición Dom→Lun.
+    //
+    // Cada bucket cubre desde su lunes hasta el día anterior al
+    // próximo período (Sun en weekly, próximo Lun-1 = Domingo de
+    // semana 2 en biweekly), ambos via `tzNoon` para garantizar que
+    // start y end resuelvan al rango correcto en `dailyTz`.
+    const stride = aggregation === "biweekly" ? 14 : 7;
+    const buckets: BucketWindow[] = [];
     const fromYmd = toYmdInTimezone(range.from, dailyTz);
     const toYmd = toYmdInTimezone(range.to, dailyTz);
-    let mondayYmd = mondayYmdOf(fromYmd);
+    let cursorYmd = mondayYmdOf(fromYmd);
     let guard = 0;
 
-    while (mondayYmd <= toYmd && guard++ < 200) {
-      const sundayYmd = addDaysYmd(mondayYmd, 6);
-      const startNoon = tzNoon(mondayYmd, dailyTz);
-      const endNoon = tzNoon(sundayYmd, dailyTz);
+    while (cursorYmd <= toYmd && guard++ < 200) {
+      const lastDayYmd = addDaysYmd(cursorYmd, stride - 1);
+      const startNoon = tzNoon(cursorYmd, dailyTz);
+      const endNoon = tzNoon(lastDayYmd, dailyTz);
 
-      weeks.push({
+      buckets.push({
         start: startNoon,
         end: endNoon,
-        label: dayLabelFromYmd(mondayYmd),
+        label: dayLabelFromYmd(cursorYmd),
         tooltip: formatPeriodTooltipSpan(startNoon, endNoon, dailyTz),
       });
-      mondayYmd = addDaysYmd(mondayYmd, 7);
+      cursorYmd = addDaysYmd(cursorYmd, stride);
     }
 
-    return weeks;
+    return buckets;
   }
 
   // checkin_period
