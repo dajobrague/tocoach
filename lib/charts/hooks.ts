@@ -143,10 +143,13 @@ async function apiDelete<T>(url: string): Promise<T> {
 
 // ─── Hooks: trainer template ──────────────────────────────────────────────
 
-export function useChartTemplate() {
+export function useChartTemplate(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+
   return useQuery({
     queryKey: ["charts", "template"],
     queryFn: () => apiGet<TemplateData>("/api/charts/template"),
+    enabled,
     retry: (failureCount, err) => {
       // Don't retry auth errors — handleUnauthorized already redirected.
       if (err instanceof Error && err.message.includes("401")) return false;
@@ -282,16 +285,33 @@ export interface SnapshotData {
   >;
 }
 
+export type ChartRange = "7d" | "30d" | "90d" | "6m" | "12m";
+
 export function useClientSnapshot(
   clientId: number | string,
-  range: "7d" | "30d" | "90d" = "30d"
+  range: ChartRange = "30d"
 ) {
   return useQuery({
     queryKey: ["charts", "snapshot", String(clientId), range],
-    queryFn: () =>
-      apiGet<SnapshotData>(
-        `/api/charts/clients/${clientId}/snapshot?range=${range}`
-      ),
+    queryFn: () => {
+      // Mismo motivo que en charts-section.tsx (lado cliente):
+      // mandamos browser tz para que el server alinee los buckets
+      // diarios/weekly/biweekly/monthly al calendario del usuario que
+      // está mirando — en este caso el trainer. Sin esto el server
+      // defaultea a UTC y los buckets se desfasan cerca de medianoche
+      // local del trainer.
+      let tz = "UTC";
+
+      try {
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      } catch {
+        // browsers muy viejos sin Intl — fallback a UTC.
+      }
+
+      return apiGet<SnapshotData>(
+        `/api/charts/clients/${clientId}/snapshot?range=${range}&tz=${encodeURIComponent(tz)}`
+      );
+    },
     enabled: clientId !== "" && clientId !== 0,
     retry: (failureCount, err) => {
       if (err instanceof Error && err.message.includes("401")) return false;

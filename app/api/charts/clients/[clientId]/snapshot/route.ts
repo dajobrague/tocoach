@@ -260,7 +260,12 @@ function getEffectiveAggregation(
   // estructura tz-aware del weekly también quedó arreglada en este
   // mismo commit (mismo patrón que daily — antes producía doble
   // conteo en boundaries Dom→Lun).
-  if (rangeKey === "3m") return "weekly";
+  //
+  // Aceptamos `"3m"` (cliente) y `"90d"` (trainer-side ChartRange en
+  // lib/charts/hooks.ts) como sinónimos — ambos mapean a 90 días en
+  // RANGE_DAYS y deben recibir el mismo tratamiento de aggregation
+  // para que la preview del trainer match con lo que ve el cliente.
+  if (rangeKey === "3m" || rangeKey === "90d") return "weekly";
 
   // 6 Meses (~180 días) → biweekly (~13 buckets, uno cada 2 semanas).
   // Mantiene la misma densidad visual que 3m (~13 buckets en mobile)
