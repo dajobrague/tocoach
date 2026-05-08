@@ -47,7 +47,9 @@ import {
   useResetClientCharts,
   useUpdateChartTemplate,
   useUpdateClientCharts,
+  type ChartRange,
 } from "@/lib/charts/hooks";
+import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { buildStarterDocument } from "@/lib/charts/starter";
 
@@ -98,13 +100,20 @@ function buildAddChartConfig(
 }
 
 export function ChartSurface({ mode, clientId }: Props) {
+  // Period selector for trainer-client / client-readonly. Trainer-template
+  // never queries the snapshot — it always renders synthesized demo data.
+  const [range, setRange] = useState<ChartRange>("30d");
+
   // ─── Data hooks (call all of them; they no-op when not needed) ─────────
-  const tplQuery = useChartTemplate();
+  // The template query is only meaningful in `trainer-template` mode.
+  // Disabling it elsewhere prevents 500 noise when the trainer has no
+  // template row yet (orphan tenant_host) — it's a wasted fetch otherwise.
+  const tplQuery = useChartTemplate({ enabled: mode === "trainer-template" });
   const clientQuery = useClientCharts(clientId ?? "");
   const sourcesQuery = useDataSources();
   // Real client data via snapshot — only relevant for trainer-client /
   // client-readonly. Disabled when no clientId.
-  const snapshotQuery = useClientSnapshot(clientId ?? "");
+  const snapshotQuery = useClientSnapshot(clientId ?? "", range);
 
   // Mutation hooks — same caveat: call unconditionally, pick the right one.
   const tplMut = useUpdateChartTemplate();
@@ -221,6 +230,13 @@ export function ChartSurface({ mode, clientId }: Props) {
   // Compute renderable buckets per chart. In trainer-template, synthesize.
   // In trainer-client / client-readonly, prefer real snapshot data; fall
   // back to demo for charts not in the snapshot (e.g. a freshly-added one).
+  //
+  // Importante: para que la preview con demo data refleje EXACTAMENTE
+  // lo que el cliente verá al cambiar de tab de período, aplicamos el
+  // mismo `getEffectiveAggregation` que usa el snapshot route. Antes
+  // la demo data usaba `chart.aggregation` literal — el trainer veía
+  // su chart como "checkin_period" aunque el cliente real lo vería
+  // como "daily" cuando seleccionara "7 días". Ahora coinciden.
   const renderData = useMemo(() => {
     if (!doc) return [];
     const snapshotBuckets = snapshotQuery.data?.buckets;
@@ -236,7 +252,20 @@ export function ChartSurface({ mode, clientId }: Props) {
       ) {
         buckets = snapshotBuckets[chart.id]!.buckets as BucketedPoint[];
       } else {
-        buckets = synthesizeDemoBuckets(chart, adapter?.metadata);
+        // Para demo data: aplicamos el override de rango antes de
+        // sintetizar, así el trainer ve la preview con la
+        // granularidad real que tendrá el cliente.
+        const effectiveAgg = getEffectiveAggregation(
+          range,
+          chart.aggregation,
+          chart.chart_type
+        );
+        const effectiveChart =
+          effectiveAgg === chart.aggregation
+            ? chart
+            : { ...chart, aggregation: effectiveAgg };
+
+        buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
       }
       const series = adapter?.metadata.series?.map((s) => ({
         id: s.id,
@@ -245,7 +274,7 @@ export function ChartSurface({ mode, clientId }: Props) {
 
       return { chart, adapter, buckets, series };
     });
-  }, [doc, snapshotQuery.data, mode]);
+  }, [doc, snapshotQuery.data, mode, range]);
 
   // ─── Editing handlers ──────────────────────────────────────────────────
 
@@ -397,8 +426,16 @@ export function ChartSurface({ mode, clientId }: Props) {
             </>
           ) : null}
         </p>
-        {!isReadOnly ? (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Period selector — visible en los 3 modos. En
+              trainer-client / client-readonly cambia el query del
+              snapshot. En trainer-template afecta la demo data via
+              `getEffectiveAggregation` aplicado en `renderData`,
+              permitiéndole al trainer previsualizar cómo se ve la
+              plantilla en cada rango sin tener que abrir un cliente
+              real. */}
+          <PeriodSelector value={range} onChange={setRange} />
+          {!isReadOnly ? (
             <Button
               size="sm"
               startContent={
@@ -412,52 +449,54 @@ export function ChartSurface({ mode, clientId }: Props) {
             >
               {editMode ? "Vista previa" : "Editar"}
             </Button>
-            {mode === "trainer-template" ? (
-              <>
-                <Button
-                  size="sm"
-                  startContent={<Icon icon="solar:restart-bold" width={14} />}
-                  variant="bordered"
-                  onPress={() => {
-                    if (
-                      typeof window !== "undefined" &&
-                      !window.confirm(
-                        "Esto reemplazará tu plantilla actual con las gráficas por defecto. ¿Continuar?"
-                      )
-                    ) {
-                      return;
-                    }
-                    const starter = buildStarterDocument();
-
-                    setDoc(starter);
-                    void autosave.flushNow();
-                  }}
-                >
-                  Restaurar default
-                </Button>
-                <Button
-                  color="warning"
-                  size="sm"
-                  startContent={<Icon icon="solar:refresh-bold" width={14} />}
-                  variant="flat"
-                  onPress={() => setShowApplyToAll(true)}
-                >
-                  Aplicar a todos
-                </Button>
-              </>
-            ) : null}
-            {mode === "trainer-client" && sourceFlag === "override" ? (
+          ) : null}
+          {!isReadOnly && mode === "trainer-template" ? (
+            <>
               <Button
                 size="sm"
                 startContent={<Icon icon="solar:restart-bold" width={14} />}
                 variant="bordered"
-                onPress={() => void handleResetToTemplate()}
+                onPress={() => {
+                  if (
+                    typeof window !== "undefined" &&
+                    !window.confirm(
+                      "Esto reemplazará tu plantilla actual con las gráficas por defecto. ¿Continuar?"
+                    )
+                  ) {
+                    return;
+                  }
+                  const starter = buildStarterDocument();
+
+                  setDoc(starter);
+                  void autosave.flushNow();
+                }}
               >
-                Restablecer a plantilla
+                Restaurar default
               </Button>
-            ) : null}
-          </div>
-        ) : null}
+              <Button
+                color="warning"
+                size="sm"
+                startContent={<Icon icon="solar:refresh-bold" width={14} />}
+                variant="flat"
+                onPress={() => setShowApplyToAll(true)}
+              >
+                Aplicar a todos
+              </Button>
+            </>
+          ) : null}
+          {!isReadOnly &&
+          mode === "trainer-client" &&
+          sourceFlag === "override" ? (
+            <Button
+              size="sm"
+              startContent={<Icon icon="solar:restart-bold" width={14} />}
+              variant="bordered"
+              onPress={() => void handleResetToTemplate()}
+            >
+              Restablecer a plantilla
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* Inheritance banner (per-client mode) */}
@@ -598,6 +637,48 @@ export function ChartSurface({ mode, clientId }: Props) {
         isOpen={showApplyToAll}
         onClose={() => setShowApplyToAll(false)}
       />
+    </div>
+  );
+}
+
+// ─── Period selector ───────────────────────────────────────────────────────
+
+const PERIOD_OPTIONS: ReadonlyArray<{ value: ChartRange; label: string }> = [
+  { value: "7d", label: "7d" },
+  { value: "30d", label: "30d" },
+  { value: "90d", label: "3m" },
+  { value: "6m", label: "6m" },
+  { value: "12m", label: "12m" },
+];
+
+function PeriodSelector({
+  value,
+  onChange,
+}: {
+  value: ChartRange;
+  onChange: (next: ChartRange) => void;
+}) {
+  return (
+    <div className="inline-flex items-center rounded-full border border-default-200 bg-default-50 p-0.5">
+      {PERIOD_OPTIONS.map((opt) => {
+        const active = opt.value === value;
+
+        return (
+          <button
+            key={opt.value}
+            aria-pressed={active}
+            className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-colors ${
+              active
+                ? "bg-foreground text-background"
+                : "text-foreground/60 hover:text-foreground/90"
+            }`}
+            type="button"
+            onClick={() => onChange(opt.value)}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

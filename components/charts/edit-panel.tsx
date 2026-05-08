@@ -63,9 +63,21 @@ const CHART_TYPES: {
   { id: "kpi", label: "Número", icon: "solar:hashtag-bold", multi: false },
 ];
 
+// Mantenemos paridad 1:1 con el `Aggregation` type union de
+// lib/charts/types.ts. biweekly y monthly se añadieron primero como
+// runtime overrides (snapshot endpoint las inyecta para 6m/12m sin
+// que el trainer las elija), pero las exponemos también acá por dos
+// razones: (1) el trainer puede elegirlas explícitamente si quiere
+// fijar un chart de "tendencia bi-mensual" sin depender del rango;
+// (2) si una migración o el sistema guarda un chart con esas
+// aggregations, el dropdown debe poder mostrarlas correctamente y no
+// caer al primer item silenciosamente al renderizar `selectedKeys`
+// con un valor que el Select no conoce.
 const AGGREGATIONS: { id: Aggregation; label: string }[] = [
   { id: "daily", label: "Diaria" },
   { id: "weekly", label: "Semanal" },
+  { id: "biweekly", label: "Cada 2 semanas" },
+  { id: "monthly", label: "Mensual" },
   { id: "checkin_period", label: "Por check-in" },
   { id: "range_total", label: "Total del rango" },
 ];

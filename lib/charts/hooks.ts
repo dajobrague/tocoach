@@ -243,6 +243,14 @@ export function useUpdateClientCharts(clientId: number | string) {
       qc.invalidateQueries({
         queryKey: ["charts", "client", String(clientId)],
       });
+      // Invalidar también el snapshot para que el preview del trainer
+      // muestre datos reales del cliente inmediatamente tras el
+      // autosave, en lugar de quedarse con la demo data que se renderiza
+      // mientras la mutación está in-flight. Mismo patrón que ya hace
+      // `useResetClientCharts` abajo.
+      qc.invalidateQueries({
+        queryKey: ["charts", "snapshot", String(clientId)],
+      });
     },
   });
 }

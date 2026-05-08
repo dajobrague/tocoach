@@ -18,7 +18,6 @@ import type {
   Aggregation,
   BucketedPoint,
   ChartConfig,
-  ChartType,
 } from "@/lib/charts/types";
 import type {
   AdapterContext,
@@ -30,6 +29,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { authorizeClientAccess } from "@/lib/charts/server/auth";
 import { loadEffectiveClientCharts } from "@/lib/charts/server/template-loader";
+import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import {
   DEFAULT_CHECKIN_SCHEDULE,
@@ -211,83 +211,6 @@ function ymd(d: Date): string {
  * cableado 7d. 30d / 3m / 6m / 12m caen al fallback del trainer hasta
  * que se decida por separado el comportamiento exacto de cada uno.
  */
-function getEffectiveAggregation(
-  rangeKey: string,
-  fallback: Aggregation,
-  chartType: ChartType
-): Aggregation {
-  // Guards defensivos por chart_type — el override de "daily para
-  // 7d/30d" tiene sentido para line/area/bar/kpi pero rompería la
-  // intención del trainer en otros tipos:
-  //
-  //   - `range_total` (típicamente ring, o un KPI deliberado de
-  //     "promedio del periodo") está pensado para 1 solo bucket. No
-  //     debe fragmentarse en buckets diarios — perdería su semántica.
-  //   - `stacked_bar` (training breakdown: fuerza+cardio apilados):
-  //     30 bars apiladas en mobile (~310px) son ~10px cada una con
-  //     dos segmentos verticales — visualmente saturado. Mantenemos
-  //     la elección del trainer (típicamente checkin_period o weekly)
-  //     que produce 4-5 bars chunky y legibles. En 7d una stacked_bar
-  //     diaria con 7 bars sigue siendo razonable, pero por consistencia
-  //     y safety preferimos que sea SIEMPRE el trainer quien decida.
-  if (fallback === "range_total") return "range_total";
-  if (chartType === "stacked_bar") return fallback;
-
-  // 7 Días → siempre daily (7 buckets, uno por día). El cliente espera
-  // ver el día a día de la última semana sin importar qué eligió el
-  // trainer. Sin esto, un chart con `checkin_period` mostraba un solo
-  // bucket "Lun-Dom" o ninguno si la semana actual aún no terminó.
-  if (rangeKey === "7d") return "daily";
-
-  // 30 Días → también daily (30 buckets, uno por día). Mismo patrón
-  // que 7d para mantener consistencia mental: cada bar = un día. Las
-  // bars en mobile quedan ~7px de ancho con 30 puntos en ~310px de
-  // canvas — finas pero legibles, especialmente para line/area que
-  // son la mayoría de los charts. Si en algún tenant los charts `bar`
-  // se sienten apretados, el ajuste fino se hace en el renderer
-  // (barSize) sin tocar la aggregation. La estructura del bucket
-  // (tz-aware del cliente, sin doble conteo) ya quedó resuelta para
-  // daily en commits anteriores, así que 30d hereda automáticamente
-  // ese fix.
-  if (rangeKey === "30d") return "daily";
-
-  // 3 Meses (~90 días) → weekly (~13 buckets, uno por semana ISO
-  // Mon-Sun). Daily excedería el cap MAX_BUCKETS=60 y caería al
-  // fallback weekly de todas formas; preferimos hacer la decisión
-  // explícita aquí. 13 weekly bars en ~310px mobile = ~24px por slot,
-  // ~17px de bar visible. Cómodo. Las labels van rotadas -45° en los
-  // renderers cuando hay >8 buckets para que quepan sin truncar. La
-  // estructura tz-aware del weekly también quedó arreglada en este
-  // mismo commit (mismo patrón que daily — antes producía doble
-  // conteo en boundaries Dom→Lun).
-  //
-  // Aceptamos `"3m"` (cliente) y `"90d"` (trainer-side ChartRange en
-  // lib/charts/hooks.ts) como sinónimos — ambos mapean a 90 días en
-  // RANGE_DAYS y deben recibir el mismo tratamiento de aggregation
-  // para que la preview del trainer match con lo que ve el cliente.
-  if (rangeKey === "3m" || rangeKey === "90d") return "weekly";
-
-  // 6 Meses (~180 días) → biweekly (~13 buckets, uno cada 2 semanas).
-  // Mantiene la misma densidad visual que 3m (~13 buckets en mobile)
-  // — el cliente ve un selector de período donde cada step solo
-  // cambia el "ancho temporal" de cada bar, no la cantidad de bars.
-  // Weekly daría 26 bars de ~8px cada una (denso, ruidoso para
-  // tendencias semestrales); monthly daría sólo 6 bars (demasiado
-  // coarse para charts de bienestar). Biweekly es el sweet spot.
-  if (rangeKey === "6m") return "biweekly";
-
-  // 12 Meses → monthly (12 buckets, uno por mes calendario). Es el
-  // patrón universal de las apps de fitness/wellness para vistas
-  // anuales (Apple Health, Strava, etc.). 12 buckets coincide con la
-  // densidad visual de 3m/6m manteniendo la progresión consistente
-  // del selector. Labels cortos ("Ene", "Feb", ...) caben fácilmente
-  // con la rotación -45°. Cada bucket = 1 mes calendario natural,
-  // que matchea cómo el cliente piensa el tiempo.
-  if (rangeKey === "12m") return "monthly";
-
-  return fallback;
-}
-
 /**
  * Materialize one chart, with auto-fallback from too-fine an aggregation
  * to weekly when the bucket count would exceed the cap.
