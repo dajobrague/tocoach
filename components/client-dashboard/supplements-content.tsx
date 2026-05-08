@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardBody, Spinner } from "@heroui/react";
+import { Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
@@ -9,23 +9,32 @@ import { useClientData } from "./client-data-provider";
 import { ClientHeader } from "./client-header";
 
 import { useSupplements } from "@/lib/hooks/use-client-queries";
-import { useContrastColor } from "@/lib/utils/use-contrast-color";
 import { ClientSupplementAssignment } from "@/types/supplements";
+
+function getTimingIcon(timing: string): string {
+  const lower = timing.toLowerCase();
+
+  if (lower.includes("post")) return "solar:dumbbell-bold";
+  if (lower.includes("pre")) return "solar:alarm-bold";
+  if (lower.includes("desayuno")) return "solar:cup-hot-bold";
+  if (lower.includes("cena") || lower.includes("dormir"))
+    return "solar:moon-bold";
+
+  return "solar:clock-circle-bold";
+}
 
 export function SupplementsContent() {
   const {
     clientId,
+    clientProfilePicture,
     firstName,
     logoUrl,
-    trainerName,
-    clientProfilePicture,
     tenantSlug,
+    trainerName,
   } = useClientData();
 
-  // ─── TanStack Query: cached supplement data ────────────────────────────
   const { data: allAssignments = [], isLoading } = useSupplements();
 
-  // Filter to active only
   const assignments = useMemo(
     () =>
       allAssignments.filter(
@@ -34,29 +43,9 @@ export function SupplementsContent() {
     [allAssignments]
   );
 
-  // Dynamic text colors for proper contrast
-  const primaryTextLight = useContrastColor("primary", 0.05, {
-    useThemeColor: true,
-  });
-  const primaryText = useContrastColor("primary", 0.1, { useThemeColor: true });
-  const warningText = useContrastColor("warning", 0.1, { useThemeColor: true });
-
-  const getTimingIcon = (timing: string) => {
-    if (timing.toLowerCase().includes("post")) return "solar:dumbbell-bold";
-    if (timing.toLowerCase().includes("pre")) return "solar:alarm-bold";
-    if (timing.toLowerCase().includes("desayuno")) return "solar:cup-hot-bold";
-    if (
-      timing.toLowerCase().includes("cena") ||
-      timing.toLowerCase().includes("dormir")
-    )
-      return "solar:moon-bold";
-
-    return "solar:clock-circle-bold";
-  };
-
   return (
     <>
-      <div className="min-h-screen bg-background pb-20">
+      <div className="min-h-screen bg-background pb-32">
         <ClientHeader
           clientId={clientId}
           clientProfilePicture={clientProfilePicture}
@@ -67,190 +56,187 @@ export function SupplementsContent() {
           trainerName={trainerName}
         />
 
-        <div className="max-w-lg mx-auto p-4">
-          {/* Info Card - Dynamic contrast text color */}
-          <Card className="mb-6 bg-primary/5 border border-primary/20">
-            <CardBody className="p-4">
-              <div className="flex items-start gap-3">
-                <Icon
-                  className="mt-0.5 flex-shrink-0"
-                  icon="solar:info-circle-bold"
-                  style={primaryTextLight.style}
-                  width={20}
-                />
-                <div>
-                  <p
-                    className="text-sm font-semibold mb-1"
-                    style={primaryTextLight.style}
-                  >
-                    Tu Protocolo de Suplementación
-                  </p>
-                  <p
-                    className="text-xs"
-                    style={primaryTextLight.secondaryStyle}
-                  >
-                    Sigue las indicaciones de tu entrenador para obtener los
-                    mejores resultados.
-                  </p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
+        <div className="mx-auto max-w-lg p-4">
+          <div className="mb-4 flex items-baseline justify-between border-b border-default-200 pb-3">
+            <h1
+              className="text-2xl text-foreground"
+              style={{ fontFamily: "var(--font-heading)", fontWeight: 800 }}
+            >
+              Suplementos
+            </h1>
+            {!isLoading && assignments.length > 0 && (
+              <span
+                className="text-sm text-default-500"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                {assignments.length}{" "}
+                {assignments.length === 1 ? "activo" : "activos"}
+              </span>
+            )}
+          </div>
 
-          {/* Loading State */}
           {isLoading && (
-            <div className="flex justify-center items-center py-12">
+            <div className="flex items-center justify-center py-12">
               <Spinner size="lg" />
             </div>
           )}
 
-          {/* Supplements List */}
           {!isLoading && assignments.length > 0 && (
-            <div className="space-y-4">
-              {assignments.map((assignment: ClientSupplementAssignment) => {
-                const supplement = assignment.supplement;
-                const productImage = supplement?.images?.[0];
-
-                return (
-                  <Card
-                    key={assignment.id}
-                    className="bg-background border border-default-200"
-                  >
-                    <CardBody className="p-4">
-                      {/* Header */}
-                      <div className="flex items-start gap-3 mb-4">
-                        {/* Product Image or Icon - Dynamic contrast */}
-                        <div className="flex-shrink-0 w-14 h-14 bg-primary/10 rounded-xl overflow-hidden flex items-center justify-center">
-                          {productImage ? (
-                            <img
-                              alt={assignment.supplement_name}
-                              className="w-full h-full object-cover"
-                              src={productImage}
-                            />
-                          ) : (
-                            <Icon
-                              className="text-2xl"
-                              icon="solar:health-bold"
-                              style={primaryText.style}
-                            />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-base font-bold text-foreground mb-1 truncate">
-                            {assignment.supplement_name}
-                          </h3>
-                          {assignment.supplement_description && (
-                            <p className="text-xs text-default-500 line-clamp-2">
-                              {assignment.supplement_description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Details Grid */}
-                      <div className="space-y-3">
-                        {/* Dosage & Frequency */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="p-3 bg-default-100 rounded-lg">
-                            <p className="text-xs text-default-500 font-medium mb-1">
-                              Dosificación
-                            </p>
-                            <p className="text-sm font-semibold text-foreground">
-                              {assignment.dosage}
-                            </p>
-                          </div>
-                          <div className="p-3 bg-default-100 rounded-lg">
-                            <p className="text-xs text-default-500 font-medium mb-1">
-                              Frecuencia
-                            </p>
-                            <p className="text-sm font-semibold text-foreground">
-                              {assignment.frequency}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Timing - Dynamic contrast */}
-                        <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                          <Icon
-                            icon={getTimingIcon(assignment.timing)}
-                            style={primaryTextLight.style}
-                            width={20}
-                          />
-                          <div className="flex-1">
-                            <p
-                              className="text-xs font-medium"
-                              style={primaryTextLight.secondaryStyle}
-                            >
-                              Timing
-                            </p>
-                            <p
-                              className="text-sm font-semibold"
-                              style={primaryTextLight.style}
-                            >
-                              {assignment.timing}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Notes - Dynamic contrast */}
-                        {assignment.notes && (
-                          <div className="p-3 bg-warning/10 rounded-lg border border-warning/20">
-                            <div className="flex items-start gap-2">
-                              <Icon
-                                className="mt-0.5 flex-shrink-0"
-                                icon="solar:clipboard-text-bold"
-                                style={warningText.style}
-                                width={16}
-                              />
-                              <div>
-                                <p
-                                  className="text-xs font-medium mb-0.5"
-                                  style={warningText.style}
-                                >
-                                  Nota importante
-                                </p>
-                                <p
-                                  className="text-xs"
-                                  style={warningText.secondaryStyle}
-                                >
-                                  {assignment.notes}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardBody>
-                  </Card>
-                );
-              })}
+            <div className="space-y-3">
+              {assignments.map((assignment: ClientSupplementAssignment) => (
+                <SupplementCard key={assignment.id} assignment={assignment} />
+              ))}
             </div>
           )}
 
-          {/* Empty State */}
-          {!isLoading && assignments.length === 0 && (
-            <Card className="bg-background border border-default-200">
-              <CardBody className="p-12">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="bg-default-100 p-4 rounded-full mb-4">
-                    <Icon
-                      className="text-default-400 text-5xl"
-                      icon="solar:health-linear"
-                    />
-                  </div>
-                  <h3 className="text-base font-semibold text-foreground mb-2">
-                    No tienes suplementos asignados
-                  </h3>
-                  <p className="text-sm text-default-500">
-                    Tu entrenador aún no te ha asignado ningún suplemento
-                  </p>
-                </div>
-              </CardBody>
-            </Card>
-          )}
+          {!isLoading && assignments.length === 0 && <EmptyState />}
         </div>
       </div>
       <ClientBottomNav />
     </>
+  );
+}
+
+function SupplementCard({
+  assignment,
+}: {
+  assignment: ClientSupplementAssignment;
+}) {
+  const productImage = assignment.supplement?.images?.[0];
+
+  return (
+    <article className="rounded-2xl border border-default-200 bg-content1 p-4 shadow-sm">
+      <header className="flex items-start gap-3">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-default-100">
+          {productImage ? (
+            <img
+              alt={assignment.supplement_name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+              src={productImage}
+            />
+          ) : (
+            <Icon
+              className="text-3xl text-default-400"
+              icon="solar:health-bold"
+            />
+          )}
+        </div>
+        <div className="min-w-0 flex-1 pt-1">
+          <h3
+            className="truncate text-base text-foreground"
+            style={{ fontFamily: "var(--font-heading)", fontWeight: 700 }}
+          >
+            {assignment.supplement_name}
+          </h3>
+          {assignment.supplement_description && (
+            <p
+              className="line-clamp-2 text-xs text-default-500"
+              style={{ fontFamily: "var(--font-body)" }}
+            >
+              {assignment.supplement_description}
+            </p>
+          )}
+        </div>
+      </header>
+
+      <div className="my-4 border-t border-default-100" />
+
+      <dl className="space-y-3">
+        <MetadataRow
+          icon="solar:scale-bold"
+          label="Dosis"
+          value={assignment.dosage}
+        />
+        <MetadataRow
+          icon="solar:calendar-bold"
+          label="Frecuencia"
+          value={assignment.frequency}
+        />
+        <MetadataRow
+          icon={getTimingIcon(assignment.timing)}
+          label="Cuándo"
+          value={assignment.timing}
+        />
+      </dl>
+
+      {assignment.notes && (
+        <div className="mt-4 rounded-xl border border-warning-100 bg-warning-50 p-3">
+          <div className="flex items-start gap-2">
+            <Icon
+              className="mt-0.5 shrink-0 text-base text-warning-600"
+              icon="solar:clipboard-text-bold"
+            />
+            <div className="min-w-0 flex-1">
+              <p
+                className="mb-0.5 text-xs text-warning-700"
+                style={{ fontFamily: "var(--font-body)", fontWeight: 600 }}
+              >
+                Nota del entrenador
+              </p>
+              <p
+                className="text-xs text-warning-700/90"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                {assignment.notes}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function MetadataRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className="shrink-0 text-lg text-default-400" icon={icon} />
+      <dt
+        className="text-sm text-default-500"
+        style={{ fontFamily: "var(--font-body)" }}
+      >
+        {label}
+      </dt>
+      <dd
+        className="ml-auto text-right text-sm text-foreground"
+        style={{ fontFamily: "var(--font-body)", fontWeight: 600 }}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <Icon
+        className="mb-5 text-default-300"
+        height={64}
+        icon="solar:health-linear"
+        width={64}
+      />
+      <h3
+        className="mb-2 text-base text-foreground"
+        style={{ fontFamily: "var(--font-heading)", fontWeight: 700 }}
+      >
+        No tienes suplementos asignados
+      </h3>
+      <p
+        className="max-w-xs text-sm text-default-500"
+        style={{ fontFamily: "var(--font-body)" }}
+      >
+        Tu entrenador aún no te ha asignado ningún suplemento
+      </p>
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import { useClientBootstrap } from "@/lib/hooks/use-client-queries";
 export interface ClientData {
   clientId: string;
   firstName: string;
+  lastName: string;
   logoUrl: string;
   trainerName: string;
   clientProfilePicture: string;
