@@ -33,8 +33,8 @@ interface TopShellProps {
   activeKey: string;
   trainerId: string;
   trainerName: string;
-  trainerImage?: string;
-  brandLogo?: string;
+  trainerImage: string | undefined;
+  brandLogo: string | undefined;
   unreadMessages: number;
   onLogout: () => void;
 }

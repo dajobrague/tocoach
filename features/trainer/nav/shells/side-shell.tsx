@@ -27,8 +27,8 @@ interface SideShellProps {
   activeKey: string;
   trainerId: string;
   trainerName: string;
-  trainerImage?: string;
-  brandLogo?: string;
+  trainerImage: string | undefined;
+  brandLogo: string | undefined;
   unreadMessages: number;
   onLogout: () => void;
 }
@@ -38,44 +38,49 @@ function buildSidebarItems(unreadMessages: number): SidebarItem[] {
   const out: SidebarItem[] = [];
 
   for (const section of TRAINER_NAV) {
-    out.push({
-      key: `section-${section.key}`,
-      title: section.title,
-      items: section.items.map((item) => {
-        if (item.items && item.items.length > 0) {
-          return {
-            key: item.key,
-            title: item.title,
-            icon: item.icon,
-            type: SidebarItemType.Nest,
-            items: item.items.map((child) => ({
-              key: child.key,
-              title: child.title,
-              icon: child.icon,
-              href: child.href,
-            })),
-          };
-        }
-        const sidebarItem: SidebarItem = {
+    const sectionItems: SidebarItem[] = section.items.map((item) => {
+      if (item.items && item.items.length > 0) {
+        const nested: SidebarItem = {
           key: item.key,
           title: item.title,
           icon: item.icon,
-          href: item.href,
+          type: SidebarItemType.Nest,
+          items: item.items.map((child) => {
+            const leaf: SidebarItem = {
+              key: child.key,
+              title: child.title,
+              icon: child.icon,
+            };
+            if (child.href) leaf.href = child.href;
+            return leaf;
+          }),
         };
-        if (item.key === "messaging" && unreadMessages > 0) {
-          sidebarItem.endContent = (
-            <Chip
-              className="h-5 min-w-5 px-1"
-              color="primary"
-              size="sm"
-              variant="solid"
-            >
-              {unreadMessages > 99 ? "99+" : unreadMessages}
-            </Chip>
-          );
-        }
-        return sidebarItem;
-      }),
+        return nested;
+      }
+      const sidebarItem: SidebarItem = {
+        key: item.key,
+        title: item.title,
+        icon: item.icon,
+      };
+      if (item.href) sidebarItem.href = item.href;
+      if (item.key === "messaging" && unreadMessages > 0) {
+        sidebarItem.endContent = (
+          <Chip
+            className="h-5 min-w-5 px-1"
+            color="primary"
+            size="sm"
+            variant="solid"
+          >
+            {unreadMessages > 99 ? "99+" : unreadMessages}
+          </Chip>
+        );
+      }
+      return sidebarItem;
+    });
+    out.push({
+      key: `section-${section.key}`,
+      title: section.title,
+      items: sectionItems,
     });
   }
 
@@ -145,6 +150,12 @@ export function SideShell({
         </div>
       </div>
 
+      {/*
+        Sidebar's onSelect prop type collides with Listbox's DOM onSelect
+        event in the HeroUI types (intersection of two incompatible
+        signatures). Runtime is correct — Sidebar destructures the prop and
+        calls it with a string key. We cast to satisfy the type-checker.
+      */}
       <Sidebar
         defaultSelectedKey={activeKey || "metricas"}
         items={sidebarItems}
@@ -152,7 +163,7 @@ export function SideShell({
           heading:
             "text-tiny uppercase tracking-wide text-default-500 px-2 pt-2 pb-1",
         }}
-        onSelect={onSidebarSelect}
+        onSelect={onSidebarSelect as never}
       />
 
       <div className="mt-auto">
