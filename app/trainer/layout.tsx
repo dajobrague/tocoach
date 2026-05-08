@@ -1,12 +1,21 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import React from "react";
+
+import { TrainerNavShell } from "@/features/trainer/nav/trainer-nav-shell";
+
+const SHELL_PATH_PREFIXES = ["/trainer/dashboard", "/trainer/settings"];
 
 export default function TrainerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname() ?? "";
+  const useShell = SHELL_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
   const trainerThemeCss = `
     .trainer-app {
       --heroui-primary-50: 248 250 252 !important;
@@ -52,7 +61,9 @@ export default function TrainerLayout({
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: trainerThemeCss }} />
-      <div className="trainer-app">{children}</div>
+      <div className="trainer-app">
+        {useShell ? <TrainerNavShell>{children}</TrainerNavShell> : children}
+      </div>
     </>
   );
 }

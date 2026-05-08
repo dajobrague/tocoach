@@ -236,7 +236,9 @@ export function SideShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    // Lock the layout to viewport height. The sidebar and top header stay
+    // fixed; only the <main> content scrolls.
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Mobile drawer (only renders when open) */}
       <Drawer
         classNames={{
@@ -251,13 +253,13 @@ export function SideShell({
         </DrawerContent>
       </Drawer>
 
-      {/* Desktop persistent sidebar */}
-      <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-200 bg-white">
+      {/* Desktop persistent sidebar — does not scroll with page content */}
+      <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-200 bg-white h-screen">
         {sidebarContent}
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-200 bg-white lg:justify-end">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-200 bg-white shrink-0 lg:justify-end">
           <button
             aria-label="Abrir menú"
             className="lg:hidden p-2 rounded-md hover:bg-slate-100"
@@ -268,7 +270,7 @@ export function SideShell({
           {trainerId && <TrainerNotificationsDropdown trainerId={trainerId} />}
         </header>
 
-        <main className="flex-1 w-full overflow-hidden">{children}</main>
+        <main className="flex-1 w-full overflow-y-auto">{children}</main>
       </div>
     </div>
   );
