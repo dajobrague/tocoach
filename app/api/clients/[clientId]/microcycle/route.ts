@@ -1,10 +1,10 @@
 // GET / PUT /api/clients/[clientId]/microcycle
-// Endpoints trainer-side para configurar el microciclo (plan semanal) de
+// Endpoints trainer-side para configurar el microciclo de
 // un cliente. El microciclo se ancla al client_program más reciente
 // (UNIQUE constraint en microcycles.client_program_id), pero las sesiones
 // disponibles para los slots se traen de TODOS los programas activos del
 // cliente — un cliente típicamente tiene fuerza + cardio simultáneamente
-// y el trainer debe poder mezclar ambos en el plan semanal.
+// y el trainer debe poder mezclar ambos en el microciclo.
 //
 // Replica el patrón de los otros endpoints trainer-on-client: auth con
 // getTrainerSession + check de ownership implícito vía client_programs

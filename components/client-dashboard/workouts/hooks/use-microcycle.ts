@@ -2,7 +2,7 @@
 // descansos implícitos ya expandidos (lo hace el endpoint del lado
 // servidor). Si el entrenador todavía no ha armado el microciclo, el
 // response devuelve { microcycle: null } y la UI oculta el enlace
-// "Ver mi plan semanal".
+// "Ver mi microciclo".
 
 import type { MicrocycleSlotView } from "@/types/training";
 
@@ -26,7 +26,7 @@ async function fetchMicrocycle(): Promise<ClientMicrocycleData | null> {
   const data = (await response.json()) as ApiResponse;
 
   if (!response.ok || !data.success) {
-    throw new Error(data.error ?? "Error al cargar el plan semanal");
+    throw new Error(data.error ?? "Error al cargar el microciclo");
   }
 
   return data.microcycle;

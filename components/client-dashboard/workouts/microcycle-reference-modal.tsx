@@ -1,39 +1,14 @@
-// Modal "Tu plan semanal" — referencia visual del microciclo armado por
+// Modal "Tu microciclo" — referencia visual del microciclo armado por
 // el entrenador. Sin CTA "Comenzar" (decisión extra-1 §1 de la spec).
 // Si el cliente no tiene microciclo, el padre oculta el enlace que lo
 // abre, así que aquí solo manejamos el estado "tiene microciclo".
 
-import type { MicrocycleSlotView, SessionType } from "@/types/training";
+import type { MicrocycleSlotView } from "@/types/training";
 
-import {
-  Chip,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalHeader,
-} from "@heroui/react";
+import { Modal, ModalBody, ModalContent, ModalHeader } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
-const TYPE_LABEL: Record<SessionType, string> = {
-  strength: "Fuerza",
-  cardio: "Cardio",
-  flexibility: "Flexibilidad",
-  sports: "Deportes",
-  recovery: "Descanso activo",
-  other: "Otro",
-};
-
-const TYPE_COLOR: Record<
-  SessionType,
-  "primary" | "danger" | "warning" | "secondary" | "success" | "default"
-> = {
-  strength: "primary",
-  cardio: "danger",
-  flexibility: "secondary",
-  sports: "warning",
-  recovery: "success",
-  other: "default",
-};
+import { getSessionTypeStyle } from "./session-type-style";
 
 interface Props {
   isOpen: boolean;
@@ -59,7 +34,7 @@ export function MicrocycleReferenceModal({
               width={22}
             />
             <span className="text-lg font-heading font-bold text-foreground">
-              Tu plan semanal
+              Tu microciclo
             </span>
           </div>
           <p className="text-xs font-body text-foreground/60">
@@ -83,17 +58,21 @@ export function MicrocycleReferenceModal({
                     : "Descanso"}
                 </span>
                 {slot.type === "session" && slot.session?.session_type ? (
-                  <Chip
-                    color={TYPE_COLOR[slot.session.session_type]}
-                    size="sm"
-                    variant="flat"
-                  >
-                    {TYPE_LABEL[slot.session.session_type]}
-                  </Chip>
+                  (() => {
+                    const s = getSessionTypeStyle(slot.session.session_type);
+
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-body font-medium ${s.chipClass}`}
+                      >
+                        {s.label}
+                      </span>
+                    );
+                  })()
                 ) : (
-                  <Chip color="default" size="sm" variant="flat">
+                  <span className="inline-flex items-center rounded-full bg-default-100 px-2.5 py-0.5 text-xs font-body font-medium text-foreground/70 border border-default-200/60">
                     Descanso
-                  </Chip>
+                  </span>
                 )}
               </li>
             ))}
