@@ -71,12 +71,15 @@ export async function GET(request: NextRequest) {
       ? `${profile.name} ${profile.last_name || ""}`.trim()
       : session.full_name || "Client";
     const firstName = profile?.name || fullName.split(" ")[0];
+    const lastName =
+      profile?.last_name || fullName.split(" ").slice(1).join(" ");
 
     return NextResponse.json({
       success: true,
       data: {
         clientId: session.client_id.toString(),
         firstName,
+        lastName,
         logoUrl: tenant?.logo_url || "",
         trainerName: tenant?.theme_json?.meta?.name || "Your Trainer",
         clientProfilePicture: profile?.profile_picture_url || "",

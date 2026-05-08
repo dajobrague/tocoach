@@ -101,6 +101,32 @@ export async function loadOrCreateTrainerTemplate(
     };
   }
 
+  // Lazy-create can fail with a FK violation when the trainer's session
+  // `tenant_host` doesn't exist in the `tenants` table (orphan trainer —
+  // observed for ~2/33 trainers in production). Verify the tenant row
+  // exists first; if not, return a safe in-memory template rather than
+  // 500ing every chart fetch for that trainer. The trainer simply sees
+  // an empty starter and won't be able to save until the tenant row is
+  // restored — but reads (snapshot, client view) keep working.
+  const tenantCheck = await supabase
+    .from("tenants")
+    .select("host")
+    .eq("host", tenantHost)
+    .maybeSingle();
+
+  if (!tenantCheck.data) {
+    console.warn(
+      `[charts] orphan trainer tenant_host="${tenantHost}" trainer_id="${trainerId}" — returning ephemeral starter template (DB write skipped).`
+    );
+
+    return {
+      id: "ephemeral",
+      charts: buildStarterDocument(),
+      auto_apply_to_new_clients: true,
+      updated_at: new Date(0).toISOString(),
+    };
+  }
+
   // Lazy-create with the starter shape.
   const starter = buildStarterDocument();
   const insert = await supabase
@@ -125,9 +151,16 @@ export async function loadOrCreateTrainerTemplate(
       .single();
 
     if (reread.error || !reread.data) {
-      throw new Error(
-        `Failed to lazy-create chart template: ${insert.error.message}`
+      console.warn(
+        `[charts] lazy-create failed and re-read empty for tenant_host="${tenantHost}" trainer_id="${trainerId}": ${insert.error.message}. Falling back to ephemeral starter.`
       );
+
+      return {
+        id: "ephemeral",
+        charts: buildStarterDocument(),
+        auto_apply_to_new_clients: true,
+        updated_at: new Date(0).toISOString(),
+      };
     }
 
     return {

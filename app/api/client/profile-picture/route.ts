@@ -112,3 +112,69 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(_request: NextRequest) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getClientSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    // List all files under the client's folder so we can remove every variant
+    // (jpg, png, webp) that may have been uploaded historically.
+    const { data: existing, error: listError } = await supabase.storage
+      .from("client-profile-pictures")
+      .list(session.client_id.toString());
+
+    if (listError) {
+      console.error("[Profile Picture DELETE] List error:", listError);
+    }
+
+    if (existing && existing.length > 0) {
+      const paths = existing.map(
+        (entry) => `${session.client_id}/${entry.name}`
+      );
+      const { error: removeError } = await supabase.storage
+        .from("client-profile-pictures")
+        .remove(paths);
+
+      if (removeError) {
+        console.error("[Profile Picture DELETE] Remove error:", removeError);
+      }
+    }
+
+    // Clear the URL in the database regardless — even if the file was already
+    // gone from storage, the client should no longer reference it.
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ profile_picture_url: null })
+      .eq("id", session.client_id);
+
+    if (updateError) {
+      console.error("[Profile Picture DELETE] DB update error:", updateError);
+
+      return NextResponse.json(
+        { success: false, error: "Error al actualizar el perfil" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Foto de perfil eliminada correctamente",
+    });
+  } catch (error) {
+    console.error("[Profile Picture DELETE] Unexpected error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}

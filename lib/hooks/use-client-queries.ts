@@ -35,6 +35,7 @@ function getDateDaysAgo(days: number): string {
 export interface ClientBootstrapData {
   clientId: string;
   firstName: string;
+  lastName: string;
   logoUrl: string;
   trainerName: string;
   clientProfilePicture: string;
