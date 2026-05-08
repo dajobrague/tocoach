@@ -134,6 +134,27 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // `loadOrCreateTrainerTemplate` returns a sentinel `{ id: "ephemeral", ... }`
+    // when the trainer's session has no resolvable `tenant_host` (orphan
+    // tenant). Updating WHERE id="ephemeral" would 500 with `22P02` because
+    // the column is UUID. Refuse cleanly so the editor surfaces a real
+    // error instead of a generic 500.
+    if (current.id === "ephemeral") {
+      console.error(
+        `[charts/template PUT] ephemeral template — orphan trainer (trainer_id=${auth.actor.trainerId}, tenant_host=${JSON.stringify(auth.actor.tenantHost)}). Save refused.`
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "tenant_unresolved",
+          message:
+            "Tu sesión no tiene un tenant válido. Cierra sesión y vuelve a entrar para reanudar los cambios.",
+        },
+        { status: 503 }
+      );
+    }
+
     // Determine whether the body wants to update the auto_apply flag.
     const autoApply =
       typeof body.auto_apply_to_new_clients === "boolean"

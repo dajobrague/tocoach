@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
+import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 export type AuthActor =
   | {
@@ -45,6 +46,16 @@ function deny(status: 401 | 403 | 404, message: string): NextResponse {
 
 /**
  * Trainer-only routes: template GET/PUT, apply-to-all, data-sources.
+ *
+ * The JWT carries `tenant_host`, but historically several login paths have
+ * issued trainer cookies with `tenant_host=""` (empty string) — older builds
+ * passed `""` unconditionally; newer ones fall back to `""` when the
+ * `tenants` lookup at issuance fails. Those sessions are otherwise valid:
+ * the `trainer_id` claim is signed and non-empty. So when the JWT host is
+ * empty we resolve it from the `tenants` table by `trainer_id` rather than
+ * 401'ing the user. Genuinely orphan trainers (no row in `tenants`) still
+ * land with `tenantHost=""` and get caught downstream by the template
+ * loader's orphan path.
  */
 export async function authorizeTrainerOnly(): Promise<
   AuthResult<{ actor: Extract<AuthActor, { kind: "trainer" }> }>
@@ -55,12 +66,25 @@ export async function authorizeTrainerOnly(): Promise<
     return { ok: false, response: deny(401, "No autorizado") };
   }
 
+  let tenantHost = session.tenant_host;
+
+  if (!tenantHost) {
+    const supabase = createSupabaseClient();
+    const { data } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", session.trainer_id)
+      .maybeSingle();
+
+    tenantHost = (data?.host as string | undefined) ?? "";
+  }
+
   return {
     ok: true,
     actor: {
       kind: "trainer",
       trainerId: session.trainer_id,
-      tenantHost: session.tenant_host,
+      tenantHost,
       email: session.email,
     },
   };
