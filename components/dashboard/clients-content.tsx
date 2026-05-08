@@ -318,7 +318,7 @@ export default function ClientsContent() {
         };
       case "not_due":
         return {
-          label: "No programado",
+          label: "Programado",
           color: "default" as const,
           variant: "flat" as const,
         };
