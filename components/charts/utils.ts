@@ -13,11 +13,21 @@
 import type { BucketedPoint, ChartType } from "@/lib/charts/types";
 
 /**
- * Tick density that matches today's chart visuals. ≤8 buckets show every
- * label, 9-16 show every other, 17+ space out at ~8 labels.
+ * Tick density del eje X. Trabaja en conjunto con la rotación -45°
+ * que aplican los renderers cuando hay >8 buckets — al ir en
+ * diagonal, cada label ocupa ~21px de proyección horizontal y caben
+ * ~13 labels en un canvas mobile de 310px sin solaparse.
+ *
+ * Tramos:
+ *   ≤14  → mostrar todas (cubre 7d=7, 3m=13, 6m=13, 12m=~12).
+ *          Antes el corte estaba en 8 lo que dejaba a 3m/6m/12m
+ *          mostrando solo cada 2 labels (~7 visibles) — el cliente
+ *          notaba "no veo todas las quincenas en el eje x".
+ *   15-16 → cada 2 (every other).
+ *   17+   → ~8 visibles distribuidas.
  */
 export function xAxisInterval(dataLen: number): number {
-  if (dataLen <= 8) return 0;
+  if (dataLen <= 14) return 0;
   if (dataLen <= 16) return 1;
 
   return Math.floor(dataLen / 8);
