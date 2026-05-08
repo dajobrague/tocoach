@@ -110,3 +110,7 @@ playwright/.cache/
 # Lint / build caches
 .eslintcache
 .turbo/
+
+# Local AI agent state and skill lock files (per-machine, not shared)
+.agents/
+skills-lock.json
