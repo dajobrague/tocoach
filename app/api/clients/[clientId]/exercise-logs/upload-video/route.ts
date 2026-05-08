@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { compressVideo } from "@/lib/utils/server-video-compression";
+
+export const runtime = "nodejs";
+// Raw uploads can be up to 1 GB and compression on a shared CPU can take
+// many minutes for long clips. Give the route plenty of headroom; ffmpeg
+// has its own internal timeout (see compressVideo's `timeoutMs`).
+export const maxDuration = 600;
 
 const ALLOWED_TYPES = [
   "video/mp4",
@@ -9,7 +16,7 @@ const ALLOWED_TYPES = [
   "video/quicktime",
   "video/x-m4v",
 ];
-const MAX_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_SIZE = 1024 * 1024 * 1024; // 1GB raw — compression makes the stored copy much smaller
 
 export async function POST(
   request: NextRequest,
@@ -60,19 +67,44 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "El archivo es demasiado grande (máx 100MB)",
+          error: "El archivo es demasiado grande (máx 1GB)",
         },
         { status: 400 }
       );
     }
 
+    const rawBuffer = Buffer.from(await file.arrayBuffer());
+
+    let uploadBuffer: Buffer = rawBuffer;
+    let uploadContentType = file.type;
+    let uploadFilename = file.name;
+
+    try {
+      const compressed = await compressVideo({
+        buffer: rawBuffer,
+        filename: file.name,
+      });
+
+      uploadBuffer = compressed.buffer;
+      uploadContentType = compressed.contentType;
+      uploadFilename = compressed.filename;
+    } catch (err) {
+      // If encoding fails, fall back to uploading the original so the user
+      // doesn't lose their video. Log the cause so we can investigate.
+      console.error(
+        "[Client Exercise Video API] Compression failed, uploading raw:",
+        err
+      );
+    }
+
     const timestamp = Date.now();
-    const fileExt = file.name.split(".").pop();
+    const fileExt = uploadFilename.split(".").pop();
     const fileName = `${clientId}/${timestamp}.${fileExt}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("client-exercise-videos")
-      .upload(fileName, file, {
+      .upload(fileName, uploadBuffer, {
+        contentType: uploadContentType,
         cacheControl: "3600",
         upsert: false,
       });

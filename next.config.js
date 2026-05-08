@@ -5,6 +5,26 @@ const nextConfig = {
   // Pin workspace root when multiple lockfiles exist (e.g. parent ~/package-lock.json).
   outputFileTracingRoot: path.join(__dirname),
 
+  // Next.js's automatic file tracing doesn't pick up the native ffmpeg binary
+  // shipped by `ffmpeg-static` (it's referenced as a path string at runtime,
+  // not imported), so the standalone bundle excludes it by default. Force the
+  // build to copy the binary into `.next/standalone/node_modules/ffmpeg-static/`
+  // for the upload routes that spawn it.
+  outputFileTracingIncludes: {
+    "/api/clients/[clientId]/exercise-logs/upload-video": [
+      "./node_modules/ffmpeg-static/ffmpeg",
+    ],
+    "/api/exercises/upload-video": ["./node_modules/ffmpeg-static/ffmpeg"],
+  },
+
+  // `ffmpeg-static` resolves its binary path with `__dirname`, but the bundler
+  // (Turbopack in dev, webpack in prod) rewrites `__dirname` to a virtual
+  // `/ROOT` prefix when the module is bundled. That makes `spawn` fail with
+  // ENOENT because the path doesn't exist on disk. Marking the package as a
+  // server external forces a real Node `require` at runtime, which keeps
+  // `__dirname` pointing at the actual file system.
+  serverExternalPackages: ["ffmpeg-static"],
+
   // Production optimizations
   reactStrictMode: true,
   poweredByHeader: false,

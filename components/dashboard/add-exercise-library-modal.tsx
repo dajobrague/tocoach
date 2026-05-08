@@ -25,10 +25,7 @@ import {
   uploadExerciseVideo,
   validateExerciseLibraryForm,
 } from "@/lib/utils/exercise-utils";
-import {
-  compressVideo,
-  isCompressionSupported,
-} from "@/lib/utils/video-compression";
+import { isUnsupportedExternalUrl } from "@/lib/utils/video-url";
 
 interface AddExerciseLibraryModalProps {
   isOpen: boolean;
@@ -64,8 +61,6 @@ export default function AddExerciseLibraryModal({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [compressingVideo, setCompressingVideo] = useState(false);
-  const [compressionProgress, setCompressionProgress] = useState(0);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -136,8 +131,8 @@ export default function AddExerciseLibraryModal({
 
     if (!file) return;
 
-    if (file.size > 100 * 1024 * 1024) {
-      alert("El archivo es demasiado grande (máx 100MB)");
+    if (file.size > 1024 * 1024 * 1024) {
+      alert("El archivo es demasiado grande (máx 1GB)");
 
       return;
     }
@@ -147,29 +142,18 @@ export default function AddExerciseLibraryModal({
     setVideoPreview(previewUrl);
 
     try {
-      let fileToUpload = file;
-
-      if (isCompressionSupported()) {
-        setCompressingVideo(true);
-        setCompressionProgress(0);
-        fileToUpload = await compressVideo(file, (percent) => {
-          setCompressionProgress(percent);
-        });
-        setCompressingVideo(false);
-      }
-
       setUploadingVideo(true);
-      const result = await uploadExerciseVideo(fileToUpload);
+      const result = await uploadExerciseVideo(file);
 
       if (result.success && result.url) {
         setFormData((prev) => ({
           ...prev,
           uploaded_video_url: result.url || "",
         }));
-        const compressedPreview = URL.createObjectURL(fileToUpload);
-
+        // El backend ya devolvió la URL del video procesado; usamos esa para
+        // el preview en lugar de un blob local del archivo crudo.
         URL.revokeObjectURL(previewUrl);
-        setVideoPreview(compressedPreview);
+        setVideoPreview(result.url);
       } else {
         alert(result.error || "Error al subir video");
         URL.revokeObjectURL(previewUrl);
@@ -180,7 +164,6 @@ export default function AddExerciseLibraryModal({
       alert("Error al subir video. Por favor intenta de nuevo.");
       URL.revokeObjectURL(previewUrl);
       setVideoPreview(null);
-      setCompressingVideo(false);
     } finally {
       setUploadingVideo(false);
     }
@@ -597,8 +580,8 @@ export default function AddExerciseLibraryModal({
                       Video Vertical del Ejercicio (Opcional)
                     </label>
                     <p className="text-xs text-gray-500 mb-2">
-                      Sube un video vertical (9:16) de hasta 100MB. Se
-                      comprimirá automáticamente.
+                      Sube un video vertical (9:16) de hasta 1GB. Se comprimirá
+                      automáticamente.
                     </p>
                     {videoPreview || formData.uploaded_video_url ? (
                       <div className="flex flex-col items-center gap-3">
@@ -625,7 +608,7 @@ export default function AddExerciseLibraryModal({
                         </div>
                         <Button
                           color="danger"
-                          isDisabled={compressingVideo || uploadingVideo}
+                          isDisabled={uploadingVideo}
                           size="sm"
                           startContent={
                             <Icon
@@ -654,19 +637,19 @@ export default function AddExerciseLibraryModal({
                             o arrastra y suelta
                           </p>
                           <p className="text-xs text-gray-500">
-                            MP4, WebM o MOV (MÁX. 100MB)
+                            MP4, WebM o MOV (MÁX. 1GB)
                           </p>
                         </div>
                         <input
                           accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.mov,.webm,.m4v"
                           className="hidden"
-                          disabled={compressingVideo || uploadingVideo}
+                          disabled={uploadingVideo}
                           type="file"
                           onChange={handleVideoSelect}
                         />
                       </label>
                     )}
-                    {compressingVideo && (
+                    {uploadingVideo && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2 text-sm text-slate-700">
                           <Icon
@@ -674,31 +657,22 @@ export default function AddExerciseLibraryModal({
                             icon="solar:refresh-bold"
                             width={16}
                           />
-                          Comprimiendo video... {compressionProgress}%
+                          Procesando video...
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div
-                            className="bg-slate-700 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${compressionProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {uploadingVideo && !compressingVideo && (
-                      <div className="flex items-center gap-2 text-sm text-slate-700 mt-2">
-                        <Icon
-                          className="animate-spin"
-                          icon="solar:refresh-bold"
-                          width={16}
-                        />
-                        Subiendo video...
+                        <p className="text-xs text-slate-500 mt-1">
+                          Esto puede tardar un momento. Estamos optimizando el
+                          video para que se vea bien y cargue rápido.
+                        </p>
                       </div>
                     )}
                   </div>
 
                   <Input
+                    description="YouTube o Vimeo. Para Reels, TikTok o Instagram, sube el archivo arriba — esos enlaces no se reproducen dentro de la app."
+                    errorMessage="Este enlace no se puede mostrar al cliente. Usa YouTube/Vimeo o sube el archivo arriba."
+                    isInvalid={isUnsupportedExternalUrl(formData.video_url)}
                     label="URL del Video Tutorial (Opcional)"
-                    placeholder="https://youtube.com/..."
+                    placeholder="https://youtube.com/... o https://vimeo.com/..."
                     startContent={
                       <Icon
                         className="text-gray-400"
@@ -1140,7 +1114,6 @@ export default function AddExerciseLibraryModal({
               isSubmitting ||
               uploadingImage ||
               uploadingVideo ||
-              compressingVideo ||
               !formData.category
             }
             isLoading={isSubmitting}
