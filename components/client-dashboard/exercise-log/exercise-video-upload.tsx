@@ -1,5 +1,6 @@
 // Sub-sección "Video (Opcional)" del formulario de registro: preview de
-// video subido + delete, o botón de subida con progress de compresión.
+// video subido + delete, o botón de subida. La compresión ocurre en el
+// servidor durante el upload, así que mostramos un solo estado de carga.
 
 import type { MutableRefObject } from "react";
 
@@ -9,8 +10,6 @@ import { Icon } from "@iconify/react";
 interface Props {
   videoUrl: string | null;
   isUploading: boolean;
-  isCompressing: boolean;
-  compressionProgress: number;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
   onPickFile: (file: File) => void;
   onRemove: () => void;
@@ -19,8 +18,6 @@ interface Props {
 export function ExerciseVideoUpload({
   videoUrl,
   isUploading,
-  isCompressing,
-  compressionProgress,
   fileInputRef,
   onPickFile,
   onRemove,
@@ -57,7 +54,7 @@ export function ExerciseVideoUpload({
             ref={fileInputRef}
             accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.mov,.webm,.m4v"
             className="hidden"
-            disabled={isCompressing || isUploading}
+            disabled={isUploading}
             type="file"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -68,41 +65,22 @@ export function ExerciseVideoUpload({
           />
           <Button
             className="w-full"
-            isDisabled={isCompressing || isUploading}
-            isLoading={isUploading && !isCompressing}
+            isDisabled={isUploading}
+            isLoading={isUploading}
             size="sm"
             startContent={
-              !isUploading &&
-              !isCompressing && (
-                <Icon icon="solar:videocamera-bold" width={18} />
-              )
+              !isUploading && <Icon icon="solar:videocamera-bold" width={18} />
             }
             variant="flat"
             onPress={() => fileInputRef.current?.click()}
           >
-            {isCompressing
-              ? "Comprimiendo video..."
-              : isUploading
-                ? "Subiendo video..."
-                : "Subir video"}
+            {isUploading ? "Procesando video..." : "Subir video"}
           </Button>
-          {isCompressing ? (
-            <div>
-              <div className="flex items-center gap-2 text-sm text-foreground/60">
-                <Icon
-                  className="animate-spin"
-                  icon="solar:refresh-bold"
-                  width={16}
-                />
-                Comprimiendo video... {compressionProgress}%
-              </div>
-              <div className="w-full bg-default-200 rounded-full h-2 mt-1">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${compressionProgress}%` }}
-                />
-              </div>
-            </div>
+          {isUploading ? (
+            <p className="text-xs text-foreground/60">
+              Esto puede tardar un momento. Estamos optimizando el video para
+              que se vea bien y cargue rápido.
+            </p>
           ) : null}
         </>
       )}

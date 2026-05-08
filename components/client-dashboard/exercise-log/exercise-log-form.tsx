@@ -1,7 +1,7 @@
-// Formulario de registro: variantes fuerza (sets/reps/peso por serie) y
-// cardio (duración/distancia/intensidad/FC), notas y subida de video.
-// El estado vive en el orquestador (para persistencia de draft y save);
-// aquí solo recibimos formData + setter + handlers de video.
+// Formulario de registro: variantes fuerza (sets/reps/peso/video por
+// serie) y cardio (duración/distancia/intensidad/FC + un solo video
+// porque cardio no tiene series). El estado vive en el orquestador;
+// acá solo recibimos formData + setters.
 
 import type { MutableRefObject } from "react";
 import type {
@@ -12,31 +12,46 @@ import type {
 import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { ExerciseSetRow } from "./exercise-set-row";
 import { ExerciseVideoUpload } from "./exercise-video-upload";
 import { defaultSet } from "./helpers";
 
-interface VideoState {
+interface CardioVideoState {
   videoUrl: string | null;
   isUploading: boolean;
-  isCompressing: boolean;
-  compressionProgress: number;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
   onPickFile: (file: File) => void;
   onRemove: () => void;
+}
+
+interface SetVideosState {
+  uploadingIndex: number | null;
+  onPickFile: (setIndex: number, file: File) => void;
+  onRemove: (setIndex: number) => void;
 }
 
 interface Props {
   isCardio: boolean;
   formData: ExerciseLogFormDraft;
   onChange: (next: ExerciseLogFormDraft) => void;
-  video: VideoState;
+  // Solo cardio usa el video por log (legacy, una sola pieza).
+  cardioVideo: CardioVideoState;
+  // Solo fuerza usa el video por serie.
+  setVideos: SetVideosState;
+  // Título adaptado al contexto: hoy, fecha pasada, edición.
+  formTitle: string;
+  // Estado del autosave para mostrar inline al lado del título.
+  autoSaveState: "idle" | "saving" | "saved" | "error";
 }
 
 export function ExerciseLogForm({
   isCardio,
   formData,
   onChange,
-  video,
+  cardioVideo,
+  setVideos,
+  formTitle,
+  autoSaveState,
 }: Props) {
   const updateSet = (index: number, field: keyof SetDraft, value: string) => {
     const newSets = [...formData.sets];
@@ -51,12 +66,11 @@ export function ExerciseLogForm({
   };
 
   const addSet = () => {
-    const lastSet = formData.sets[formData.sets.length - 1];
-    const newSet: SetDraft = lastSet
-      ? { reps: lastSet.reps, weight: lastSet.weight }
-      : defaultSet();
-
-    onChange({ ...formData, sets: [...formData.sets, newSet] });
+    // Siempre nueva serie vacía. Antes copiábamos reps/peso de la
+    // última fila como "atajo", pero a los clientes les confunde — la
+    // serie nueva debe arrancar en blanco para que registren su
+    // verdadero peso/reps.
+    onChange({ ...formData, sets: [...formData.sets, defaultSet()] });
   };
 
   const removeSet = (index: number) => {
@@ -68,9 +82,12 @@ export function ExerciseLogForm({
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-semibold text-foreground font-heading">
-        ¿Qué realizaste?
-      </h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-foreground font-heading">
+          {formTitle}
+        </h4>
+        <InlineSaveStatus state={autoSaveState} />
+      </div>
 
       {isCardio ? (
         <CardioFields formData={formData} onChange={onChange} />
@@ -79,12 +96,13 @@ export function ExerciseLogForm({
           addSet={addSet}
           formData={formData}
           removeSet={removeSet}
+          setVideos={setVideos}
           updateSet={updateSet}
           onChange={onChange}
         />
       )}
 
-      <ExerciseVideoUpload {...video} />
+      {isCardio ? <ExerciseVideoUpload {...cardioVideo} /> : null}
     </div>
   );
 }
@@ -101,8 +119,8 @@ function CardioFields({
       <div className="grid grid-cols-2 gap-4">
         <Input
           classNames={{ input: "text-base" }}
+          inputMode="numeric"
           label="Duración (min)"
-          placeholder="Ej: 30"
           startContent={
             <Icon
               className="text-foreground/40"
@@ -118,8 +136,8 @@ function CardioFields({
         />
         <Input
           classNames={{ input: "text-base" }}
+          inputMode="decimal"
           label="Distancia (km)"
-          placeholder="Ej: 5.2"
           startContent={
             <Icon
               className="text-foreground/40"
@@ -140,7 +158,6 @@ function CardioFields({
         <Select
           classNames={{ value: "text-base" }}
           label="Intensidad"
-          placeholder="Selecciona"
           selectedKeys={
             formData.intensityCompleted ? [formData.intensityCompleted] : []
           }
@@ -165,8 +182,8 @@ function CardioFields({
 
         <Input
           classNames={{ input: "text-base" }}
-          label="FC Promedio (bpm)"
-          placeholder="Ej: 145"
+          inputMode="numeric"
+          label="FC promedio (bpm)"
           startContent={
             <Icon
               className="text-foreground/40"
@@ -192,55 +209,45 @@ function StrengthFields({
   updateSet,
   addSet,
   removeSet,
+  setVideos,
   onChange,
 }: {
   formData: ExerciseLogFormDraft;
   updateSet: (index: number, field: keyof SetDraft, value: string) => void;
   addSet: () => void;
   removeSet: (index: number) => void;
+  setVideos: SetVideosState;
   onChange: (next: ExerciseLogFormDraft) => void;
 }) {
+  const hasMultipleSets = formData.sets.length > 1;
+
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-2">
+        {/* Headers — afuera de las filas para que cada fila quede pareja
+            y no haya doble texto (label flotante + placeholder) en la
+            primera. Los anchos son los mismos que los de la fila para
+            que se alineen visualmente. */}
+        <div className="flex items-center gap-1.5 sm:gap-2 px-0.5 text-[11px] font-body uppercase tracking-wide text-foreground/50">
+          <span className="w-10 shrink-0 text-center">Serie</span>
+          <span className="flex-1">Peso (kg)</span>
+          <span className="flex-1">Reps</span>
+          <span className="w-10 shrink-0 text-center">Video</span>
+          {hasMultipleSets ? <span className="w-10 shrink-0" /> : null}
+        </div>
+
         {formData.sets.map((set, index) => (
-          <div key={index} className="flex items-end gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mb-1">
-              {index + 1}
-            </div>
-            <Input
-              classNames={{ input: "text-base", base: "flex-1" }}
-              label={index === 0 ? "Reps" : undefined}
-              placeholder="10"
-              size="sm"
-              type="number"
-              value={set.reps}
-              onValueChange={(value) => updateSet(index, "reps", value)}
-            />
-            <Input
-              classNames={{ input: "text-base", base: "flex-1" }}
-              label={index === 0 ? "Peso" : undefined}
-              placeholder="80kg"
-              size="sm"
-              value={set.weight}
-              onValueChange={(value) => updateSet(index, "weight", value)}
-            />
-            {formData.sets.length > 1 && (
-              <Button
-                isIconOnly
-                className="mb-1"
-                size="sm"
-                variant="light"
-                onPress={() => removeSet(index)}
-              >
-                <Icon
-                  className="text-danger"
-                  icon="solar:trash-bin-minimalistic-bold"
-                  width={16}
-                />
-              </Button>
-            )}
-          </div>
+          <ExerciseSetRow
+            key={index}
+            canRemove={hasMultipleSets}
+            index={index}
+            isUploading={setVideos.uploadingIndex === index}
+            set={set}
+            onPickVideo={(file) => setVideos.onPickFile(index, file)}
+            onRemove={() => removeSet(index)}
+            onRemoveVideo={() => setVideos.onRemove(index)}
+            onUpdate={(field, value) => updateSet(index, field, value)}
+          />
         ))}
       </div>
 
@@ -259,6 +266,41 @@ function StrengthFields({
   );
 }
 
+// Indicador inline de autosave al lado del título "Tus números de hoy".
+// Tamaño muy chico, solo aparece mientras está guardando, después del
+// guardado exitoso, o si hubo un error. En idle no se muestra nada
+// para no agregar ruido visual.
+function InlineSaveStatus({
+  state,
+}: {
+  state: "idle" | "saving" | "saved" | "error";
+}) {
+  if (state === "idle") return null;
+  if (state === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-body text-foreground/50">
+        <Icon className="animate-spin" icon="solar:refresh-linear" width={11} />
+        Guardando
+      </span>
+    );
+  }
+  if (state === "saved") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-body text-success">
+        <Icon icon="solar:check-circle-bold" width={11} />
+        Guardado
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-body text-danger">
+      <Icon icon="solar:danger-circle-linear" width={11} />
+      Error
+    </span>
+  );
+}
+
 function NotesField({
   formData,
   onChange,
@@ -268,10 +310,9 @@ function NotesField({
 }) {
   return (
     <Textarea
-      classNames={{ input: "text-base" }}
-      label="Notas (Opcional)"
+      classNames={{ input: "text-base", inputWrapper: "min-h-unit-12" }}
       minRows={2}
-      placeholder="Ej: Me sentí fuerte, podría subir peso la próxima vez"
+      placeholder="Notas"
       startContent={
         <Icon
           className="text-foreground/40"

@@ -1,23 +1,21 @@
-// Sección NUEVA: PR (mejor marca histórica) + últimas 3 sesiones del
-// cliente para este ejercicio. Decisiones (g) y (h) del §1 de
-// bloque-1-spec.md.
+// PR (mejor marca histórica) + últimas sesiones del cliente para este
+// ejercicio. Por defecto mostramos 10 sesiones; "Ver más" amplía a 30.
 //
-// Comportamiento:
-// - Si no hay logs previos del ejercicio (recent vacío AND pr null),
-//   se oculta TODA la sección — no mostramos "Sin historial todavía".
-// - Loading: skeleton compacto.
-// - Error: ignorado en silencio (no rompe el flujo de log).
+// Diseño:
+// - PR como card neutra con medalla amber (ya no usa la paleta warning
+//   del theme — esa pelea visualmente con el primario del trainer).
+// - Cada fila: chip de fecha + pills de peso × reps agrupadas por peso
+//   + indicador de tendencia vs sesión anterior + borde izquierdo por
+//   tendencia.
 //
-// Rediseño (Fase 5.5 / Trabajo 2):
-// - Date como chip pequeño en la fila.
-// - Sets como pills agrupadas por peso.
-// - Indicador de tendencia (↑ verde, ↓ naranja) vs sesión anterior.
-// - Borde izquierdo coloreado en cada fila siguiendo el mismo lenguaje.
+// Comportamiento: si no hay PR ni recent, la sección entera no se
+// renderiza (no mostramos "sin historial").
 
 import type { ExerciseHistoryEntry } from "@/types/training";
 
-import { Chip, Skeleton } from "@heroui/react";
+import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useState } from "react";
 
 import { useExerciseHistory } from "./hooks/use-exercise-history";
 
@@ -26,9 +24,14 @@ interface Props {
   isOpen: boolean;
 }
 
+const INITIAL_LIMIT = 10;
+const EXPANDED_LIMIT = 30;
+
 export function ExerciseHistorySection({ exerciseId, isOpen }: Props) {
+  const [expanded, setExpanded] = useState(false);
+  const limit = expanded ? EXPANDED_LIMIT : INITIAL_LIMIT;
   const { data, isLoading } = useExerciseHistory(exerciseId, {
-    limit: 3,
+    limit,
     enabled: isOpen,
   });
 
@@ -47,10 +50,20 @@ export function ExerciseHistorySection({ exerciseId, isOpen }: Props) {
 
   if (!data || !hasAny) return null;
 
+  // Heurística para mostrar "Ver más": si recibimos exactamente el
+  // límite no expandido, asumimos que probablemente hay más en BD.
+  const canExpand = !expanded && data.recent.length >= INITIAL_LIMIT;
+
   return (
     <div className="space-y-3">
       {data.pr ? <PrBanner pr={data.pr} /> : null}
-      {data.recent.length > 0 ? <RecentList recent={data.recent} /> : null}
+      {data.recent.length > 0 ? (
+        <RecentList
+          canExpand={canExpand}
+          recent={data.recent}
+          onExpand={() => setExpanded(true)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -65,22 +78,22 @@ function PrBanner({
   const ago = pr.achieved_at ? formatRelative(pr.achieved_at) : "";
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3">
-      <div className="bg-warning-200/60 p-2 rounded-md">
+    <div className="flex items-center gap-3 rounded-lg border border-default-200 bg-content1 px-4 py-3">
+      <div className="bg-amber-100 p-2 rounded-md">
         <Icon
-          className="text-warning-700"
+          className="text-amber-600"
           icon="solar:medal-star-bold"
           width={20}
         />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase font-semibold text-warning-700 font-body">
+        <p className="text-[11px] uppercase font-semibold text-foreground/50 font-body">
           Tu mejor marca
         </p>
-        <p className="text-sm font-semibold text-warning-900 font-heading">
+        <p className="text-sm font-semibold text-foreground font-heading">
           {pr.weight_kg} kg{reps}
           {ago ? (
-            <span className="ml-1 text-warning-700 font-normal">({ago})</span>
+            <span className="ml-1 text-foreground/50 font-normal">({ago})</span>
           ) : null}
         </p>
       </div>
@@ -88,12 +101,31 @@ function PrBanner({
   );
 }
 
-function RecentList({ recent }: { recent: ExerciseHistoryEntry[] }) {
+function RecentList({
+  recent,
+  canExpand,
+  onExpand,
+}: {
+  recent: ExerciseHistoryEntry[];
+  canExpand: boolean;
+  onExpand: () => void;
+}) {
   return (
     <div className="rounded-lg border border-default-200 bg-content1 overflow-hidden">
       <p className="px-3 py-2 text-[11px] uppercase font-semibold text-default-500 border-b border-default-100 font-body">
         Últimas sesiones
       </p>
+
+      {/* Header de la mini-tabla. Mismas anchos que las filas para que
+          alineen sin gap shifts. */}
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-body uppercase tracking-wide text-foreground/50 border-b border-default-100">
+        <span className="w-14 shrink-0">Fecha</span>
+        <span className="flex-1">Mejor</span>
+        <span className="w-10 shrink-0 text-center">Series</span>
+        <span className="w-8 shrink-0 text-center">Tend.</span>
+        <span className="w-4 shrink-0" />
+      </div>
+
       <ul className="divide-y divide-default-100">
         {recent.map((entry, idx) => {
           const previous = recent[idx + 1];
@@ -108,6 +140,18 @@ function RecentList({ recent }: { recent: ExerciseHistoryEntry[] }) {
           );
         })}
       </ul>
+      {canExpand ? (
+        <div className="border-t border-default-100">
+          <Button
+            className="w-full"
+            size="sm"
+            variant="light"
+            onPress={onExpand}
+          >
+            Ver más
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -120,102 +164,119 @@ interface HistoryRowProps {
 }
 
 function HistoryRow({ entry, trend }: HistoryRowProps) {
-  const groups = groupSetsByWeight(entry);
+  const [expanded, setExpanded] = useState(false);
+  const best = bestSet(entry);
+  const bestLabel = best
+    ? `${best.weight > 0 ? `${best.weight}kg` : "—"} × ${best.reps}`
+    : "—";
 
   return (
     <li
-      className={`relative px-3 py-2.5 pl-4 ${trendBorderClass(trend)}`}
+      className={`relative ${trendBorderClass(trend)}`}
       style={{ borderLeftWidth: 3 }}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <Chip
-          classNames={{
-            base: "h-5 px-1.5",
-            content: "text-[10px] font-medium",
-          }}
-          size="sm"
-          variant="flat"
-        >
+      <button
+        aria-expanded={expanded}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-default-50 transition-colors"
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="w-14 shrink-0 text-[11px] font-body text-foreground/70">
           {formatShortDate(entry.scheduled_date)}
-        </Chip>
-        <TrendBadge trend={trend} />
-      </div>
-      {groups.length === 0 ? (
-        <p className="text-xs text-default-500 font-body">Sin sets</p>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {groups.map((g, i) => (
-            <SetPill key={`${entry.exercise_log_id}-${i}`} group={g} />
-          ))}
+        </span>
+        <span className="flex-1 text-xs font-semibold text-foreground truncate">
+          {bestLabel}
+        </span>
+        <span className="w-10 shrink-0 text-xs text-center font-body text-foreground/70">
+          {entry.sets.length}
+        </span>
+        <span className="w-8 shrink-0 flex justify-center">
+          <TrendIcon trend={trend} />
+        </span>
+        <span className="w-4 shrink-0 flex justify-center text-foreground/40">
+          <Icon
+            icon={
+              expanded
+                ? "solar:alt-arrow-up-linear"
+                : "solar:alt-arrow-down-linear"
+            }
+            width={14}
+          />
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="bg-default-50/60 border-t border-default-100 px-3 py-2">
+          {entry.sets.length === 0 ? (
+            <p className="text-xs text-default-500 font-body">Sin sets</p>
+          ) : (
+            <ul className="space-y-1">
+              {entry.sets.map((s) => (
+                <SetLine
+                  key={`${entry.exercise_log_id}-${s.set_number}`}
+                  set={s}
+                />
+              ))}
+            </ul>
+          )}
         </div>
-      )}
+      ) : null}
     </li>
   );
 }
 
-interface SetGroup {
-  weight: number | null;
-  reps: number[];
-}
-
-function groupSetsByWeight(entry: ExerciseHistoryEntry): SetGroup[] {
-  if (entry.sets.length === 0) return [];
-  const groups: SetGroup[] = [];
-  let current: SetGroup | null = null;
-
-  for (const s of entry.sets) {
-    if (current && current.weight === s.weight_kg) {
-      current.reps.push(s.reps);
-    } else {
-      current = { weight: s.weight_kg, reps: [s.reps] };
-      groups.push(current);
-    }
-  }
-
-  return groups;
-}
-
-function SetPill({ group }: { group: SetGroup }) {
-  const weightLabel =
-    group.weight != null ? `${group.weight} kg` : "Peso libre";
-  const repsLabel = group.reps.join(", ");
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-default-100 px-2 py-1 text-xs font-medium text-foreground">
-      <span className="font-semibold">{weightLabel}</span>
-      <span className="text-default-400">·</span>
-      <span className="text-default-700">{repsLabel}</span>
-    </span>
-  );
-}
-
-function TrendBadge({ trend }: { trend: Trend }) {
+// Solo el icono (sin texto) para que entre en la columna de 32px de la
+// mini-tabla. Para fila colapsada / vista densa.
+function TrendIcon({ trend }: { trend: Trend }) {
   if (trend === "improved") {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-success-700">
-        <Icon icon="solar:arrow-up-bold" width={12} />
-        Mejora
-      </span>
+      <Icon
+        aria-label="Mejora"
+        className="text-success-700"
+        icon="solar:arrow-up-bold"
+        width={14}
+      />
     );
   }
   if (trend === "regressed") {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-warning-700">
-        <Icon icon="solar:arrow-down-bold" width={12} />
-        Bajó
-      </span>
+      <Icon
+        aria-label="Bajó"
+        className="text-warning-700"
+        icon="solar:arrow-down-bold"
+        width={14}
+      />
     );
   }
   if (trend === "same") {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-default-500">
-        <Icon icon="solar:minus-circle-linear" width={12} />
-        Igual
-      </span>
+      <Icon
+        aria-label="Igual"
+        className="text-default-400"
+        icon="solar:minus-circle-linear"
+        width={14}
+      />
     );
   }
 
   return null;
+}
+
+function SetLine({ set }: { set: ExerciseHistoryEntry["sets"][number] }) {
+  const weightLabel = set.weight_kg != null ? `${set.weight_kg} kg` : "—";
+
+  return (
+    <li className="flex items-center gap-2 text-xs font-body">
+      <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-foreground/70">
+        S{set.set_number}
+      </span>
+      <span className="text-foreground">
+        <span className="font-semibold">{weightLabel}</span>
+        <span className="text-default-400"> × </span>
+        <span>{set.reps} reps</span>
+      </span>
+    </li>
+  );
 }
 
 function trendBorderClass(trend: Trend): string {

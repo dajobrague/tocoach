@@ -32,6 +32,7 @@ export function isExerciseCardio(exercise: ExerciseShape): boolean {
 
 export function defaultSet(): SetDraft {
   return { reps: "", weight: "" };
+  // videoUrl/videoPath quedan undefined: el form los hidrata bajo demanda.
 }
 
 // Hidrata el formulario al abrir el modal: existingLog (si hay) > defaults
@@ -51,7 +52,25 @@ export function buildBaseFormData(
     sets = existingLog.sets.map((s: any) => ({
       reps: s.reps != null ? String(s.reps) : "",
       weight: s.weight_kg != null ? String(s.weight_kg) : "",
+      videoUrl:
+        typeof s.video_url === "string" && s.video_url.length > 0
+          ? s.video_url
+          : undefined,
     }));
+
+    // Compat con logs viejos que tenían un solo video por ejercicio
+    // (exercise_logs.video_url). Si el log existente trae video legacy
+    // y la primera serie no tiene video propio, mostramos el legacy en
+    // la primera serie en modo read-only (lo conserva al guardar
+    // mientras no lo cambien).
+    if (
+      sets.length > 0 &&
+      !sets[0]!.videoUrl &&
+      typeof existingLog.video_url === "string" &&
+      existingLog.video_url.length > 0
+    ) {
+      sets[0]!.videoUrl = existingLog.video_url;
+    }
   } else if (existingLog?.sets_completed) {
     const count = existingLog.sets_completed;
     const repsStr = existingLog.reps_completed;

@@ -1,17 +1,12 @@
-// Encapsula la subida + borrado de video del registro de ejercicio:
-// estados (uploading, compressing, progress), upload con compresión
-// opcional, y limpieza del path en storage cuando el usuario quita el
-// video. La compresión browser-side es best-effort: si el navegador no
-// la soporta, sube el archivo crudo.
+// Encapsula la subida + borrado de video del registro de ejercicio.
+// La compresión sucede en el servidor (ver lib/utils/server-video-compression.ts);
+// aquí solo manejamos el upload del archivo crudo y el borrado del path en
+// storage cuando el usuario quita el video.
 
 /* eslint-disable no-console */
 import { useEffect, useRef, useState } from "react";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import {
-  compressVideo,
-  isCompressionSupported,
-} from "@/lib/utils/video-compression";
 
 interface UseExerciseVideoArgs {
   isOpen: boolean;
@@ -22,8 +17,6 @@ interface UseExerciseVideoArgs {
 interface UseExerciseVideoReturn {
   videoUrl: string | null;
   isUploading: boolean;
-  isCompressing: boolean;
-  compressionProgress: number;
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   onPickFile: (file: File) => void;
   onRemove: () => void;
@@ -37,8 +30,6 @@ export function useExerciseVideo({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [compressionProgress, setCompressionProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Resetea el video cuando cambia el ejercicio o se cierra/reabre el modal.
@@ -50,20 +41,10 @@ export function useExerciseVideo({
 
   const onPickFile = async (file: File) => {
     try {
-      let fileToUpload = file;
-
-      if (isCompressionSupported()) {
-        setIsCompressing(true);
-        setCompressionProgress(0);
-        fileToUpload = await compressVideo(file, (percent) =>
-          setCompressionProgress(percent)
-        );
-        setIsCompressing(false);
-      }
       setIsUploading(true);
       const fd = new FormData();
 
-      fd.append("file", fileToUpload);
+      fd.append("file", file);
       const response = await clientFetch(
         `/api/clients/${clientId}/exercise-logs/upload-video`,
         { method: "POST", body: fd }
@@ -79,7 +60,6 @@ export function useExerciseVideo({
     } catch (err) {
       console.error("[useExerciseVideo] upload error:", err);
       alert("Error al subir video");
-      setIsCompressing(false);
     } finally {
       setIsUploading(false);
     }
@@ -103,8 +83,6 @@ export function useExerciseVideo({
   return {
     videoUrl,
     isUploading,
-    isCompressing,
-    compressionProgress,
     fileInputRef,
     onPickFile,
     onRemove,

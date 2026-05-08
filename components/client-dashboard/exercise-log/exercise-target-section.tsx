@@ -1,12 +1,12 @@
-// "Datos del Programa" — bloque read-only con los targets que armó el
-// entrenador para este ejercicio (sets/reps/sistema/tempo para fuerza,
-// duración/distancia/intensidad/zona FC para cardio). Solo presentación;
-// la lógica de qué tipo es la calcula el orquestador.
+// "Datos del programa" — chips inline con los targets del entrenador
+// (sets/reps/sistema/tempo para fuerza, duración/distancia/intensidad
+// /zona FC para cardio). Solo presentación.
 
 interface TargetExercise {
   sets?: number;
   reps?: string;
   tempo?: string;
+  rest?: string;
   trainingSystem?: string;
   duration?: number;
   distance?: number;
@@ -20,49 +20,61 @@ interface Props {
 }
 
 export function ExerciseTargetSection({ exercise, isCardio }: Props) {
-  return (
-    <div className="bg-default-50 p-4 rounded-lg space-y-2">
-      <p className="text-xs text-foreground/60 font-body uppercase font-semibold">
-        Datos del Programa
-      </p>
+  const chips = isCardio
+    ? buildCardioChips(exercise)
+    : buildStrengthChips(exercise);
 
-      {isCardio ? (
-        <div className="grid grid-cols-2 gap-3">
-          {exercise.duration ? (
-            <Field label="Duración" value={`${exercise.duration} min`} />
-          ) : null}
-          {exercise.distance ? (
-            <Field label="Distancia" value={`${exercise.distance} km`} />
-          ) : null}
-          {exercise.intensity ? (
-            <Field label="Intensidad" value={exercise.intensity} />
-          ) : null}
-          {exercise.heartRateZone ? (
-            <Field
-              label="Zona FC"
-              value={`${exercise.heartRateZone.min}-${exercise.heartRateZone.max} bpm`}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Series" value={`${exercise.sets ?? "-"} series`} />
-          <Field label="Repeticiones" value={`${exercise.reps ?? "-"} reps`} />
-          <Field label="Sistema" value={exercise.trainingSystem ?? "-"} />
-          <Field label="Tempo" value={exercise.tempo ?? "-"} />
-        </div>
-      )}
+  if (chips.length === 0) return null;
+
+  return (
+    <div>
+      <p className="text-[11px] uppercase font-semibold text-foreground/50 font-body mb-2">
+        Datos del programa
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map((c) => (
+          <span
+            key={c.label}
+            className="inline-flex items-center gap-1 rounded-md bg-default-100 px-2 py-1 text-xs font-body"
+          >
+            <span className="text-foreground/60">{c.label}</span>
+            <span className="font-semibold text-foreground">{c.value}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-foreground/60 font-body">{label}</p>
-      <p className="text-sm font-semibold text-foreground font-heading">
-        {value}
-      </p>
-    </div>
-  );
+interface Chip {
+  label: string;
+  value: string;
+}
+
+function buildStrengthChips(e: TargetExercise): Chip[] {
+  const chips: Chip[] = [];
+
+  if (e.sets) chips.push({ label: "Series", value: String(e.sets) });
+  if (e.reps) chips.push({ label: "Reps", value: String(e.reps) });
+  if (e.rest) chips.push({ label: "Descanso", value: String(e.rest) });
+  if (e.tempo) chips.push({ label: "Tempo", value: String(e.tempo) });
+  if (e.trainingSystem)
+    chips.push({ label: "Sistema", value: String(e.trainingSystem) });
+
+  return chips;
+}
+
+function buildCardioChips(e: TargetExercise): Chip[] {
+  const chips: Chip[] = [];
+
+  if (e.duration) chips.push({ label: "Duración", value: `${e.duration} min` });
+  if (e.distance) chips.push({ label: "Distancia", value: `${e.distance} km` });
+  if (e.intensity) chips.push({ label: "Intensidad", value: e.intensity });
+  if (e.heartRateZone)
+    chips.push({
+      label: "Zona FC",
+      value: `${e.heartRateZone.min}-${e.heartRateZone.max} bpm`,
+    });
+
+  return chips;
 }

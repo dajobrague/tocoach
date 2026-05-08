@@ -5,9 +5,16 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 function parseWeightKg(weight: string): number | null {
   if (!weight) return null;
-  const match = weight.match(/[\d.]+/);
+  // El cliente en es-ES escribe decimales con coma ("80,5"). El regex
+  // anterior `[\d.]+` cortaba al ver la coma y guardaba 80. Normalizamos
+  // coma → punto antes de buscar el número.
+  const normalized = weight.replace(",", ".");
+  const match = normalized.match(/[\d.]+/);
 
-  return match ? parseFloat(match[0]) : null;
+  if (!match) return null;
+  const n = parseFloat(match[0]);
+
+  return Number.isFinite(n) ? n : null;
 }
 
 function buildSetsFromLegacy(log: any) {
@@ -60,7 +67,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        "*, scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg)"
+        "*, scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)"
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: false });
@@ -98,6 +105,7 @@ export async function GET(
         exercise_log_sets: undefined,
         scheduled_sessions: undefined,
         scheduled_date: log.scheduled_sessions?.scheduled_date,
+        session_id: log.scheduled_sessions?.session_id,
         sets,
         weight_used:
           log.metadata?.weight_used_original ||
@@ -156,6 +164,7 @@ export async function POST(
       intensityCompleted,
       avgHeartRate,
       notes,
+      finalize,
     } = body;
 
     if (session.client_id.toString() !== clientId) {
@@ -269,19 +278,48 @@ export async function POST(
 
     const { data: existingExerciseLog } = await supabase
       .from("exercise_logs")
-      .select("id")
+      .select("id, finalized_at")
       .eq("scheduled_session_id", scheduledSessionId)
       .eq("exercise_id", exerciseId)
       .eq("client_id", parseInt(clientId))
       .maybeSingle();
 
+    // finalize=true: el cliente tocó "Finalizado" — el ejercicio queda
+    // marcado como hecho. Si ya estaba finalizado preservamos el
+    // timestamp original (es la primera vez que terminó). Si no estaba
+    // finalizado y finalize=true, ahora sí.
+    // finalize=false (autosave): nunca tocamos finalized_at — preserva
+    // lo que haya en BD (null si nunca finalizó, o el timestamp viejo
+    // si el cliente vuelve a editar después de finalizar).
+    let finalizedAtForWrite: string | null | undefined;
+
+    if (finalize === true) {
+      finalizedAtForWrite = existingExerciseLog?.finalized_at
+        ? existingExerciseLog.finalized_at
+        : new Date().toISOString();
+    } else if (!existingExerciseLog) {
+      finalizedAtForWrite = null;
+    } else {
+      // existingExerciseLog && !finalize: no tocar la columna en update
+      finalizedAtForWrite = undefined;
+    }
+
     let exerciseLog: any;
     let createError: any;
 
     if (existingExerciseLog) {
+      const updatePayload: any = {
+        ...logData,
+        completed_at: new Date().toISOString(),
+      };
+
+      if (finalizedAtForWrite !== undefined) {
+        updatePayload.finalized_at = finalizedAtForWrite;
+      }
+
       const { data, error } = await supabase
         .from("exercise_logs")
-        .update({ ...logData, completed_at: new Date().toISOString() })
+        .update(updatePayload)
         .eq("id", existingExerciseLog.id)
         .select()
         .single();
@@ -293,7 +331,7 @@ export async function POST(
     } else {
       const { data, error } = await supabase
         .from("exercise_logs")
-        .insert(logData)
+        .insert({ ...logData, finalized_at: finalizedAtForWrite ?? null })
         .select()
         .single();
 
@@ -325,12 +363,16 @@ export async function POST(
         set_number: i + 1,
         reps: s.reps != null ? parseInt(s.reps) : null,
         weight_kg: parseWeightKg(String(s.weight ?? "")),
+        video_url:
+          typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0
+            ? s.videoUrl
+            : null,
       }));
 
       const { data: insertedSets, error: setsError } = await supabase
         .from("exercise_log_sets")
         .insert(setRows)
-        .select("id, set_number, reps, weight_kg");
+        .select("id, set_number, reps, weight_kg, video_url");
 
       if (setsError) {
         console.error("[Exercise Logs API] Error saving sets:", setsError);
@@ -339,15 +381,19 @@ export async function POST(
       }
     }
 
-    // Si los logs cubren todos los session_exercises del template, marcamos
-    // scheduled_sessions.status = 'completed'. Best-effort: errores aquí no
-    // fallan el guardado del log, solo dejan el status sin actualizar.
-    await maybeMarkScheduledCompleted(
-      supabase,
-      scheduledSessionId,
-      sessionId,
-      parseInt(clientId)
-    );
+    // Si todos los logs están FINALIZADOS y cubren los session_exercises
+    // del template, marcamos scheduled_sessions.status = 'completed'.
+    // Skip en autosave (finalize=false): la sesión no debe pasar a
+    // "completed" solo porque haya filas en BD; el cliente todavía
+    // está tipeando.
+    if (finalize === true) {
+      await maybeMarkScheduledCompleted(
+        supabase,
+        scheduledSessionId,
+        sessionId,
+        parseInt(clientId)
+      );
+    }
 
     const flattenedLog: any = {
       ...exerciseLog,
@@ -386,6 +432,179 @@ export async function POST(
   }
 }
 
+// DELETE — el cliente edita su histórico. Dos modos via query string:
+//   ?logId=<uuid>                              → borra un solo registro
+//   ?sessionId=<uuid>&scheduledDate=YYYY-MM-DD → borra todos los logs de
+//                                                esa sesión en esa fecha
+// El cleanup de exercise_log_sets va con un delete explícito porque el
+// FK no tiene ON DELETE CASCADE configurado en todas las migraciones.
+// El scheduled_sessions row se preserva (solo limpiamos los logs); si
+// queda sin logs y la sesión nunca llegó a "completed", queda como
+// "scheduled" — comportamiento aceptable y reversible.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getClientSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { clientId } = await params;
+
+    if (session.client_id.toString() !== clientId) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const logId = searchParams.get("logId");
+    const sessionId = searchParams.get("sessionId");
+    const scheduledDate = searchParams.get("scheduledDate");
+
+    let logIdsToDelete: string[] = [];
+    let scheduledSessionId: string | null = null;
+
+    if (logId) {
+      // Modo single: validamos que el log pertenezca al cliente antes
+      // de borrar. RLS ya cubriría esto, pero hacerlo explícito da un
+      // error 404 limpio en vez de un 200 con cero filas afectadas.
+      const { data: row, error } = await supabase
+        .from("exercise_logs")
+        .select("id, client_id, scheduled_session_id")
+        .eq("id", logId)
+        .maybeSingle();
+
+      if (error || !row) {
+        return NextResponse.json(
+          { success: false, error: "Registro no encontrado" },
+          { status: 404 }
+        );
+      }
+      if (row.client_id !== parseInt(clientId)) {
+        return NextResponse.json(
+          { success: false, error: "No autorizado" },
+          { status: 403 }
+        );
+      }
+      logIdsToDelete = [row.id];
+      scheduledSessionId = row.scheduled_session_id;
+    } else if (sessionId && scheduledDate) {
+      // Modo bulk: borrar todos los logs del scheduled_session que
+      // matchee (sessionId, scheduledDate, clientId).
+      const { data: scheduled, error: scheduledError } = await supabase
+        .from("scheduled_sessions")
+        .select("id")
+        .eq("session_id", sessionId)
+        .eq("client_id", parseInt(clientId))
+        .eq("scheduled_date", scheduledDate)
+        .maybeSingle();
+
+      if (scheduledError || !scheduled) {
+        return NextResponse.json(
+          { success: false, error: "Entrenamiento no encontrado" },
+          { status: 404 }
+        );
+      }
+      scheduledSessionId = scheduled.id;
+
+      const { data: logs, error: logsError } = await supabase
+        .from("exercise_logs")
+        .select("id")
+        .eq("scheduled_session_id", scheduledSessionId)
+        .eq("client_id", parseInt(clientId));
+
+      if (logsError) {
+        return NextResponse.json(
+          { success: false, error: "Error al consultar registros" },
+          { status: 500 }
+        );
+      }
+      logIdsToDelete = (logs ?? []).map((l) => l.id);
+    } else {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Falta parámetro: pasar logId o (sessionId, scheduledDate)",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (logIdsToDelete.length === 0) {
+      // Nada que borrar — devolvemos éxito idempotente.
+      return NextResponse.json({ success: true, deleted: 0 });
+    }
+
+    // Sets primero (FK), luego logs.
+    const { error: setsError } = await supabase
+      .from("exercise_log_sets")
+      .delete()
+      .in("exercise_log_id", logIdsToDelete);
+
+    if (setsError) {
+      console.error("[Exercise Logs API] Error deleting sets:", setsError);
+
+      return NextResponse.json(
+        { success: false, error: "Error al borrar series" },
+        { status: 500 }
+      );
+    }
+
+    const { error: logsError } = await supabase
+      .from("exercise_logs")
+      .delete()
+      .in("id", logIdsToDelete);
+
+    if (logsError) {
+      console.error("[Exercise Logs API] Error deleting logs:", logsError);
+
+      return NextResponse.json(
+        { success: false, error: "Error al borrar registros" },
+        { status: 500 }
+      );
+    }
+
+    // Si el scheduled_session quedó sin logs y estaba en "completed",
+    // lo bajamos a "scheduled" para que el estado refleje la realidad.
+    if (scheduledSessionId) {
+      const { data: remaining } = await supabase
+        .from("exercise_logs")
+        .select("id")
+        .eq("scheduled_session_id", scheduledSessionId)
+        .limit(1);
+
+      if (!remaining || remaining.length === 0) {
+        await supabase
+          .from("scheduled_sessions")
+          .update({ status: "scheduled", completion_date: null })
+          .eq("id", scheduledSessionId);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted: logIdsToDelete.length,
+    });
+  } catch (error) {
+    console.error("[Exercise Logs API] Unexpected DELETE error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
 // Marca scheduled_sessions.status = 'completed' cuando los exercise_logs
 // del cliente cubren todos los session_exercises del template. Best-effort:
 // si algo falla, log y sigue (el guardado del log ya hizo commit).
@@ -402,7 +621,10 @@ async function maybeMarkScheduledCompleted(
           .from("exercise_logs")
           .select("exercise_id")
           .eq("scheduled_session_id", scheduledSessionId)
-          .eq("client_id", clientId),
+          .eq("client_id", clientId)
+          // Solo contamos logs FINALIZADOS — autosaves a medias no deben
+          // marcar la sesión completa.
+          .not("finalized_at", "is", null),
         supabase
           .from("session_exercises")
           .select("exercise_id")

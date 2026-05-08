@@ -10,6 +10,11 @@ const DRAFT_TTL_MS = 48 * 60 * 60 * 1000;
 export type SetDraft = {
   reps: string;
   weight: string;
+  // Video opcional por serie. videoUrl es lo que se muestra/guarda;
+  // videoPath sirve para borrar del storage si el usuario lo cambia
+  // antes de hacer Save. Ambos quedan undefined cuando no hay video.
+  videoUrl?: string;
+  videoPath?: string;
 };
 
 export type ExerciseLogFormDraft = {
