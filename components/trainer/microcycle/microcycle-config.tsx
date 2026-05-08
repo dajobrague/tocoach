@@ -1,4 +1,4 @@
-// Orquestador de la pantalla "Plan semanal" del trainer. Estado y reglas
+// Orquestador de la pantalla "Microciclo" del trainer. Estado y reglas
 // de edición delegados a useMicrocycleEditor; este archivo se ocupa solo
 // del layout, fetching, mutación de guardado y composición de los
 // sub-componentes presentacionales.
@@ -37,7 +37,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
       {
         onSuccess: () => {
           addToast({
-            title: "Plan semanal guardado",
+            title: "Microciclo guardado",
             description: "Tu cliente ya puede verlo como referencia en su app.",
           });
         },
@@ -84,27 +84,11 @@ export default function MicrocycleConfig({ clientId }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-4">
+      <header className="flex flex-col gap-5 pb-5 border-b border-gray-200">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Plan semanal
-            </h2>
-            {data?.program ? (
-              <p className="text-xs text-gray-500">
-                Programa{" "}
-                <span className="font-medium">{data.program.name}</span>
-                {data.start_date ? (
-                  <>
-                    {" · "}Inicio{" "}
-                    <span className="font-medium">
-                      {formatDate(data.start_date)}
-                    </span>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            <p className="text-sm text-gray-500 max-w-md">
+            <h2 className="text-lg font-semibold text-gray-900">Microciclo</h2>
+            <p className="text-sm text-gray-500">
               Configura el orden ideal de la semana. Tu cliente lo verá como
               referencia y podrá hacer las sesiones en el orden que prefiera.
             </p>
@@ -118,17 +102,29 @@ export default function MicrocycleConfig({ clientId }: Props) {
             }
             onPress={handleSave}
           >
-            Guardar
+            Guardar plan
           </Button>
         </div>
-        <div className="max-w-md">
-          <MicrocycleDurationSelector
-            isDisabled={noActiveProgram || isSaving}
-            maxAssignedDay={editor.maxAssignedDay}
-            value={editor.durationDays}
-            onChange={editor.setDurationDays}
-          />
-        </div>
+        {!noActiveProgram ? (
+          <div className="flex items-end gap-6">
+            <div className="flex-1 min-w-0">
+              <MicrocycleDurationSelector
+                isDisabled={isSaving}
+                maxAssignedDay={editor.maxAssignedDay}
+                value={editor.durationDays}
+                onChange={editor.setDurationDays}
+              />
+            </div>
+            <div className="bg-blue-50 px-4 py-2 rounded-md min-w-[110px] shrink-0">
+              <div className="text-base font-semibold text-blue-900 tabular-nums">
+                {editor.assignedCount} / {editor.durationDays}
+              </div>
+              <div className="text-[10px] text-blue-700 leading-tight">
+                días asignados
+              </div>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       {noActiveProgram ? (
@@ -167,6 +163,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
             <AvailableSessionsAside
               highlighted={editor.selectedDay !== null}
               isDisabled={isSaving || availableSessions.length === 0}
+              selectedDay={editor.selectedDay}
               sessions={availableSessions}
               onSelectSession={editor.selectSession}
             />
@@ -175,18 +172,4 @@ export default function MicrocycleConfig({ clientId }: Props) {
       )}
     </div>
   );
-}
-
-function formatDate(isoYmd: string): string {
-  try {
-    const d = new Date(`${isoYmd}T12:00:00Z`);
-
-    return new Intl.DateTimeFormat("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(d);
-  } catch {
-    return isoYmd;
-  }
 }

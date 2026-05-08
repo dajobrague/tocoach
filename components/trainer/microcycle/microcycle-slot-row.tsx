@@ -1,4 +1,4 @@
-// Una fila del microciclo en el editor del Plan Semanal. Variantes:
+// Una fila del microciclo en el editor. Variantes:
 // - Slot asignado: nombre + chip de tipo + botón × (eliminar).
 // - Slot vacío + no seleccionado: hint "— Descanso —" + chip "Rest".
 // - Slot vacío + seleccionado: hint "Toca una sesión del panel".
@@ -8,7 +8,7 @@
 
 import type { Session, SessionType } from "@/types/training";
 
-import { Button, Chip } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 const TYPE_LABEL: Record<SessionType, string> = {
@@ -20,20 +20,22 @@ const TYPE_LABEL: Record<SessionType, string> = {
   other: "Otro",
 };
 
-// Mapeo legible en ambos modos (light + dark). NO usar "primary" — es
-// el brand y queda muy oscuro como chip. Todos con variant="flat" para
-// que HeroUI dé background tintado + foreground legible automático.
-const TYPE_COLOR: Record<
-  SessionType,
-  "danger" | "warning" | "secondary" | "success" | "default"
-> = {
-  strength: "secondary",
-  cardio: "danger",
-  flexibility: "warning",
-  sports: "success",
-  recovery: "default",
-  other: "default",
+// Pills de tipo de sesión. Renderizadas como <span> con clases Tailwind
+// explícitas en lugar de <Chip color="..."> de HeroUI, porque el chip
+// con color="primary" no respeta la escala de azules del theme custom y
+// termina renderizando casi negro. Estas clases dan el aspecto tintado
+// preciso del wireframe.
+const TYPE_PILL_CLASS: Record<SessionType, string> = {
+  strength: "bg-blue-100 text-blue-800",
+  cardio: "bg-red-100 text-red-800",
+  flexibility: "bg-amber-100 text-amber-800",
+  sports: "bg-green-100 text-green-800",
+  recovery: "bg-gray-100 text-gray-700",
+  other: "bg-gray-100 text-gray-700",
 };
+
+const PILL_BASE_CLASS =
+  "inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded";
 
 interface Props {
   dayIndex: number;
@@ -106,17 +108,15 @@ export default function MicrocycleSlotRow({
 
       <div className="shrink-0 flex items-center gap-2">
         {session?.session_type ? (
-          <Chip
-            color={TYPE_COLOR[session.session_type]}
-            size="sm"
-            variant="flat"
+          <span
+            className={`${PILL_BASE_CLASS} ${TYPE_PILL_CLASS[session.session_type]}`}
           >
             {TYPE_LABEL[session.session_type]}
-          </Chip>
+          </span>
         ) : selectedSessionId === null ? (
-          <Chip color="default" size="sm" variant="flat">
+          <span className={`${PILL_BASE_CLASS} bg-gray-100 text-gray-700`}>
             Rest
-          </Chip>
+          </span>
         ) : null}
 
         {session ? (

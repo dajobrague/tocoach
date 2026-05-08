@@ -1,4 +1,4 @@
-// Hook con la lógica de edición del Plan Semanal: estado de duración,
+// Hook con la lógica de edición del Microciclo: estado de duración,
 // asignación slot↔sesión, slot seleccionado, y el flujo de auto-fill
 // que guía al trainer al "siguiente vacío" tras cada asignación.
 //
@@ -24,6 +24,8 @@ export interface MicrocycleEditorState {
   selectedDay: number | null;
   /** day_index más alto con sesión asignada (no null). 0 si nada asignado. */
   maxAssignedDay: number;
+  /** Cuántos slots dentro del rango actual tienen sesión asignada (no null). */
+  assignedCount: number;
   setDurationDays: (next: number) => void;
   selectDay: (day: number | null) => void;
   selectSession: (sessionId: string) => void;
@@ -68,6 +70,16 @@ export function useMicrocycleEditor(
 
     return max;
   }, [slotByDay]);
+
+  const assignedCount = useMemo(() => {
+    let count = 0;
+
+    for (const [day, sessionId] of slotByDay.entries()) {
+      if (sessionId !== null && day >= 1 && day <= durationDays) count += 1;
+    }
+
+    return count;
+  }, [slotByDay, durationDays]);
 
   const setDurationDays = (next: number) => {
     setDurationDaysState(next);
@@ -128,6 +140,7 @@ export function useMicrocycleEditor(
     slotByDay,
     selectedDay,
     maxAssignedDay,
+    assignedCount,
     setDurationDays,
     selectDay,
     selectSession,
