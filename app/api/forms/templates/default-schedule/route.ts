@@ -122,7 +122,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = (await request.json()) as unknown;
-    const scheduleValidation = validateCheckInScheduleInput(body);
+    // The trainer template page wraps the schedule as `{ schedule: ... }` to
+    // mirror the per-client config endpoint shape; unwrap before validating.
+    const scheduleInput =
+      body && typeof body === "object" && "schedule" in body
+        ? (body as { schedule: unknown }).schedule
+        : body;
+    const scheduleValidation = validateCheckInScheduleInput(scheduleInput);
 
     if (!scheduleValidation.ok) {
       return NextResponse.json(

@@ -11,6 +11,10 @@ import {
   validateCheckInScheduleInput,
 } from "@/lib/forms";
 import {
+  DEFAULT_CHECKIN_CONFIG,
+  DEFAULT_HABIT_CONFIG,
+} from "@/lib/forms/defaults";
+import {
   DEFAULT_CHECKIN_SCHEDULE,
   getScheduleOrDefault,
 } from "@/lib/forms/schedule";
@@ -204,32 +208,67 @@ export async function GET(
         );
       }
 
-      if (!template) {
+      // No template exists for this tenant: lazily auto-create one from the
+      // in-code defaults so every client renders a populated form even if the
+      // trainer never opened the template editor. Subsequent trainer edits
+      // overwrite this row through the normal /api/forms/templates flow.
+      let resolvedTemplate = template;
+
+      if (!resolvedTemplate) {
         console.log(
-          "[Forms Configs] No template found for tenant:",
+          "[Forms Configs] No template found for tenant — creating from defaults:",
           tenantHost,
           formType
         );
 
-        return NextResponse.json(
-          {
-            success: false,
-            error: "No se encontró plantilla para este formulario",
-          },
-          { status: 404 }
-        );
+        const fallbackConfig =
+          formType === "checkins"
+            ? DEFAULT_CHECKIN_CONFIG
+            : DEFAULT_HABIT_CONFIG;
+        const fallbackName =
+          formType === "checkins"
+            ? "Plantilla de Check-in"
+            : "Plantilla de Hábitos";
+
+        const { data: createdTemplate, error: createTemplateError } =
+          await supabase
+            .from("form_templates")
+            .insert({
+              tenant_host: tenantHost,
+              form_type: formType,
+              name: fallbackName,
+              questions_config: fallbackConfig,
+              is_active: true,
+              auto_apply_to_new_clients: true,
+            })
+            .select("id, questions_config, default_schedule")
+            .single();
+
+        if (createTemplateError || !createdTemplate) {
+          console.error(
+            "[Forms Configs] Error auto-creating template from defaults:",
+            createTemplateError
+          );
+
+          return NextResponse.json(
+            { success: false, error: "Error al crear plantilla por defecto" },
+            { status: 500 }
+          );
+        }
+
+        resolvedTemplate = createdTemplate;
       }
 
-      // Create the client config from the template
+      // Create the client config from the (existing or freshly-seeded) template
       const { data: newConfig, error: insertError } = await supabase
         .from("client_form_configs")
         .insert({
           tenant_host: tenantHost,
           client_id: clientId,
           form_type: formType,
-          questions_config: template.questions_config,
+          questions_config: resolvedTemplate.questions_config,
           uses_template: true,
-          template_id: template.id,
+          template_id: resolvedTemplate.id,
         })
         .select()
         .single();

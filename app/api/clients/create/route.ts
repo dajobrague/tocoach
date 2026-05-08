@@ -82,10 +82,11 @@ export async function POST(request: NextRequest) {
       newClient.id
     );
 
-    // Auto-seed form configs from any template that has
-    // `auto_apply_to_new_clients = true`. Non-blocking: errors here should
-    // never break client creation — if seeding fails, the client will still
-    // get configs lazily on first access to `/api/forms/configs/[clientId]`.
+    // Auto-seed form configs from every active template the tenant has.
+    // Non-blocking: errors here should never break client creation — if seeding
+    // fails or the tenant has no template, the client gets configs lazily on
+    // first access to `/api/forms/configs/[clientId]` (which auto-creates a
+    // template from `DEFAULT_*_CONFIG` defaults).
     try {
       const { data: tenantRow } = await supabase
         .from("tenants")
@@ -94,20 +95,19 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (tenantRow?.host) {
-        const { data: autoApplyTemplates, error: tplError } = await supabase
+        const { data: activeTemplates, error: tplError } = await supabase
           .from("form_templates")
           .select("id, form_type, questions_config, default_schedule")
           .eq("tenant_host", tenantRow.host)
-          .eq("is_active", true)
-          .eq("auto_apply_to_new_clients", true);
+          .eq("is_active", true);
 
         if (tplError) {
           console.warn(
             "[Create Client API] auto-seed: error fetching templates",
             tplError
           );
-        } else if (autoApplyTemplates && autoApplyTemplates.length > 0) {
-          const rows = autoApplyTemplates.map((tpl) => {
+        } else if (activeTemplates && activeTemplates.length > 0) {
+          const rows = activeTemplates.map((tpl) => {
             const row: Record<string, unknown> = {
               tenant_host: tenantRow.host,
               client_id: newClient.id,
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
           } else {
             console.log(
               "[Create Client API] auto-seed: applied",
-              autoApplyTemplates.length,
+              activeTemplates.length,
               "template(s) to client",
               newClient.id
             );
