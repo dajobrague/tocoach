@@ -61,7 +61,11 @@ export function useShellMode(): ShellMode {
     if (next !== mode) setMode(next);
 
     // Watch for PWA install mid-session.
-    const mql = window.matchMedia("(display-mode: standalone)");
+    const mql =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(display-mode: standalone)")
+        : null;
+    if (!mql) return;
     const onChange = () => setMode(detect());
     if (typeof mql.addEventListener === "function") {
       mql.addEventListener("change", onChange);
