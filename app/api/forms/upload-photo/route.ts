@@ -33,7 +33,21 @@ export async function POST(request: NextRequest) {
     const questionId = formData.get("question_id") as string | null;
     const formType = formData.get("form_type") as string | null;
 
+    // Diagnostic log so 400s aren't silent. Hits Railway/Vercel logs and
+    // local `npm run dev` output — gives us file.name/type/size to see
+    // exactly which guard tripped without parsing the multipart body again.
+    console.log("[Form Photo] Incoming upload", {
+      clientId: session.client_id,
+      questionId,
+      formType,
+      fileName: file?.name ?? null,
+      fileType: file?.type ?? null,
+      fileSize: file?.size ?? null,
+    });
+
     if (!file) {
+      console.warn("[Form Photo] 400: no file in form data");
+
       return NextResponse.json(
         { success: false, error: "No se proporcionó ningún archivo" },
         { status: 400 }
@@ -41,65 +55,122 @@ export async function POST(request: NextRequest) {
     }
 
     if (!questionId) {
+      console.warn("[Form Photo] 400: missing question_id", {
+        fileName: file.name,
+      });
+
       return NextResponse.json(
         { success: false, error: "Falta el ID de la pregunta" },
         { status: 400 }
       );
     }
 
-    // Validate file type (include HEIC for iOS gallery)
+    // Validate file type. Includes HEIC and HEIF (iOS gallery formats)
+    // and is lenient with empty MIME by falling back to the file
+    // extension — some browsers (and AirDrop/Universal Clipboard handoffs)
+    // strip the type, which would otherwise reject perfectly valid JPEGs.
     const allowedTypes = [
       "image/png",
       "image/jpeg",
       "image/jpg",
       "image/webp",
       "image/heic",
+      "image/heif",
     ];
+    const allowedExtensions = ["png", "jpg", "jpeg", "webp", "heic", "heif"];
+    const declaredType = file.type?.toLowerCase().trim();
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const typeOk = declaredType ? allowedTypes.includes(declaredType) : false;
+    const extOk = ext ? allowedExtensions.includes(ext) : false;
 
-    if (!allowedTypes.includes(file.type)) {
+    if (!typeOk && !extOk) {
+      console.warn("[Form Photo] 400: rejected file type", {
+        fileName: file.name,
+        declaredType,
+        ext,
+      });
+
       return NextResponse.json(
         {
           success: false,
-          error: "Formato no válido. Usa PNG, JPG, WebP o HEIC.",
+          error: `Formato no válido (${declaredType || "tipo desconocido"}). Usa PNG, JPG, WebP, HEIC o HEIF.`,
         },
         { status: 400 }
       );
     }
 
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validate file size (10MB max — iPhone HEIC live photos routinely
+    // hit 6-9MB so the previous 5MB cap was rejecting them silently).
+    const MAX_BYTES = 10 * 1024 * 1024;
+
+    if (file.size > MAX_BYTES) {
+      console.warn("[Form Photo] 400: file too large", {
+        fileName: file.name,
+        size: file.size,
+        max: MAX_BYTES,
+      });
+
       return NextResponse.json(
         {
           success: false,
-          error: "La imagen no puede superar 5MB",
+          error: `La imagen no puede superar 10MB (recibido ${(file.size / 1024 / 1024).toFixed(1)}MB)`,
         },
         { status: 400 }
       );
     }
 
-    // Build the storage path
-    const ext = file.name.split(".").pop() || "jpg";
+    // Build the storage path. Reuse `ext` derived above (with fallback) so
+    // the file lands with a consistent extension even when the browser
+    // strips the MIME type and we accepted it via the extension fallback.
+    const safeExt = ext ?? "jpg";
     const timestamp = Date.now();
     const safeFormType = formType === "habits" ? "habits" : "checkins";
-    const filePath = `${session.client_id}/${safeFormType}/${questionId}_${timestamp}.${ext}`;
+    const filePath = `${session.client_id}/${safeFormType}/${questionId}_${timestamp}.${safeExt}`;
 
     // Convert File to ArrayBuffer then to Uint8Array for Supabase
     const arrayBuffer = await file.arrayBuffer();
     const fileBuffer = new Uint8Array(arrayBuffer);
 
+    // Map extension → MIME for the rare case where file.type is empty
+    // (some browsers/transports strip it). The bucket's allowed_mime_types
+    // check is strict, so we must always send a concrete contentType.
+    const extToMime: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      webp: "image/webp",
+      heic: "image/heic",
+      heif: "image/heif",
+    };
+    const resolvedContentType =
+      declaredType && allowedTypes.includes(declaredType)
+        ? declaredType
+        : (extToMime[safeExt] ?? "application/octet-stream");
+
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from("form-photos")
       .upload(filePath, fileBuffer, {
-        contentType: file.type,
+        contentType: resolvedContentType,
         upsert: false, // Don't overwrite — each upload is unique via timestamp
       });
 
     if (uploadError) {
-      console.error("[Form Photo] Upload error:", uploadError);
+      console.error("[Form Photo] Upload error:", {
+        message: uploadError.message,
+        name: uploadError.name,
+        filePath,
+        contentType: resolvedContentType,
+      });
 
+      // Surface the underlying storage error message to the client when
+      // safe — bucket-side rejections (mime, size, RLS) are otherwise
+      // hidden behind a generic 500 toast and leave the user stuck.
       return NextResponse.json(
-        { success: false, error: "Error al subir la imagen" },
+        {
+          success: false,
+          error: `Error al subir la imagen: ${uploadError.message}`,
+        },
         { status: 500 }
       );
     }
