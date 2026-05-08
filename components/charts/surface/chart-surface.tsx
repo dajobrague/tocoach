@@ -227,34 +227,28 @@ export function ChartSurface({ mode, clientId }: Props) {
     return doc.charts.find((c) => c.id === editingId) ?? null;
   }, [doc, editingId]);
 
-  // Compute renderable buckets per chart. In trainer-template, synthesize.
-  // In trainer-client / client-readonly, prefer real snapshot data; fall
-  // back to demo for charts not in the snapshot (e.g. a freshly-added one).
+  // Compute renderable buckets per chart. Tres caminos según mode:
   //
-  // Importante: para que la preview con demo data refleje EXACTAMENTE
-  // lo que el cliente verá al cambiar de tab de período, aplicamos el
-  // mismo `getEffectiveAggregation` que usa el snapshot route. Antes
-  // la demo data usaba `chart.aggregation` literal — el trainer veía
-  // su chart como "checkin_period" aunque el cliente real lo vería
-  // como "daily" cuando seleccionara "7 días". Ahora coinciden.
+  // - trainer-template: SIEMPRE demo data (no hay clientId, no hay
+  //   snapshot). Aplicamos `getEffectiveAggregation` antes de
+  //   sintetizar para que la preview refleje la granularidad real
+  //   que tendrá el cliente al cambiar de tab de período.
+  //
+  // - trainer-client / client-readonly: SOLO datos reales del
+  //   snapshot. Si el chart no tiene aún un bucket en el snapshot
+  //   (recién agregado, no terminó el autosave + refetch), pasamos
+  //   `buckets: undefined` que ChartCard renderiza como skeleton —
+  //   antes caíamos a demo data y se veía un flicker raro de valores
+  //   sintéticos antes del refresh. Ahora hay un loading state limpio.
   const renderData = useMemo(() => {
     if (!doc) return [];
     const snapshotBuckets = snapshotQuery.data?.buckets;
 
     return doc.charts.map((chart) => {
       const adapter = resolveAdapter(chart.source);
-      let buckets: BucketedPoint[];
+      let buckets: BucketedPoint[] | undefined;
 
-      if (
-        mode !== "trainer-template" &&
-        snapshotBuckets &&
-        snapshotBuckets[chart.id]
-      ) {
-        buckets = snapshotBuckets[chart.id]!.buckets as BucketedPoint[];
-      } else {
-        // Para demo data: aplicamos el override de rango antes de
-        // sintetizar, así el trainer ve la preview con la
-        // granularidad real que tendrá el cliente.
+      if (mode === "trainer-template") {
         const effectiveAgg = getEffectiveAggregation(
           range,
           chart.aggregation,
@@ -266,7 +260,13 @@ export function ChartSurface({ mode, clientId }: Props) {
             : { ...chart, aggregation: effectiveAgg };
 
         buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
+      } else if (snapshotBuckets?.[chart.id]) {
+        buckets = snapshotBuckets[chart.id]!.buckets as BucketedPoint[];
+      } else {
+        // Sin demo: undefined → skeleton en ChartCard.
+        buckets = undefined;
       }
+
       const series = adapter?.metadata.series?.map((s) => ({
         id: s.id,
         label: s.label,

@@ -20,6 +20,9 @@ import type {
   ChartDataSource,
 } from "@/lib/charts/types";
 
+import { generateBuckets } from "@/lib/charts/adapters/bucketing";
+import { DEFAULT_CHECKIN_SCHEDULE } from "@/lib/forms/types";
+
 // ─── Deterministic PRNG (mulberry32) ───────────────────────────────────────
 
 function seededRandom(seed: number): () => number {
@@ -125,50 +128,73 @@ interface BucketSpec {
 }
 
 /**
- * Generate time-bucketed labels matching the aggregation. We don't have
- * the schedule here — the surface passes a small spec (how many buckets,
- * what kind of label).
+ * Días aproximados que cubre cada aggregation cuando queremos generar
+ * `bucketCount` buckets ending today. Usado solo para construir un
+ * `range` sintético que alimente a `generateBuckets`.
+ */
+const DAYS_PER_BUCKET: Record<Aggregation, number> = {
+  daily: 1,
+  weekly: 7,
+  biweekly: 14,
+  monthly: 31, // upper bound para que el range cubra 12 meses calendario
+  checkin_period: 7, // depends on schedule; default weekly
+  range_total: 30,
+};
+
+/**
+ * Genera buckets demo con LABELS REALISTAS (mismo formato que los
+ * que ve el cliente con datos reales: "5 May", "1-7 May", "May",
+ * etc.). Antes producíamos placeholders cripticos como "D-7", "S-3",
+ * "Q-2" que el trainer no podía interpretar — ahora la preview de
+ * la plantilla se ve idéntica visualmente a lo que el cliente verá
+ * con datos reales, solo cambian los valores (random) por los del
+ * cliente.
+ *
+ * Implementación: construimos un `range` sintético terminando "hoy"
+ * y delegamos a `generateBuckets` (mismo helper que el snapshot
+ * route) con un `DEFAULT_CHECKIN_SCHEDULE`. Eso nos da BucketWindow
+ * reales con labels formateadas igual que los buckets reales.
+ *
+ * `daysSpanned` se computa de cada bucket window (end-start+1) para
+ * que el synthesizer escale los valores correctamente (ej: una
+ * bucket weekly tiene ~7x los entrenamientos de una daily).
  */
 export function buildDemoBucketSpecs(
   aggregation: Aggregation,
   bucketCount = 12
 ): BucketSpec[] {
-  const out: BucketSpec[] = [];
-
-  switch (aggregation) {
-    case "daily":
-      for (let i = bucketCount - 1; i >= 0; i -= 1) {
-        out.push({ label: `D-${i}`, daysSpanned: 1 });
-      }
-      break;
-    case "weekly":
-      for (let i = bucketCount - 1; i >= 0; i -= 1) {
-        out.push({ label: `S-${i}`, daysSpanned: 7 });
-      }
-      break;
-    case "biweekly":
-      for (let i = bucketCount - 1; i >= 0; i -= 1) {
-        out.push({ label: `Q-${i}`, daysSpanned: 14 });
-      }
-      break;
-    case "monthly":
-      for (let i = bucketCount - 1; i >= 0; i -= 1) {
-        // 30 days es una aproximación — los demos no dependen de la
-        // longitud exacta del mes calendario.
-        out.push({ label: `M-${i}`, daysSpanned: 30 });
-      }
-      break;
-    case "checkin_period":
-      for (let i = bucketCount - 1; i >= 0; i -= 1) {
-        out.push({ label: `P-${i}`, daysSpanned: 7 });
-      }
-      break;
-    case "range_total":
-      out.push({ label: "Total", daysSpanned: 30 });
-      break;
+  if (aggregation === "range_total") {
+    // generateBuckets para range_total devuelve 1 bucket "Total".
+    return [{ label: "Total", daysSpanned: 30 }];
   }
 
-  return out;
+  const days = DAYS_PER_BUCKET[aggregation];
+  const to = new Date();
+  const from = new Date(to.getTime() - bucketCount * days * 86400000);
+  // Un schedule mínimo (default weekly Mon 12:00 Madrid) sólo se usa
+  // para que `generateBuckets` tenga algo coherente al construir
+  // tooltips y boundaries — no afecta el rendering visual ya que las
+  // labels se computan en clientTz que pasamos abajo.
+  const schedule = { ...DEFAULT_CHECKIN_SCHEDULE };
+  const tz = (() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+      return "UTC";
+    }
+  })();
+  const windows = generateBuckets({ from, to }, aggregation, schedule, tz);
+
+  // Pickeamos los últimos `bucketCount` buckets — el helper puede
+  // generar uno extra al inicio dependiendo del alineamiento.
+  const sliced = windows.slice(-bucketCount);
+
+  return sliced.map((w) => {
+    const spannedMs = w.end.getTime() - w.start.getTime();
+    const daysSpanned = Math.max(1, Math.round(spannedMs / 86400000) + 1);
+
+    return { label: w.label, daysSpanned };
+  });
 }
 
 // ─── Public synthesizer ────────────────────────────────────────────────────
