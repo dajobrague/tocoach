@@ -82,10 +82,23 @@ export function DynamicFormModal({
   );
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // Upload a photo for a question and store the URL in answers
+  // Upload a photo for a question and store the URL in answers.
+  //
+  // Bulletproofing:
+  //  - 60s AbortController timeout — slow networks shouldn't hang.
+  //  - On success, we write the URL to sessionStorage BEFORE setAnswers.
+  //    If the user closes the modal between fetch resolution and React
+  //    re-render (very real on slow phones), the URL still survives in
+  //    the draft and is restored next time the modal opens.
+  //  - AbortError due to timeout shows a specific toast; AbortError due
+  //    to manual cancellation is silent.
   const handlePhotoUpload = useCallback(
     async (questionId: string, file: File) => {
       setUploadingPhotos((prev) => new Set(prev).add(questionId));
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort("timeout");
+      }, 60_000);
 
       try {
         const fd = new FormData();
@@ -97,10 +110,30 @@ export function DynamicFormModal({
         const res = await clientFetch("/api/forms/upload-photo", {
           method: "POST",
           body: fd,
+          signal: controller.signal,
         });
         const data = await res.json();
 
         if (data.success && data.url) {
+          // Defense in depth: persist to sessionStorage SYNCHRONOUSLY
+          // before the React commit. Even if the modal is unmounting on
+          // the next tick, the draft has the URL and the next open will
+          // restore it. Skipped when editing an existing server response
+          // because that branch's draft is cleared by checkExistingResponse.
+          if (!isEditingExisting) {
+            const dateForKey = targetDate || getLocalTodayYmd();
+            const draftKey = formResponseDraftStorageKey(
+              clientId,
+              formType,
+              dateForKey
+            );
+            const existing = readFormResponseDraft(draftKey);
+
+            writeFormResponseDraft(draftKey, {
+              ...(existing?.answers ?? {}),
+              [questionId]: data.url,
+            });
+          }
           setAnswers((prev) => ({ ...prev, [questionId]: data.url }));
           // Clear any error
           setErrors((prev) => {
@@ -118,13 +151,31 @@ export function DynamicFormModal({
           });
         }
       } catch (err) {
-        console.error("Photo upload error:", err);
-        addToast({
-          title: "Error de conexión",
-          description: "No se pudo subir la imagen",
-          color: "danger",
-        });
+        // AbortError = either timeout (we set reason="timeout") or a
+        // caller-initiated cancel. Distinguish so the user only sees a
+        // toast for the network-stalled case.
+        const error = err as Error & { name?: string };
+
+        if (error?.name === "AbortError") {
+          if (controller.signal.reason === "timeout") {
+            addToast({
+              title: "La subida tardó demasiado",
+              description:
+                "Verifica tu conexión y vuelve a intentarlo en un momento.",
+              color: "warning",
+            });
+          }
+          // Silent on user-initiated abort.
+        } else {
+          console.error("Photo upload error:", err);
+          addToast({
+            title: "Error de conexión",
+            description: "No se pudo subir la imagen",
+            color: "danger",
+          });
+        }
       } finally {
+        clearTimeout(timeoutId);
         setUploadingPhotos((prev) => {
           const next = new Set(prev);
 
@@ -134,7 +185,7 @@ export function DynamicFormModal({
         });
       }
     },
-    [formType]
+    [formType, clientId, targetDate, isEditingExisting]
   );
 
   const triggerFileInput = (questionId: string) => {
@@ -604,6 +655,15 @@ export function DynamicFormModal({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    // 30s timeout on submit. If the network stalls (tunnel, flaky 3G,
+    // etc.), abort instead of hanging the modal indefinitely. The user's
+    // answers stay in `answers` state so a retry just reruns this same
+    // function with the same payload.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort("timeout");
+    }, 30_000);
+
     try {
       const response = await clientFetch(`/api/forms/responses/${clientId}`, {
         method: "POST",
@@ -617,6 +677,7 @@ export function DynamicFormModal({
             completion_time: new Date().toISOString(),
           },
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -724,13 +785,31 @@ export function DynamicFormModal({
         }
       }
     } catch (error) {
-      console.error("Error submitting form:", error);
-      addToast({
-        title: "Error de conexión",
-        description: "No se pudo enviar el formulario",
-        color: "danger",
-      });
+      const err = error as Error & { name?: string };
+
+      // Timeout-specific message — "Reintentar" hint nudges the user to
+      // tap Enviar again rather than thinking the form is broken. The
+      // answers state is intact so a retry just reruns the same payload.
+      if (
+        err?.name === "AbortError" &&
+        controller.signal.reason === "timeout"
+      ) {
+        addToast({
+          title: "El envío tardó demasiado",
+          description:
+            "Verifica tu conexión y toca Enviar otra vez. Tus respuestas siguen aquí.",
+          color: "warning",
+        });
+      } else {
+        console.error("Error submitting form:", error);
+        addToast({
+          title: "Error de conexión",
+          description: "No se pudo enviar el formulario",
+          color: "danger",
+        });
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsSubmitting(false);
     }
   };
@@ -944,7 +1023,7 @@ export function DynamicFormModal({
                       Toca para tomar o subir una foto
                     </p>
                     <p className="text-xs text-foreground/60 font-body">
-                      PNG, JPG o WebP · Máx. 5MB
+                      PNG, JPG, WebP, HEIC o HEIF · Máx. 10MB
                     </p>
                   </>
                 )}
