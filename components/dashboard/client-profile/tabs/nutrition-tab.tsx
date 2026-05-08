@@ -3131,10 +3131,13 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           {(() => {
             const effectiveMode: NutritionPlanMode =
               nutritionPlan.plan_mode || "structured";
-            const showPdfSection =
-              effectiveMode === "pdf" || effectiveMode === "hybrid";
-            const showStructuredEditor =
-              effectiveMode === "structured" || effectiveMode === "hybrid";
+            // El modo del plan sólo controla cómo lo VE el cliente
+            // (lib/utils/nutrition-tree.ts + components/client-dashboard/nutrition-content.tsx).
+            // El editor del trainer siempre muestra ambas secciones — el
+            // toggle "Solo PDF" no debe ocultar ni el editor de
+            // comidas/ingredientes ni la subida del PDF.
+            const showPdfSection = true;
+            const showStructuredEditor = true;
 
             return (
               <>
