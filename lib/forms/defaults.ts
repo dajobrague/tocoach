@@ -260,13 +260,16 @@ export const DEFAULT_CHECKIN_CONFIG: FormConfigData = {
       ],
     },
     {
+      // Optional by default: many clients don't have a scale on every
+      // check-in day. Trainers who insist on body weight can toggle this
+      // back to required from /trainer/settings/forms/checkins.
       id: "body_weight",
       label: "Peso Corporal",
       icon: "solar:scale-bold",
       type: "number",
       unit: "kg",
       enabled: true,
-      required: true,
+      required: false,
       pageId: "checkin_body",
     },
   ],

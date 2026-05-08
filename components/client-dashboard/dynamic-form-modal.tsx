@@ -19,6 +19,12 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
+import {
+  clearFormResponseDraft,
+  formResponseDraftStorageKey,
+  readFormResponseDraft,
+  writeFormResponseDraft,
+} from "@/lib/client/checkin-draft";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/conditional";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
@@ -158,6 +164,35 @@ export function DynamicFormModal({
     };
   }, [isOpen, clientId, formType, targetDate]);
 
+  // Persist in-progress answers to sessionStorage so a refresh, tab
+  // background, or accidental modal close doesn't wipe a half-filled
+  // form. Only writes when the user is actively editing a NEW response
+  // — server-stored existing responses are canonical, drafts for that
+  // date have already been cleared by checkExistingResponse(). Photo
+  // upload setAnswers also flows through here, so a draft preserves
+  // uploaded photo URLs even before submit.
+  useEffect(() => {
+    if (!isOpen || isLoading || isViewMode || isEditingExisting) return;
+    const dateForKey = targetDate || getLocalTodayYmd();
+    const key = formResponseDraftStorageKey(clientId, formType, dateForKey);
+
+    if (Object.keys(answers).length === 0) {
+      clearFormResponseDraft(key);
+
+      return;
+    }
+    writeFormResponseDraft(key, answers);
+  }, [
+    isOpen,
+    isLoading,
+    isViewMode,
+    isEditingExisting,
+    answers,
+    clientId,
+    formType,
+    targetDate,
+  ]);
+
   const checkNeatCards = async (isCancelled?: () => boolean) => {
     try {
       const response = await clientFetch("/api/client/neat");
@@ -203,10 +238,23 @@ export function DynamicFormModal({
         // call or if they need to correct a previous submission.
         setIsEditingExisting(true);
         setIsViewMode(false);
+        // Server copy supersedes any local draft for this date — clear it
+        // so we don't accidentally restore stale answers next time.
+        clearFormResponseDraft(
+          formResponseDraftStorageKey(clientId, formType, dateToCheck)
+        );
       } else {
         setIsEditingExisting(false);
         setIsViewMode(false);
-        setAnswers({});
+
+        // No server response yet — try to restore an in-progress draft so
+        // the client can resume where they left off after a refresh, tab
+        // background, or accidental modal close.
+        const draft = readFormResponseDraft(
+          formResponseDraftStorageKey(clientId, formType, dateToCheck)
+        );
+
+        setAnswers(draft?.answers ?? {});
       }
     } catch (error) {
       if (isCancelled?.()) return;
@@ -603,6 +651,17 @@ export function DynamicFormModal({
             );
           }
         }
+
+        // Drop the local draft now that the server has the canonical
+        // copy — keeping it would risk restoring stale answers if the
+        // client re-opens the modal before the server cache refreshes.
+        clearFormResponseDraft(
+          formResponseDraftStorageKey(
+            clientId,
+            formType,
+            targetDate || getLocalTodayYmd()
+          )
+        );
 
         setAnswers({});
         setCurrentStep(0);

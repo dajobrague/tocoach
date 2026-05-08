@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardBody } from "@heroui/react";
+import { Button, Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -23,7 +23,11 @@ import {
   getLocalTodayYmd,
   getLocalYmd,
 } from "@/lib/forms/client-helpers";
-import { getScheduleOrDefault, isCheckInDue } from "@/lib/forms/schedule";
+import {
+  formatScheduleDescription,
+  getScheduleOrDefault,
+  isCheckInDue,
+} from "@/lib/forms/schedule";
 import {
   DEFAULT_CHECKIN_SCHEDULE,
   FormResponse,
@@ -384,33 +388,50 @@ export function DashboardContent() {
           )}
 
           {/* Check-in banner cuando el schedule está activo y la
-              ventana actual está vencida. */}
+              ventana actual está vencida. Mismo recipe que el error
+              banner de arriba (border-warning/20 + bg-warning/5 +
+              icon chip) para visual parity con el resto del
+              dashboard, en lugar del bloque amarillo full-bleed
+              legacy. El título original (custom_name del trainer)
+              vive ahora dentro de la card. */}
           {showWeeklyBanner && (
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold font-heading mb-3 px-4 text-foreground">
-                {checkinSchedule.custom_name}
-              </h2>
-              {/* `text-warning-foreground` (no `text-white`) — el
-                  theme define explícitamente el contrast pair de
-                  warning, así que pasa WCAG AA en cualquier tenant
-                  aunque el warning del entrenador sea muy claro. */}
-              <button
-                aria-label={`Completar ${checkinSchedule.custom_name}`}
-                className="bg-warning cursor-pointer hover:opacity-90 transition-all active:scale-[0.98] py-8 px-6 w-full border-0"
-                type="button"
-                onClick={() => setShowWeeklyFormModal(true)}
-              >
-                <div className="max-w-lg mx-auto flex items-center justify-between">
-                  <span className="text-warning-foreground text-xl font-medium">
-                    {`Completa tu ${checkinSchedule.custom_name}`}
-                  </span>
-                  <Icon
-                    aria-hidden
-                    className="text-warning-foreground text-3xl"
-                    icon="solar:alt-arrow-right-bold"
-                  />
+            <div className="mb-4 px-4">
+              <div className="rounded-large border border-warning/20 bg-warning/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 bg-warning/10 p-2 rounded-full">
+                    <Icon
+                      aria-hidden
+                      className="text-warning-600"
+                      icon="solar:clipboard-list-bold"
+                      width={24}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-semibold text-foreground">
+                      {`Tu ${checkinSchedule.custom_name} te espera`}
+                    </p>
+                    <p className="text-sm text-foreground/70 mt-0.5">
+                      Completa tu seguimiento para que tu entrenador vea cómo va
+                      la semana.
+                    </p>
+                    <p className="text-xs text-foreground/50 mt-1">
+                      {formatScheduleDescription(checkinSchedule)}
+                    </p>
+                  </div>
                 </div>
-              </button>
+                <Button
+                  aria-label={`Completar ${checkinSchedule.custom_name}`}
+                  className="mt-3 w-full font-semibold"
+                  color="warning"
+                  endContent={
+                    <Icon icon="solar:alt-arrow-right-bold" width={18} />
+                  }
+                  variant="solid"
+                  onPress={() => setShowWeeklyFormModal(true)}
+                >
+                  Empezar Check-in
+                </Button>
+              </div>
             </div>
           )}
 
