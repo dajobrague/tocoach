@@ -79,6 +79,7 @@ export type Aggregation =
   | "daily"
   | "weekly"
   | "biweekly"
+  | "monthly"
   | "checkin_period"
   | "range_total";
 

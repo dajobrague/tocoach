@@ -271,6 +271,15 @@ function getEffectiveAggregation(
   // coarse para charts de bienestar). Biweekly es el sweet spot.
   if (rangeKey === "6m") return "biweekly";
 
+  // 12 Meses → monthly (12 buckets, uno por mes calendario). Es el
+  // patrón universal de las apps de fitness/wellness para vistas
+  // anuales (Apple Health, Strava, etc.). 12 buckets coincide con la
+  // densidad visual de 3m/6m manteniendo la progresión consistente
+  // del selector. Labels cortos ("Ene", "Feb", ...) caben fácilmente
+  // con la rotación -45°. Cada bucket = 1 mes calendario natural,
+  // que matchea cómo el cliente piensa el tiempo.
+  if (rangeKey === "12m") return "monthly";
+
   return fallback;
 }
 

@@ -46,6 +46,7 @@ const aggregationSchema = z.enum([
   "daily",
   "weekly",
   "biweekly",
+  "monthly",
   "checkin_period",
   "range_total",
 ] as const);

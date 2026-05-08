@@ -100,6 +100,51 @@ function mondayYmdOf(ymd: string): string {
 }
 
 /**
+ * Devuelve el Y-M-D del primer día del mes calendario que contiene
+ * `ymd`. Ejemplo: "2026-05-15" → "2026-05-01".
+ */
+function firstOfMonthYmd(ymd: string): string {
+  const [y, m] = ymd.split("-");
+
+  return `${y}-${m}-01`;
+}
+
+/**
+ * Suma N meses calendario a un Y-M-D string. Robusto contra fines de
+ * mes y años bisiestos: pivote en UTC el día 1 del mes (que siempre
+ * existe), agrega N meses, y formatea. Si el `ymd` original no era
+ * el día 1, mantenemos el día (clamping a fin de mes si el mes
+ * destino no tiene ese día). Para nuestro caso (siempre invocado
+ * con day=01), el clamping no aplica.
+ */
+function addMonthsYmd(ymd: string, months: number): string {
+  const [yStr, mStr, dStr] = ymd.split("-");
+  const y = Number(yStr);
+  const m = Number(mStr) - 1; // 0-indexed for Date arithmetic
+  const d = Number(dStr);
+  const target = new Date(Date.UTC(y, m + months, 1));
+  const ny = target.getUTCFullYear();
+  const nm = target.getUTCMonth() + 1;
+  // Días reales en el mes destino (clamping si d > maxDay).
+  const maxDay = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  const nd = Math.min(d, maxDay);
+
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
+}
+
+/**
+ * "Ene", "Feb", ... "Dic" desde un Y-M-D. Usado por buckets monthly
+ * para que el eje x muestre solo el nombre corto del mes —
+ * suficientemente claro para una vista anual donde el orden
+ * cronológico está implícito.
+ */
+function monthLabelFromYmd(ymd: string): string {
+  const m = Number(ymd.split("-")[1]) - 1;
+
+  return MONTH_ABBR_ES[m] ?? "";
+}
+
+/**
  * Construye un Date que representa "mediodía en la zona `tz` del día
  * `ymd`". Usado como punto único para start/end de un bucket diario:
  * tanto start como end resuelven al MISMO YMD via toYmdInTimezone,
@@ -203,6 +248,35 @@ export function generateBuckets(
     }
 
     return days;
+  }
+
+  if (aggregation === "monthly") {
+    // Iteramos por meses calendario en `dailyTz`. Cada bucket cubre
+    // del día 1 del mes al último día del mes (variable: 28-31).
+    // Mismo patrón tz-aware que daily/weekly — anclamos al día 1 en
+    // dailyTz, no al server-local, para evitar drift de huso.
+    const months: BucketWindow[] = [];
+    const fromYmd = toYmdInTimezone(range.from, dailyTz);
+    const toYmd = toYmdInTimezone(range.to, dailyTz);
+    let cursorYmd = firstOfMonthYmd(fromYmd);
+    let guard = 0;
+
+    while (cursorYmd <= toYmd && guard++ < 60) {
+      const nextMonthFirst = addMonthsYmd(cursorYmd, 1);
+      const lastDayOfMonth = addDaysYmd(nextMonthFirst, -1);
+      const startNoon = tzNoon(cursorYmd, dailyTz);
+      const endNoon = tzNoon(lastDayOfMonth, dailyTz);
+
+      months.push({
+        start: startNoon,
+        end: endNoon,
+        label: monthLabelFromYmd(cursorYmd),
+        tooltip: formatPeriodTooltipSpan(startNoon, endNoon, dailyTz),
+      });
+      cursorYmd = nextMonthFirst;
+    }
+
+    return months;
   }
 
   if (aggregation === "weekly" || aggregation === "biweekly") {

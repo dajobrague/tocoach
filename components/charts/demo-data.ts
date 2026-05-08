@@ -151,6 +151,13 @@ export function buildDemoBucketSpecs(
         out.push({ label: `Q-${i}`, daysSpanned: 14 });
       }
       break;
+    case "monthly":
+      for (let i = bucketCount - 1; i >= 0; i -= 1) {
+        // 30 days es una aproximación — los demos no dependen de la
+        // longitud exacta del mes calendario.
+        out.push({ label: `M-${i}`, daysSpanned: 30 });
+      }
+      break;
     case "checkin_period":
       for (let i = bucketCount - 1; i >= 0; i -= 1) {
         out.push({ label: `P-${i}`, daysSpanned: 7 });
