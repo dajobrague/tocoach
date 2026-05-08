@@ -81,7 +81,7 @@ export const TRAINER_NAV: TrainerNavSection[] = [
             key: "templates-checkin",
             title: "Check-in",
             icon: "solar:calendar-mark-linear",
-            href: "/trainer/settings/checkin-defaults",
+            href: "/trainer/settings/forms/checkins",
           },
           {
             key: "templates-habits",
@@ -104,6 +104,8 @@ export function flattenLeaves(
     if (item.href) out.push(item);
     item.items?.forEach(walk);
   };
+
   sections.forEach((s) => s.items.forEach(walk));
+
   return out;
 }

@@ -8,16 +8,7 @@ import type {
   QuestionConfig,
 } from "@/lib/forms/types";
 
-import {
-  Button,
-  Card,
-  CardBody,
-  Divider,
-  Skeleton,
-  Switch,
-} from "@heroui/react";
-import { Icon } from "@iconify/react";
-import Link from "next/link";
+import { Card, CardBody, Divider, Skeleton, Switch } from "@heroui/react";
 import { notFound, useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -432,31 +423,8 @@ function TemplateEditor({ formType }: { formType: FormType }) {
 
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <header className="border-b border-gray-200 bg-white px-4 py-3">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <Button
-            as={Link}
-            href="/trainer/dashboard"
-            size="sm"
-            startContent={<Icon icon="solar:arrow-left-linear" width={18} />}
-            variant="light"
-            onPress={() => {
-              try {
-                localStorage.setItem("activeSection", "brand-settings");
-              } catch {
-                /* ignore */
-              }
-            }}
-          >
-            Volver al panel
-          </Button>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
-        {children}
-      </main>
-    </div>
+    <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
+      {children}
+    </main>
   );
 }
