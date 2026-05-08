@@ -10,8 +10,8 @@
 // Pair this with the no-cache headers on /sw.js in next.config.js so the
 // new sw.js bytes actually reach the browser.
 
-const CACHE_NAME = "topcoach-v7";
-const STATIC_CACHE_NAME = "topcoach-static-v7";
+const CACHE_NAME = "topcoach-v8";
+const STATIC_CACHE_NAME = "topcoach-static-v8";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
