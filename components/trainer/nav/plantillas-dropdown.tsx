@@ -1,5 +1,7 @@
 "use client";
 
+import type { TrainerNavItem } from "@/features/trainer/nav/nav-items";
+
 import {
   Button,
   Dropdown,
@@ -9,8 +11,6 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
-
-import type { TrainerNavItem } from "@/features/trainer/nav/nav-items";
 
 interface PlantillasDropdownProps {
   items: TrainerNavItem[];
@@ -51,6 +51,7 @@ export function PlantillasDropdown({
         variant="flat"
         onAction={(key) => {
           const item = items.find((i) => i.key === key);
+
           if (item?.href) router.push(item.href);
         }}
       >
@@ -58,11 +59,7 @@ export function PlantillasDropdown({
           <DropdownItem
             key={item.key}
             startContent={
-              <Icon
-                className="text-gray-500"
-                icon={item.icon}
-                width={20}
-              />
+              <Icon className="text-gray-500" icon={item.icon} width={20} />
             }
           >
             {item.title}
