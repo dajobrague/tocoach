@@ -1,0 +1,252 @@
+"use client";
+
+import {
+  Avatar,
+  Chip,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
+  ScrollShadow,
+  useDisclosure,
+} from "@heroui/react";
+import { Icon } from "@iconify/react";
+import { useRouter } from "next/navigation";
+import React from "react";
+
+import Sidebar, {
+  SidebarItemType,
+  type SidebarItem,
+} from "@/components/dashboard/sidebar";
+import SidebarDrawer from "@/components/dashboard/sidebar-drawer";
+import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
+import { TRAINER_NAV } from "@/features/trainer/nav/nav-items";
+
+interface SideShellProps {
+  children: React.ReactNode;
+  activeKey: string;
+  trainerId: string;
+  trainerName: string;
+  trainerImage?: string;
+  brandLogo?: string;
+  unreadMessages: number;
+  onLogout: () => void;
+}
+
+/** Convert TRAINER_NAV into the SidebarItem[] format expected by `<Sidebar>`. */
+function buildSidebarItems(unreadMessages: number): SidebarItem[] {
+  const out: SidebarItem[] = [];
+
+  for (const section of TRAINER_NAV) {
+    out.push({
+      key: `section-${section.key}`,
+      title: section.title,
+      items: section.items.map((item) => {
+        if (item.items && item.items.length > 0) {
+          return {
+            key: item.key,
+            title: item.title,
+            icon: item.icon,
+            type: SidebarItemType.Nest,
+            items: item.items.map((child) => ({
+              key: child.key,
+              title: child.title,
+              icon: child.icon,
+              href: child.href,
+            })),
+          };
+        }
+        const sidebarItem: SidebarItem = {
+          key: item.key,
+          title: item.title,
+          icon: item.icon,
+          href: item.href,
+        };
+        if (item.key === "messaging" && unreadMessages > 0) {
+          sidebarItem.endContent = (
+            <Chip
+              className="h-5 min-w-5 px-1"
+              color="primary"
+              size="sm"
+              variant="solid"
+            >
+              {unreadMessages > 99 ? "99+" : unreadMessages}
+            </Chip>
+          );
+        }
+        return sidebarItem;
+      }),
+    });
+  }
+
+  return out;
+}
+
+export function SideShell({
+  children,
+  activeKey,
+  trainerId,
+  trainerName,
+  trainerImage,
+  brandLogo,
+  unreadMessages,
+  onLogout,
+}: SideShellProps) {
+  const router = useRouter();
+  const drawer = useDisclosure();
+  const [logoError, setLogoError] = React.useState(false);
+  React.useEffect(() => setLogoError(false), [brandLogo]);
+
+  const sidebarItems = React.useMemo(
+    () => buildSidebarItems(unreadMessages),
+    [unreadMessages],
+  );
+
+  const onSidebarSelect = (key: string) => {
+    drawer.onClose();
+    let href: string | undefined;
+    for (const section of TRAINER_NAV) {
+      for (const item of section.items) {
+        if (item.key === key) {
+          href = item.href;
+          break;
+        }
+        for (const child of item.items ?? []) {
+          if (child.key === key) {
+            href = child.href;
+            break;
+          }
+        }
+      }
+    }
+    if (href) router.push(href);
+  };
+
+  const sidebarContent = (
+    <ScrollShadow className="h-full max-h-screen flex flex-col gap-4 px-4 py-4">
+      <div className="flex items-center gap-3">
+        {brandLogo && !logoError ? (
+          <img
+            alt="Logo"
+            className="h-9 w-9 rounded-lg object-contain"
+            src={brandLogo}
+            onError={() => setLogoError(true)}
+          />
+        ) : (
+          <div className="bg-black flex h-9 w-9 items-center justify-center rounded-lg shadow-sm">
+            <span className="text-white font-bold text-sm">TC</span>
+          </div>
+        )}
+        <div className="flex flex-col">
+          <p className="font-bold text-base text-gray-900 leading-none">
+            TOP COACH
+          </p>
+          <p className="text-xs text-gray-500 font-medium">Dashboard</p>
+        </div>
+      </div>
+
+      <Sidebar
+        defaultSelectedKey={activeKey || "metricas"}
+        items={sidebarItems}
+        sectionClasses={{
+          heading:
+            "text-tiny uppercase tracking-wide text-default-500 px-2 pt-2 pb-1",
+        }}
+        onSelect={onSidebarSelect}
+      />
+
+      <div className="mt-auto">
+        <Dropdown placement="top-start">
+          <DropdownTrigger>
+            <button className="flex items-center gap-2 w-full px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <Avatar
+                isBordered
+                color="primary"
+                name={trainerName}
+                radius="lg"
+                size="sm"
+                src={trainerImage ?? ""}
+              />
+              <div className="flex flex-col items-start min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900 truncate w-full text-left">
+                  {trainerName}
+                </p>
+                <p className="text-xs text-gray-500">Entrenador</p>
+              </div>
+              <Icon
+                className="text-gray-500"
+                icon="solar:alt-arrow-up-linear"
+                width={16}
+              />
+            </button>
+          </DropdownTrigger>
+          <DropdownMenu
+            aria-label="User Actions"
+            classNames={{ base: "w-56" }}
+            variant="flat"
+            onAction={(key) => {
+              if (key === "settings") router.push("/trainer/settings");
+              else if (key === "help") router.push("/trainer/dashboard/help");
+              else if (key === "logout") onLogout();
+            }}
+          >
+            <DropdownItem
+              key="settings"
+              startContent={<Icon icon="solar:settings-linear" width={18} />}
+            >
+              Configuración
+            </DropdownItem>
+            <DropdownItem
+              key="help"
+              startContent={
+                <Icon icon="solar:question-circle-linear" width={18} />
+              }
+            >
+              Ayuda y soporte
+            </DropdownItem>
+            <DropdownItem
+              key="logout"
+              className="text-danger"
+              color="danger"
+              startContent={<Icon icon="solar:logout-2-linear" width={18} />}
+            >
+              Cerrar sesión
+            </DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+      </div>
+    </ScrollShadow>
+  );
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      <SidebarDrawer
+        isOpen={drawer.isOpen}
+        sidebarPlacement="left"
+        sidebarWidth={272}
+        onOpenChange={drawer.onOpenChange}
+      >
+        {sidebarContent}
+      </SidebarDrawer>
+
+      <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-200 bg-white">
+        {sidebarContent}
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-200 bg-white lg:justify-end">
+          <button
+            aria-label="Abrir menú"
+            className="lg:hidden p-2 rounded-md hover:bg-slate-100"
+            onClick={drawer.onOpen}
+          >
+            <Icon icon="solar:hamburger-menu-linear" width={22} />
+          </button>
+          {trainerId && <TrainerNotificationsDropdown trainerId={trainerId} />}
+        </header>
+
+        <main className="flex-1 w-full overflow-hidden">{children}</main>
+      </div>
+    </div>
+  );
+}
