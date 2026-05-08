@@ -3,6 +3,9 @@
 import {
   Avatar,
   Chip,
+  Drawer,
+  DrawerBody,
+  DrawerContent,
   Dropdown,
   DropdownItem,
   DropdownMenu,
@@ -18,7 +21,6 @@ import Sidebar, {
   SidebarItemType,
   type SidebarItem,
 } from "@/components/dashboard/sidebar";
-import SidebarDrawer from "@/components/dashboard/sidebar-drawer";
 import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
 import { TRAINER_NAV } from "@/features/trainer/nav/nav-items";
 
@@ -51,10 +53,13 @@ function buildSidebarItems(unreadMessages: number): SidebarItem[] {
               title: child.title,
               icon: child.icon,
             };
+
             if (child.href) leaf.href = child.href;
+
             return leaf;
           }),
         };
+
         return nested;
       }
       const sidebarItem: SidebarItem = {
@@ -62,6 +67,7 @@ function buildSidebarItems(unreadMessages: number): SidebarItem[] {
         title: item.title,
         icon: item.icon,
       };
+
       if (item.href) sidebarItem.href = item.href;
       if (item.key === "messaging" && unreadMessages > 0) {
         sidebarItem.endContent = (
@@ -75,8 +81,10 @@ function buildSidebarItems(unreadMessages: number): SidebarItem[] {
           </Chip>
         );
       }
+
       return sidebarItem;
     });
+
     out.push({
       key: `section-${section.key}`,
       title: section.title,
@@ -100,16 +108,18 @@ export function SideShell({
   const router = useRouter();
   const drawer = useDisclosure();
   const [logoError, setLogoError] = React.useState(false);
+
   React.useEffect(() => setLogoError(false), [brandLogo]);
 
   const sidebarItems = React.useMemo(
     () => buildSidebarItems(unreadMessages),
-    [unreadMessages],
+    [unreadMessages]
   );
 
   const onSidebarSelect = (key: string) => {
     drawer.onClose();
     let href: string | undefined;
+
     for (const section of TRAINER_NAV) {
       for (const item of section.items) {
         if (item.key === key) {
@@ -231,15 +241,21 @@ export function SideShell({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <SidebarDrawer
+      {/* Mobile drawer (only renders when open) */}
+      <Drawer
+        classNames={{
+          base: "max-w-[272px]",
+        }}
         isOpen={drawer.isOpen}
-        sidebarPlacement="left"
-        sidebarWidth={272}
+        placement="left"
         onOpenChange={drawer.onOpenChange}
       >
-        {sidebarContent}
-      </SidebarDrawer>
+        <DrawerContent>
+          <DrawerBody className="p-0">{sidebarContent}</DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
+      {/* Desktop persistent sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-200 bg-white">
         {sidebarContent}
       </aside>
