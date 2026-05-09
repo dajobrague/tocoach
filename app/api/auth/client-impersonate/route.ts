@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { ClientSession } from "@/lib/auth/client-session";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -10,11 +11,21 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // Same shape as `lib/auth/client-session.ts` COOKIE_OPTIONS, but with a
 // shorter TTL (8h) — admin impersonation must not mint a 30-day session.
+//
+// SameSite MUST match the regular login cookie ("lax"). The previous
+// "none" attribute caused the impersonation cookie to be attached to
+// every cross-site request to app.topcoach.io for 8 hours after a
+// support session, polluting other tenant URLs with the impersonated
+// tenant's session. The middleware then logged a `Tenant mismatch:
+// <impersonated-tenant> vs <visited-tenant>` warning on every protected
+// route the admin (or anyone sharing that browser) hit afterwards.
+// Impersonation flows are initiated from the admin panel on the same
+// origin, so Lax is sufficient.
 const IMPERSONATION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: isProduction,
-  sameSite: isProduction ? ("none" as const) : ("lax" as const),
+  sameSite: "lax" as const,
   path: "/",
   maxAge: IMPERSONATION_MAX_AGE,
 };
