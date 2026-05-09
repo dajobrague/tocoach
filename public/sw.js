@@ -10,8 +10,8 @@
 // Pair this with the no-cache headers on /sw.js in next.config.js so the
 // new sw.js bytes actually reach the browser.
 
-const CACHE_NAME = "topcoach-v9";
-const STATIC_CACHE_NAME = "topcoach-static-v9";
+const CACHE_NAME = "topcoach-v10";
+const STATIC_CACHE_NAME = "topcoach-static-v10";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -22,8 +22,25 @@ const STATIC_FILES = [
 ];
 
 // Install event - cache static files
+//
+// `skipWaiting()` MUST run unconditionally, BEFORE any promise that can
+// reject. Previously it sat inside the cache.addAll().then() chain, so if
+// addAll failed for any reason (transient network blip, a STATIC_FILES URL
+// returning non-200 during a deploy), the .catch swallowed the error and
+// skipWaiting was never called. The new SW would install successfully but
+// stay parked in "waiting" forever because no other event triggers an
+// activation. The registration code in components/service-worker-registration.tsx
+// then reloads the page expecting the new SW to be active — but it isn't,
+// the OLD SW is still controlling, and the user reloads into the same bug
+// indefinitely. This wedged Pedro and Yolanda's Chrome on Android.
+//
+// Calling skipWaiting() outside the waitUntil chain breaks the dependency:
+// the new SW always advances to active, and cache pre-warming becomes
+// best-effort instead of load-bearing.
 self.addEventListener("install", (event) => {
   console.log("[SW] Installing service worker");
+
+  self.skipWaiting();
 
   event.waitUntil(
     caches
@@ -34,7 +51,6 @@ self.addEventListener("install", (event) => {
       })
       .then(() => {
         console.log("[SW] Static files cached successfully");
-        return self.skipWaiting();
       })
       .catch((error) => {
         console.error("[SW] Failed to cache static files:", error);
