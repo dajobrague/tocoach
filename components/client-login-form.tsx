@@ -2,7 +2,6 @@
 
 import { Button, Form, Input, Link, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useRouter } from "next/navigation";
 import React from "react";
 
 import {
@@ -43,8 +42,31 @@ function writeLastRecoveryTs(ts: number): void {
   }
 }
 
+// Extract the `tenant_slug` claim from a JWT without verifying it. Used only
+// to decide whether to skip the cookie-recovery flow for a token that
+// belongs to a different tenant — the JWT's signature is still verified
+// server-side by /api/auth/refresh-cookie. Returns null on any parse error.
+function decodeTokenTenantSlug(token: string): string | null {
+  try {
+    const parts = token.split(".");
+
+    if (parts.length !== 3) return null;
+    const payloadSegment = parts[1];
+
+    if (!payloadSegment) return null;
+    const padded =
+      payloadSegment.replace(/-/g, "+").replace(/_/g, "/") +
+      "=".repeat((4 - (payloadSegment.length % 4)) % 4);
+    const json = atob(padded);
+    const payload = JSON.parse(json) as { tenant_slug?: unknown };
+
+    return typeof payload.tenant_slug === "string" ? payload.tenant_slug : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
-  const router = useRouter();
   const [step, setStep] = React.useState<LoginStep>("email");
   const [email, setEmail] = React.useState("");
   const [clientId, setClientId] = React.useState("");
@@ -73,6 +95,19 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
       const token = getClientToken();
 
       if (!token) {
+        if (!cancelled) setIsRecoveringSession(false);
+
+        return;
+      }
+
+      // Cross-tenant guard: a localStorage token from another trainer's
+      // portal would otherwise be re-issued as a cookie here and bounce
+      // the user into a redirect loop on this tenant's protected routes.
+      // Don't clear it — the user may still want it for the original
+      // tenant — just skip recovery and render the login form.
+      const tokenTenantSlug = decodeTokenTenantSlug(token);
+
+      if (tokenTenantSlug && tokenTenantSlug !== tenantSlug) {
         if (!cancelled) setIsRecoveringSession(false);
 
         return;
@@ -119,6 +154,7 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
         // router.push) so middleware re-runs with the fresh cookie.
         window.location.href = `/${tenantSlug}/dashboard`;
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.warn("[Client Login] Session recovery failed:", err);
         if (!cancelled) setIsRecoveringSession(false);
       }

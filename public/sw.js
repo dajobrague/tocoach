@@ -10,8 +10,8 @@
 // Pair this with the no-cache headers on /sw.js in next.config.js so the
 // new sw.js bytes actually reach the browser.
 
-const CACHE_NAME = "topcoach-v8";
-const STATIC_CACHE_NAME = "topcoach-static-v8";
+const CACHE_NAME = "topcoach-v9";
+const STATIC_CACHE_NAME = "topcoach-static-v9";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -143,7 +143,12 @@ self.addEventListener("fetch", (event) => {
       .catch(() => {
         return caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) return cachedResponse;
-          return new Response("", { status: 503 });
+          // Surface a real network error so the browser can retry and
+          // show its own error UI. A synthesized 503 with an empty body
+          // would silently corrupt page hydration when the failed asset
+          // is a JS chunk — the page would render its SSR loading shell
+          // forever, which users perceive as a "white screen".
+          return Response.error();
         });
       })
   );

@@ -12,10 +12,16 @@ export default async function ClientLoginPage({
 }) {
   const { slug } = await params;
 
-  // Check if already logged in
+  // Check if already logged in. The `client-session` cookie is scoped to the
+  // app domain and not the tenant, so a session from another trainer can be
+  // present here — only honor it if it belongs to *this* tenant. Otherwise
+  // fall through and render the login form, allowing the user to sign in
+  // (which will overwrite the cross-tenant cookie). Without this guard the
+  // server bounces to /dashboard, the middleware bounces back to /login,
+  // and the browser ends up in an infinite redirect loop ("white screen").
   const session = await getClientSession();
 
-  if (session) {
+  if (session && session.tenant_slug === slug) {
     redirect(`/${slug}/dashboard`);
   }
 

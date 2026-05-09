@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Set up password for client (first time)
 import { NextRequest, NextResponse } from "next/server";
 
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     const token = await setClientSessionCookie(
       response,
-      client.id,
+      String(client.id),
       tenantSlug,
       client.email,
       fullName

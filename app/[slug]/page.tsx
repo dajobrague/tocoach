@@ -9,14 +9,13 @@ export default async function ClientRootPage({
 }) {
   const { slug } = await params;
 
-  // Check client session
+  // Only treat the session as "authenticated for this tenant" when it
+  // matches — see the matching note in `app/[slug]/login/page.tsx`.
   const session = await getClientSession();
 
-  if (session) {
-    // Authenticated - redirect to dashboard
+  if (session && session.tenant_slug === slug) {
     redirect(`/${slug}/dashboard`);
   } else {
-    // Not authenticated - redirect to login
     redirect(`/${slug}/login`);
   }
 }
