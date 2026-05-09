@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Server-only session management for trainers
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
@@ -7,15 +8,65 @@ import { JWT_SECRET_BYTES as JWT_SECRET } from "./jwt-secret";
 
 const TRAINER_COOKIE_NAME = "trainer-session";
 const ADMIN_COOKIE_NAME = "admin-session";
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  // Use "lax" for same-site cookies (trainer/admin on app.topcoach.io)
-  // This allows cookies to be sent on normal navigation while still being secure
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
-};
+const TRAINER_DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+/**
+ * Build cookie options for trainer/admin session cookies.
+ *
+ * Single source of truth so that all writers of `trainer-session` /
+ * `admin-session` (regular login, password setup, register, admin login,
+ * trainer impersonation) end up with the same `secure`, `sameSite`,
+ * `path`, and (most importantly) `domain` attributes. Without this the
+ * impersonation route was setting a host-only cookie while regular login
+ * set a `.domain.tld`-scoped cookie, leaving two cookies that browsers
+ * resolve in undefined ways.
+ */
+export function buildTrainerCookieOptions(maxAgeSeconds: number) {
+  const base = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    // Lax: sent on top-level same-site navigations from any origin
+    // (admin → impersonation URL is opened on the same origin).
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: maxAgeSeconds,
+  };
+
+  if (
+    process.env.NODE_ENV !== "production" ||
+    !process.env.NEXT_PUBLIC_APP_DOMAIN
+  ) {
+    return base;
+  }
+
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
+
+  // Railway / Vercel / Netlify preview domains don't allow setting a
+  // wildcard parent domain; the cookie must be host-scoped on those.
+  const isCustomDomain =
+    !appDomain.includes("railway.app") &&
+    !appDomain.includes("vercel.app") &&
+    !appDomain.includes("netlify.app");
+
+  if (!isCustomDomain) {
+    return base;
+  }
+
+  const parts = appDomain.split(".");
+
+  if (parts.length < 2) {
+    return base;
+  }
+
+  return {
+    ...base,
+    domain: `.${parts.slice(-2).join(".")}`,
+  };
+}
+
+const COOKIE_OPTIONS = buildTrainerCookieOptions(
+  TRAINER_DEFAULT_MAX_AGE_SECONDS
+);
 
 export interface TrainerSession {
   trainer_id: string; // Supabase user ID
@@ -125,7 +176,7 @@ export async function verifySessionFromRequest(
     const { payload } = await jwtVerify(token, JWT_SECRET);
 
     return payload as unknown as TrainerSession;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -160,49 +211,9 @@ export async function setSessionCookie(
     .setExpirationTime(exp)
     .sign(JWT_SECRET);
 
-  // Use provided isAdmin flag to determine cookie name
   const cookieName = isAdmin ? ADMIN_COOKIE_NAME : TRAINER_COOKIE_NAME;
 
-  // In production with custom domain, set domain to allow sharing across subdomains
-  // For Railway/Vercel domains, DON'T set domain (cookies don't work across their infrastructure)
-  let cookieOptionsWithDomain: any = COOKIE_OPTIONS;
-
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.NEXT_PUBLIC_APP_DOMAIN
-  ) {
-    const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
-
-    // Only set domain for custom domains (not Railway, Vercel, etc.)
-    const isCustomDomain =
-      !appDomain.includes("railway.app") &&
-      !appDomain.includes("vercel.app") &&
-      !appDomain.includes("netlify.app");
-
-    if (isCustomDomain) {
-      const parts = appDomain.split(".");
-
-      if (parts.length >= 2) {
-        // Get last two parts (domain.tld) for custom domains
-        const baseDomain = `.${parts.slice(-2).join(".")}`;
-
-        cookieOptionsWithDomain = {
-          ...cookieOptionsWithDomain,
-          domain: baseDomain,
-        };
-      }
-    }
-    // For Railway/Vercel/etc, don't set domain - use default (current host only)
-  }
-
-  response.cookies.set(cookieName, token, cookieOptionsWithDomain);
-  console.log("[Session] Cookie set:", {
-    cookieName,
-    isAdmin,
-    userId: trainerId,
-    tenantHost,
-    options: cookieOptionsWithDomain,
-  });
+  response.cookies.set(cookieName, token, COOKIE_OPTIONS);
 
   return token;
 }

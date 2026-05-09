@@ -1,7 +1,9 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SignJWT } from "jose";
 
+import { buildTrainerCookieOptions } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 export async function POST(request: NextRequest) {
@@ -82,13 +84,16 @@ export async function POST(request: NextRequest) {
     // Set session cookie for trainer (using trainer-session cookie name)
     const cookieStore = await cookies();
 
-    cookieStore.set("trainer-session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 8, // 8 hours
-      path: "/", // Root path so it works for trainer portal
-    });
+    // Route through the shared cookie-options builder so the impersonation
+    // cookie gets the same `domain` attribute as a regular trainer login —
+    // otherwise we'd write a host-scoped cookie alongside the existing
+    // domain-scoped one and the browser's resolution between the two is
+    // undefined.
+    cookieStore.set(
+      "trainer-session",
+      sessionToken,
+      buildTrainerCookieOptions(60 * 60 * 8) // 8 hours
+    );
 
     // Log successful impersonation
     console.log(
