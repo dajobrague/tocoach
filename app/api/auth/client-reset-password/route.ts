@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Client reset password using OTP-issued reset token
 import { NextRequest, NextResponse } from "next/server";
 
@@ -166,10 +167,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Email is already lowercased and trimmed by `normalizeEmail`; using
+    // `.eq` (not `.ilike`) ensures we only update the single matching row.
+    // Two tenants-internal clients with emails that differ only by case
+    // would otherwise both have their password overwritten.
     const { error: updateError } = await supabase
       .from("clients")
       .update({ password: newPassword })
-      .ilike("email", normalizedEmail)
+      .eq("email", normalizedEmail)
       .eq("tenant", tenant.trainer_id);
 
     if (updateError) {

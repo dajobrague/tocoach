@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Server-only tenant resolution and configuration loader
  *
@@ -69,7 +70,7 @@ async function loadTenantMetadata(
       .select(
         "host, slug, theme_slug, theme_json, features, status, tables, stripe_customer_portal_conf, maintenance_reason, maintenance_until, logo_url"
       )
-      .eq("host", normalizedSlug) // Database field is 'host' but contains slug values
+      .eq("slug", normalizedSlug)
       .single();
 
     if (error || !data) {

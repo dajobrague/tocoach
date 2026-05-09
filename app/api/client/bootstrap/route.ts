@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
@@ -13,7 +14,7 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
  * Both queries run in parallel so the total latency is max(tenant, profile)
  * rather than tenant + profile.
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const supabase = createSupabaseClient();
 
   try {
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from("tenants")
         .select("logo_url, theme_json, trainer_id")
-        .eq("host", session.tenant_slug)
+        .eq("slug", session.tenant_slug)
         .single(),
       supabase
         .from("clients")

@@ -1,19 +1,22 @@
 "use client";
 
+/* eslint-disable no-console */
+
 /**
  * Client-side storage + fetch helpers for the client-session JWT.
  *
  * Why this exists
  * ---------------
  * The primary transport for `client-session` is an httpOnly cookie set by
- * `/api/auth/client-login`. In production it uses `SameSite=None; Secure`
- * (needed for iframe embedding and cross-site login redirects), which makes
- * it vulnerable to being silently dropped by:
+ * `/api/auth/client-login`. The cookie is `SameSite=Lax` (see
+ * `lib/auth/client-session.ts`), which is dropped by some user agents on
+ * cross-site fetches and POSTs that we still need to authenticate:
  *   - Safari ITP (intelligent tracking prevention)
- *   - Third-party cookie restrictions (Chrome, Firefox)
  *   - Third-party in-app browsers (Instagram, Facebook, TikTok webviews)
+ *   - Some Android Chrome edge cases around `window.location.href`
+ *     immediately after a `Set-Cookie`
  *
- * When that happens the cookie is never sent back on subsequent requests,
+ * When that happens the cookie is never sent back on subsequent requests
  * and the client sees "No autorizado" on form submission. To cover those
  * cases we *also* store the same signed JWT in `localStorage` at login
  * time, and attach it as `Authorization: Bearer <jwt>` on writes.

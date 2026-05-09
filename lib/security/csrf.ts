@@ -1,13 +1,21 @@
+/* eslint-disable no-console */
 /**
  * CSRF (Cross-Site Request Forgery) Protection Utility
  *
- * This provides an additional layer of security now that we use sameSite: "none" cookies
- * for iframe embedding support.
+ * NOTE (status): this module is currently unused. It was originally
+ * written when the client-session cookie was `SameSite=None` to support
+ * iframe embedding, where the SameSite attribute alone provides no CSRF
+ * protection. Iframe support has since been removed and the session
+ * cookie is `SameSite=Lax`, which mitigates basic CSRF on its own.
  *
- * Usage:
- * 1. Generate a CSRF token when creating sessions
- * 2. Include token in forms and API requests
- * 3. Validate token on state-changing operations (POST, PUT, DELETE)
+ * Keeping the helpers around for the day we add genuinely cross-site
+ * mutating endpoints; until then no production code calls
+ * `setCSRFTokenCookie` / `validateCSRFForMutation`.
+ *
+ * Usage if/when wired up:
+ * 1. Generate a CSRF token when creating sessions.
+ * 2. Include the token in forms and API requests.
+ * 3. Validate the token on state-changing operations (POST, PUT, DELETE).
  */
 
 import { SignJWT, jwtVerify } from "jose";
