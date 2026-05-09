@@ -70,13 +70,36 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseClient();
 
-    // Confirm the client still exists. We deliberately do NOT re-check
-    // status/password here — impersonation must work for broken accounts,
-    // which is the whole point of admin support access.
+    // Defense-in-depth: re-verify the client belongs to the tenant the
+    // token was issued for. The admin mint endpoint
+    // (/api/admin/trainers/[trainerId]/clients/[clientId]/impersonate)
+    // already enforces ownership when minting the token, but enforcing
+    // it again at consume time means a bug in mint, a malformed token,
+    // or a future caller that signs `client_impersonation` tokens with
+    // mismatched clientId / tenantSlug fields cannot promote a client
+    // of trainer A into a session for trainer B.
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("trainer_id")
+      .eq("slug", tenantSlug)
+      .eq("status", "active")
+      .single();
+
+    if (tenantError || !tenant?.trainer_id) {
+      return NextResponse.json(
+        { error: "Tenant no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    // Confirm the client exists AND belongs to this tenant. We deliberately
+    // do NOT re-check status/password — impersonation must work for broken
+    // accounts, which is the whole point of admin support access.
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id, email, name, last_name, status")
       .eq("id", clientId)
+      .eq("tenant", tenant.trainer_id)
       .single();
 
     if (clientError || !client) {
