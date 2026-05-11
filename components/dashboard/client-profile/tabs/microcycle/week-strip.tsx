@@ -22,6 +22,20 @@ function colorClassFor(classification: DayClassification): string {
   return "text-gray-300";
 }
 
+function borderClassFor(
+  classification: DayClassification,
+  isSelected: boolean
+): string {
+  if (isSelected) return "border-blue-500 bg-blue-50";
+  if (classification === "complete")
+    return "border-green-200 hover:bg-green-50/50";
+  if (classification === "partial")
+    return "border-amber-200 hover:bg-amber-50/50";
+  if (classification === "pending") return "border-gray-200 hover:bg-gray-50";
+
+  return "border-gray-200 hover:bg-gray-50";
+}
+
 interface Props {
   days: DayMetrics[];
   selectedDate: string;
@@ -58,10 +72,8 @@ export function WeekStrip({ days, selectedDate, onSelect, onArrowNav }: Props) {
             aria-label={ariaLabel}
             aria-selected={isSelected}
             className={[
-              "flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors text-left",
-              isSelected
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 hover:bg-gray-50",
+              "relative flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors text-left",
+              borderClassFor(day.classification, isSelected),
               day.isFuture ? "opacity-70" : "",
             ].join(" ")}
             role="gridcell"
@@ -84,13 +96,17 @@ export function WeekStrip({ days, selectedDate, onSelect, onArrowNav }: Props) {
             <span
               className={[
                 "text-base font-semibold tabular-nums",
-                day.isToday
-                  ? "text-blue-600 ring-1 ring-blue-300 rounded-full w-7 h-7 flex items-center justify-center"
-                  : "text-gray-900",
+                day.isToday ? "text-blue-600" : "text-gray-900",
               ].join(" ")}
             >
               {dayNumber}
             </span>
+            {day.isToday ? (
+              <span
+                aria-hidden="true"
+                className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-blue-500"
+              />
+            ) : null}
             <span className="text-[10px] text-gray-500 leading-tight text-center min-h-[1rem] line-clamp-1">
               {sessionName}
             </span>
