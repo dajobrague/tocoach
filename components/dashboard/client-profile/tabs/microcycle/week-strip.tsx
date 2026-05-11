@@ -26,9 +26,11 @@ interface Props {
   days: DayMetrics[];
   selectedDate: string;
   onSelect: (date: string) => void;
+  /** Arrow-key navigation handler. Buttons attach onKeyDown to call this. */
+  onArrowNav?: (direction: "left" | "right") => void;
 }
 
-export function WeekStrip({ days, selectedDate, onSelect }: Props) {
+export function WeekStrip({ days, selectedDate, onSelect, onArrowNav }: Props) {
   return (
     <div
       aria-label="Días de la semana con adherencia"
@@ -65,6 +67,16 @@ export function WeekStrip({ days, selectedDate, onSelect }: Props) {
             role="gridcell"
             type="button"
             onClick={() => onSelect(day.date)}
+            onKeyDown={(e) => {
+              if (!onArrowNav) return;
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                onArrowNav("left");
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                onArrowNav("right");
+              }
+            }}
           >
             <span className="text-[10px] font-semibold text-gray-500 tracking-wider">
               {DAY_LABELS[idx]}
