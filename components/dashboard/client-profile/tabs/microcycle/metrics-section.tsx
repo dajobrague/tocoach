@@ -110,9 +110,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     <section className="flex flex-col gap-4">
       <WeekNavigator
         weekStartYmd={getLocalYmd(weekStart)}
-        onNext={handleNext}
         onPickDate={handlePickDate}
-        onPrev={handlePrev}
         onToday={handleToday}
       />
 
@@ -142,6 +140,8 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
               days={data.days}
               selectedDate={selectedDate}
               onArrowNav={handleArrowNav}
+              onNextWeek={handleNext}
+              onPrevWeek={handlePrev}
               onSelect={setSelectedDate}
             />
           </div>
