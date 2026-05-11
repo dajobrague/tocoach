@@ -43,9 +43,13 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useClientExerciseLogs } from "./workouts/use-client-exercise-logs";
+import { useExerciseExpandedState } from "./workouts/use-exercise-expanded-state";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
+import { type TrainerExerciseVideoHandle } from "@/components/trainer/trainer-exercise-video-modal";
 
 interface WorkoutsTabProps {
   clientId: string;
@@ -223,6 +227,36 @@ export default function WorkoutsTab({
   const [sessionForm, setSessionForm] = useState({
     name: "",
   });
+
+  // Exercise progress integration: shared log fetching, video modal,
+  // expansion state with first-of-session seeded defaults.
+  const { getLogsForExercise, getOrphanGroups } =
+    useClientExerciseLogs(clientId);
+  const { isExpanded, toggle: toggleExerciseExpanded } =
+    useExerciseExpandedState(programs);
+  const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
+  const openExerciseVideo = useCallback(
+    (url: string, name: string) => videoModalRef.current?.open(url, name),
+    []
+  );
+
+  // Set of library exercise IDs prescribed across active programs — used by
+  // the orphan section to filter off-plan logged exercises.
+  const prescribedExerciseIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const program of programs) {
+      for (const session of program.sessions) {
+        for (const exercise of session.exercises) {
+          if (exercise.exercise_id) ids.add(exercise.exercise_id);
+        }
+      }
+    }
+
+    return ids;
+  }, [programs]);
+
+  const orphanGroups = getOrphanGroups(prescribedExerciseIds);
 
   // Fetch programs from API
   const fetchPrograms = async () => {
