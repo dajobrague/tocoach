@@ -4,15 +4,29 @@ import type { PrescribedExercise } from "./types";
 
 import { useCallback, useMemo, useState } from "react";
 
+/** A single prescribed set in per-set mode. */
+export interface EditorSetRow {
+  /** Stable React key — preserved across reorders/edits. */
+  key: string;
+  setNumber: number;
+  reps: string | null;
+  weightKg: number | null;
+}
+
 export interface EditorRow {
   /** Stable React key — preserved across reorders. */
   key: string;
   exerciseId: string;
   name: string;
   category: string;
+  /** Editor mode: uniform sends sets/reps/weight; perSet sends setsDetail. */
+  mode: "uniform" | "perSet";
+  /** Uniform fields. */
   sets: number | null;
   reps: string | null;
   weightKg: number | null;
+  /** Per-set rows (only relevant when mode === "perSet"). */
+  setsDetail: EditorSetRow[];
 }
 
 interface UseDayEditor {
@@ -32,6 +46,18 @@ interface UseDayEditor {
     category: string;
   }) => void;
   removeRow: (key: string) => void;
+  /** Switch a row from uniform → per-set; pre-fills N rows with uniform values. */
+  switchToPerSet: (key: string) => void;
+  /** Switch a row from per-set → uniform; takes set 1's values as the uniform defaults. */
+  switchToUniform: (key: string) => void;
+  /** Update a per-set row's reps/weight. */
+  updateSetDetail: (
+    rowKey: string,
+    setKey: string,
+    patch: Partial<EditorSetRow>
+  ) => void;
+  addSetDetail: (rowKey: string) => void;
+  removeSetDetail: (rowKey: string, setKey: string) => void;
   /** Replace the whole list — used when the trainer swaps session. */
   replaceFromPrescribed: (
     prescribed: PrescribedExercise[],
@@ -41,19 +67,41 @@ interface UseDayEditor {
   reset: () => Promise<{ ok: boolean; locked?: boolean }>;
 }
 
-function rowKey(): string {
-  return `r-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function shortKey(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function fromPrescribed(p: PrescribedExercise): EditorRow {
+  // When the prescription carries per-set values, hydrate in perSet mode.
+  if (p.perSet && p.perSet.length > 0) {
+    return {
+      key: shortKey("r"),
+      exerciseId: p.exerciseId,
+      name: p.name,
+      category: p.category,
+      mode: "perSet",
+      sets: p.perSet.length,
+      reps: null,
+      weightKg: null,
+      setsDetail: p.perSet.map((s) => ({
+        key: shortKey("s"),
+        setNumber: s.setNumber,
+        reps: s.reps,
+        weightKg: s.weightKg,
+      })),
+    };
+  }
+
   return {
-    key: rowKey(),
+    key: shortKey("r"),
     exerciseId: p.exerciseId,
     name: p.name,
     category: p.category,
+    mode: "uniform",
     sets: p.prescribedSets > 0 ? p.prescribedSets : null,
     reps: p.prescribedReps,
     weightKg: p.prescribedWeightKg,
+    setsDetail: [],
   };
 }
 
@@ -98,13 +146,15 @@ export function useDayEditor({
       setRows((prev) => [
         ...prev,
         {
-          key: rowKey(),
+          key: shortKey("r"),
           exerciseId: input.exerciseId,
           name: input.name,
           category: input.category,
+          mode: "uniform",
           sets: null,
           reps: null,
           weightKg: null,
+          setsDetail: [],
         },
       ]);
     },
@@ -113,6 +163,109 @@ export function useDayEditor({
 
   const removeRow = useCallback((key: string) => {
     setRows((prev) => prev.filter((r) => r.key !== key));
+  }, []);
+
+  const switchToPerSet = useCallback((key: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        // Pre-fill: build N sets from current uniform values. Default to 1
+        // when sets is null/0 so the user has at least one row to edit.
+        const count = r.sets && r.sets > 0 ? r.sets : 1;
+        const detail: EditorSetRow[] = Array.from(
+          { length: count },
+          (_, i) => ({
+            key: shortKey("s"),
+            setNumber: i + 1,
+            reps: r.reps,
+            weightKg: r.weightKg,
+          })
+        );
+
+        return {
+          ...r,
+          mode: "perSet",
+          sets: count,
+          setsDetail: detail,
+        };
+      })
+    );
+  }, []);
+
+  const switchToUniform = useCallback((key: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const first = r.setsDetail[0];
+
+        return {
+          ...r,
+          mode: "uniform",
+          sets: r.setsDetail.length || r.sets,
+          reps: first?.reps ?? r.reps,
+          weightKg: first?.weightKg ?? r.weightKg,
+          setsDetail: [],
+        };
+      })
+    );
+  }, []);
+
+  const updateSetDetail = useCallback(
+    (rowKey: string, setKey: string, patch: Partial<EditorSetRow>) => {
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.key !== rowKey) return r;
+
+          return {
+            ...r,
+            setsDetail: r.setsDetail.map((s) =>
+              s.key === setKey ? { ...s, ...patch } : s
+            ),
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const addSetDetail = useCallback((rowKey: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== rowKey) return r;
+        const nextNumber = (r.setsDetail.at(-1)?.setNumber ?? 0) + 1;
+
+        return {
+          ...r,
+          sets: r.setsDetail.length + 1,
+          setsDetail: [
+            ...r.setsDetail,
+            {
+              key: shortKey("s"),
+              setNumber: nextNumber,
+              reps: null,
+              weightKg: null,
+            },
+          ],
+        };
+      })
+    );
+  }, []);
+
+  const removeSetDetail = useCallback((rowKey: string, setKey: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== rowKey) return r;
+        const next = r.setsDetail.filter((s) => s.key !== setKey);
+        // Renumber so set_number stays contiguous starting at 1.
+        const renumbered = next.map((s, i) => ({ ...s, setNumber: i + 1 }));
+
+        return {
+          ...r,
+          sets: renumbered.length,
+          setsDetail: renumbered,
+        };
+      })
+    );
   }, []);
 
   const replaceFromPrescribed = useCallback(
@@ -125,10 +278,18 @@ export function useDayEditor({
 
   const isValid = useMemo(() => {
     for (const r of rows) {
-      if (r.sets != null && r.sets <= 0) return false;
-      if (r.sets != null && r.sets > 0 && (!r.reps || r.reps.trim() === ""))
-        return false;
-      if (r.weightKg != null && r.weightKg < 0) return false;
+      if (r.mode === "uniform") {
+        if (r.sets != null && r.sets <= 0) return false;
+        if (r.sets != null && r.sets > 0 && (!r.reps || r.reps.trim() === ""))
+          return false;
+        if (r.weightKg != null && r.weightKg < 0) return false;
+      } else {
+        if (r.setsDetail.length === 0) return false;
+        for (const s of r.setsDetail) {
+          if (!s.reps || s.reps.trim() === "") return false;
+          if (s.weightKg != null && s.weightKg < 0) return false;
+        }
+      }
     }
 
     return true;
@@ -142,13 +303,26 @@ export function useDayEditor({
       const a = rows[i]!;
       const b = initialRows[i]!;
 
-      if (
-        a.exerciseId !== b.exerciseId ||
-        a.sets !== b.sets ||
-        a.reps !== b.reps ||
-        a.weightKg !== b.weightKg
-      ) {
-        return true;
+      if (a.exerciseId !== b.exerciseId) return true;
+      if (a.mode !== b.mode) return true;
+
+      if (a.mode === "uniform") {
+        if (a.sets !== b.sets || a.reps !== b.reps || a.weightKg !== b.weightKg)
+          return true;
+      } else {
+        if (a.setsDetail.length !== b.setsDetail.length) return true;
+        for (let j = 0; j < a.setsDetail.length; j++) {
+          const sa = a.setsDetail[j]!;
+          const sb = b.setsDetail[j]!;
+
+          if (
+            sa.setNumber !== sb.setNumber ||
+            sa.reps !== sb.reps ||
+            sa.weightKg !== sb.weightKg
+          ) {
+            return true;
+          }
+        }
       }
     }
 
@@ -170,13 +344,30 @@ export function useDayEditor({
           body: JSON.stringify({
             scheduledDate,
             sessionId,
-            exercises: rows.map((r, idx) => ({
-              exerciseId: r.exerciseId,
-              exerciseOrder: idx + 1,
-              sets: r.sets,
-              reps: r.reps,
-              weightKg: r.weightKg,
-            })),
+            exercises: rows.map((r, idx) => {
+              if (r.mode === "perSet") {
+                return {
+                  exerciseId: r.exerciseId,
+                  exerciseOrder: idx + 1,
+                  sets: r.setsDetail.length,
+                  reps: null,
+                  weightKg: null,
+                  setsDetail: r.setsDetail.map((s) => ({
+                    setNumber: s.setNumber,
+                    reps: s.reps,
+                    weightKg: s.weightKg,
+                  })),
+                };
+              }
+
+              return {
+                exerciseId: r.exerciseId,
+                exerciseOrder: idx + 1,
+                sets: r.sets,
+                reps: r.reps,
+                weightKg: r.weightKg,
+              };
+            }),
           }),
         }
       );
@@ -262,6 +453,11 @@ export function useDayEditor({
     reorderRows,
     addRow,
     removeRow,
+    switchToPerSet,
+    switchToUniform,
+    updateSetDetail,
+    addSetDetail,
+    removeSetDetail,
     replaceFromPrescribed,
     save,
     reset,

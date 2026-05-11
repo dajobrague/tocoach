@@ -244,8 +244,17 @@ export function DayEditor({
                       disabled={editor.saving || editor.resetting}
                       dragHandleProps={dragHandleProps}
                       row={row}
+                      onAddSet={() => editor.addSetDetail(row.key)}
                       onChange={(patch) => editor.updateRow(row.key, patch)}
                       onRemove={() => editor.removeRow(row.key)}
+                      onRemoveSet={(setKey) =>
+                        editor.removeSetDetail(row.key, setKey)
+                      }
+                      onSwitchToPerSet={() => editor.switchToPerSet(row.key)}
+                      onSwitchToUniform={() => editor.switchToUniform(row.key)}
+                      onUpdateSet={(setKey, patch) =>
+                        editor.updateSetDetail(row.key, setKey, patch)
+                      }
                     />
                   )}
                 </SortableEditorItem>
