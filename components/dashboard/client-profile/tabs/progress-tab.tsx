@@ -20,9 +20,9 @@ import { NeatSection } from "./progress/neat-section";
 
 import { resolveStepsAnswer } from "@/lib/forms/analytics-keys";
 import {
-  VerticalVideoPlayerModal,
-  type VerticalVideoPlayerHandle,
-} from "@/components/client-dashboard/vertical-video-player-modal";
+  TrainerExerciseVideoModal,
+  type TrainerExerciseVideoHandle,
+} from "@/components/trainer/trainer-exercise-video-modal";
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
   const [stepsData, setStepsData] = useState<StepsPoint[]>([]);
   const [stepsLoading, setStepsLoading] = useState(true);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const videoPlayerRef = useRef<VerticalVideoPlayerHandle>(null);
+  const videoPlayerRef = useRef<TrainerExerciseVideoHandle>(null);
 
   const openVideo = useCallback((url: string, name: string) => {
     videoPlayerRef.current?.open(url, name);
@@ -237,7 +237,7 @@ export default function ProgressTab({ clientId }: { clientId: string }) {
         </>
       )}
 
-      <VerticalVideoPlayerModal ref={videoPlayerRef} />
+      <TrainerExerciseVideoModal ref={videoPlayerRef} />
     </div>
   );
 }
