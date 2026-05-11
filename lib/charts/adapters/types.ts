@@ -19,6 +19,7 @@ import type {
   BucketedPoint,
   ChartDataSource,
   DateRange,
+  PhotoPoint,
 } from "../types";
 
 /**
@@ -72,7 +73,20 @@ export interface AdapterContext {
  */
 export interface DataAdapter {
   metadata: ChartDataSource;
+  /**
+   * Bucketed numeric output. Adapters whose `metadata.dimensions === "photo"`
+   * still implement this — they return an empty array because photo
+   * sources don't bucket. The snapshot endpoint dispatches to
+   * `photoTimeline()` instead based on chart_type.
+   */
   materialize(ctx: AdapterContext, aggregation: Aggregation): BucketedPoint[];
+  /**
+   * Photo-timeline output, ordered oldest → newest. Only present on
+   * adapters whose `metadata.dimensions === "photo"`. The snapshot
+   * endpoint trusts this and the renderer trusts it — clients can rely
+   * on it being sorted.
+   */
+  photoTimeline?(ctx: AdapterContext): PhotoPoint[];
 }
 
 /**

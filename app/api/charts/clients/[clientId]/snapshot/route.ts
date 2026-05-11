@@ -18,6 +18,7 @@ import type {
   Aggregation,
   BucketedPoint,
   ChartConfig,
+  PhotoPoint,
 } from "@/lib/charts/types";
 import type {
   AdapterContext,
@@ -32,6 +33,7 @@ import { loadEffectiveClientCharts } from "@/lib/charts/server/template-loader";
 import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { buildFormQuestionAdapter } from "@/lib/charts/adapters/form-question";
 import {
   DEFAULT_CHECKIN_SCHEDULE,
   type CheckInSchedule,
@@ -342,8 +344,29 @@ export async function GET(
       string,
       { buckets: BucketedPoint[]; aggregationFallback: boolean }
     > = {};
+    const photoBuckets: Record<string, { photos: PhotoPoint[] }> = {};
 
     for (const chart of visibleCharts.charts) {
+      // Photo timeline charts use a different output shape (PhotoPoint[]
+      // instead of BucketedPoint[]). Resolve a photo adapter directly here
+      // — the catalog-vs-form_question generic resolveAdapter doesn't know
+      // a question is of type photo (it'd return a numeric adapter), so
+      // we build the photo adapter inline from the ref.
+      if (
+        chart.chart_type === "photo_timeline" &&
+        chart.source.kind === "form_question"
+      ) {
+        const photoAdapter = buildFormQuestionAdapter({
+          formType: chart.source.form_type,
+          questionId: chart.source.question_id,
+          label: chart.label,
+          kind: "photo",
+        });
+        const photos = photoAdapter.photoTimeline?.(ctx) ?? [];
+
+        photoBuckets[chart.id] = { photos };
+        continue;
+      }
       buckets[chart.id] = materializeWithCap(chart, ctx, rangeKey);
     }
 
@@ -355,6 +378,7 @@ export async function GET(
         schedule,
         range: { from: range.from.toISOString(), to: range.to.toISOString() },
         buckets,
+        photoBuckets,
       },
     });
   } catch (err) {

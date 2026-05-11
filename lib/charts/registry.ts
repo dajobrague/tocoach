@@ -86,6 +86,13 @@ export interface FormTemplateRow {
  */
 const NUMERIC_QUESTION_TYPES = new Set(["number", "rating"]);
 
+/**
+ * Question types that surface as photo-timeline sources. Only `photo` at
+ * the moment — `group` containers with photo sub-questions are deferred
+ * to a follow-up (would require expansion logic in the adapter).
+ */
+const PHOTO_QUESTION_TYPES = new Set(["photo"]);
+
 function isQuestionConfigArray(v: unknown): v is QuestionConfig[] {
   return Array.isArray(v);
 }
@@ -127,16 +134,20 @@ export function buildFormQuestionAdaptersFromTemplates(
     const questions = extractQuestions(tpl.questions_config);
 
     for (const q of questions) {
-      if (!NUMERIC_QUESTION_TYPES.has(String(q.type).toLowerCase())) continue;
       if (!q.id) continue;
-      // Skip disabled questions — matches what the form renderer does.
       if (q.enabled === false) continue;
+      const qType = String(q.type).toLowerCase();
+      const isNumeric = NUMERIC_QUESTION_TYPES.has(qType);
+      const isPhoto = PHOTO_QUESTION_TYPES.has(qType);
+
+      if (!isNumeric && !isPhoto) continue;
       out.push(
         buildFormQuestionAdapter({
           formType: tpl.form_type,
           questionId: q.id,
           label: q.label || q.id,
           ...(q.unit !== undefined ? { unit: q.unit } : {}),
+          ...(isPhoto ? { kind: "photo" as const } : {}),
         })
       );
     }

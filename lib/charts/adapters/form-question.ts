@@ -26,6 +26,7 @@ import type {
   ChartDataSource,
   ColorToken,
   FormType,
+  PhotoPoint,
 } from "../types";
 import type { AdapterContext, DataAdapter } from "./types";
 
@@ -40,6 +41,48 @@ export interface FormQuestionAdapterSpec {
   label: string;
   /** Optional unit suffix (e.g. "cm", "kg"). */
   unit?: string;
+  /**
+   * Set to `"photo"` for form questions of `type: "photo"`. The adapter
+   * routes through a photo timeline path instead of numeric bucketing.
+   * Defaults to numeric.
+   */
+  kind?: "numeric" | "photo";
+}
+
+const ES_SHORT_MONTHS = [
+  "ene",
+  "feb",
+  "mar",
+  "abr",
+  "may",
+  "jun",
+  "jul",
+  "ago",
+  "sep",
+  "oct",
+  "nov",
+  "dic",
+];
+
+function shortEsDateLabel(ymd: string): string {
+  // ymd format: "YYYY-MM-DD". Build "4 may" / "23 dic" without going
+  // through Date (which would apply local TZ shifts at midnight).
+  const parts = ymd.split("-");
+
+  if (parts.length !== 3) return ymd;
+  const monthIdx = Number(parts[1]) - 1;
+  const day = Number(parts[2]);
+
+  if (
+    !Number.isFinite(day) ||
+    monthIdx < 0 ||
+    monthIdx > 11 ||
+    !ES_SHORT_MONTHS[monthIdx]
+  ) {
+    return ymd;
+  }
+
+  return `${day} ${ES_SHORT_MONTHS[monthIdx]}`;
 }
 
 const FALLBACK_COLOR: ColorToken = "neutral-slate";
@@ -53,18 +96,20 @@ export function buildFormQuestionAdapter(
   spec: FormQuestionAdapterSpec
 ): DataAdapter {
   const id = `form_q:${spec.formType}:${spec.questionId}`;
+  const isPhoto = spec.kind === "photo";
 
   const metadata: ChartDataSource = {
     id,
     label: spec.label,
     ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
     category: spec.formType === "checkins" ? "checkin" : "habit",
-    dimensions: 1,
-    default_chart_type: "area",
+    dimensions: isPhoto ? "photo" : 1,
+    default_chart_type: isPhoto ? "photo_timeline" : "area",
     default_color: FALLBACK_COLOR,
+    ...(isPhoto ? { icon: "solar:gallery-bold" } : {}),
   };
 
-  const resolve = (r: FormResponse): number | null => {
+  const resolveNumeric = (r: FormResponse): number | null => {
     if (!r.answers) return null;
     if (!(spec.questionId in r.answers)) return null;
     const raw = r.answers[spec.questionId];
@@ -81,6 +126,12 @@ export function buildFormQuestionAdapter(
       ctx: AdapterContext,
       aggregation: Aggregation
     ): BucketedPoint[] {
+      // Photo adapters don't produce numeric buckets; the snapshot
+      // endpoint dispatches to `photoTimeline()` instead. Returning an
+      // empty array here means a chart pointed at a photo question that
+      // somehow got chart_type !== "photo_timeline" renders as no-data
+      // rather than crashing.
+      if (isPhoto) return [];
       const responses =
         spec.formType === "checkins"
           ? ctx.formResponses.checkins
@@ -97,13 +148,50 @@ export function buildFormQuestionAdapter(
         value: averageInWindow(
           responses,
           w,
-          resolve,
+          resolveNumeric,
           ctx.schedule,
           ctx.clientTz
         ),
         periodTooltip: w.tooltip,
       }));
     },
+    ...(isPhoto
+      ? {
+          photoTimeline(ctx: AdapterContext): PhotoPoint[] {
+            const responses =
+              spec.formType === "checkins"
+                ? ctx.formResponses.checkins
+                : ctx.formResponses.habits;
+
+            const points: PhotoPoint[] = [];
+
+            for (const r of responses) {
+              if (!r.answers) continue;
+              const raw = r.answers[spec.questionId];
+
+              if (typeof raw !== "string" || raw.length === 0) continue;
+              // response_date is YYYY-MM-DD; the renderer formats the
+              // display label, but adapters set a sensible default so a
+              // missing dateLabel never blanks out the card.
+              const date = (r.response_date as string) ?? "";
+
+              if (!date) continue;
+              points.push({
+                date,
+                url: raw,
+                label: shortEsDateLabel(date),
+              });
+            }
+
+            // Oldest → newest so the renderer can render left → right
+            // (progress reads naturally over time). Photos from the same
+            // day are kept in array order (first submit wins for ties).
+            points.sort((a, b) => a.date.localeCompare(b.date));
+
+            return points;
+          },
+        }
+      : {}),
   };
 }
 
