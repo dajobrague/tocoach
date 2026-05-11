@@ -106,3 +106,26 @@ export function buildFormQuestionAdapter(
     },
   };
 }
+
+/**
+ * Parse a `form_q:<form_type>:<question_id>` adapter id back into its
+ * constituent parts. Returns null when the input is not a form-question
+ * adapter id (catalog ids, malformed ids).
+ */
+export function parseFormQuestionAdapterId(
+  id: string
+): { formType: "checkins" | "habits"; questionId: string } | null {
+  if (!id.startsWith("form_q:")) return null;
+  const rest = id.slice("form_q:".length);
+  const sep = rest.indexOf(":");
+
+  if (sep <= 0) return null;
+  const formType = rest.slice(0, sep);
+
+  if (formType !== "checkins" && formType !== "habits") return null;
+  const questionId = rest.slice(sep + 1);
+
+  if (questionId.length === 0) return null;
+
+  return { formType, questionId };
+}

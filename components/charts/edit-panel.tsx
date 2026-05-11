@@ -43,6 +43,7 @@ import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
 import { COLOR_TOKENS, resolveColor } from "@/lib/charts/palette";
+import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 
 const CHART_TYPES: {
   id: ChartType;
@@ -100,30 +101,30 @@ function dataSourceRefKey(ref: DataSourceRef): string {
 }
 
 function adapterKey(source: ChartDataSource): string {
-  if (source.id.startsWith("form_q:")) {
-    // We need form_type from somewhere — encode it into id when listing.
-    // The data-sources endpoint returns the metadata id as `form_q:<question_id>`,
-    // but we need form_type to construct the ref. We rely on the catalog
-    // `category` field to recover form_type since form_q sources have
-    // category "checkin" or "habit".
-    const formType = source.category === "checkin" ? "checkins" : "habits";
-    const questionId = source.id.replace(/^form_q:/, "");
-
-    return `form_q:${formType}:${questionId}`;
-  }
+  // For form-question sources, the id already encodes form_type and is
+  // identical to what `dataSourceRefKey` produces for the corresponding
+  // DataSourceRef — no reconstruction needed. Catalog ids get the prefix
+  // here so the two namespaces don't collide in the Select.
+  if (source.id.startsWith("form_q:")) return source.id;
 
   return `catalog:${source.id}`;
 }
 
 function refFromAdapter(source: ChartDataSource): DataSourceRef {
   if (source.id.startsWith("form_q:")) {
-    const formType: "checkins" | "habits" =
-      source.category === "checkin" ? "checkins" : "habits";
+    const parsed = parseFormQuestionAdapterId(source.id);
+
+    if (!parsed) {
+      // Defensive — the data-sources endpoint should never emit malformed
+      // ids. Falling back to a catalog ref would silently swap source kind,
+      // so throw instead so the UI surfaces it loudly.
+      throw new Error(`Malformed form-question adapter id: ${source.id}`);
+    }
 
     return {
       kind: "form_question",
-      form_type: formType,
-      question_id: source.id.replace(/^form_q:/, ""),
+      form_type: parsed.formType,
+      question_id: parsed.questionId,
     };
   }
 

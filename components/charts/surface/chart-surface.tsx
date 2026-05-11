@@ -51,6 +51,7 @@ import {
 } from "@/lib/charts/hooks";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 import { buildStarterDocument } from "@/lib/charts/starter";
 
 type SurfaceMode = "trainer-template" | "trainer-client" | "client-readonly";
@@ -74,16 +75,22 @@ function buildAddChartConfig(
   position: number
 ): ChartConfig {
   const isMulti = source.dimensions === "multi";
-  const ref = source.id.startsWith("form_q:")
-    ? {
-        kind: "form_question" as const,
-        form_type:
-          source.category === "checkin"
-            ? ("checkins" as const)
-            : ("habits" as const),
-        question_id: source.id.replace(/^form_q:/, ""),
-      }
-    : { kind: "catalog" as const, id: source.id as never };
+  let ref: ChartConfig["source"];
+
+  if (source.id.startsWith("form_q:")) {
+    const parsed = parseFormQuestionAdapterId(source.id);
+
+    if (!parsed) {
+      throw new Error(`Malformed form-question adapter id: ${source.id}`);
+    }
+    ref = {
+      kind: "form_question",
+      form_type: parsed.formType,
+      question_id: parsed.questionId,
+    };
+  } else {
+    ref = { kind: "catalog", id: source.id as never };
+  }
 
   return {
     id: newChartId(),
