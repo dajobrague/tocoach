@@ -126,17 +126,17 @@ export async function PUT(
       }
     }
 
-    // ── Validate referenced sessionId belongs to tenant ────────────
-    // Note: clients.tenant stores the trainer's UUID (already checked above);
-    // sessions/exercises store tenant_host (the actual tenant host string).
+    // ── Validate referenced sessionId belongs to trainer ───────────
+    // Sessions and exercises both carry trainer_id; that's the canonical
+    // ownership check across the rest of the trainer-side endpoints.
     if (body.sessionId) {
       const { data: sess, error: sessError } = await supabase
         .from("sessions")
-        .select("id, tenant_host")
+        .select("id, trainer_id")
         .eq("id", body.sessionId)
         .single();
 
-      if (sessError || !sess || sess.tenant_host !== session.tenant_host) {
+      if (sessError || !sess || sess.trainer_id !== session.trainer_id) {
         return NextResponse.json(
           { success: false, error: "sessionId inválido" },
           { status: 400 }
@@ -144,12 +144,12 @@ export async function PUT(
       }
     }
 
-    // ── Validate referenced exercise_ids belong to tenant ──────────
+    // ── Validate referenced exercise_ids belong to trainer ─────────
     if (body.exercises.length > 0) {
       const exerciseIds = body.exercises.map((e) => e.exerciseId);
       const { data: foundEx, error: exError } = await supabase
         .from("exercises")
-        .select("id, tenant_host")
+        .select("id, trainer_id")
         .in("id", exerciseIds);
 
       if (exError || !foundEx) {
@@ -161,7 +161,7 @@ export async function PUT(
 
       const validIds = new Set(
         foundEx
-          .filter((e) => e.tenant_host === session.tenant_host)
+          .filter((e) => e.trainer_id === session.trainer_id)
           .map((e) => e.id)
       );
 
