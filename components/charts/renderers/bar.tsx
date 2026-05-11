@@ -26,7 +26,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { avgNonNull, xAxisInterval } from "../utils";
+import { avgNonNull, formatNumber, xAxisInterval } from "../utils";
 
 import { resolveColor, resolveTargetZoneFill } from "@/lib/charts/palette";
 
@@ -112,7 +112,7 @@ export function BarRenderer({
                 <p className="text-[11px] text-gray-600 mb-0.5">{row.label}</p>
                 <p className="text-sm font-semibold">
                   {row.hasValue
-                    ? `${Number(row.value).toLocaleString("es-ES")}${unit ?? ""}`
+                    ? `${formatNumber(Number(row.value), 2, 0)}${unit ?? ""}`
                     : "—"}
                 </p>
               </div>

@@ -536,16 +536,43 @@ export function ChartEditPanel({
             )}
           </div>
 
-          {/* VISIBILITY — trainer-only vs shared with client */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <div>
-                <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase">
-                  Privado
-                </p>
-                <p className="text-[10px] text-foreground/40 leading-relaxed">
-                  Solo visible para mí. El cliente no la ve en su dashboard.
-                </p>
+          {/* VISIBILITY — trainer-only vs shared with client. Same amber
+              palette as the "Solo para ti" section header in the surface
+              so the trainer associates the two at a glance. */}
+          <div
+            className={
+              config.visibility === "trainer_only"
+                ? "rounded-lg border border-amber-300/60 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/[0.06] p-3"
+                : "rounded-lg border border-default-200 bg-default-50/50 p-3"
+            }
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <Icon
+                  className={
+                    config.visibility === "trainer_only"
+                      ? "text-amber-700 dark:text-amber-400 mt-0.5"
+                      : "text-foreground/40 mt-0.5"
+                  }
+                  icon={
+                    config.visibility === "trainer_only"
+                      ? "solar:lock-bold"
+                      : "solar:users-group-rounded-bold"
+                  }
+                  width={14}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">
+                    {config.visibility === "trainer_only"
+                      ? "Solo para ti"
+                      : "Compartida con el cliente"}
+                  </p>
+                  <p className="text-[10px] text-foreground/50 leading-snug">
+                    {config.visibility === "trainer_only"
+                      ? "El cliente no verá esta gráfica en su dashboard."
+                      : "El cliente la ve en su dashboard."}
+                  </p>
+                </div>
               </div>
               <Switch
                 aria-label="Gráfica privada"

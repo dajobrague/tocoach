@@ -27,7 +27,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { avgNonNull, xAxisInterval } from "../utils";
+import { avgNonNull, formatNumber, xAxisInterval } from "../utils";
 
 import { resolveColor } from "@/lib/charts/palette";
 
@@ -139,7 +139,7 @@ export function LineAreaRenderer({
                 <p className="text-sm font-semibold">
                   {row.value === undefined
                     ? "—"
-                    : `${Number(row.value).toLocaleString("es-ES")}${unit ?? ""}`}
+                    : `${formatNumber(Number(row.value), 2, 0)}${unit ?? ""}`}
                 </p>
               </div>
             );

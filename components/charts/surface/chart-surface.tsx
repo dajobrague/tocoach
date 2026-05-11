@@ -298,20 +298,47 @@ export function ChartSurface({ mode, clientId }: Props) {
     const idx = doc.charts.findIndex((c) => c.id === next.id);
 
     if (idx < 0) return;
+    const prev = doc.charts[idx];
+    const wasPrivate = prev?.visibility === "trainer_only";
+    const isPrivate = next.visibility === "trainer_only";
+
+    // When the trainer toggles "Privado", auto-move the chart to the end
+    // of its NEW section so it appears predictably at the bottom of
+    // "Privadas" / "Compartidas" instead of staying buried in the middle
+    // of the previous section.
+    if (wasPrivate !== isPrivate) {
+      const without = doc.charts.filter((c) => c.id !== next.id);
+      const repositioned = [...without, next].map((c, i) => ({
+        ...c,
+        position: i,
+      }));
+
+      setDoc({ ...doc, charts: repositioned });
+
+      return;
+    }
     const charts = [...doc.charts];
 
     charts[idx] = { ...next, position: idx };
     setDoc({ ...doc, charts });
   };
 
-  const handleAdd = async (sourceId: string): Promise<void> => {
+  const handleAdd = async (
+    sourceId: string,
+    visibility?: "trainer_only"
+  ): Promise<void> => {
     if (!doc) return;
     const source = sourceById.get(sourceId);
 
     if (!source) return;
+    const newChart = buildAddChartConfig(source, doc.charts.length);
+
+    if (visibility === "trainer_only") {
+      newChart.visibility = "trainer_only";
+    }
     const next: ChartsDocument = {
       ...doc,
-      charts: [...doc.charts, buildAddChartConfig(source, doc.charts.length)],
+      charts: [...doc.charts, newChart],
     };
 
     setDoc(next);
@@ -337,13 +364,46 @@ export function ChartSurface({ mode, clientId }: Props) {
     const idx = doc.charts.findIndex((c) => c.id === chartId);
 
     if (idx < 0) return;
-    const target = idx + dir;
+    const current = doc.charts[idx];
 
-    if (target < 0 || target >= doc.charts.length) return;
+    if (!current) return;
+    const currentIsPrivate = current.visibility === "trainer_only";
+
+    // Move only within the same visibility group: find the nearest
+    // chart in the same section (skipping over charts from the other
+    // group). This keeps the up/down arrows in "Compartidas" from
+    // accidentally crossing into "Privadas" and vice versa.
+    let target = -1;
+
+    if (dir === -1) {
+      for (let i = idx - 1; i >= 0; i--) {
+        const c = doc.charts[i];
+
+        if (!c) continue;
+        if ((c.visibility === "trainer_only") === currentIsPrivate) {
+          target = i;
+          break;
+        }
+      }
+    } else {
+      for (let i = idx + 1; i < doc.charts.length; i++) {
+        const c = doc.charts[i];
+
+        if (!c) continue;
+        if ((c.visibility === "trainer_only") === currentIsPrivate) {
+          target = i;
+          break;
+        }
+      }
+    }
+    if (target < 0) return;
     const charts = [...doc.charts];
-    const [moved] = charts.splice(idx, 1);
+    const a = charts[idx];
+    const b = charts[target];
 
-    charts.splice(target, 0, moved!);
+    if (!a || !b) return;
+    charts[idx] = b;
+    charts[target] = a;
     const renumbered = charts.map((c, i) => ({ ...c, position: i }));
 
     setDoc({ ...doc, charts: renumbered });
@@ -544,16 +604,31 @@ export function ChartSurface({ mode, clientId }: Props) {
         </div>
       ) : null}
 
-      {/* Grid */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-        {renderData.map(({ chart, adapter, buckets, series }, idx) => {
+      {/* Partition by visibility — two sections with distinct headers.
+          The split is purely a render concern; the underlying doc.charts
+          array stays a single flat list, and visibility is a property on
+          each chart (handleMove and handleChartChange respect the group). */}
+      {(() => {
+        const sharedRender = renderData.filter(
+          (d) => d.chart.visibility !== "trainer_only"
+        );
+        const privateRender = renderData.filter(
+          (d) => d.chart.visibility === "trainer_only"
+        );
+
+        const renderCard = (
+          d: (typeof renderData)[number],
+          localIdx: number,
+          localCount: number
+        ) => {
+          const { chart, adapter, buckets, series } = d;
           const overlay =
             editMode && !isReadOnly ? (
               <>
                 <button
                   aria-label="Subir"
                   className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
-                  disabled={idx === 0}
+                  disabled={localIdx === 0}
                   type="button"
                   onClick={() => void handleMove(chart.id, -1)}
                 >
@@ -562,7 +637,7 @@ export function ChartSurface({ mode, clientId }: Props) {
                 <button
                   aria-label="Bajar"
                   className="w-6 h-6 rounded-full bg-default-100 hover:bg-default-200 flex items-center justify-center disabled:opacity-30"
-                  disabled={idx === doc.charts.length - 1}
+                  disabled={localIdx === localCount - 1}
                   type="button"
                   onClick={() => void handleMove(chart.id, 1)}
                 >
@@ -609,18 +684,109 @@ export function ChartSurface({ mode, clientId }: Props) {
               {...(series !== undefined ? { series } : {})}
             />
           );
-        })}
-        {editMode && !isReadOnly ? (
-          <AddChartCard
-            isLoading={sourcesQuery.isLoading}
-            sources={sources}
-            onAdd={handleAdd}
-            {...(sourcesQuery.error
-              ? { error: sourcesQuery.error as Error }
-              : {})}
-          />
-        ) : null}
-      </div>
+        };
+
+        // Each section appears when EITHER it has charts OR we're in edit
+        // mode (so the trainer always has a clear "Añadir" affordance for
+        // both groups). The private section is suppressed entirely on the
+        // read-only client surface — the server already filters those
+        // charts out, so this just avoids rendering an empty header.
+        const showShared = sharedRender.length > 0 || (editMode && !isReadOnly);
+        const showPrivate =
+          !isReadOnly && (privateRender.length > 0 || editMode);
+
+        return (
+          <>
+            {showShared ? (
+              <section className="mb-6">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="p-1.5 rounded-full bg-default-100 flex-shrink-0 mt-0.5">
+                      <Icon
+                        className="text-foreground/60"
+                        icon="solar:users-group-rounded-bold"
+                        width={14}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Compartidas con cliente
+                      </h3>
+                      <p className="text-[11px] text-foreground/50 leading-snug">
+                        Tu cliente ve estas gráficas en su dashboard.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-foreground/40 flex-shrink-0 mt-1 uppercase tracking-wider">
+                    {sharedRender.length}{" "}
+                    {sharedRender.length === 1 ? "gráfica" : "gráficas"}
+                  </span>
+                </div>
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                  {sharedRender.map((d, i) =>
+                    renderCard(d, i, sharedRender.length)
+                  )}
+                  {editMode && !isReadOnly ? (
+                    <AddChartCard
+                      isLoading={sourcesQuery.isLoading}
+                      sources={sources}
+                      onAdd={(id) => handleAdd(id)}
+                      {...(sourcesQuery.error
+                        ? { error: sourcesQuery.error as Error }
+                        : {})}
+                    />
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
+            {showPrivate ? (
+              <section>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="p-1.5 rounded-full bg-amber-100/60 dark:bg-amber-500/15 flex-shrink-0 mt-0.5">
+                      <Icon
+                        className="text-amber-700 dark:text-amber-400"
+                        icon="solar:lock-bold"
+                        width={14}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Solo para ti · Privadas
+                      </h3>
+                      <p className="text-[11px] text-foreground/50 leading-snug">
+                        El cliente no las ve. Útiles para notas internas o
+                        métricas de seguimiento.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-foreground/40 flex-shrink-0 mt-1 uppercase tracking-wider">
+                    {privateRender.length}{" "}
+                    {privateRender.length === 1 ? "gráfica" : "gráficas"}
+                  </span>
+                </div>
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                  {privateRender.map((d, i) =>
+                    renderCard(d, i, privateRender.length)
+                  )}
+                  {editMode && !isReadOnly ? (
+                    <AddChartCard
+                      private
+                      isLoading={sourcesQuery.isLoading}
+                      sources={sources}
+                      onAdd={(id) => handleAdd(id, "trainer_only")}
+                      {...(sourcesQuery.error
+                        ? { error: sourcesQuery.error as Error }
+                        : {})}
+                    />
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+          </>
+        );
+      })()}
 
       {/* Empty state */}
       {doc.charts.length === 0 && !editMode ? (
@@ -707,11 +873,18 @@ function AddChartCard({
   isLoading,
   error,
   onAdd,
+  private: isPrivateAdd,
 }: {
   sources: ChartDataSource[];
   isLoading: boolean;
   error?: Error | null;
   onAdd: (sourceId: string) => Promise<void>;
+  /**
+   * When true, the dashed card hints visually (lock icon + label) that
+   * any chart added here will land in the trainer-private section. The
+   * actual visibility flag is applied by the caller via `onAdd`.
+   */
+  private?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -726,12 +899,26 @@ function AddChartCard({
   if (!open) {
     return (
       <button
-        className="rounded-xl border-2 border-dashed border-default-300 bg-default-50 hover:border-foreground/30 hover:bg-default-100 p-6 flex flex-col items-center justify-center gap-2 text-foreground/50 hover:text-foreground/70 transition-colors min-h-[200px] cursor-pointer"
+        className={
+          isPrivateAdd
+            ? "rounded-xl border-2 border-dashed border-amber-300/70 dark:border-amber-500/40 bg-amber-50/40 dark:bg-amber-500/[0.04] hover:border-amber-500/60 hover:bg-amber-50 dark:hover:bg-amber-500/10 p-6 flex flex-col items-center justify-center gap-2 text-amber-700/70 dark:text-amber-400/70 hover:text-amber-800 transition-colors min-h-[200px] cursor-pointer"
+            : "rounded-xl border-2 border-dashed border-default-300 bg-default-50 hover:border-foreground/30 hover:bg-default-100 p-6 flex flex-col items-center justify-center gap-2 text-foreground/50 hover:text-foreground/70 transition-colors min-h-[200px] cursor-pointer"
+        }
         type="button"
         onClick={() => setOpen(true)}
       >
-        <Icon icon="solar:add-circle-bold" width={32} />
-        <span className="text-sm font-medium">Añadir gráfica</span>
+        <Icon
+          icon={isPrivateAdd ? "solar:lock-bold" : "solar:add-circle-bold"}
+          width={32}
+        />
+        <span className="text-sm font-medium">
+          {isPrivateAdd ? "Añadir gráfica privada" : "Añadir gráfica"}
+        </span>
+        {isPrivateAdd ? (
+          <span className="text-[10px] text-current opacity-70 leading-tight text-center max-w-[180px]">
+            El cliente no la verá
+          </span>
+        ) : null}
       </button>
     );
   }
