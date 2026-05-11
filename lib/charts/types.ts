@@ -158,6 +158,19 @@ export interface ChartConfig {
    * (form_question) or override the catalog adapter's default.
    */
   icon?: string;
+  /**
+   * Who can see this chart on the client's dashboard.
+   * - "shared" (or undefined): the chart appears on both the trainer's
+   *   view of the client AND the client's own dashboard.
+   * - "trainer_only": the chart appears ONLY on the trainer's view —
+   *   filtered out server-side from any response served to a client
+   *   session. Lets trainers track per-client metrics they don't want
+   *   the client to see (internal notes, adherence flags, etc.).
+   *
+   * `undefined` is treated as "shared" so every chart stored before this
+   * field existed keeps its existing behavior.
+   */
+  visibility?: "shared" | "trainer_only";
 }
 
 export interface ChartsDocument {

@@ -171,6 +171,19 @@ export function ChartCard({
             <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate">
               {config.label}
             </p>
+            {config.visibility === "trainer_only" ? (
+              // Solo se ve en la vista del trainer: el server filtra estos
+              // charts antes de enviárselos al cliente, así que renderizar
+              // este badge incondicionalmente no fuga nada — si el chart
+              // está en pantalla, el caller es trainer.
+              <span
+                className="flex items-center gap-0.5 text-[9px] uppercase tracking-wider text-foreground/55 bg-default-100 px-1.5 py-0.5 rounded flex-shrink-0"
+                title="Solo visible para ti"
+              >
+                <Icon icon="solar:lock-bold" width={9} />
+                Privado
+              </span>
+            ) : null}
           </div>
           {editable && editOverlay ? (
             <div className="flex items-center gap-1 flex-shrink-0">

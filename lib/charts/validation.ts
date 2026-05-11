@@ -141,6 +141,10 @@ export const chartConfigSchema = z
     // restricts the practical surface to a curated grid plus a free-form
     // input.
     icon: z.string().min(1).max(80).optional(),
+    // Audience filter. Undefined = "shared". When "trainer_only", the
+    // chart is dropped from any snapshot/list response served to a client
+    // session — see lib/charts/server/visibility.ts.
+    visibility: z.enum(["shared", "trainer_only"]).optional(),
   })
   .superRefine((cfg, ctx) => {
     const multiDim = isMultiDim(cfg.chart_type);

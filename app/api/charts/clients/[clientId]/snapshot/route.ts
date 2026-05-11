@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { authorizeClientAccess } from "@/lib/charts/server/auth";
 import { loadEffectiveClientCharts } from "@/lib/charts/server/template-loader";
+import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import {
@@ -329,12 +330,20 @@ export async function GET(
       clientTz: tzParam,
     };
 
+    // Drop trainer-only charts when serving a client session. We filter
+    // BEFORE computing buckets so no bucket payload leaks for a chart the
+    // client can't see.
+    const visibleCharts = filterChartsForAudience(
+      effective.charts,
+      auth.actor.kind
+    );
+
     const buckets: Record<
       string,
       { buckets: BucketedPoint[]; aggregationFallback: boolean }
     > = {};
 
-    for (const chart of effective.charts.charts) {
+    for (const chart of visibleCharts.charts) {
       buckets[chart.id] = materializeWithCap(chart, ctx, rangeKey);
     }
 
@@ -342,7 +351,7 @@ export async function GET(
       success: true,
       data: {
         source: effective.source,
-        effective_charts: effective.charts,
+        effective_charts: visibleCharts,
         schedule,
         range: { from: range.from.toISOString(), to: range.to.toISOString() },
         buckets,

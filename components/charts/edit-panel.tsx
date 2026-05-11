@@ -536,6 +536,35 @@ export function ChartEditPanel({
             )}
           </div>
 
+          {/* VISIBILITY — trainer-only vs shared with client */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase">
+                  Privado
+                </p>
+                <p className="text-[10px] text-foreground/40 leading-relaxed">
+                  Solo visible para mí. El cliente no la ve en su dashboard.
+                </p>
+              </div>
+              <Switch
+                aria-label="Gráfica privada"
+                isSelected={config.visibility === "trainer_only"}
+                size="sm"
+                onValueChange={(on) => {
+                  if (on) {
+                    update({ visibility: "trainer_only" });
+                  } else {
+                    const { visibility: _v, ...rest } = config;
+
+                    void _v;
+                    onChange(rest as ChartConfig);
+                  }
+                }}
+              />
+            </div>
+          </div>
+
           {/* ICON */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
