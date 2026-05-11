@@ -106,6 +106,14 @@ function buildAddChartConfig(
   };
 }
 
+function formTypeLabel(source: ChartDataSource): string | null {
+  if (!source.id.startsWith("form_q:")) return null;
+  if (source.category === "checkin") return "Check-in";
+  if (source.category === "habit") return "Hábitos";
+
+  return null;
+}
+
 export function ChartSurface({ mode, clientId }: Props) {
   // Period selector for trainer-client / client-readonly. Trainer-template
   // never queries the snapshot — it always renders synthesized demo data.
@@ -776,26 +784,35 @@ function AddChartCard({
               onChange={(e) => setFilter(e.target.value)}
             />
             <div className="overflow-y-auto max-h-[180px] -mx-1">
-              {filtered.map((s) => (
-                <button
-                  key={s.id}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
-                  type="button"
-                  onClick={() => {
-                    void onAdd(s.id);
-                    setOpen(false);
-                    setFilter("");
-                  }}
-                >
-                  {s.icon ? <Icon icon={s.icon} width={14} /> : null}
-                  <span className="flex-1">{s.label}</span>
-                  {s.unit ? (
-                    <span className="text-foreground/40 text-[10px]">
-                      {s.unit}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+              {filtered.map((s) => {
+                const ft = formTypeLabel(s);
+
+                return (
+                  <button
+                    key={s.id}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
+                    type="button"
+                    onClick={() => {
+                      void onAdd(s.id);
+                      setOpen(false);
+                      setFilter("");
+                    }}
+                  >
+                    {s.icon ? <Icon icon={s.icon} width={14} /> : null}
+                    <span className="flex-1">{s.label}</span>
+                    {ft ? (
+                      <span className="text-[9px] uppercase tracking-wider text-foreground/50 bg-default-100 px-1.5 py-0.5 rounded">
+                        {ft}
+                      </span>
+                    ) : null}
+                    {s.unit ? (
+                      <span className="text-foreground/40 text-[10px]">
+                        {s.unit}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
               {filtered.length === 0 ? (
                 <p className="text-xs text-foreground/40 text-center py-3">
                   Ninguna coincidencia.

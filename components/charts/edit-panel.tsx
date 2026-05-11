@@ -304,19 +304,34 @@ export function ChartEditPanel({
               size="sm"
               onChange={(e) => handleSourceChange(e.target.value)}
             >
-              {sources.map((s) => (
-                <SelectItem key={adapterKey(s)} textValue={s.label}>
-                  <div className="flex items-center gap-2">
-                    {s.icon ? <Icon icon={s.icon} width={14} /> : null}
-                    <span>{s.label}</span>
-                    {s.unit ? (
-                      <span className="text-foreground/40 text-[10px]">
-                        ({s.unit})
-                      </span>
-                    ) : null}
-                  </div>
-                </SelectItem>
-              ))}
+              {sources.map((s) => {
+                const ft = s.id.startsWith("form_q:")
+                  ? s.category === "checkin"
+                    ? "Check-in"
+                    : s.category === "habit"
+                      ? "Hábitos"
+                      : null
+                  : null;
+
+                return (
+                  <SelectItem key={adapterKey(s)} textValue={s.label}>
+                    <div className="flex items-center gap-2">
+                      {s.icon ? <Icon icon={s.icon} width={14} /> : null}
+                      <span>{s.label}</span>
+                      {ft ? (
+                        <span className="text-[9px] uppercase tracking-wider text-foreground/50 bg-default-100 px-1.5 py-0.5 rounded">
+                          {ft}
+                        </span>
+                      ) : null}
+                      {s.unit ? (
+                        <span className="text-foreground/40 text-[10px]">
+                          ({s.unit})
+                        </span>
+                      ) : null}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </Select>
           </div>
 
