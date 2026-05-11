@@ -1,0 +1,72 @@
+import type { ExerciseLog } from "../progress/types";
+
+/** A single exercise prescribed inside a scheduled session. */
+export interface PrescribedExercise {
+  exerciseId: string;
+  name: string;
+  category: string;
+  prescribedSets: number;
+  /** Reps come back as TEXT from session_exercises (can be "10-12", "AMRAP", etc.). */
+  prescribedReps: string | null;
+  prescribedWeightKg: number | null;
+}
+
+/** Result of the API: a scheduled_sessions row with its session + exercises. */
+export interface ScheduledSessionRow {
+  id: string;
+  scheduled_date: string;
+  status: "scheduled" | "completed" | "missed" | "cancelled" | "rescheduled";
+  completion_date: string | null;
+  session: {
+    id: string;
+    name: string;
+    session_exercises: Array<{
+      id: string;
+      exercise_order: number;
+      sets: number | null;
+      reps: string | null;
+      weight_kg: number | null;
+      exercise: { id: string; name: string; category: string };
+    }>;
+  } | null;
+}
+
+export type DayClassification =
+  | "complete"
+  | "partial"
+  | "pending"
+  | "rest"
+  | "future";
+
+export interface DayAdherence {
+  totalPrescribed: number;
+  completedExercises: number;
+  prescribedSetsTotal: number;
+  loggedSetsTotal: number;
+  prescribedLoadTotal: number;
+  loggedLoadTotal: number;
+  /** 0..1 — proportion of exercises with at least one logged set. */
+  ejercicios: number;
+  /** 0..1 — proportion of prescribed sets that were logged. */
+  series: number;
+  /** 0..1 — proportion of prescribed load lifted. 1 when no prescribed load. */
+  carga: number;
+}
+
+export interface DayMetrics {
+  date: string;
+  scheduledSession: ScheduledSessionRow | null;
+  prescribed: PrescribedExercise[];
+  logs: ExerciseLog[];
+  adherence: DayAdherence;
+  classification: DayClassification;
+  isToday: boolean;
+  isFuture: boolean;
+}
+
+export interface WeekMetrics {
+  /** 7 entries, Monday first. */
+  days: DayMetrics[];
+  /** Logs whose scheduled_date sits inside the week but with no scheduled session. */
+  orphansByDate: Map<string, ExerciseLog[]>;
+}
