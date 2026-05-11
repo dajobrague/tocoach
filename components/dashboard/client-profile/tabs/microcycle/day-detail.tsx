@@ -221,13 +221,28 @@ function PrescribedRow({
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900">{prescribed.name}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-            Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
-            {prescribed.prescribedReps ?? "—"}
-            {prescribed.prescribedWeightKg
-              ? ` @ ${prescribed.prescribedWeightKg} kg`
-              : ""}
-          </p>
+          {prescribed.perSet && prescribed.perSet.length > 0 ? (
+            <div className="text-[11px] text-gray-500 mt-0.5 tabular-nums space-y-0.5">
+              <p className="text-gray-600 font-medium">Prescrito por serie</p>
+              {prescribed.perSet.map((s) => (
+                <p key={s.setNumber}>
+                  <span className="text-gray-400">Set {s.setNumber}:</span>{" "}
+                  <span className="text-gray-700">
+                    {s.reps ?? "—"} reps
+                    {s.weightKg != null ? ` × ${s.weightKg} kg` : ""}
+                  </span>
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
+              Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
+              {prescribed.prescribedReps ?? "—"}
+              {prescribed.prescribedWeightKg
+                ? ` @ ${prescribed.prescribedWeightKg} kg`
+                : ""}
+            </p>
+          )}
 
           {!isFuture && prescribedSets > 0 ? (
             <div className="mt-1.5">
