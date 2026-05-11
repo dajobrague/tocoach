@@ -8,14 +8,12 @@ import ChartsTab from "./tabs/charts-tab";
 import FormsTab from "./tabs/forms-tab";
 import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
-import ProgressTab from "./tabs/progress-tab";
 import SupplementsTab from "./tabs/supplements-tab";
 import TrainingTabs from "./tabs/training-tabs";
 
 const TAB_ITEMS = [
-  { key: "progress", label: "Progreso", icon: "solar:chart-line-duotone" },
-  { key: "charts", label: "Gráficas", icon: "solar:chart-square-bold" },
   { key: "training", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
+  { key: "charts", label: "Gráficas", icon: "solar:chart-square-bold" },
   { key: "neat", label: "NEAT", icon: "solar:walking-bold" },
   { key: "nutrition", label: "Nutrición", icon: "fluent:food-20-filled" },
   { key: "supplements", label: "Suplementos", icon: "solar:health-bold" },
@@ -32,7 +30,7 @@ export default function ClientProfileTabs({
   clientId,
   clientName,
 }: ClientProfileTabsProps) {
-  const [selectedTab, setSelectedTab] = useState("progress");
+  const [selectedTab, setSelectedTab] = useState("training");
   const formsUnsavedRef = useRef(false);
 
   const handleTabChange = (key: string) => {
@@ -86,7 +84,6 @@ export default function ClientProfileTabs({
       {/* Tab Content */}
       <div className="bg-gray-50">
         <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-          {selectedTab === "progress" && <ProgressTab clientId={clientId} />}
           {selectedTab === "charts" && <ChartsTab clientId={clientId} />}
           {selectedTab === "training" && (
             <TrainingTabs clientId={clientId} clientName={clientName ?? ""} />
