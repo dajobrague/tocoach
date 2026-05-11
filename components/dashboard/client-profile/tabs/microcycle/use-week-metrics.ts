@@ -36,14 +36,27 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
   if (row.override_exercises && row.override_exercises.length > 0) {
     return [...row.override_exercises]
       .sort((a, b) => a.exercise_order - b.exercise_order)
-      .map((oe) => ({
-        exerciseId: oe.exercise.id,
-        name: oe.exercise.name,
-        category: oe.exercise.category,
-        prescribedSets: oe.sets ?? 0,
-        prescribedReps: oe.reps,
-        prescribedWeightKg: oe.weight_kg,
-      }));
+      .map((oe) => {
+        const perSet = (oe.prescribed_sets ?? [])
+          .slice()
+          .sort((a, b) => a.set_number - b.set_number)
+          .map((s) => ({
+            setNumber: s.set_number,
+            reps: s.reps,
+            weightKg: s.weight_kg,
+          }));
+
+        return {
+          exerciseId: oe.exercise.id,
+          name: oe.exercise.name,
+          category: oe.exercise.category,
+          // When perSet is present, prescribedSets reflects the count.
+          prescribedSets: perSet.length > 0 ? perSet.length : (oe.sets ?? 0),
+          prescribedReps: oe.reps,
+          prescribedWeightKg: oe.weight_kg,
+          perSet,
+        };
+      });
   }
 
   if (!row.session) return [];
@@ -57,6 +70,7 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
       prescribedSets: se.sets ?? 0,
       prescribedReps: se.reps,
       prescribedWeightKg: se.weight_kg,
+      perSet: [],
     }));
 }
 

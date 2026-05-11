@@ -138,6 +138,7 @@ export function DayEditor({
                 prescribedSets: e.sets ?? 0,
                 prescribedReps: e.reps ?? null,
                 prescribedWeightKg: e.weight_kg ?? null,
+                perSet: [],
               }));
               break;
             }
