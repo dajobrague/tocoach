@@ -26,6 +26,12 @@ interface PutBody {
     distanceMeters?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
+    /** When non-empty, per-set values are written and become the source of truth. */
+    setsDetail?: Array<{
+      setNumber: number;
+      reps: string | null;
+      weightKg: number | null;
+    }> | null;
   }>;
 }
 
@@ -239,7 +245,11 @@ export async function PUT(
         scheduled_session_id: scheduledSessionId,
         exercise_id: e.exerciseId,
         exercise_order: e.exerciseOrder,
-        sets: e.sets ?? null,
+        // When per-set is provided, sets count is derived from setsDetail.length.
+        sets:
+          e.setsDetail && e.setsDetail.length > 0
+            ? e.setsDetail.length
+            : (e.sets ?? null),
         reps: e.reps ?? null,
         weight_kg: e.weightKg ?? null,
         duration_seconds: e.durationSeconds ?? null,
@@ -248,20 +258,74 @@ export async function PUT(
         notes: e.notes ?? null,
       }));
 
-      const { error: insError } = await supabase
+      const { data: inserted, error: insError } = await supabase
         .from("scheduled_session_exercises")
-        .insert(rows);
+        .insert(rows)
+        .select("id, exercise_order");
 
-      if (insError) {
+      if (insError || !inserted) {
         console.error(`${LOG_PREFIX} insert overrides:`, {
           correlationId,
-          error: insError.message,
+          error: insError?.message,
         });
 
         return NextResponse.json(
           { success: false, error: "Error guardando override" },
           { status: 500 }
         );
+      }
+
+      // ── Per-set rows: insert when any exercise carries setsDetail ──
+      const orderToParentId = new Map<number, string>();
+
+      for (const r of inserted as Array<{
+        id: string;
+        exercise_order: number;
+      }>) {
+        orderToParentId.set(r.exercise_order, r.id);
+      }
+
+      const setRows: Array<{
+        tenant_host: string;
+        scheduled_session_exercise_id: string;
+        set_number: number;
+        reps: string | null;
+        weight_kg: number | null;
+      }> = [];
+
+      for (const e of body.exercises) {
+        if (!e.setsDetail || e.setsDetail.length === 0) continue;
+        const parentId = orderToParentId.get(e.exerciseOrder);
+
+        if (!parentId) continue;
+
+        for (const s of e.setsDetail) {
+          setRows.push({
+            tenant_host: session.trainer_id,
+            scheduled_session_exercise_id: parentId,
+            set_number: s.setNumber,
+            reps: s.reps,
+            weight_kg: s.weightKg,
+          });
+        }
+      }
+
+      if (setRows.length > 0) {
+        const { error: setInsError } = await supabase
+          .from("scheduled_session_exercise_sets")
+          .insert(setRows);
+
+        if (setInsError) {
+          console.error(`${LOG_PREFIX} insert per-set rows:`, {
+            correlationId,
+            error: setInsError.message,
+          });
+
+          return NextResponse.json(
+            { success: false, error: "Error guardando series prescritas" },
+            { status: 500 }
+          );
+        }
       }
     }
 
