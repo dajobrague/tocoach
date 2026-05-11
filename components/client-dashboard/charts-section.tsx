@@ -168,9 +168,11 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
             key={chart.id}
             buckets={chartBuckets}
             config={chart}
-            {...(adapter?.metadata.icon !== undefined
-              ? { icon: adapter.metadata.icon }
-              : {})}
+            {...(chart.icon !== undefined
+              ? { icon: chart.icon }
+              : adapter?.metadata.icon !== undefined
+                ? { icon: adapter.metadata.icon }
+                : {})}
             {...(adapter?.metadata.unit !== undefined
               ? { unit: adapter.metadata.unit }
               : {})}
@@ -220,7 +222,9 @@ function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
               : chart.color;
             const palette = resolveColor(colorToken);
             const icon =
-              adapter?.metadata.icon ?? iconForChartType(chart.chart_type);
+              chart.icon ??
+              adapter?.metadata.icon ??
+              iconForChartType(chart.chart_type);
 
             return (
               <li

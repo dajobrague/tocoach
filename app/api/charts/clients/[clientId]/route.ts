@@ -18,6 +18,7 @@ import {
   loadClientChartConfig,
   loadEffectiveClientCharts,
 } from "@/lib/charts/server/template-loader";
+import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { validateDocumentWithRegistry } from "@/lib/charts/registry";
 import { chartsDocumentSchema } from "@/lib/charts/validation";
 
@@ -62,12 +63,19 @@ export async function GET(
       clientTrainerId: trainerId,
     });
 
+    // Drop trainer-only charts when the caller is a client session.
+    // Trainers always see the full doc (they own the config).
+    const visibleCharts = filterChartsForAudience(
+      effective.charts,
+      auth.actor.kind
+    );
+
     return NextResponse.json(
       {
         success: true,
         data: {
           source: effective.source,
-          charts: effective.charts,
+          charts: visibleCharts,
           updated_at: effective.updated_at,
         },
       },

@@ -43,6 +43,7 @@ import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
 import { COLOR_TOKENS, resolveColor } from "@/lib/charts/palette";
+import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 
 const CHART_TYPES: {
   id: ChartType;
@@ -82,6 +83,38 @@ const AGGREGATIONS: { id: Aggregation; label: string }[] = [
   { id: "range_total", label: "Total del rango" },
 ];
 
+// Curated quick-pick set. The free-form input below the grid accepts any
+// Iconify id, so this list is just a shortcut to the icons that match the
+// metrics trainers configure most often. Drawn from icons already used in
+// the catalog adapters and seeded form templates so the picker stays
+// internally consistent.
+const ICON_PALETTE: ReadonlyArray<string> = [
+  "solar:body-bold",
+  "solar:scale-bold",
+  "solar:heart-pulse-bold",
+  "solar:health-bold",
+  "solar:moon-sleep-bold",
+  "solar:moon-stars-bold",
+  "solar:sun-bold",
+  "solar:bolt-bold",
+  "solar:fire-bold",
+  "solar:dish-bold",
+  "solar:bone-bold",
+  "solar:leaf-bold",
+  "solar:cloud-waterdrop-bold",
+  "solar:waterdrop-bold",
+  "solar:bottle-bold",
+  "solar:cup-hot-bold",
+  "solar:pill-bold",
+  "solar:walking-bold",
+  "solar:running-bold",
+  "solar:dumbbell-bold",
+  "solar:pie-chart-bold",
+  "solar:target-bold",
+  "solar:smile-circle-bold",
+  "solar:shield-warning-bold",
+];
+
 interface Props {
   isOpen: boolean;
   config: ChartConfig | null;
@@ -100,30 +133,30 @@ function dataSourceRefKey(ref: DataSourceRef): string {
 }
 
 function adapterKey(source: ChartDataSource): string {
-  if (source.id.startsWith("form_q:")) {
-    // We need form_type from somewhere — encode it into id when listing.
-    // The data-sources endpoint returns the metadata id as `form_q:<question_id>`,
-    // but we need form_type to construct the ref. We rely on the catalog
-    // `category` field to recover form_type since form_q sources have
-    // category "checkin" or "habit".
-    const formType = source.category === "checkin" ? "checkins" : "habits";
-    const questionId = source.id.replace(/^form_q:/, "");
-
-    return `form_q:${formType}:${questionId}`;
-  }
+  // For form-question sources, the id already encodes form_type and is
+  // identical to what `dataSourceRefKey` produces for the corresponding
+  // DataSourceRef — no reconstruction needed. Catalog ids get the prefix
+  // here so the two namespaces don't collide in the Select.
+  if (source.id.startsWith("form_q:")) return source.id;
 
   return `catalog:${source.id}`;
 }
 
 function refFromAdapter(source: ChartDataSource): DataSourceRef {
   if (source.id.startsWith("form_q:")) {
-    const formType: "checkins" | "habits" =
-      source.category === "checkin" ? "checkins" : "habits";
+    const parsed = parseFormQuestionAdapterId(source.id);
+
+    if (!parsed) {
+      // Defensive — the data-sources endpoint should never emit malformed
+      // ids. Falling back to a catalog ref would silently swap source kind,
+      // so throw instead so the UI surfaces it loudly.
+      throw new Error(`Malformed form-question adapter id: ${source.id}`);
+    }
 
     return {
       kind: "form_question",
-      form_type: formType,
-      question_id: source.id.replace(/^form_q:/, ""),
+      form_type: parsed.formType,
+      question_id: parsed.questionId,
     };
   }
 
@@ -303,19 +336,34 @@ export function ChartEditPanel({
               size="sm"
               onChange={(e) => handleSourceChange(e.target.value)}
             >
-              {sources.map((s) => (
-                <SelectItem key={adapterKey(s)} textValue={s.label}>
-                  <div className="flex items-center gap-2">
-                    {s.icon ? <Icon icon={s.icon} width={14} /> : null}
-                    <span>{s.label}</span>
-                    {s.unit ? (
-                      <span className="text-foreground/40 text-[10px]">
-                        ({s.unit})
-                      </span>
-                    ) : null}
-                  </div>
-                </SelectItem>
-              ))}
+              {sources.map((s) => {
+                const ft = s.id.startsWith("form_q:")
+                  ? s.category === "checkin"
+                    ? "Check-in"
+                    : s.category === "habit"
+                      ? "Hábitos"
+                      : null
+                  : null;
+
+                return (
+                  <SelectItem key={adapterKey(s)} textValue={s.label}>
+                    <div className="flex items-center gap-2">
+                      {s.icon ? <Icon icon={s.icon} width={14} /> : null}
+                      <span>{s.label}</span>
+                      {ft ? (
+                        <span className="text-[9px] uppercase tracking-wider text-foreground/50 bg-default-100 px-1.5 py-0.5 rounded">
+                          {ft}
+                        </span>
+                      ) : null}
+                      {s.unit ? (
+                        <span className="text-foreground/40 text-[10px]">
+                          ({s.unit})
+                        </span>
+                      ) : null}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </Select>
           </div>
 
@@ -486,6 +534,124 @@ export function ChartEditPanel({
                 })}
               </div>
             )}
+          </div>
+
+          {/* VISIBILITY — trainer-only vs shared with client */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase">
+                  Privado
+                </p>
+                <p className="text-[10px] text-foreground/40 leading-relaxed">
+                  Solo visible para mí. El cliente no la ve en su dashboard.
+                </p>
+              </div>
+              <Switch
+                aria-label="Gráfica privada"
+                isSelected={config.visibility === "trainer_only"}
+                size="sm"
+                onValueChange={(on) => {
+                  if (on) {
+                    update({ visibility: "trainer_only" });
+                  } else {
+                    const { visibility: _v, ...rest } = config;
+
+                    void _v;
+                    onChange(rest as ChartConfig);
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* ICON */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase">
+                Icono
+              </p>
+              {config.icon ? (
+                <button
+                  className="text-[10px] text-foreground/50 hover:text-foreground"
+                  type="button"
+                  onClick={() => {
+                    const { icon: _icon, ...rest } = config;
+
+                    void _icon;
+                    onChange(rest as ChartConfig);
+                  }}
+                >
+                  Quitar
+                </button>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-8 gap-1">
+              {ICON_PALETTE.map((iconId) => {
+                const active = config.icon === iconId;
+
+                return (
+                  <button
+                    key={iconId}
+                    aria-label={iconId}
+                    aria-pressed={active}
+                    className={`w-7 h-7 rounded-md border-2 flex items-center justify-center ${
+                      active
+                        ? "border-foreground/70 bg-default-100"
+                        : "border-transparent hover:bg-default-100"
+                    }`}
+                    type="button"
+                    onClick={() => update({ icon: iconId })}
+                  >
+                    <Icon icon={iconId} width={14} />
+                  </button>
+                );
+              })}
+            </div>
+            <Input
+              aria-label="Icono personalizado"
+              className="mt-2"
+              placeholder="solar:body-bold"
+              size="sm"
+              startContent={
+                config.icon ? (
+                  <Icon icon={config.icon} width={14} />
+                ) : (
+                  <Icon
+                    className="text-foreground/30"
+                    icon="solar:gallery-bold"
+                    width={14}
+                  />
+                )
+              }
+              value={config.icon ?? ""}
+              onValueChange={(v) => {
+                const next = v.trim();
+
+                if (next === "") {
+                  const { icon: _icon, ...rest } = config;
+
+                  void _icon;
+                  onChange(rest as ChartConfig);
+
+                  return;
+                }
+                update({ icon: next });
+              }}
+            />
+            <p className="text-[10px] text-foreground/40 mt-1 leading-relaxed">
+              <Icon
+                className="inline mr-0.5 -mt-0.5"
+                icon="solar:info-circle-bold"
+                width={11}
+              />
+              Cualquier id de Iconify (p. ej. <code>solar:body-bold</code>).
+              Buscar en{" "}
+              <span className="font-mono text-foreground/60">
+                icones.js.org
+              </span>
+              .
+            </p>
           </div>
 
           {/* TARGET ZONE */}

@@ -1,10 +1,16 @@
 /**
- * Form-question adapter — dynamically built per question_id from the
- * trainer's form_templates.questions_config.
+ * Form-question adapter — dynamically built per (form_type, question_id)
+ * from the trainer's form_templates.questions_config.
  *
  * Always 1-D. Bucketing uses the same averaging path as the catalog 1-D
  * adapters, except the resolver looks up `answers[question_id]` directly
  * (no heuristic — we trust the question_id stored in the chart config).
+ *
+ * The metadata id is `form_q:<form_type>:<question_id>` so the same
+ * question_id existing in both check-in and daily-habit templates produces
+ * two distinct adapters (and two distinct picker entries). DataSourceRef
+ * carries `form_type` separately, which is the contract the validator,
+ * the snapshot route, and the UI parsers rely on.
  *
  * If the question gets deleted or has its type changed away from numeric,
  * the surface will see no data come through and render the orphan
@@ -40,13 +46,13 @@ const FALLBACK_COLOR: ColorToken = "neutral-slate";
 
 /**
  * Build a runtime adapter for a single form question. Stable id is
- * `form_q:<question_id>` so two adapters built for the same question
- * compare equal by metadata.id.
+ * `form_q:<form_type>:<question_id>` so adapters for the same question_id
+ * coming from different form types stay distinct (same id ⇒ same adapter).
  */
 export function buildFormQuestionAdapter(
   spec: FormQuestionAdapterSpec
 ): DataAdapter {
-  const id = `form_q:${spec.questionId}`;
+  const id = `form_q:${spec.formType}:${spec.questionId}`;
 
   const metadata: ChartDataSource = {
     id,
@@ -99,4 +105,27 @@ export function buildFormQuestionAdapter(
       }));
     },
   };
+}
+
+/**
+ * Parse a `form_q:<form_type>:<question_id>` adapter id back into its
+ * constituent parts. Returns null when the input is not a form-question
+ * adapter id (catalog ids, malformed ids).
+ */
+export function parseFormQuestionAdapterId(
+  id: string
+): { formType: "checkins" | "habits"; questionId: string } | null {
+  if (!id.startsWith("form_q:")) return null;
+  const rest = id.slice("form_q:".length);
+  const sep = rest.indexOf(":");
+
+  if (sep <= 0) return null;
+  const formType = rest.slice(0, sep);
+
+  if (formType !== "checkins" && formType !== "habits") return null;
+  const questionId = rest.slice(sep + 1);
+
+  if (questionId.length === 0) return null;
+
+  return { formType, questionId };
 }

@@ -151,6 +151,26 @@ export interface ChartConfig {
   aggregation: Aggregation;
   /** Allowed only when chart_type ∈ {line, area, bar}. */
   show_average_line?: boolean;
+  /**
+   * Trainer-chosen Iconify id (e.g. "solar:body-bold"). When set, takes
+   * precedence over the adapter's metadata.icon at render time. Lets the
+   * trainer pick an icon for charts whose source adapter has no default
+   * (form_question) or override the catalog adapter's default.
+   */
+  icon?: string;
+  /**
+   * Who can see this chart on the client's dashboard.
+   * - "shared" (or undefined): the chart appears on both the trainer's
+   *   view of the client AND the client's own dashboard.
+   * - "trainer_only": the chart appears ONLY on the trainer's view —
+   *   filtered out server-side from any response served to a client
+   *   session. Lets trainers track per-client metrics they don't want
+   *   the client to see (internal notes, adherence flags, etc.).
+   *
+   * `undefined` is treated as "shared" so every chart stored before this
+   * field existed keeps its existing behavior.
+   */
+  visibility?: "shared" | "trainer_only";
 }
 
 export interface ChartsDocument {

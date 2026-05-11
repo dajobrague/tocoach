@@ -1,17 +1,24 @@
 /**
- * Starter chart template — the six charts that exactly reproduce today's
- * client dashboard (PESO, SUEÑO, CALORÍAS, PROTEÍNA, MACROS, ENTRENAMIENTO).
+ * Starter chart template — the seven charts that exactly reproduce today's
+ * client dashboard (PESO, CALORÍAS, PROTEÍNA, HIDRATOS, GRASAS, SUEÑO,
+ * ENTRENAMIENTO).
  *
- * The migration (083_create_chart_system.sql) seeds this same shape into
- * existing trainers' rows. This TS factory is used by:
+ * PESO points at the `body_weight` question seeded in the check-in form
+ * template (migrations 020 + 087). Each trainer can repoint it to a
+ * different numeric question — or to the daily-habit `body_weight` — via
+ * the chart editor.
+ *
+ * The migration (083_create_chart_system.sql) seeded an older shape that
+ * used `{kind:"catalog", id:"weight"}`; that adapter was removed in the
+ * 2026-05 cleanup. Trainers whose template was created before this change
+ * will see the weight chart in its orphan empty-state until they delete
+ * and re-add it via the picker.
+ *
+ * This TS factory is used by:
  *   - the lazy-create path in /api/charts/template GET (for trainers
- *     created after the migration ran)
+ *     created after the migration ran, or whose row is missing)
  *   - the trainer template page's "Restore defaults" button when the
  *     template is empty
- *
- * Keeping the JSON shape in lockstep between the SQL seed and this factory
- * is a load-bearing invariant. If you add or change a starter chart here,
- * you must also bump the migration's seed (or write a follow-up migration).
  */
 
 import type { ChartConfig, ChartsDocument } from "./types";
@@ -40,10 +47,15 @@ export function buildStarterCharts(): ChartConfig[] {
       id: randomUUID(),
       position: 0,
       label: "PESO",
-      source: { kind: "catalog", id: "weight" },
+      source: {
+        kind: "form_question",
+        form_type: "checkins",
+        question_id: "body_weight",
+      },
       chart_type: "area",
       color: "weight-amber",
       aggregation: "checkin_period",
+      icon: "solar:body-bold",
     },
     {
       id: randomUUID(),

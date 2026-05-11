@@ -51,6 +51,7 @@ import {
 } from "@/lib/charts/hooks";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 import { buildStarterDocument } from "@/lib/charts/starter";
 
 type SurfaceMode = "trainer-template" | "trainer-client" | "client-readonly";
@@ -74,16 +75,22 @@ function buildAddChartConfig(
   position: number
 ): ChartConfig {
   const isMulti = source.dimensions === "multi";
-  const ref = source.id.startsWith("form_q:")
-    ? {
-        kind: "form_question" as const,
-        form_type:
-          source.category === "checkin"
-            ? ("checkins" as const)
-            : ("habits" as const),
-        question_id: source.id.replace(/^form_q:/, ""),
-      }
-    : { kind: "catalog" as const, id: source.id as never };
+  let ref: ChartConfig["source"];
+
+  if (source.id.startsWith("form_q:")) {
+    const parsed = parseFormQuestionAdapterId(source.id);
+
+    if (!parsed) {
+      throw new Error(`Malformed form-question adapter id: ${source.id}`);
+    }
+    ref = {
+      kind: "form_question",
+      form_type: parsed.formType,
+      question_id: parsed.questionId,
+    };
+  } else {
+    ref = { kind: "catalog", id: source.id as never };
+  }
 
   return {
     id: newChartId(),
@@ -97,6 +104,14 @@ function buildAddChartConfig(
         ? "range_total"
         : "checkin_period",
   };
+}
+
+function formTypeLabel(source: ChartDataSource): string | null {
+  if (!source.id.startsWith("form_q:")) return null;
+  if (source.category === "checkin") return "Check-in";
+  if (source.category === "habit") return "Hábitos";
+
+  return null;
 }
 
 export function ChartSurface({ mode, clientId }: Props) {
@@ -579,9 +594,11 @@ export function ChartSurface({ mode, clientId }: Props) {
               config={chart}
               editOverlay={overlay}
               editable={editMode && !isReadOnly}
-              {...(adapter?.metadata.icon !== undefined
-                ? { icon: adapter.metadata.icon }
-                : {})}
+              {...(chart.icon !== undefined
+                ? { icon: chart.icon }
+                : adapter?.metadata.icon !== undefined
+                  ? { icon: adapter.metadata.icon }
+                  : {})}
               {...(adapter?.metadata.unit !== undefined
                 ? { unit: adapter.metadata.unit }
                 : {})}
@@ -769,26 +786,35 @@ function AddChartCard({
               onChange={(e) => setFilter(e.target.value)}
             />
             <div className="overflow-y-auto max-h-[180px] -mx-1">
-              {filtered.map((s) => (
-                <button
-                  key={s.id}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
-                  type="button"
-                  onClick={() => {
-                    void onAdd(s.id);
-                    setOpen(false);
-                    setFilter("");
-                  }}
-                >
-                  {s.icon ? <Icon icon={s.icon} width={14} /> : null}
-                  <span className="flex-1">{s.label}</span>
-                  {s.unit ? (
-                    <span className="text-foreground/40 text-[10px]">
-                      {s.unit}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+              {filtered.map((s) => {
+                const ft = formTypeLabel(s);
+
+                return (
+                  <button
+                    key={s.id}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-default-100 rounded text-left text-xs"
+                    type="button"
+                    onClick={() => {
+                      void onAdd(s.id);
+                      setOpen(false);
+                      setFilter("");
+                    }}
+                  >
+                    {s.icon ? <Icon icon={s.icon} width={14} /> : null}
+                    <span className="flex-1">{s.label}</span>
+                    {ft ? (
+                      <span className="text-[9px] uppercase tracking-wider text-foreground/50 bg-default-100 px-1.5 py-0.5 rounded">
+                        {ft}
+                      </span>
+                    ) : null}
+                    {s.unit ? (
+                      <span className="text-foreground/40 text-[10px]">
+                        {s.unit}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
               {filtered.length === 0 ? (
                 <p className="text-xs text-foreground/40 text-center py-3">
                   Ninguna coincidencia.
