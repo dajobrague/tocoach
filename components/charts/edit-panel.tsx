@@ -190,6 +190,7 @@ export function ChartEditPanel({
   if (!config) return null;
 
   const isMulti = currentSource?.dimensions === "multi";
+  const isPhoto = currentSource?.dimensions === "photo";
 
   const update = (patch: Partial<ChartConfig>): void => {
     onChange({ ...config, ...patch });
@@ -380,161 +381,178 @@ export function ChartEditPanel({
             />
           </div>
 
-          {/* CHART TYPE — split into two sections so the constraint is
-              obvious. Multi-series types (Apiladas / Anillo) need a
+          {/* CHART TYPE — hidden entirely for photo sources because
+              photo_timeline is the only valid chart_type for them and
+              showing pills the trainer can't usefully change would be
+              noise. Multi-series types (Apiladas / Anillo) need a
               multi-series source (today: Macros, Entrenamiento). */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
-              Tipo de gráfica
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {CHART_TYPES.filter((t) => !t.multi).map((t) => {
-                const active = config.chart_type === t.id;
-                const compatible = !isMulti;
-
-                return (
-                  <button
-                    key={t.id}
-                    aria-label={t.label}
-                    aria-pressed={active}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
-                      active
-                        ? "bg-default-200 border-foreground/30 text-foreground"
-                        : compatible
-                          ? "bg-default-50 border-default-200 hover:bg-default-100"
-                          : "opacity-40 cursor-not-allowed border-default-100 line-through"
-                    }`}
-                    disabled={!compatible}
-                    title={
-                      compatible
-                        ? undefined
-                        : "Esta métrica es de varias series — usa Apiladas o Anillo"
-                    }
-                    type="button"
-                    onClick={() => handleChartTypeChange(t.id)}
-                  >
-                    <Icon icon={t.icon} width={12} />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="text-[10px] font-semibold tracking-wider text-foreground/40 uppercase mt-3 mb-1.5">
-              Varias series
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {CHART_TYPES.filter((t) => t.multi).map((t) => {
-                const active = config.chart_type === t.id;
-                const compatible = isMulti;
-
-                return (
-                  <button
-                    key={t.id}
-                    aria-label={t.label}
-                    aria-pressed={active}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
-                      active
-                        ? "bg-default-200 border-foreground/30 text-foreground"
-                        : compatible
-                          ? "bg-default-50 border-default-200 hover:bg-default-100"
-                          : "opacity-40 cursor-not-allowed border-default-100 line-through"
-                    }`}
-                    disabled={!compatible}
-                    title={
-                      compatible
-                        ? undefined
-                        : "Solo disponible con métricas de varias series (p. ej. Macros, Entrenamiento)"
-                    }
-                    type="button"
-                    onClick={() => handleChartTypeChange(t.id)}
-                  >
-                    <Icon icon={t.icon} width={12} />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-            {!isMulti ? (
-              <p className="text-[10px] text-foreground/40 mt-2 leading-relaxed">
-                <Icon
-                  className="inline mr-0.5 -mt-0.5"
-                  icon="solar:info-circle-bold"
-                  width={11}
-                />
-                Apiladas y Anillo necesitan una métrica de varias series. Cambia
-                primero la métrica a <strong>Macros</strong> o{" "}
-                <strong>Entrenamiento</strong> para activarlas.
+          {isPhoto ? (
+            <div>
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+                Tipo de gráfica
               </p>
-            ) : null}
-            {!isMulti &&
-            (config.chart_type === "ring" ||
-              config.chart_type === "stacked_bar") ? (
-              <p className="text-[10px] text-warning mt-1">
-                Combinación inválida — selecciona un tipo de una serie.
-              </p>
-            ) : null}
-          </div>
-
-          {/* COLOR(S) */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
-              {isMulti ? "Colores (uno por serie)" : "Color"}
-            </p>
-            {isMulti && Array.isArray(config.color) ? (
-              <div className="space-y-2">
-                {config.color.map((token, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-[10px] text-foreground/50 w-16">
-                      {currentSource?.series?.[i]?.label ?? `Serie ${i + 1}`}
-                    </span>
-                    <div className="flex flex-wrap gap-1">
-                      {COLOR_TOKENS.map((c) => {
-                        const palette = resolveColor(c);
-                        const active = token === c;
-
-                        return (
-                          <button
-                            key={c}
-                            aria-label={c}
-                            className={`w-5 h-5 rounded-full border-2 ${
-                              active
-                                ? "border-foreground/70"
-                                : "border-transparent"
-                            }`}
-                            style={{ backgroundColor: palette.stroke }}
-                            type="button"
-                            onClick={() => handleColorChange(c, i)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-default-50 border border-default-200 text-xs">
+                <Icon icon="solar:gallery-bold" width={14} />
+                Timeline de fotos
               </div>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {COLOR_TOKENS.map((c) => {
-                  const palette = resolveColor(c);
-                  const active = config.color === c;
+            </div>
+          ) : (
+            <div>
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+                Tipo de gráfica
+              </p>
+
+              <div className="flex flex-wrap gap-1.5">
+                {CHART_TYPES.filter((t) => !t.multi).map((t) => {
+                  const active = config.chart_type === t.id;
+                  const compatible = !isMulti;
 
                   return (
                     <button
-                      key={c}
-                      aria-label={c}
-                      className={`w-6 h-6 rounded-md border-2 ${
-                        active ? "border-foreground/70" : "border-transparent"
+                      key={t.id}
+                      aria-label={t.label}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
+                        active
+                          ? "bg-default-200 border-foreground/30 text-foreground"
+                          : compatible
+                            ? "bg-default-50 border-default-200 hover:bg-default-100"
+                            : "opacity-40 cursor-not-allowed border-default-100 line-through"
                       }`}
-                      style={{ backgroundColor: palette.stroke }}
+                      disabled={!compatible}
+                      title={
+                        compatible
+                          ? undefined
+                          : "Esta métrica es de varias series — usa Apiladas o Anillo"
+                      }
                       type="button"
-                      onClick={() => handleColorChange(c)}
-                    />
+                      onClick={() => handleChartTypeChange(t.id)}
+                    >
+                      <Icon icon={t.icon} width={12} />
+                      {t.label}
+                    </button>
                   );
                 })}
               </div>
-            )}
-          </div>
+
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/40 uppercase mt-3 mb-1.5">
+                Varias series
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {CHART_TYPES.filter((t) => t.multi).map((t) => {
+                  const active = config.chart_type === t.id;
+                  const compatible = isMulti;
+
+                  return (
+                    <button
+                      key={t.id}
+                      aria-label={t.label}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
+                        active
+                          ? "bg-default-200 border-foreground/30 text-foreground"
+                          : compatible
+                            ? "bg-default-50 border-default-200 hover:bg-default-100"
+                            : "opacity-40 cursor-not-allowed border-default-100 line-through"
+                      }`}
+                      disabled={!compatible}
+                      title={
+                        compatible
+                          ? undefined
+                          : "Solo disponible con métricas de varias series (p. ej. Macros, Entrenamiento)"
+                      }
+                      type="button"
+                      onClick={() => handleChartTypeChange(t.id)}
+                    >
+                      <Icon icon={t.icon} width={12} />
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {!isMulti ? (
+                <p className="text-[10px] text-foreground/40 mt-2 leading-relaxed">
+                  <Icon
+                    className="inline mr-0.5 -mt-0.5"
+                    icon="solar:info-circle-bold"
+                    width={11}
+                  />
+                  Apiladas y Anillo necesitan una métrica de varias series.
+                  Cambia primero la métrica a <strong>Macros</strong> o{" "}
+                  <strong>Entrenamiento</strong> para activarlas.
+                </p>
+              ) : null}
+              {!isMulti &&
+              (config.chart_type === "ring" ||
+                config.chart_type === "stacked_bar") ? (
+                <p className="text-[10px] text-warning mt-1">
+                  Combinación inválida — selecciona un tipo de una serie.
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {/* COLOR(S) — hidden for photo sources (no color tinting on
+              photos; the renderer draws the actual image). */}
+          {isPhoto ? null : (
+            <div>
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+                {isMulti ? "Colores (uno por serie)" : "Color"}
+              </p>
+              {isMulti && Array.isArray(config.color) ? (
+                <div className="space-y-2">
+                  {config.color.map((token, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-[10px] text-foreground/50 w-16">
+                        {currentSource?.series?.[i]?.label ?? `Serie ${i + 1}`}
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {COLOR_TOKENS.map((c) => {
+                          const palette = resolveColor(c);
+                          const active = token === c;
+
+                          return (
+                            <button
+                              key={c}
+                              aria-label={c}
+                              className={`w-5 h-5 rounded-full border-2 ${
+                                active
+                                  ? "border-foreground/70"
+                                  : "border-transparent"
+                              }`}
+                              style={{ backgroundColor: palette.stroke }}
+                              type="button"
+                              onClick={() => handleColorChange(c, i)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {COLOR_TOKENS.map((c) => {
+                    const palette = resolveColor(c);
+                    const active = config.color === c;
+
+                    return (
+                      <button
+                        key={c}
+                        aria-label={c}
+                        className={`w-6 h-6 rounded-md border-2 ${
+                          active ? "border-foreground/70" : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: palette.stroke }}
+                        type="button"
+                        onClick={() => handleColorChange(c)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* VISIBILITY — trainer-only vs shared with client. Same amber
               palette as the "Solo para ti" section header in the surface
@@ -761,39 +779,42 @@ export function ChartEditPanel({
             </div>
           ) : null}
 
-          {/* AGGREGATION */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
-              Agrupación
-            </p>
-            <Select
-              aria-label="Agrupación"
-              isDisabled={config.chart_type === "ring"}
-              selectedKeys={[config.aggregation]}
-              size="sm"
-              onChange={(e) =>
-                update({ aggregation: e.target.value as Aggregation })
-              }
-            >
-              {AGGREGATIONS.map((a) => (
-                <SelectItem
-                  key={a.id}
-                  isDisabled={
-                    a.id === "range_total" &&
-                    config.chart_type !== "ring" &&
-                    config.chart_type !== "kpi"
-                  }
-                >
-                  {a.label}
-                </SelectItem>
-              ))}
-            </Select>
-            {config.chart_type === "ring" ? (
-              <p className="text-[10px] text-foreground/40 mt-1">
-                Las gráficas de anillo se calculan sobre todo el rango.
+          {/* AGGREGATION — hidden for photo timelines (photos don't
+              bucket; each entry is its own date). */}
+          {isPhoto ? null : (
+            <div>
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+                Agrupación
               </p>
-            ) : null}
-          </div>
+              <Select
+                aria-label="Agrupación"
+                isDisabled={config.chart_type === "ring"}
+                selectedKeys={[config.aggregation]}
+                size="sm"
+                onChange={(e) =>
+                  update({ aggregation: e.target.value as Aggregation })
+                }
+              >
+                {AGGREGATIONS.map((a) => (
+                  <SelectItem
+                    key={a.id}
+                    isDisabled={
+                      a.id === "range_total" &&
+                      config.chart_type !== "ring" &&
+                      config.chart_type !== "kpi"
+                    }
+                  >
+                    {a.label}
+                  </SelectItem>
+                ))}
+              </Select>
+              {config.chart_type === "ring" ? (
+                <p className="text-[10px] text-foreground/40 mt-1">
+                  Las gráficas de anillo se calculan sobre todo el rango.
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {/* AVG LINE */}
           {allowsTargetZone ? (
