@@ -36,12 +36,26 @@ interface SessionWithExercises {
   session_exercises: SessionExercise[];
 }
 
+interface OverrideExercise {
+  id: string;
+  exercise_order: number;
+  sets: number | null;
+  reps: string | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  rest_seconds: number | null;
+  notes: string | null;
+  exercise: { id: string; name: string; category: string };
+}
+
 interface ScheduledSessionResponse {
   id: string;
   scheduled_date: string;
   status: string;
   completion_date: string | null;
   session: SessionWithExercises | null;
+  override_exercises: OverrideExercise[];
 }
 
 function diffDays(fromYmd: string, toYmd: string): number {
@@ -116,6 +130,11 @@ export async function GET(
              id, exercise_order, sets, reps, weight_kg,
              exercise:exercises(id, name, category)
            )
+         ),
+         override_exercises:scheduled_session_exercises(
+           id, exercise_order, sets, reps, weight_kg,
+           duration_seconds, distance_meters, rest_seconds, notes,
+           exercise:exercises(id, name, category)
          )`
       )
       .eq("client_id", clientId)
@@ -277,6 +296,7 @@ async function materializeTemplate(
         status: "scheduled",
         completion_date: null,
         session: sessionDetail,
+        override_exercises: [],
       });
     }
   }
