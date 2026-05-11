@@ -130,11 +130,11 @@ function ExecutedSetRow({
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
+    <div className="inline-flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-100 rounded-md px-1.5 py-1 w-fit">
+      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
         {set.set_number}
       </span>
-      <span className="text-gray-900 tabular-nums flex-1 min-w-0">
+      <span className="text-gray-900 tabular-nums whitespace-nowrap">
         <span className="font-semibold">{set.reps ?? "—"}</span>
         <span className="text-gray-400 mx-0.5">reps</span>
         <span className="text-gray-400 mx-0.5">×</span>
@@ -146,7 +146,7 @@ function ExecutedSetRow({
       {set.video_url && onPlayVideo ? (
         <button
           aria-label={`Ver video de ${exerciseName} serie ${set.set_number}`}
-          className="inline-flex items-center justify-center w-6 h-6 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors shrink-0"
+          className="inline-flex items-center justify-center w-6 h-6 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-100 transition-colors shrink-0 -mr-0.5"
           type="button"
           onClick={() => onPlayVideo(set.video_url!, exerciseName)}
         >
@@ -246,7 +246,7 @@ function PrescribedRow({
       {!isFuture ? (
         <div className="mt-3 ml-10 space-y-2">
           {allSets.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
+            <div className="flex flex-wrap gap-1.5">
               {allSets.map((set) => (
                 <ExecutedSetRow
                   key={`${set.id ?? set.set_number}`}
