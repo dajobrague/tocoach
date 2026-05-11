@@ -11,6 +11,20 @@ export interface PrescribedExercise {
   prescribedWeightKg: number | null;
 }
 
+/** A row from scheduled_session_exercises — the per-date override (Phase 3). */
+export interface OverrideExerciseRow {
+  id: string;
+  exercise_order: number;
+  sets: number | null;
+  reps: string | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  rest_seconds: number | null;
+  notes: string | null;
+  exercise: { id: string; name: string; category: string };
+}
+
 /** Result of the API: a scheduled_sessions row with its session + exercises. */
 export interface ScheduledSessionRow {
   id: string;
@@ -29,6 +43,8 @@ export interface ScheduledSessionRow {
       exercise: { id: string; name: string; category: string };
     }>;
   } | null;
+  /** Override rows — when present, they win over session.session_exercises. */
+  override_exercises: OverrideExerciseRow[];
 }
 
 export type DayClassification =
