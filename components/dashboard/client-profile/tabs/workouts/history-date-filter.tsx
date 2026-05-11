@@ -10,6 +10,13 @@ interface Props {
   /** Currently selected YYYY-MM-DD, or "" for no filter. */
   value: string;
   onChange: (next: string) => void;
+  /**
+   * When true, every date is clickable (not just those in datesWithSessions),
+   * the component renders even when datesWithSessions is empty/length<=1, and
+   * the "Limpiar" footer + leyenda are hidden because there's nothing to clear
+   * back to. Used by the microcycle week navigator.
+   */
+  allowAnyDate?: boolean;
 }
 
 const DAY_LABELS = ["L", "M", "X", "J", "V", "S", "D"];
@@ -76,6 +83,7 @@ export function HistoryDateFilter({
   datesWithSessions,
   value,
   onChange,
+  allowAnyDate = false,
 }: Props) {
   // Set of YYYY-MM-DD for O(1) lookup while rendering cells.
   const dataSet = useMemo(
@@ -103,7 +111,7 @@ export function HistoryDateFilter({
   const grid = useMemo(() => buildMonthGrid(monthStart), [monthStart]);
   const todayYmd = useMemo(() => toYmd(new Date()), []);
 
-  if (datesWithSessions.length <= 1) return null;
+  if (!allowAnyDate && datesWithSessions.length <= 1) return null;
 
   const handlePrev = () =>
     setMonthStart((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1));
@@ -111,7 +119,7 @@ export function HistoryDateFilter({
     setMonthStart((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1));
 
   const handleSelect = (ymd: string, hasData: boolean) => {
-    if (!hasData) return;
+    if (!allowAnyDate && !hasData) return;
     onChange(ymd);
     setOpen(false);
   };
@@ -200,7 +208,9 @@ export function HistoryDateFilter({
                     "relative h-8 rounded text-[11px] tabular-nums transition-colors",
                     !inMonth ? "text-gray-300" : "",
                     inMonth && !hasData && !isSelected
-                      ? "text-gray-400 cursor-not-allowed"
+                      ? allowAnyDate
+                        ? "text-gray-700 hover:bg-blue-50 cursor-pointer"
+                        : "text-gray-400 cursor-not-allowed"
                       : "",
                     hasData && !isSelected
                       ? "text-gray-900 font-medium hover:bg-blue-50 cursor-pointer"
@@ -212,7 +222,7 @@ export function HistoryDateFilter({
                       ? "ring-1 ring-inset ring-blue-300"
                       : "",
                   ].join(" ")}
-                  disabled={!hasData}
+                  disabled={!allowAnyDate && !hasData}
                   type="button"
                   onClick={() => handleSelect(ymd, hasData)}
                 >
@@ -225,21 +235,23 @@ export function HistoryDateFilter({
             })}
           </div>
 
-          <div className="flex items-center justify-between px-2 py-1.5 border-t border-gray-100 bg-gray-50">
-            <span className="text-[10px] text-gray-500 inline-flex items-center gap-1">
-              <span className="inline-block w-1 h-1 rounded-full bg-blue-500" />
-              Días con registros
-            </span>
-            {value ? (
-              <button
-                className="text-[11px] text-blue-600 hover:text-blue-800 font-medium px-1"
-                type="button"
-                onClick={handleClear}
-              >
-                Limpiar
-              </button>
-            ) : null}
-          </div>
+          {allowAnyDate ? null : (
+            <div className="flex items-center justify-between px-2 py-1.5 border-t border-gray-100 bg-gray-50">
+              <span className="text-[10px] text-gray-500 inline-flex items-center gap-1">
+                <span className="inline-block w-1 h-1 rounded-full bg-blue-500" />
+                Días con registros
+              </span>
+              {value ? (
+                <button
+                  className="text-[11px] text-blue-600 hover:text-blue-800 font-medium px-1"
+                  type="button"
+                  onClick={handleClear}
+                >
+                  Limpiar
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>
