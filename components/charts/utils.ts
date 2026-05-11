@@ -51,16 +51,31 @@ export function latestNonNull(buckets: BucketedPoint[]): number | null {
 /**
  * ES-locale number formatting. Doesn't add a unit suffix — the card
  * surrounds it with one explicitly.
+ *
+ * Two modes:
+ *   - `formatNumber(v, n)` — exact n decimals (min === max). 75 → "75,0"
+ *     with n=1, "75,00" with n=2. This is what the card header and KPI
+ *     value use; the forced trailing zero signals "measurement, not
+ *     integer count".
+ *   - `formatNumber(v, max, min)` — at most `max`, at least `min` decimals.
+ *     75 with (2, 0) → "75"; 75.5 → "75,5"; 75.555 → "75,56". Used in
+ *     tooltips to cap precision without forcing trailing zeros.
+ *
+ * In both cases the output is rounded to `max` decimals — `toLocaleString`
+ * never emits more digits than `maximumFractionDigits`, so this is the
+ * single chokepoint that enforces "no more than X decimals" across the
+ * chart system.
  */
 export function formatNumber(
   value: number | null | undefined,
-  fractionDigits = 0
+  maxFractionDigits = 0,
+  minFractionDigits: number = maxFractionDigits
 ): string {
   if (value === null || value === undefined) return "—";
 
   return value.toLocaleString("es-ES", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: minFractionDigits,
+    maximumFractionDigits: maxFractionDigits,
   });
 }
 
