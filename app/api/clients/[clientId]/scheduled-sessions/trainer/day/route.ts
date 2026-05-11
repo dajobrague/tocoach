@@ -275,3 +275,132 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { clientId } = await params;
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get("date");
+
+    if (!isYmd(date)) {
+      return NextResponse.json(
+        { success: false, error: "date inválido" },
+        { status: 400 }
+      );
+    }
+
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id, tenant")
+      .eq("id", clientId)
+      .single();
+
+    if (clientError || !client || client.tenant !== session.trainer_id) {
+      return NextResponse.json(
+        { success: false, error: "Cliente no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    if (date! < todayYmd()) {
+      const { count } = await supabase
+        .from("exercise_logs")
+        .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("scheduled_sessions.client_id", clientId)
+        .eq("scheduled_sessions.scheduled_date", date!);
+
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Día con registros — no se puede resetear",
+            code: "DAY_LOCKED",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const { data: ss } = await supabase
+      .from("scheduled_sessions")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("scheduled_date", date!)
+      .maybeSingle();
+
+    if (!ss) {
+      // Nothing to reset; idempotent success.
+      return NextResponse.json({ success: true });
+    }
+
+    // Defensive: even if not "past" by date, a logged session exists →
+    // keep the row (logs FK to it) and only drop the override exercises.
+    const { count: logsCount } = await supabase
+      .from("exercise_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("scheduled_session_id", ss.id);
+
+    if ((logsCount ?? 0) > 0) {
+      const { error: delExError } = await supabase
+        .from("scheduled_session_exercises")
+        .delete()
+        .eq("scheduled_session_id", ss.id);
+
+      if (delExError) {
+        console.error(`${LOG_PREFIX} delete overrides only:`, {
+          correlationId,
+          error: delExError.message,
+        });
+
+        return NextResponse.json(
+          { success: false, error: "Error reseteando override" },
+          { status: 500 }
+        );
+      }
+    } else {
+      const { error: delSsError } = await supabase
+        .from("scheduled_sessions")
+        .delete()
+        .eq("id", ss.id);
+
+      if (delSsError) {
+        console.error(`${LOG_PREFIX} delete scheduled_session:`, {
+          correlationId,
+          error: delSsError.message,
+        });
+
+        return NextResponse.json(
+          { success: false, error: "Error eliminando sesión programada" },
+          { status: 500 }
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error(`${LOG_PREFIX} DELETE unexpected:`, error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
