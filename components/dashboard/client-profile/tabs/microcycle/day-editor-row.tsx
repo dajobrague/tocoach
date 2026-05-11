@@ -18,7 +18,7 @@ export function DayEditorRow({
   dragHandleProps,
   onChange,
   onRemove,
-  disabled,
+  disabled = false,
 }: Props) {
   return (
     <div className="flex items-center gap-2 px-2 py-2 border border-gray-200 rounded-md bg-white">
