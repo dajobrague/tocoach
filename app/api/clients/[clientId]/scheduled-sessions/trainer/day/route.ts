@@ -103,6 +103,28 @@ export async function PUT(
       );
     }
 
+    // Resolve the trainer's actual tenant_host from the DB (the JWT's value
+    // can be stale or not registered as a tenants.host primary key).
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("host")
+      .eq("trainer_id", session.trainer_id)
+      .maybeSingle();
+
+    if (tenantError || !tenant) {
+      console.error(`${LOG_PREFIX} resolve tenant.host:`, {
+        correlationId,
+        error: tenantError?.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Tenant no resuelto" },
+        { status: 500 }
+      );
+    }
+
+    const tenantHost = tenant.host;
+
     // ── Lock check: past + has logs ────────────────────────────────
     if (body.scheduledDate < todayYmd()) {
       const { count } = await supabase
@@ -199,7 +221,7 @@ export async function PUT(
       const { data: created, error: createError } = await supabase
         .from("scheduled_sessions")
         .insert({
-          tenant_host: session.tenant_host,
+          tenant_host: tenantHost,
           client_id: clientId,
           trainer_id: session.trainer_id,
           session_id: body.sessionId,
@@ -243,7 +265,7 @@ export async function PUT(
 
     if (body.exercises.length > 0) {
       const rows = body.exercises.map((e) => ({
-        tenant_host: session.tenant_host,
+        tenant_host: tenantHost,
         scheduled_session_id: scheduledSessionId,
         exercise_id: e.exerciseId,
         exercise_order: e.exerciseOrder,
@@ -303,7 +325,7 @@ export async function PUT(
 
         for (const s of e.setsDetail) {
           setRows.push({
-            tenant_host: session.tenant_host,
+            tenant_host: tenantHost,
             scheduled_session_exercise_id: parentId,
             set_number: s.setNumber,
             reps: s.reps,
