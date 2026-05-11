@@ -2,7 +2,7 @@
 
 import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DayDetail } from "./day-detail";
 import { useWeekMetrics } from "./use-week-metrics";
@@ -10,6 +10,10 @@ import { WeekNavigator } from "./week-navigator";
 import { WeekStrip } from "./week-strip";
 
 import { getLocalYmd } from "@/lib/forms/client-helpers";
+import {
+  TrainerExerciseVideoModal,
+  type TrainerExerciseVideoHandle,
+} from "@/components/trainer/trainer-exercise-video-modal";
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -44,6 +48,12 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     getLocalYmd(new Date())
   );
   const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
+
+  const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
+  const openVideo = useCallback(
+    (url: string, name: string) => videoModalRef.current?.open(url, name),
+    []
+  );
 
   // Reset selected date when client changes.
   useEffect(() => {
@@ -140,10 +150,13 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
             <DayDetail
               day={selectedDay}
               orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
+              onPlayVideo={openVideo}
             />
           ) : null}
         </>
       ) : null}
+
+      <TrainerExerciseVideoModal ref={videoModalRef} />
 
       {data && weekIsCompletelyEmpty ? (
         <div className="rounded-lg border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800 flex items-start gap-3">
