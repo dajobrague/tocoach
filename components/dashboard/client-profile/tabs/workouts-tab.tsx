@@ -45,11 +45,16 @@ import {
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ExerciseProgressCard } from "./workouts/exercise-progress-card";
+import { OrphanExercisesSection } from "./workouts/orphan-exercises-section";
 import { useClientExerciseLogs } from "./workouts/use-client-exercise-logs";
 import { useExerciseExpandedState } from "./workouts/use-exercise-expanded-state";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
-import { type TrainerExerciseVideoHandle } from "@/components/trainer/trainer-exercise-video-modal";
+import {
+  TrainerExerciseVideoModal,
+  type TrainerExerciseVideoHandle,
+} from "@/components/trainer/trainer-exercise-video-modal";
 
 interface WorkoutsTabProps {
   clientId: string;
@@ -1384,136 +1389,94 @@ export default function WorkoutsTab({
                                               dragHandleProps:
                                                 exerciseDragHandleProps,
                                             }) => (
-                                              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                                                {/* Drag handle */}
-                                                <div
-                                                  className="flex items-center justify-center mt-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-                                                  {...exerciseDragHandleProps}
-                                                >
-                                                  <Icon
-                                                    icon="solar:hamburger-menu-linear"
-                                                    width={16}
-                                                  />
-                                                </div>
-                                                <span className="text-sm font-semibold text-gray-500 min-w-[24px] mt-1">
-                                                  {exercise.order}.
+                                              <div className="flex items-start gap-2">
+                                                <span className="text-xs font-semibold text-gray-400 w-5 text-right mt-4 shrink-0 tabular-nums">
+                                                  {exercise.order}
                                                 </span>
-                                                {/* Exercise Image */}
-                                                {exercise.imageUrl ? (
-                                                  // eslint-disable-next-line @next/next/no-img-element
-                                                  <img
-                                                    alt={exercise.name}
-                                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                                                    src={exercise.imageUrl}
+                                                <div className="flex-1 min-w-0">
+                                                  <ExerciseProgressCard
+                                                    actions={
+                                                      <>
+                                                        {exercise.videoUrl && (
+                                                          <Button
+                                                            isIconOnly
+                                                            as="a"
+                                                            className="h-6 w-6 min-w-6"
+                                                            href={
+                                                              exercise.videoUrl
+                                                            }
+                                                            size="sm"
+                                                            target="_blank"
+                                                            variant="flat"
+                                                          >
+                                                            <Icon
+                                                              className="text-slate-700"
+                                                              icon="solar:play-circle-bold"
+                                                              width={16}
+                                                            />
+                                                          </Button>
+                                                        )}
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="light"
+                                                          onPress={() =>
+                                                            handleEditExercise(
+                                                              session.id,
+                                                              exercise
+                                                            )
+                                                          }
+                                                        >
+                                                          <Icon
+                                                            className="text-gray-400 hover:text-gray-600"
+                                                            icon="solar:pen-linear"
+                                                            width={16}
+                                                          />
+                                                        </Button>
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="light"
+                                                          onPress={() =>
+                                                            handleDeleteExercise(
+                                                              session.id,
+                                                              exercise
+                                                            )
+                                                          }
+                                                        >
+                                                          <Icon
+                                                            className="text-gray-400 hover:text-red-600"
+                                                            icon="solar:trash-bin-trash-linear"
+                                                            width={16}
+                                                          />
+                                                        </Button>
+                                                      </>
+                                                    }
+                                                    dragHandleProps={
+                                                      exerciseDragHandleProps
+                                                    }
+                                                    isExpanded={
+                                                      exercise.id
+                                                        ? isExpanded(
+                                                            exercise.id
+                                                          )
+                                                        : false
+                                                    }
+                                                    logs={getLogsForExercise(
+                                                      exercise.exercise_id ?? ""
+                                                    )}
+                                                    prescribed={exercise}
+                                                    variant="strength"
+                                                    onPlayVideo={
+                                                      openExerciseVideo
+                                                    }
+                                                    onToggle={() => {
+                                                      if (exercise.id)
+                                                        toggleExerciseExpanded(
+                                                          exercise.id
+                                                        );
+                                                    }}
                                                   />
-                                                ) : (
-                                                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                                    <Icon
-                                                      className="text-gray-400"
-                                                      icon="solar:dumbbell-bold"
-                                                      width={28}
-                                                    />
-                                                  </div>
-                                                )}
-                                                <div className="flex-1">
-                                                  <div className="flex items-center gap-2">
-                                                    <p className="font-medium text-gray-900">
-                                                      {exercise.name}
-                                                    </p>
-                                                    {exercise.videoUrl && (
-                                                      <Button
-                                                        isIconOnly
-                                                        as="a"
-                                                        className="h-6 w-6 min-w-6"
-                                                        href={exercise.videoUrl}
-                                                        size="sm"
-                                                        target="_blank"
-                                                        variant="flat"
-                                                      >
-                                                        <Icon
-                                                          className="text-slate-700"
-                                                          icon="solar:play-circle-bold"
-                                                          width={16}
-                                                        />
-                                                      </Button>
-                                                    )}
-                                                  </div>
-                                                  <div className="text-sm text-gray-600 mt-1">
-                                                    {exercise.sets &&
-                                                      exercise.reps && (
-                                                        <span>
-                                                          {exercise.sets} series
-                                                          × {exercise.reps} reps
-                                                        </span>
-                                                      )}
-                                                    {exercise.rest && (
-                                                      <span className="ml-2">
-                                                        • {exercise.rest}{" "}
-                                                        descanso
-                                                      </span>
-                                                    )}
-                                                    {exercise.trainingSystem && (
-                                                      <span className="ml-2">
-                                                        •{" "}
-                                                        {
-                                                          exercise.trainingSystem
-                                                        }
-                                                      </span>
-                                                    )}
-                                                    {exercise.tempo && (
-                                                      <span className="ml-2">
-                                                        • Tempo:{" "}
-                                                        {exercise.tempo}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                  {exercise.description && (
-                                                    <p className="text-gray-500 mt-1 text-xs">
-                                                      {exercise.description}
-                                                    </p>
-                                                  )}
-                                                  {exercise.notes && (
-                                                    <p className="text-gray-500 mt-1 text-xs italic">
-                                                      Notas: {exercise.notes}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                                {/* Actions */}
-                                                <div className="flex items-center gap-1">
-                                                  <Button
-                                                    isIconOnly
-                                                    size="sm"
-                                                    variant="light"
-                                                    onPress={() =>
-                                                      handleEditExercise(
-                                                        session.id,
-                                                        exercise
-                                                      )
-                                                    }
-                                                  >
-                                                    <Icon
-                                                      className="text-gray-400 hover:text-gray-600"
-                                                      icon="solar:pen-linear"
-                                                      width={16}
-                                                    />
-                                                  </Button>
-                                                  <Button
-                                                    isIconOnly
-                                                    size="sm"
-                                                    variant="light"
-                                                    onPress={() =>
-                                                      handleDeleteExercise(
-                                                        session.id,
-                                                        exercise
-                                                      )
-                                                    }
-                                                  >
-                                                    <Icon
-                                                      className="text-gray-400 hover:text-red-600"
-                                                      icon="solar:trash-bin-trash-linear"
-                                                      width={16}
-                                                    />
-                                                  </Button>
                                                 </div>
                                               </div>
                                             )}
@@ -2951,6 +2914,15 @@ export default function WorkoutsTab({
           }}
         />
       )}
+
+      {/* Off-plan logged exercises */}
+      <OrphanExercisesSection
+        groups={orphanGroups}
+        variant="strength"
+        onPlayVideo={openExerciseVideo}
+      />
+
+      <TrainerExerciseVideoModal ref={videoModalRef} />
     </div>
   );
 }
