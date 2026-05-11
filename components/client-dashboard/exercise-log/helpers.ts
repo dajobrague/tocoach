@@ -16,6 +16,14 @@ export interface ExerciseShape {
   tempo?: string;
   rest?: string;
   trainingSystem?: string;
+  /** Uniform prescribed weight (Phase 3 override). */
+  weightKg?: number | null;
+  /** Per-set prescription (Phase 3.5 override). Wins over uniform when present. */
+  prescribedSets?: Array<{
+    setNumber: number;
+    reps: string | null;
+    weightKg: number | null;
+  }>;
   duration?: number;
   distance?: number;
   intensity?: string;
@@ -82,10 +90,24 @@ export function buildBaseFormData(
       if (m) reps = m[0];
     }
     sets = Array.from({ length: count }, () => ({ reps, weight: "" }));
+  } else if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
+    // Per-set trainer override: prefill each row with its prescribed values.
+    sets = exercise.prescribedSets.map((s) => ({
+      reps: s.reps != null ? String(s.reps) : "",
+      weight: s.weightKg != null ? String(s.weightKg) : "",
+    }));
   } else {
+    // Uniform prescription: build N empty rows, prefilled with the trainer's
+    // uniform reps/weight when present (Phase 3 override).
     const count = exercise.sets || 1;
+    const repsStr = exercise.reps != null ? String(exercise.reps) : "";
+    const weightStr =
+      exercise.weightKg != null ? String(exercise.weightKg) : "";
 
-    sets = Array.from({ length: count }, () => defaultSet());
+    sets = Array.from({ length: count }, () => ({
+      reps: repsStr,
+      weight: weightStr,
+    }));
   }
 
   return {

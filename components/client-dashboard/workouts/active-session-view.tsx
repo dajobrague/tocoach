@@ -420,6 +420,8 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.sets != null) out.sets = r.sets;
   if (r.reps != null) out.reps = r.reps;
   if (r.weight_kg != null) out.weightKg = r.weight_kg;
+  if (r.image_url) out.imageUrl = r.image_url;
+  if (r.video_url) out.videoUrl = r.video_url;
   if (r.duration_seconds != null) {
     out.duration = Math.round(r.duration_seconds / 60);
   }

@@ -12,6 +12,8 @@ export interface ResolvedExercise {
   exercise_id: string;
   name: string;
   category: string;
+  image_url: string | null;
+  video_url: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;

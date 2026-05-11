@@ -26,6 +26,10 @@ interface ResolvedExercise {
   exercise_id: string;
   name: string;
   category: string;
+  /** Library image (when the trainer has one configured for this exercise). */
+  image_url: string | null;
+  /** Library reference/demo video (separate from per-set client uploads). */
+  video_url: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;
@@ -93,13 +97,13 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes,
-             exercise:exercises(id, name, category)
+             exercise:exercises(id, name, category, image_url, video_url)
            )
          ),
          override_exercises:scheduled_session_exercises(
            id, exercise_order, sets, reps, weight_kg,
            duration_seconds, distance_meters, rest_seconds, notes,
-           exercise:exercises(id, name, category),
+           exercise:exercises(id, name, category, image_url, video_url),
            prescribed_sets:scheduled_session_exercise_sets(
              id, set_number, reps, weight_kg, notes
            )
@@ -165,7 +169,7 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes,
-             exercise:exercises(id, name, category)
+             exercise:exercises(id, name, category, image_url, video_url)
            )`
         )
         .eq("id", slot.session_id)
@@ -217,7 +221,13 @@ function makeResolvedDay(
     distance_meters: number | null;
     rest_seconds: number | null;
     notes: string | null;
-    exercise: { id: string; name: string; category: string };
+    exercise: {
+      id: string;
+      name: string;
+      category: string;
+      image_url: string | null;
+      video_url: string | null;
+    };
     prescribed_sets?: Array<{
       set_number: number;
       reps: string | null;
@@ -241,6 +251,8 @@ function makeResolvedDay(
         exercise_id: r.exercise.id,
         name: r.exercise.name,
         category: r.exercise.category,
+        image_url: r.exercise.image_url ?? null,
+        video_url: r.exercise.video_url ?? null,
         exercise_order: r.exercise_order,
         sets: r.sets,
         reps: r.reps,
