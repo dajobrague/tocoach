@@ -127,6 +127,8 @@ export async function PUT(
     }
 
     // ── Validate referenced sessionId belongs to tenant ────────────
+    // Note: clients.tenant stores the trainer's UUID (already checked above);
+    // sessions/exercises store tenant_host (the actual tenant host string).
     if (body.sessionId) {
       const { data: sess, error: sessError } = await supabase
         .from("sessions")
@@ -134,7 +136,7 @@ export async function PUT(
         .eq("id", body.sessionId)
         .single();
 
-      if (sessError || !sess || sess.tenant_host !== session.trainer_id) {
+      if (sessError || !sess || sess.tenant_host !== session.tenant_host) {
         return NextResponse.json(
           { success: false, error: "sessionId inválido" },
           { status: 400 }
@@ -159,7 +161,7 @@ export async function PUT(
 
       const validIds = new Set(
         foundEx
-          .filter((e) => e.tenant_host === session.trainer_id)
+          .filter((e) => e.tenant_host === session.tenant_host)
           .map((e) => e.id)
       );
 
@@ -197,7 +199,7 @@ export async function PUT(
       const { data: created, error: createError } = await supabase
         .from("scheduled_sessions")
         .insert({
-          tenant_host: session.trainer_id,
+          tenant_host: session.tenant_host,
           client_id: clientId,
           trainer_id: session.trainer_id,
           session_id: body.sessionId,
@@ -241,7 +243,7 @@ export async function PUT(
 
     if (body.exercises.length > 0) {
       const rows = body.exercises.map((e) => ({
-        tenant_host: session.trainer_id,
+        tenant_host: session.tenant_host,
         scheduled_session_id: scheduledSessionId,
         exercise_id: e.exerciseId,
         exercise_order: e.exerciseOrder,
@@ -301,7 +303,7 @@ export async function PUT(
 
         for (const s of e.setsDetail) {
           setRows.push({
-            tenant_host: session.trainer_id,
+            tenant_host: session.tenant_host,
             scheduled_session_exercise_id: parentId,
             set_number: s.setNumber,
             reps: s.reps,
