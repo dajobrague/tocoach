@@ -117,61 +117,14 @@ function formResponse1D(spec: FormResponse1DSpec): DataAdapter {
 
 // ─── Catalog: 1-D adapters ─────────────────────────────────────────────────
 
-// Weight is a special case: trainers configure their daily habit forms to
-// ask for body weight (Isaac Català ticket — "el peso corporal únicamente
-// se representa cuando se registra dentro del check-in quincenal"), so the
-// chart needs to read from BOTH `checkins` and `habits` form responses and
-// merge them by date. We can't go through the 1-D factory because it binds
-// to a single formType; instead we materialize a union and reuse the
-// existing bucket helper.
-const resolveWeightAnswer = resolveByKey([
-  "weight",
-  "peso",
-  "weight_kg",
-  "peso_kg",
-]);
-const weight: DataAdapter = {
-  metadata: {
-    id: "weight",
-    label: "Peso",
-    unit: "kg",
-    icon: "solar:body-bold",
-    category: "checkin",
-    dimensions: 1,
-    default_chart_type: "area",
-    default_color: "weight-amber",
-  },
-  materialize(ctx, aggregation): BucketedPoint[] {
-    // Merge both sources. `averageInWindow` filters by `response_date`
-    // and skips null resolves, so habit-form rows that don't include a
-    // weight key are naturally ignored. If the same client logs weight
-    // on the same day in both forms, both values feed the average for
-    // that day — closer to "what the client actually weighed" than
-    // arbitrarily preferring one source.
-    const responses = [
-      ...ctx.formResponses.checkins,
-      ...ctx.formResponses.habits,
-    ];
-    const buckets = generateBuckets(
-      ctx.range,
-      aggregation,
-      ctx.schedule,
-      ctx.clientTz
-    );
-
-    return buckets.map((w) => ({
-      label: w.label,
-      value: averageInWindow(
-        responses,
-        w,
-        resolveWeightAnswer,
-        ctx.schedule,
-        ctx.clientTz
-      ),
-      periodTooltip: w.tooltip,
-    }));
-  },
-};
+// Note: there is no `weight` adapter on purpose. The catalog id literal
+// `"weight"` is retained in CatalogId / catalogIdSchema so stored docs
+// from before 2026-05 still parse, but the adapter has moved to a
+// per-trainer form-question source (see lib/charts/starter.ts). Legacy
+// charts pointing at {kind:"catalog", id:"weight"} resolve to undefined
+// here and render the orphan empty-state in ChartCard — the trainer
+// then deletes / re-adds the chart pointing at their body_weight
+// question.
 
 const bodyFat = formResponse1D({
   id: "body_fat",
@@ -468,7 +421,6 @@ const trainingBreakdown: DataAdapter = {
  *   3) Add the adapter here
  */
 export const CATALOG_ADAPTERS: ReadonlyArray<DataAdapter> = [
-  weight,
   bodyFat,
   sleepHours,
   steps,
