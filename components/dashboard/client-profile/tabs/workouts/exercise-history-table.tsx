@@ -6,6 +6,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { computeSessionVolume } from "./helpers";
+import { HistoryDateFilter } from "./history-date-filter";
 
 interface Props {
   logs: ExerciseLog[];
@@ -318,60 +319,6 @@ function PaginationControls({
   );
 }
 
-function formatDateOption(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-
-  // "vie, 22 may 2026"
-  return d.toLocaleDateString("es-ES", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function DateFilter({
-  dates,
-  value,
-  onChange,
-}: {
-  /** Distinct dates with at least one session, most recent first. */
-  dates: string[];
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  if (dates.length <= 1) return null;
-
-  return (
-    <label className="relative inline-flex items-center text-[11px] text-gray-600">
-      <Icon
-        className="absolute left-2 text-gray-400 pointer-events-none"
-        icon="solar:calendar-linear"
-        width={13}
-      />
-      <select
-        aria-label="Filtrar historial por fecha"
-        className="appearance-none bg-white border border-gray-200 rounded-md pl-7 pr-7 py-1 text-[11px] text-gray-700 font-medium hover:border-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 cursor-pointer tabular-nums"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">Todas las fechas</option>
-        {dates.map((d) => (
-          <option key={d} value={d}>
-            {formatDateOption(d)}
-          </option>
-        ))}
-      </select>
-      <Icon
-        className="absolute right-2 text-gray-400 pointer-events-none"
-        icon="solar:alt-arrow-down-linear"
-        width={11}
-      />
-    </label>
-  );
-}
-
 export function ExerciseHistoryTable({
   logs,
   variant,
@@ -392,8 +339,8 @@ export function ExerciseHistoryTable({
     setPage(1);
   }, [dateFilter]);
 
-  // Distinct dates with sessions, most recent first. Pre-computed so the
-  // dropdown stays cheap to render and only offers dates the trainer can act on.
+  // Distinct dates with sessions — fed into the calendar popover so days
+  // with data are highlighted and the rest are non-clickable.
   const distinctDates = useMemo(() => {
     const set = new Set<string>();
 
@@ -401,7 +348,7 @@ export function ExerciseHistoryTable({
       if (l.scheduled_date) set.add(l.scheduled_date);
     }
 
-    return Array.from(set).sort((a, b) => b.localeCompare(a));
+    return Array.from(set);
   }, [logs]);
 
   if (logs.length === 0) {
@@ -434,8 +381,8 @@ export function ExerciseHistoryTable({
               : `${logs.length} ${logs.length === 1 ? "sesión" : "sesiones"}`}
           </span>
         </p>
-        <DateFilter
-          dates={distinctDates}
+        <HistoryDateFilter
+          datesWithSessions={distinctDates}
           value={dateFilter}
           onChange={setDateFilter}
         />
