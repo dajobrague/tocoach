@@ -67,7 +67,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg)`
+        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg, video_url)`
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: true });

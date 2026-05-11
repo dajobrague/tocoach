@@ -3,6 +3,8 @@ export interface ExerciseLogSet {
   set_number: number;
   reps: number | null;
   weight_kg: number | null;
+  /** Per-set video uploaded by the client (added in migration 091). */
+  video_url?: string | null;
 }
 
 export interface ExerciseLog {

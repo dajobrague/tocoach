@@ -36,13 +36,27 @@ function formatNumber(n: number): string {
   return n.toLocaleString("es-ES");
 }
 
-function StrengthSetRow({ set }: { set: ExerciseLogSet }) {
+function StrengthSetRow({
+  set,
+  videoUrl,
+  videoIsLegacy,
+  exerciseName,
+  onPlayVideo,
+}: {
+  set: ExerciseLogSet;
+  /** Resolved video for this set: per-set video, or legacy session-level video on set 1. */
+  videoUrl: string | null;
+  /** True when videoUrl is the session-level legacy video (not specific to this set). */
+  videoIsLegacy: boolean;
+  exerciseName: string;
+  onPlayVideo: (url: string, name: string) => void;
+}) {
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
         {set.set_number}
       </span>
-      <span className="text-gray-900 tabular-nums">
+      <span className="text-gray-900 tabular-nums flex-1 min-w-0">
         <span className="font-semibold">{set.reps ?? "—"}</span>
         <span className="text-gray-400 mx-0.5">reps</span>
         <span className="text-gray-400 mx-0.5">×</span>
@@ -51,6 +65,25 @@ function StrengthSetRow({ set }: { set: ExerciseLogSet }) {
         </span>
         <span className="text-gray-400 ml-0.5">kg</span>
       </span>
+      {videoUrl ? (
+        <button
+          aria-label={
+            videoIsLegacy
+              ? `Ver video de ${exerciseName} (sesión completa)`
+              : `Ver video de ${exerciseName} serie ${set.set_number}`
+          }
+          className={`inline-flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0 ${
+            videoIsLegacy
+              ? "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              : "text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+          }`}
+          title={videoIsLegacy ? "Video de la sesión completa" : undefined}
+          type="button"
+          onClick={() => onPlayVideo(videoUrl, exerciseName)}
+        >
+          <Icon icon="solar:play-circle-bold" width={15} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -59,17 +92,20 @@ function SessionHeader({
   log,
   exerciseName,
   onPlayVideo,
+  /** Strength sessions render videos per set; cardio keeps the session-level button. */
+  showSessionVideoButton = true,
 }: {
   log: ExerciseLog;
   exerciseName: string;
   onPlayVideo: (url: string, name: string) => void;
+  showSessionVideoButton?: boolean;
 }) {
   return (
     <header className="px-2.5 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-3">
       <p className="text-[11px] font-semibold text-gray-700 capitalize tabular-nums">
         {formatLongDate(log.scheduled_date)}
       </p>
-      {log.video_url ? (
+      {showSessionVideoButton && log.video_url ? (
         <button
           aria-label={`Ver video de ${exerciseName}`}
           className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
@@ -107,11 +143,18 @@ function StrengthSessionCard({
   const maxWeight =
     sets.length > 0 ? Math.max(...sets.map((s) => s.weight_kg ?? 0)) : 0;
 
+  // Per-set videos (migration 091). Legacy sessions stored a single video at
+  // exercise_logs.video_url; when no per-set videos exist we surface that on
+  // set 1 with a muted treatment so the trainer can still see it.
+  const anyPerSetVideo = sets.some((s) => Boolean(s.video_url));
+  const legacyVideoUrl = log.video_url ?? null;
+
   return (
     <article className="bg-white border border-gray-200 rounded-md overflow-hidden">
       <SessionHeader
         exerciseName={exerciseName}
         log={log}
+        showSessionVideoButton={false}
         onPlayVideo={onPlayVideo}
       />
 
@@ -145,9 +188,25 @@ function StrengthSessionCard({
 
         {sets.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-0.5">
-            {sets.map((set) => (
-              <StrengthSetRow key={set.set_number} set={set} />
-            ))}
+            {sets.map((set, idx) => {
+              const perSetVideo = set.video_url ?? null;
+              const showLegacyHere =
+                !anyPerSetVideo && idx === 0 && legacyVideoUrl;
+              const resolvedUrl =
+                perSetVideo ?? (showLegacyHere ? legacyVideoUrl : null);
+              const isLegacy = !perSetVideo && Boolean(showLegacyHere);
+
+              return (
+                <StrengthSetRow
+                  key={set.set_number}
+                  exerciseName={exerciseName}
+                  set={set}
+                  videoIsLegacy={isLegacy}
+                  videoUrl={resolvedUrl}
+                  onPlayVideo={onPlayVideo}
+                />
+              );
+            })}
           </div>
         ) : null}
 
