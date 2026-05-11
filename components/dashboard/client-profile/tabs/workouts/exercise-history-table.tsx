@@ -4,7 +4,6 @@ import type { ExerciseLog } from "../progress/types";
 
 import { Icon } from "@iconify/react";
 
-import { LogTable } from "../progress/exercise-chart";
 import { formatDate } from "../progress/helpers";
 
 interface Props {
@@ -14,27 +13,27 @@ interface Props {
   onPlayVideo: (url: string, name: string) => void;
 }
 
-function formatSetsCell(log: ExerciseLog) {
-  if (log.sets && log.sets.length > 0) {
-    return (
-      <div className="flex flex-col gap-0.5">
-        {log.sets.map((s) => (
-          <div key={s.set_number} className="flex items-center gap-1.5 text-xs">
-            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-              {s.set_number}
-            </span>
-            <span>{s.reps ?? "—"} reps</span>
-            <span className="text-gray-400">·</span>
-            <span className="font-medium">
-              {s.weight_kg != null ? `${s.weight_kg}kg` : "—"}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
+function summarizeStrengthSets(log: ExerciseLog) {
+  if (!log.sets || log.sets.length === 0) return "—";
 
-  return "—";
+  return log.sets
+    .map((s) => {
+      const reps = s.reps ?? "—";
+      const weight = s.weight_kg != null ? `${s.weight_kg}kg` : "—";
+
+      return `${reps}×${weight}`;
+    })
+    .join(" · ");
+}
+
+function summarizeCardio(log: ExerciseLog) {
+  const parts: string[] = [];
+
+  if (log.duration_minutes != null) parts.push(`${log.duration_minutes} min`);
+  if (log.distance_km != null) parts.push(`${log.distance_km} km`);
+  if (log.intensity) parts.push(log.intensity);
+
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 export function ExerciseHistoryTable({
@@ -45,7 +44,7 @@ export function ExerciseHistoryTable({
 }: Props) {
   if (logs.length === 0) {
     return (
-      <p className="text-sm text-gray-400 italic">
+      <p className="text-xs text-gray-400 italic">
         Sin registros aún. Aparecerán aquí cuando tu cliente complete sesiones.
       </p>
     );
@@ -54,63 +53,37 @@ export function ExerciseHistoryTable({
   // Most recent first.
   const orderedLogs = [...logs].reverse();
 
-  if (variant === "strength") {
-    return (
-      <LogTable
-        columns={[
-          { label: "Fecha", render: (l) => formatDate(l.scheduled_date) },
-          { label: "Series", render: (l) => formatSetsCell(l) },
-          {
-            label: "",
-            render: (l) =>
-              l.video_url ? (
-                <button
-                  className="text-blue-600 hover:text-blue-800 p-1 rounded-lg hover:bg-blue-50 transition-colors"
-                  onClick={() => onPlayVideo(l.video_url!, exerciseName)}
-                >
-                  <Icon icon="solar:play-circle-bold" width={20} />
-                </button>
-              ) : null,
-          },
-          { label: "Notas", render: (l) => l.notes ?? "—", wrap: true },
-        ]}
-        logs={orderedLogs}
-      />
-    );
-  }
-
   return (
-    <LogTable
-      columns={[
-        { label: "Fecha", render: (l) => formatDate(l.scheduled_date) },
-        {
-          label: "Duración",
-          render: (l) =>
-            l.duration_minutes != null ? `${l.duration_minutes} min` : "—",
-        },
-        {
-          label: "Distancia",
-          render: (l) => (l.distance_km != null ? `${l.distance_km} km` : "—"),
-        },
-        {
-          label: "Intensidad",
-          render: (l) => l.intensity ?? "—",
-        },
-        {
-          label: "",
-          render: (l) =>
-            l.video_url ? (
-              <button
-                className="text-blue-600 hover:text-blue-800 p-1 rounded-lg hover:bg-blue-50 transition-colors"
-                onClick={() => onPlayVideo(l.video_url!, exerciseName)}
-              >
-                <Icon icon="solar:play-circle-bold" width={20} />
-              </button>
-            ) : null,
-        },
-        { label: "Notas", render: (l) => l.notes ?? "—", wrap: true },
-      ]}
-      logs={orderedLogs}
-    />
+    <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white">
+      {orderedLogs.map((log) => (
+        <div key={log.id} className="px-3 py-2 flex items-start gap-3 text-sm">
+          <span className="text-xs font-medium text-gray-500 w-16 shrink-0 tabular-nums mt-0.5">
+            {formatDate(log.scheduled_date)}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-800 leading-snug break-words">
+              {variant === "strength"
+                ? summarizeStrengthSets(log)
+                : summarizeCardio(log)}
+            </p>
+            {log.notes ? (
+              <p className="text-[11px] text-gray-500 italic mt-0.5 leading-snug">
+                {log.notes}
+              </p>
+            ) : null}
+          </div>
+          {log.video_url ? (
+            <button
+              aria-label="Ver video"
+              className="text-blue-600 hover:text-blue-800 p-0.5 -mt-0.5 rounded hover:bg-blue-50 transition-colors shrink-0"
+              type="button"
+              onClick={() => onPlayVideo(log.video_url!, exerciseName)}
+            >
+              <Icon icon="solar:play-circle-bold" width={18} />
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }

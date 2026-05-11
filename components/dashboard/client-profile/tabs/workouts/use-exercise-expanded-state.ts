@@ -1,35 +1,14 @@
 "use client";
 
-import type { WorkoutProgram } from "@/types/training";
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 /**
  * Tracks which exercise cards are expanded inside the Entrenamientos / Cardio
- * tabs. Seeds defaults exactly once after programs first load: the first
- * exercise of every session in every active program starts expanded; the rest
- * collapse. After seeding, user toggles are preserved across refetches so a
- * background reload doesn't re-expand a card the user just closed.
+ * tabs. All exercises start collapsed; the trainer expands what they want to
+ * inspect. State persists across log refetches.
  */
-export function useExerciseExpandedState(programs: WorkoutProgram[]) {
+export function useExerciseExpandedState() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [seeded, setSeeded] = useState(false);
-
-  useEffect(() => {
-    if (seeded || programs.length === 0) return;
-
-    const seed = new Set<string>();
-
-    for (const program of programs) {
-      for (const session of program.sessions) {
-        const first = session.exercises[0];
-
-        if (first?.id) seed.add(first.id);
-      }
-    }
-    setExpanded(seed);
-    setSeeded(true);
-  }, [programs, seeded]);
 
   const toggle = useCallback((id: string) => {
     setExpanded((prev) => {

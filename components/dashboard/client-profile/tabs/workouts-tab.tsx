@@ -238,7 +238,7 @@ export default function WorkoutsTab({
   const { getLogsForExercise, getOrphanGroups } =
     useClientExerciseLogs(clientId);
   const { isExpanded, toggle: toggleExerciseExpanded } =
-    useExerciseExpandedState(programs);
+    useExerciseExpandedState();
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
   const openExerciseVideo = useCallback(
     (url: string, name: string) => videoModalRef.current?.open(url, name),
