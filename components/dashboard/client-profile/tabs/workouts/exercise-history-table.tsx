@@ -3,7 +3,7 @@
 import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { computeSessionVolume } from "./helpers";
 
@@ -318,6 +318,60 @@ function PaginationControls({
   );
 }
 
+function formatDateOption(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00");
+
+  // "vie, 22 may 2026"
+  return d.toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function DateFilter({
+  dates,
+  value,
+  onChange,
+}: {
+  /** Distinct dates with at least one session, most recent first. */
+  dates: string[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  if (dates.length <= 1) return null;
+
+  return (
+    <label className="relative inline-flex items-center text-[11px] text-gray-600">
+      <Icon
+        className="absolute left-2 text-gray-400 pointer-events-none"
+        icon="solar:calendar-linear"
+        width={13}
+      />
+      <select
+        aria-label="Filtrar historial por fecha"
+        className="appearance-none bg-white border border-gray-200 rounded-md pl-7 pr-7 py-1 text-[11px] text-gray-700 font-medium hover:border-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 cursor-pointer tabular-nums"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Todas las fechas</option>
+        {dates.map((d) => (
+          <option key={d} value={d}>
+            {formatDateOption(d)}
+          </option>
+        ))}
+      </select>
+      <Icon
+        className="absolute right-2 text-gray-400 pointer-events-none"
+        icon="solar:alt-arrow-down-linear"
+        width={11}
+      />
+    </label>
+  );
+}
+
 export function ExerciseHistoryTable({
   logs,
   variant,
@@ -325,11 +379,30 @@ export function ExerciseHistoryTable({
   onPlayVideo,
 }: Props) {
   const [page, setPage] = useState(1);
+  const [dateFilter, setDateFilter] = useState<string>("");
 
-  // Reset to page 1 when the dataset changes (refetch, exercise switch).
+  // Reset filter and page when the dataset changes (exercise switch, refetch).
   useEffect(() => {
     setPage(1);
+    setDateFilter("");
   }, [logs.length]);
+
+  // Reset page to 1 whenever the filter changes.
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilter]);
+
+  // Distinct dates with sessions, most recent first. Pre-computed so the
+  // dropdown stays cheap to render and only offers dates the trainer can act on.
+  const distinctDates = useMemo(() => {
+    const set = new Set<string>();
+
+    for (const l of logs) {
+      if (l.scheduled_date) set.add(l.scheduled_date);
+    }
+
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [logs]);
 
   if (logs.length === 0) {
     return (
@@ -340,49 +413,68 @@ export function ExerciseHistoryTable({
   }
 
   const orderedLogs = [...logs].reverse();
-  const totalPages = Math.max(1, Math.ceil(orderedLogs.length / PAGE_SIZE));
+  const filteredLogs = dateFilter
+    ? orderedLogs.filter((l) => l.scheduled_date === dateFilter)
+    : orderedLogs;
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const startIdx = (safePage - 1) * PAGE_SIZE;
-  const endIdx = Math.min(startIdx + PAGE_SIZE, orderedLogs.length);
-  const pageLogs = orderedLogs.slice(startIdx, endIdx);
+  const endIdx = Math.min(startIdx + PAGE_SIZE, filteredLogs.length);
+  const pageLogs = filteredLogs.slice(startIdx, endIdx);
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs font-semibold text-gray-700">
           Historial{" "}
           <span className="text-gray-400 font-normal">
-            · {logs.length} {logs.length === 1 ? "sesión" : "sesiones"}
+            ·{" "}
+            {dateFilter
+              ? `${filteredLogs.length} ${filteredLogs.length === 1 ? "sesión" : "sesiones"} en esta fecha`
+              : `${logs.length} ${logs.length === 1 ? "sesión" : "sesiones"}`}
           </span>
         </p>
+        <DateFilter
+          dates={distinctDates}
+          value={dateFilter}
+          onChange={setDateFilter}
+        />
       </div>
-      <div className="space-y-1.5">
-        {pageLogs.map((log) =>
-          variant === "strength" ? (
-            <StrengthSessionCard
-              key={log.id}
-              exerciseName={exerciseName}
-              log={log}
-              onPlayVideo={onPlayVideo}
-            />
-          ) : (
-            <CardioSessionCard
-              key={log.id}
-              exerciseName={exerciseName}
-              log={log}
-              onPlayVideo={onPlayVideo}
-            />
-          )
-        )}
-      </div>
-      <PaginationControls
-        page={safePage}
-        rangeEnd={endIdx}
-        rangeStart={startIdx + 1}
-        total={orderedLogs.length}
-        totalPages={totalPages}
-        onChange={setPage}
-      />
+      {filteredLogs.length === 0 ? (
+        <div className="text-xs text-gray-400 italic px-3 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+          Sin registros para esta fecha.
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            {pageLogs.map((log) =>
+              variant === "strength" ? (
+                <StrengthSessionCard
+                  key={log.id}
+                  exerciseName={exerciseName}
+                  log={log}
+                  onPlayVideo={onPlayVideo}
+                />
+              ) : (
+                <CardioSessionCard
+                  key={log.id}
+                  exerciseName={exerciseName}
+                  log={log}
+                  onPlayVideo={onPlayVideo}
+                />
+              )
+            )}
+          </div>
+          <PaginationControls
+            page={safePage}
+            rangeEnd={endIdx}
+            rangeStart={startIdx + 1}
+            total={filteredLogs.length}
+            totalPages={totalPages}
+            onChange={setPage}
+          />
+        </>
+      )}
     </div>
   );
 }
