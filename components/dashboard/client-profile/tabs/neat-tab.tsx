@@ -19,6 +19,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { ClientStepsSection } from "./neat/client-steps-section";
+
 interface NeatTabProps {
   clientId: string;
 }
@@ -340,6 +342,9 @@ export default function NeatTab({ clientId }: NeatTabProps) {
           </div>
         </CardBody>
       </Card>
+
+      {/* Client steps activity (migrated from old Progress tab) */}
+      <ClientStepsSection clientId={clientId} />
 
       {/* Cards Grid or Empty State */}
       {cards.length === 0 ? (
