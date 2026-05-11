@@ -83,6 +83,38 @@ const AGGREGATIONS: { id: Aggregation; label: string }[] = [
   { id: "range_total", label: "Total del rango" },
 ];
 
+// Curated quick-pick set. The free-form input below the grid accepts any
+// Iconify id, so this list is just a shortcut to the icons that match the
+// metrics trainers configure most often. Drawn from icons already used in
+// the catalog adapters and seeded form templates so the picker stays
+// internally consistent.
+const ICON_PALETTE: ReadonlyArray<string> = [
+  "solar:body-bold",
+  "solar:scale-bold",
+  "solar:heart-pulse-bold",
+  "solar:health-bold",
+  "solar:moon-sleep-bold",
+  "solar:moon-stars-bold",
+  "solar:sun-bold",
+  "solar:bolt-bold",
+  "solar:fire-bold",
+  "solar:dish-bold",
+  "solar:bone-bold",
+  "solar:leaf-bold",
+  "solar:cloud-waterdrop-bold",
+  "solar:waterdrop-bold",
+  "solar:bottle-bold",
+  "solar:cup-hot-bold",
+  "solar:pill-bold",
+  "solar:walking-bold",
+  "solar:running-bold",
+  "solar:dumbbell-bold",
+  "solar:pie-chart-bold",
+  "solar:target-bold",
+  "solar:smile-circle-bold",
+  "solar:shield-warning-bold",
+];
+
 interface Props {
   isOpen: boolean;
   config: ChartConfig | null;
@@ -502,6 +534,95 @@ export function ChartEditPanel({
                 })}
               </div>
             )}
+          </div>
+
+          {/* ICON */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase">
+                Icono
+              </p>
+              {config.icon ? (
+                <button
+                  className="text-[10px] text-foreground/50 hover:text-foreground"
+                  type="button"
+                  onClick={() => {
+                    const { icon: _icon, ...rest } = config;
+
+                    void _icon;
+                    onChange(rest as ChartConfig);
+                  }}
+                >
+                  Quitar
+                </button>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-8 gap-1">
+              {ICON_PALETTE.map((iconId) => {
+                const active = config.icon === iconId;
+
+                return (
+                  <button
+                    key={iconId}
+                    aria-label={iconId}
+                    aria-pressed={active}
+                    className={`w-7 h-7 rounded-md border-2 flex items-center justify-center ${
+                      active
+                        ? "border-foreground/70 bg-default-100"
+                        : "border-transparent hover:bg-default-100"
+                    }`}
+                    type="button"
+                    onClick={() => update({ icon: iconId })}
+                  >
+                    <Icon icon={iconId} width={14} />
+                  </button>
+                );
+              })}
+            </div>
+            <Input
+              aria-label="Icono personalizado"
+              className="mt-2"
+              placeholder="solar:body-bold"
+              size="sm"
+              startContent={
+                config.icon ? (
+                  <Icon icon={config.icon} width={14} />
+                ) : (
+                  <Icon
+                    className="text-foreground/30"
+                    icon="solar:gallery-bold"
+                    width={14}
+                  />
+                )
+              }
+              value={config.icon ?? ""}
+              onValueChange={(v) => {
+                const next = v.trim();
+
+                if (next === "") {
+                  const { icon: _icon, ...rest } = config;
+
+                  void _icon;
+                  onChange(rest as ChartConfig);
+
+                  return;
+                }
+                update({ icon: next });
+              }}
+            />
+            <p className="text-[10px] text-foreground/40 mt-1 leading-relaxed">
+              <Icon
+                className="inline mr-0.5 -mt-0.5"
+                icon="solar:info-circle-bold"
+                width={11}
+              />
+              Cualquier id de Iconify (p. ej. <code>solar:body-bold</code>).
+              Buscar en{" "}
+              <span className="font-mono text-foreground/60">
+                icones.js.org
+              </span>
+              .
+            </p>
           </div>
 
           {/* TARGET ZONE */}

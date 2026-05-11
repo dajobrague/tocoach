@@ -136,6 +136,11 @@ export const chartConfigSchema = z
     target_zone: targetZoneSchema.optional(),
     aggregation: aggregationSchema,
     show_average_line: z.boolean().optional(),
+    // Trainer-picked Iconify id; e.g. "solar:body-bold". Bounded length so
+    // a malformed/oversized blob can't bloat the chart doc. The picker UI
+    // restricts the practical surface to a curated grid plus a free-form
+    // input.
+    icon: z.string().min(1).max(80).optional(),
   })
   .superRefine((cfg, ctx) => {
     const multiDim = isMultiDim(cfg.chart_type);

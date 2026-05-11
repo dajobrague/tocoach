@@ -151,6 +151,13 @@ export interface ChartConfig {
   aggregation: Aggregation;
   /** Allowed only when chart_type ∈ {line, area, bar}. */
   show_average_line?: boolean;
+  /**
+   * Trainer-chosen Iconify id (e.g. "solar:body-bold"). When set, takes
+   * precedence over the adapter's metadata.icon at render time. Lets the
+   * trainer pick an icon for charts whose source adapter has no default
+   * (form_question) or override the catalog adapter's default.
+   */
+  icon?: string;
 }
 
 export interface ChartsDocument {

@@ -55,6 +55,7 @@ export function buildStarterCharts(): ChartConfig[] {
       chart_type: "area",
       color: "weight-amber",
       aggregation: "checkin_period",
+      icon: "solar:body-bold",
     },
     {
       id: randomUUID(),

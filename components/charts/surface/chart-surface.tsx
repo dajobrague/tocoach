@@ -594,9 +594,11 @@ export function ChartSurface({ mode, clientId }: Props) {
               config={chart}
               editOverlay={overlay}
               editable={editMode && !isReadOnly}
-              {...(adapter?.metadata.icon !== undefined
-                ? { icon: adapter.metadata.icon }
-                : {})}
+              {...(chart.icon !== undefined
+                ? { icon: chart.icon }
+                : adapter?.metadata.icon !== undefined
+                  ? { icon: adapter.metadata.icon }
+                  : {})}
               {...(adapter?.metadata.unit !== undefined
                 ? { unit: adapter.metadata.unit }
                 : {})}
