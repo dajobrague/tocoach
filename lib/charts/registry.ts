@@ -204,7 +204,27 @@ export function validateChartConfigWithRegistry(
 
   const wantsMulti =
     cfg.chart_type === "ring" || cfg.chart_type === "stacked_bar";
+  const wantsPhoto = cfg.chart_type === "photo_timeline";
   const isMulti = adapter.metadata.dimensions === "multi";
+  const isPhoto = adapter.metadata.dimensions === "photo";
+
+  // photo_timeline ↔ photo source
+  if (wantsPhoto && !isPhoto) {
+    issues.push({
+      code: "custom",
+      input: cfg.chart_type,
+      message: `photo_timeline requires a photo source; ${adapter.metadata.id} is ${isMulti ? "multi-dim" : "1-D"}`,
+      path: ["charts", index, "chart_type"],
+    });
+  }
+  if (!wantsPhoto && isPhoto) {
+    issues.push({
+      code: "custom",
+      input: cfg.chart_type,
+      message: `${cfg.chart_type} cannot be backed by a photo source (${adapter.metadata.id})`,
+      path: ["charts", index, "chart_type"],
+    });
+  }
 
   if (wantsMulti && !isMulti) {
     issues.push({
@@ -214,7 +234,7 @@ export function validateChartConfigWithRegistry(
       path: ["charts", index, "chart_type"],
     });
   }
-  if (!wantsMulti && isMulti) {
+  if (!wantsMulti && !wantsPhoto && isMulti) {
     issues.push({
       code: "custom",
       input: cfg.chart_type,

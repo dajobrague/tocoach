@@ -95,5 +95,12 @@ export function ChartRenderer({ config, buckets, series, yMax }: Props) {
 
       return <KpiRenderer buckets={buckets} color={color} />;
     }
+    case "photo_timeline": {
+      // Photo timeline is dispatched separately by <ChartCard> because it
+      // takes a different data shape (`PhotoPoint[]`, not `BucketedPoint[]`).
+      // Reaching this branch means the dispatcher misrouted — render
+      // nothing rather than crash.
+      return null;
+    }
   }
 }

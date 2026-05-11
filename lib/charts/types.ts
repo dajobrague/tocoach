@@ -35,7 +35,8 @@ export type ChartType =
   | "bar"
   | "stacked_bar"
   | "ring"
-  | "kpi";
+  | "kpi"
+  | "photo_timeline";
 
 /** Chart types that are 1-D. */
 export const SINGLE_DIM_CHART_TYPES = [
@@ -49,6 +50,17 @@ export const SINGLE_DIM_CHART_TYPES = [
 export const MULTI_DIM_CHART_TYPES = [
   "stacked_bar",
   "ring",
+] as const satisfies readonly ChartType[];
+
+/**
+ * Photo timeline is structurally different from numeric charts: no
+ * bucketing, no Y-axis — it renders a horizontal strip of dated thumbnails
+ * sourced from `type: "photo"` form questions. The shape is enforced via
+ * `ChartDataSource.dimensions === "photo"` and a dedicated payload field
+ * in the snapshot endpoint (`photoBuckets` instead of `buckets`).
+ */
+export const PHOTO_CHART_TYPES = [
+  "photo_timeline",
 ] as const satisfies readonly ChartType[];
 
 /** Chart types where target_zone is meaningful (line/area/bar). */
@@ -216,6 +228,24 @@ export interface BucketedPoint {
 }
 
 /**
+ * A single photo entry in a photo-timeline chart.
+ * Photos are pulled from `form_responses.answers[question_id]` (a public
+ * Supabase storage URL) and decorated with the response_date for the
+ * timeline axis.
+ */
+export interface PhotoPoint {
+  /** YYYY-MM-DD; used to sort and as the displayed date label. */
+  date: string;
+  /** Public URL (currently the `form-photos` bucket is public). */
+  url: string;
+  /**
+   * Display label for this entry, e.g. "Frente · 4 may". The renderer
+   * shows this under the thumbnail and inside the lightbox.
+   */
+  label: string;
+}
+
+/**
  * The contract every data source must satisfy. See lib/charts/adapters/*
  * for implementations.
  */
@@ -241,8 +271,14 @@ export interface ChartDataSource {
    * a data point hits 10. Renderers respect this for line / area / bar.
    */
   y_max?: number;
-  /** 1-D vs multi-series. Drives chart-type validation. */
-  dimensions: 1 | "multi";
+  /**
+   * Output shape of the adapter:
+   *   - `1`      → single-series numeric (line/area/bar/kpi).
+   *   - `"multi"` → multi-series numeric (stacked_bar/ring).
+   *   - `"photo"` → photo timeline; produces `PhotoPoint[]` instead of
+   *     bucketed numerics. Only compatible with `chart_type: photo_timeline`.
+   */
+  dimensions: 1 | "multi" | "photo";
   /**
    * For multi-dim sources: the ordered series (must align with `color` array
    * length on multi-dim ChartConfig). Undefined for 1-D sources.

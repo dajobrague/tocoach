@@ -40,6 +40,7 @@ const chartTypeSchema = z.enum([
   "stacked_bar",
   "ring",
   "kpi",
+  "photo_timeline",
 ] as const);
 
 const aggregationSchema = z.enum([
@@ -205,7 +206,22 @@ export const chartConfigSchema = z
       });
     }
 
+    // photo_timeline must be backed by a form_question source. A catalog
+    // adapter wouldn't have photo data to surface, and we don't want to
+    // accept that combination on save.
+    if (
+      cfg.chart_type === "photo_timeline" &&
+      cfg.source.kind !== "form_question"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["chart_type"],
+        message: "photo_timeline requires a form_question source",
+      });
+    }
+
     // form_question sources are 1-D — reject if used with multi-dim chart
+    // (photo_timeline is NOT multi-dim, so it's allowed through here).
     if (cfg.source.kind === "form_question" && multiDim) {
       ctx.addIssue({
         code: "custom",
