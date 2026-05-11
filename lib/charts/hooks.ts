@@ -10,7 +10,7 @@
 
 "use client";
 
-import type { ChartDataSource, ChartsDocument } from "./types";
+import type { ChartDataSource, ChartsDocument, PhotoPoint } from "./types";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -291,6 +291,12 @@ export interface SnapshotData {
       aggregationFallback: boolean;
     }
   >;
+  /**
+   * Photo timeline payloads keyed by ChartConfig.id. Only present for
+   * charts with `chart_type === "photo_timeline"`. Sorted oldest → newest
+   * inside each entry.
+   */
+  photoBuckets?: Record<string, { photos: PhotoPoint[] }>;
 }
 
 export type ChartRange = "7d" | "30d" | "90d" | "6m" | "12m";

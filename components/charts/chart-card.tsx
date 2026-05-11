@@ -23,7 +23,11 @@
 
 "use client";
 
-import type { BucketedPoint, ChartConfig } from "@/lib/charts/types";
+import type {
+  BucketedPoint,
+  ChartConfig,
+  PhotoPoint,
+} from "@/lib/charts/types";
 
 import { Icon } from "@iconify/react";
 import { Card, CardBody } from "@heroui/react";
@@ -31,6 +35,7 @@ import { useMemo } from "react";
 
 import { ChartErrorBoundary } from "./error-boundary";
 import { ChartRenderer } from "./chart-renderer";
+import { PhotoTimelineRenderer } from "./renderers/photo-timeline";
 import {
   iconForChartType,
   isBucketsEmpty,
@@ -43,6 +48,11 @@ import { resolveColor } from "@/lib/charts/palette";
 interface Props {
   config: ChartConfig;
   buckets: BucketedPoint[] | undefined;
+  /**
+   * Photo timeline payload — set when `config.chart_type === "photo_timeline"`.
+   * `undefined` means loading; an empty array means "no photos in range".
+   */
+  photos?: ReadonlyArray<PhotoPoint>;
   orphan?: boolean;
   icon?: string;
   unit?: string;
@@ -96,6 +106,7 @@ function CardOrphan() {
 export function ChartCard({
   config,
   buckets,
+  photos,
   orphan,
   icon,
   unit,
@@ -104,6 +115,7 @@ export function ChartCard({
   editable,
   editOverlay,
 }: Props) {
+  const isPhotoTimeline = config.chart_type === "photo_timeline";
   // The header's "current value" is the latest non-null for 1-D charts;
   // ring (range_total) shows the sum of its series; kpi shows nothing in
   // the header (the body is already the big number).
@@ -143,13 +155,19 @@ export function ChartCard({
     : config.color;
   const palette = resolveColor(colorToken);
 
-  const isLoading = buckets === undefined;
-  // The chart still renders its silhouette (axes/grid) when empty; a
-  // watermark overlay is added on top — see NoDataOverlay below. The
-  // emptiness rule is shared with ChartsSection's pendientes-checklist
-  // grouping (see utils.isBucketsEmpty) so the two paths never drift.
+  // Photo timeline has its own loading/empty path — the renderer shows
+  // an "Aún sin fotos" placeholder. For numeric charts the chart still
+  // renders its silhouette (axes/grid) when empty, with a NoDataOverlay
+  // watermark.
+  const isLoading = isPhotoTimeline
+    ? photos === undefined
+    : buckets === undefined;
   const noData =
-    !isLoading && !orphan && Array.isArray(buckets) && isBucketsEmpty(buckets);
+    !isPhotoTimeline &&
+    !isLoading &&
+    !orphan &&
+    Array.isArray(buckets) &&
+    isBucketsEmpty(buckets);
 
   return (
     <Card className="relative" radius="lg" shadow="sm">
@@ -191,7 +209,7 @@ export function ChartCard({
             </div>
           ) : null}
         </div>
-        {config.chart_type !== "kpi" ? (
+        {config.chart_type !== "kpi" && !isPhotoTimeline ? (
           <p
             className={`text-4xl font-bold mb-3 tabular-nums ${
               noData ? "text-foreground/30" : "text-foreground"
@@ -215,11 +233,16 @@ export function ChartCard({
             no data — Recharts draws axes + grid for null values, and the
             ring/kpi renderers have their own empty-state visuals. The
             watermark sits on top via <NoDataOverlay /> so the card never
-            collapses to "blank". */}
+            collapses to "blank". Photo timeline dispatches to its own
+            renderer which handles its own empty state. */}
         {orphan ? (
           <CardOrphan />
         ) : isLoading ? (
           <CardSkeleton />
+        ) : isPhotoTimeline ? (
+          <ChartErrorBoundary chartId={config.id}>
+            <PhotoTimelineRenderer photos={photos ?? []} />
+          </ChartErrorBoundary>
         ) : (
           <div className="relative">
             <ChartErrorBoundary chartId={config.id}>

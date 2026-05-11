@@ -22,6 +22,7 @@ import type {
   BucketedPoint,
   ChartConfig,
   ChartsDocument,
+  PhotoPoint,
 } from "@/lib/charts/types";
 
 import { Icon } from "@iconify/react";
@@ -48,6 +49,7 @@ interface SnapshotResponse {
         aggregationFallback: boolean;
       }
     >;
+    photoBuckets?: Record<string, { photos: PhotoPoint[] }>;
   };
   error?: string;
 }
@@ -125,7 +127,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     );
   }
 
-  const { effective_charts, buckets } = query.data;
+  const { effective_charts, buckets, photoBuckets } = query.data;
 
   if (effective_charts.charts.length === 0) {
     // Trainer hasn't configured any charts (and there's no template).
@@ -140,6 +142,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
   type Enriched = {
     chart: ChartConfig;
     buckets: BucketedPoint[];
+    photos: PhotoPoint[] | undefined;
     adapter: ReturnType<typeof resolveAdapter>;
     series: ReadonlyArray<{ id: string; label: string }> | undefined;
   };
@@ -148,26 +151,37 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     const adapter = resolveAdapter(chart.source);
     const bucketEntry = buckets[chart.id];
     const chartBuckets: BucketedPoint[] = bucketEntry?.buckets ?? [];
+    const photos =
+      chart.chart_type === "photo_timeline"
+        ? (photoBuckets?.[chart.id]?.photos ?? [])
+        : undefined;
     const series = adapter?.metadata.series?.map((s) => ({
       id: s.id,
       label: s.label,
     }));
 
-    return { chart, buckets: chartBuckets, adapter, series };
+    return { chart, buckets: chartBuckets, photos, adapter, series };
   });
 
-  const isEmpty = (e: Enriched) => !!e.adapter && isBucketsEmpty(e.buckets);
+  // Photo timeline charts have their own empty state inside the
+  // renderer, so they never get bundled into the "Aún sin registrar"
+  // checklist — they always render as a full card.
+  const isEmpty = (e: Enriched) =>
+    e.chart.chart_type !== "photo_timeline" &&
+    !!e.adapter &&
+    isBucketsEmpty(e.buckets);
   const visibleCharts = enriched.filter((e) => !isEmpty(e));
   const pendingCharts = enriched.filter(isEmpty);
 
   return (
     <div className="space-y-4">
       {visibleCharts.map(
-        ({ chart, buckets: chartBuckets, adapter, series }) => (
+        ({ chart, buckets: chartBuckets, photos, adapter, series }) => (
           <ChartCard
             key={chart.id}
             buckets={chartBuckets}
             config={chart}
+            {...(photos !== undefined ? { photos } : {})}
             {...(chart.icon !== undefined
               ? { icon: chart.icon }
               : adapter?.metadata.icon !== undefined

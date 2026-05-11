@@ -27,6 +27,7 @@ import type {
   ChartConfig,
   ChartDataSource,
   ChartsDocument,
+  PhotoPoint,
 } from "@/lib/charts/types";
 
 import { Button, Card, CardBody } from "@heroui/react";
@@ -75,6 +76,7 @@ function buildAddChartConfig(
   position: number
 ): ChartConfig {
   const isMulti = source.dimensions === "multi";
+  const isPhoto = source.dimensions === "photo";
   let ref: ChartConfig["source"];
 
   if (source.id.startsWith("form_q:")) {
@@ -103,6 +105,9 @@ function buildAddChartConfig(
       isMulti && source.default_chart_type === "ring"
         ? "range_total"
         : "checkin_period",
+    // Photos default to trainer-only — they're sensitive enough that the
+    // safer default is "private until the trainer flips it explicitly".
+    ...(isPhoto ? { visibility: "trainer_only" as const } : {}),
   };
 }
 
@@ -258,23 +263,36 @@ export function ChartSurface({ mode, clientId }: Props) {
   const renderData = useMemo(() => {
     if (!doc) return [];
     const snapshotBuckets = snapshotQuery.data?.buckets;
+    const snapshotPhotos = snapshotQuery.data?.photoBuckets;
 
     return doc.charts.map((chart) => {
       const adapter = resolveAdapter(chart.source);
       let buckets: BucketedPoint[] | undefined;
+      let photos: PhotoPoint[] | undefined;
+      const isPhotoTimeline = chart.chart_type === "photo_timeline";
 
       if (mode === "trainer-template") {
-        const effectiveAgg = getEffectiveAggregation(
-          range,
-          chart.aggregation,
-          chart.chart_type
-        );
-        const effectiveChart =
-          effectiveAgg === chart.aggregation
-            ? chart
-            : { ...chart, aggregation: effectiveAgg };
+        // Trainer-template editor has no real snapshot — demo data for
+        // numeric charts, empty photos for timeline charts (the editor
+        // is just for layout/picking; live photos appear in trainer-client
+        // mode).
+        if (isPhotoTimeline) {
+          photos = [];
+        } else {
+          const effectiveAgg = getEffectiveAggregation(
+            range,
+            chart.aggregation,
+            chart.chart_type
+          );
+          const effectiveChart =
+            effectiveAgg === chart.aggregation
+              ? chart
+              : { ...chart, aggregation: effectiveAgg };
 
-        buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
+          buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
+        }
+      } else if (isPhotoTimeline) {
+        photos = snapshotPhotos?.[chart.id]?.photos;
       } else if (snapshotBuckets?.[chart.id]) {
         buckets = snapshotBuckets[chart.id]!.buckets as BucketedPoint[];
       } else {
@@ -287,7 +305,7 @@ export function ChartSurface({ mode, clientId }: Props) {
         label: s.label,
       }));
 
-      return { chart, adapter, buckets, series };
+      return { chart, adapter, buckets, photos, series };
     });
   }, [doc, snapshotQuery.data, mode, range]);
 
@@ -621,7 +639,7 @@ export function ChartSurface({ mode, clientId }: Props) {
           localIdx: number,
           localCount: number
         ) => {
-          const { chart, adapter, buckets, series } = d;
+          const { chart, adapter, buckets, photos, series } = d;
           const overlay =
             editMode && !isReadOnly ? (
               <>
@@ -669,6 +687,7 @@ export function ChartSurface({ mode, clientId }: Props) {
               config={chart}
               editOverlay={overlay}
               editable={editMode && !isReadOnly}
+              {...(photos !== undefined ? { photos } : {})}
               {...(chart.icon !== undefined
                 ? { icon: chart.icon }
                 : adapter?.metadata.icon !== undefined
