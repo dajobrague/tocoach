@@ -31,6 +31,8 @@ interface Props {
   availableSessions: AvailableSession[];
   onActivate: (sessionId: string) => void;
   heading?: string;
+  /** Session id that the trainer's microcycle/override prescribes for the visible date. */
+  recommendedSessionId?: string | null;
 }
 
 interface Bucket {
@@ -59,6 +61,7 @@ export function AvailableSessionsList({
   availableSessions,
   onActivate,
   heading = "Escoge tu siguiente entrenamiento",
+  recommendedSessionId = null,
 }: Props) {
   if (availableSessions.length === 0) return null;
 
@@ -78,6 +81,7 @@ export function AvailableSessionsList({
               {bucket.sessions.map((session) => (
                 <SessionRow
                   key={session.id}
+                  isRecommended={session.id === recommendedSessionId}
                   session={session}
                   onActivate={onActivate}
                 />
@@ -108,9 +112,11 @@ function BucketHeader({ bucket }: { bucket: Bucket }) {
 function SessionRow({
   session,
   onActivate,
+  isRecommended,
 }: {
   session: AvailableSession;
   onActivate: (sessionId: string) => void;
+  isRecommended: boolean;
 }) {
   return (
     <div
@@ -125,21 +131,37 @@ function SessionRow({
         }
       }}
     >
-      <SessionCard
-        exerciseCount={session.exercise_count}
-        name={session.name}
-        rightContent={
-          <Button
-            color="primary"
-            size="sm"
-            startContent={<Icon icon="solar:play-bold" width={16} />}
-            onPress={() => onActivate(session.id)}
-          >
-            Comenzar
-          </Button>
+      <div
+        className={
+          isRecommended
+            ? "rounded-xl ring-2 ring-primary/40 ring-offset-1 ring-offset-background"
+            : ""
         }
-        sessionType={session.session_type}
-      />
+      >
+        {isRecommended ? (
+          <div className="flex items-center gap-1 mb-1.5 ml-1">
+            <Icon className="text-primary" icon="solar:star-bold" width={12} />
+            <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">
+              Recomendado por tu entrenador
+            </span>
+          </div>
+        ) : null}
+        <SessionCard
+          exerciseCount={session.exercise_count}
+          name={session.name}
+          rightContent={
+            <Button
+              color="primary"
+              size="sm"
+              startContent={<Icon icon="solar:play-bold" width={16} />}
+              onPress={() => onActivate(session.id)}
+            >
+              Comenzar
+            </Button>
+          }
+          sessionType={session.session_type}
+        />
+      </div>
     </div>
   );
 }

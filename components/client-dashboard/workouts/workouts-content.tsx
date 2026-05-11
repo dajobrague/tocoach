@@ -24,6 +24,7 @@ import { useLoggedSessionsForDate } from "./hooks/use-logged-sessions-for-date";
 import { useMicrocycle } from "./hooks/use-microcycle";
 import { usePastSessions } from "./hooks/use-past-sessions";
 import { usePersistedActiveTraining } from "./hooks/use-persisted-active-training";
+import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
 import { LoggedSessionsSection } from "./logged-sessions-section";
 import { MicrocycleReferenceModal } from "./microcycle-reference-modal";
 import { PastWorkoutsList } from "./past-workouts-list";
@@ -91,6 +92,13 @@ export function WorkoutsContent() {
   const [selectedDate, setSelectedDate] = useState<string>(
     persisted?.date ?? todayYmd
   );
+
+  // The trainer's recommended session for the selected date — comes from a
+  // per-date override if present, else from the microcycle template. Used to
+  // tag the matching card in AvailableSessionsList.
+  const { data: resolvedForSelectedDate } =
+    useResolvedDayPrescription(selectedDate);
+  const recommendedSessionId = resolvedForSelectedDate?.session?.id ?? null;
 
   const activeSession = activeSessionId
     ? (availableData?.sessions.find((s) => s.id === activeSessionId) ?? null)
@@ -311,6 +319,7 @@ export function WorkoutsContent() {
                           ? "¿Qué hiciste ese día?"
                           : "Plan para ese día"
                   }
+                  recommendedSessionId={recommendedSessionId}
                   onActivate={handleActivateSession}
                 />
 
