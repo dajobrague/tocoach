@@ -64,11 +64,17 @@ export const TrainerExerciseVideoModal = forwardRef<
       hideCloseButton
       backdrop="blur"
       classNames={{
-        base: "bg-transparent shadow-none",
+        base: "bg-transparent shadow-none mx-2 sm:mx-6",
         wrapper: "items-center",
         closeButton: "hidden",
       }}
       isOpen={isOpen}
+      motionProps={{
+        variants: {
+          enter: { opacity: 1, scale: 1, transition: { duration: 0.18 } },
+          exit: { opacity: 0, scale: 0.97, transition: { duration: 0.12 } },
+        },
+      }}
       placement="center"
       scrollBehavior="inside"
       size="4xl"
