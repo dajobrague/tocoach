@@ -1,0 +1,83 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+export interface ResolvedSet {
+  set_number: number;
+  reps: string | null;
+  weight_kg: number | null;
+}
+
+export interface ResolvedExercise {
+  exercise_id: string;
+  name: string;
+  category: string;
+  exercise_order: number;
+  sets: number | null;
+  reps: string | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  rest_seconds: number | null;
+  notes: string | null;
+  prescribed_sets: ResolvedSet[];
+}
+
+export interface ResolvedDay {
+  date: string;
+  source: "override" | "session" | "template" | "rest";
+  session: { id: string; name: string } | null;
+  exercises: ResolvedExercise[];
+}
+
+interface UseResolvedDayPrescription {
+  data: ResolvedDay | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Fetches the resolved prescription for a date from
+ * GET /api/client/scheduled-sessions/[date]. Used to surface trainer
+ * overrides (sets, reps, weight, per-set values) to the active session
+ * view without disturbing the template-cache flow when no override exists.
+ */
+export function useResolvedDayPrescription(
+  date: string
+): UseResolvedDayPrescription {
+  const [data, setData] = useState<ResolvedDay | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/client/scheduled-sessions/${date}`);
+        const json = await res.json();
+
+        if (cancelled) return;
+        if (json.success) {
+          setData(json.day as ResolvedDay);
+        } else {
+          setError("No se pudo cargar la prescripción del día.");
+        }
+      } catch {
+        if (cancelled) return;
+        setError("Error de conexión.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
+
+  return { data, loading, error };
+}

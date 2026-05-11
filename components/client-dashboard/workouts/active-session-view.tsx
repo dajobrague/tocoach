@@ -14,6 +14,10 @@ import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
+import {
+  useResolvedDayPrescription,
+  type ResolvedExercise,
+} from "./hooks/use-resolved-day-prescription";
 import { getSessionTypeStyle } from "./session-type-style";
 
 interface ExerciseLike {
@@ -25,6 +29,17 @@ interface ExerciseLike {
   sets?: number;
   reps?: string;
   rest?: string;
+  /** Uniform prescribed weight in kg. Set when the trainer overrides the day. */
+  weightKg?: number | null;
+  /**
+   * Per-set prescription (Phase 3.5 override). When present it overrides the
+   * uniform sets/reps/weightKg combo: each entry is one prescribed set.
+   */
+  prescribedSets?: Array<{
+    setNumber: number;
+    reps: string | null;
+    weightKg: number | null;
+  }>;
   // Cardio
   duration?: number;
   distance?: number;
@@ -64,10 +79,21 @@ export function ActiveSessionView({
   onExit,
   onLogExercise,
 }: Props) {
-  const exercises = useMemo(
-    () => findExercisesForSession(programs, session.id),
-    [programs, session.id]
-  );
+  const { data: resolved } = useResolvedDayPrescription(scheduledDate);
+
+  const exercises: Array<ExerciseLike & Record<string, unknown>> =
+    useMemo(() => {
+      // When the trainer has saved a per-date override, prefer the resolved
+      // prescription over the program-cache template so the client sees the
+      // exact sets/reps/weight the trainer set for this date.
+      if (resolved && resolved.source === "override") {
+        return resolved.exercises.map(toExerciseLike) as Array<
+          ExerciseLike & Record<string, unknown>
+        >;
+      }
+
+      return findExercisesForSession(programs, session.id);
+    }, [resolved, programs, session.id]);
 
   const trackable = exercises.filter(
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
@@ -317,15 +343,33 @@ function formatExerciseStats(
     if (parts.length === 0 && exercise.cardioType)
       parts.push(exercise.cardioType);
   } else {
-    const sets = exercise.sets;
-    const reps = exercise.reps?.toString().trim();
+    // Per-set override (Phase 3.5) wins. Render a compact summary like
+    // "8×60kg · 8×60kg · 6×65kg" so the client sees each set immediately.
+    if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
+      const summary = exercise.prescribedSets
+        .map((s) => {
+          const r = s.reps ?? "—";
+          const w = s.weightKg != null ? `×${s.weightKg}kg` : "";
 
-    if (sets && reps) {
-      parts.push(`${sets} × ${reps}`);
-    } else if (sets) {
-      parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
-    } else if (reps) {
-      parts.push(`${reps} reps`);
+          return `${r}${w}`;
+        })
+        .join(" · ");
+
+      parts.push(summary);
+    } else {
+      const sets = exercise.sets;
+      const reps = exercise.reps?.toString().trim();
+
+      if (sets && reps) {
+        parts.push(`${sets} × ${reps}`);
+      } else if (sets) {
+        parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
+      } else if (reps) {
+        parts.push(`${reps} reps`);
+      }
+      if (exercise.weightKg != null) {
+        parts.push(`${exercise.weightKg} kg`);
+      }
     }
     const rest = exercise.rest?.toString().trim();
 
@@ -354,4 +398,35 @@ function findExercisesForSession(
   }
 
   return [];
+}
+
+function toExerciseLike(r: ResolvedExercise): ExerciseLike {
+  const perSet =
+    r.prescribed_sets && r.prescribed_sets.length > 0
+      ? r.prescribed_sets.map((s) => ({
+          setNumber: s.set_number,
+          reps: s.reps,
+          weightKg: s.weight_kg,
+        }))
+      : undefined;
+
+  const out: ExerciseLike = {
+    order: r.exercise_order,
+    name: r.name,
+    category: r.category,
+  };
+
+  if (r.exercise_id) out.exercise_id = r.exercise_id;
+  if (r.sets != null) out.sets = r.sets;
+  if (r.reps != null) out.reps = r.reps;
+  if (r.weight_kg != null) out.weightKg = r.weight_kg;
+  if (r.duration_seconds != null) {
+    out.duration = Math.round(r.duration_seconds / 60);
+  }
+  if (r.distance_meters != null) {
+    out.distance = parseFloat((r.distance_meters / 1000).toFixed(2));
+  }
+  if (perSet) out.prescribedSets = perSet;
+
+  return out;
 }
