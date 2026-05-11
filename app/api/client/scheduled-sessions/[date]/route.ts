@@ -16,6 +16,12 @@ import {
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
 
+interface ResolvedSet {
+  set_number: number;
+  reps: string | null;
+  weight_kg: number | null;
+}
+
 interface ResolvedExercise {
   exercise_id: string;
   name: string;
@@ -28,6 +34,8 @@ interface ResolvedExercise {
   distance_meters: number | null;
   rest_seconds: number | null;
   notes: string | null;
+  /** Per-set values when the override has them (Phase 3.5). Empty = uniform. */
+  prescribed_sets: ResolvedSet[];
 }
 
 interface ResolvedDay {
@@ -91,7 +99,10 @@ export async function GET(
          override_exercises:scheduled_session_exercises(
            id, exercise_order, sets, reps, weight_kg,
            duration_seconds, distance_meters, rest_seconds, notes,
-           exercise:exercises(id, name, category)
+           exercise:exercises(id, name, category),
+           prescribed_sets:scheduled_session_exercise_sets(
+             id, set_number, reps, weight_kg, notes
+           )
          )`
       )
       .eq("client_id", clientId)
@@ -207,23 +218,40 @@ function makeResolvedDay(
     rest_seconds: number | null;
     notes: string | null;
     exercise: { id: string; name: string; category: string };
+    prescribed_sets?: Array<{
+      set_number: number;
+      reps: string | null;
+      weight_kg: number | null;
+    }> | null;
   }>
 ): ResolvedDay {
   const exercises = [...raws]
     .sort((a, b) => a.exercise_order - b.exercise_order)
-    .map((r) => ({
-      exercise_id: r.exercise.id,
-      name: r.exercise.name,
-      category: r.exercise.category,
-      exercise_order: r.exercise_order,
-      sets: r.sets,
-      reps: r.reps,
-      weight_kg: r.weight_kg,
-      duration_seconds: r.duration_seconds,
-      distance_meters: r.distance_meters,
-      rest_seconds: r.rest_seconds,
-      notes: r.notes,
-    }));
+    .map((r) => {
+      const sets = (r.prescribed_sets ?? [])
+        .slice()
+        .sort((a, b) => a.set_number - b.set_number)
+        .map((s) => ({
+          set_number: s.set_number,
+          reps: s.reps,
+          weight_kg: s.weight_kg,
+        }));
+
+      return {
+        exercise_id: r.exercise.id,
+        name: r.exercise.name,
+        category: r.exercise.category,
+        exercise_order: r.exercise_order,
+        sets: r.sets,
+        reps: r.reps,
+        weight_kg: r.weight_kg,
+        duration_seconds: r.duration_seconds,
+        distance_meters: r.distance_meters,
+        rest_seconds: r.rest_seconds,
+        notes: r.notes,
+        prescribed_sets: sets,
+      };
+    });
 
   return {
     date,
