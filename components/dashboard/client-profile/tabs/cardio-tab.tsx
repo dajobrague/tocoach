@@ -43,9 +43,18 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ExerciseProgressCard } from "./workouts/exercise-progress-card";
+import { OrphanExercisesSection } from "./workouts/orphan-exercises-section";
+import { useClientExerciseLogs } from "./workouts/use-client-exercise-logs";
+import { useExerciseExpandedState } from "./workouts/use-exercise-expanded-state";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
+import {
+  TrainerExerciseVideoModal,
+  type TrainerExerciseVideoHandle,
+} from "@/components/trainer/trainer-exercise-video-modal";
 
 // Sortable wrapper for session cards
 function SortableSessionItem({
@@ -206,9 +215,39 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   });
   const [templates, setTemplates] = useState<any[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  // Exercise progress integration: shared log fetching, video modal,
+  // expansion state. Same hooks reused from Entrenamientos.
+  const { getLogsForExercise, getOrphanGroups } =
+    useClientExerciseLogs(clientId);
+  const { isExpanded, toggle: toggleExerciseExpanded } =
+    useExerciseExpandedState();
+  const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
+  const openExerciseVideo = useCallback(
+    (url: string, name: string) => videoModalRef.current?.open(url, name),
+    []
+  );
+
   const [sessionForm, setSessionForm] = useState({
     name: "",
   });
+
+  // Set of library exercise IDs prescribed across active cardio programs —
+  // used by the orphan section to filter off-plan logged exercises.
+  const prescribedExerciseIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const program of programs) {
+      for (const session of program.sessions) {
+        for (const exercise of session.exercises) {
+          if (exercise.exercise_id) ids.add(exercise.exercise_id);
+        }
+      }
+    }
+
+    return ids;
+  }, [programs]);
+
+  const orphanGroups = getOrphanGroups(prescribedExerciseIds);
 
   // Fetch programs from API
   const fetchPrograms = async () => {
@@ -390,29 +429,6 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       month: "short",
       year: "numeric",
     });
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "Running":
-        return "solar:running-bold";
-      case "Cycling":
-        return "solar:bicycle-bold";
-      case "Swimming":
-        return "solar:water-sun-bold";
-      case "Walking":
-        return "solar:walking-bold";
-      case "Rowing":
-        return "solar:water-bold";
-      case "HIIT":
-        return "solar:fire-bold";
-      case "Elliptical":
-        return "solar:graph-new-up-bold";
-      case "Stairmaster":
-        return "solar:stairs-bold";
-      default:
-        return "solar:heart-pulse-bold";
-    }
   };
 
   const handleOpenAddExercise = async (sessionId: string) => {
@@ -1298,238 +1314,75 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                                               dragHandleProps:
                                                 exerciseDragHandleProps,
                                             }) => (
-                                              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                                                {/* Drag handle */}
-                                                <div
-                                                  className="flex items-center justify-center mt-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-                                                  {...exerciseDragHandleProps}
-                                                >
-                                                  <Icon
-                                                    icon="solar:hamburger-menu-linear"
-                                                    width={16}
-                                                  />
-                                                </div>
-                                                <span className="text-sm font-semibold text-gray-500 min-w-[24px] mt-1">
-                                                  {exercise.order}.
+                                              <div className="flex items-start gap-2">
+                                                <span className="text-xs font-semibold text-gray-400 w-5 text-right mt-4 shrink-0 tabular-nums">
+                                                  {exercise.order}
                                                 </span>
-                                                {/* Exercise Image */}
-                                                {exercise.imageUrl ? (
-                                                  // eslint-disable-next-line @next/next/no-img-element
-                                                  <img
-                                                    alt={exercise.name}
-                                                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                                                    src={exercise.imageUrl}
-                                                  />
-                                                ) : (
-                                                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                                    <Icon
-                                                      className="text-gray-400"
-                                                      icon={
-                                                        exercise.cardioType
-                                                          ? getTypeIcon(
-                                                              exercise.cardioType
+                                                <div className="flex-1 min-w-0">
+                                                  <ExerciseProgressCard
+                                                    actions={
+                                                      <>
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="light"
+                                                          onPress={() =>
+                                                            handleEditExercise(
+                                                              session.id,
+                                                              exercise
                                                             )
-                                                          : "solar:heart-pulse-bold"
-                                                      }
-                                                      width={28}
-                                                    />
-                                                  </div>
-                                                )}
-                                                <div className="flex-1">
-                                                  <div className="flex items-center gap-2">
-                                                    <p className="font-medium text-gray-900">
-                                                      {exercise.name}
-                                                    </p>
-                                                    {exercise.cardioType && (
-                                                      <Chip
-                                                        className="bg-gray-100 text-gray-600 border border-gray-200"
-                                                        size="sm"
-                                                        variant="flat"
-                                                      >
-                                                        <div className="flex items-center gap-1">
-                                                          <Icon
-                                                            icon={getTypeIcon(
-                                                              exercise.cardioType
-                                                            )}
-                                                            width={12}
-                                                          />
-                                                          <span className="text-xs font-medium">
-                                                            {
-                                                              exercise.cardioType
-                                                            }
-                                                          </span>
-                                                        </div>
-                                                      </Chip>
-                                                    )}
-                                                    {exercise.intensity && (
-                                                      <Chip
-                                                        className={`border ${
-                                                          exercise.intensity ===
-                                                          "Low"
-                                                            ? "bg-green-50 text-green-700 border-green-200"
-                                                            : exercise.intensity ===
-                                                                "Moderate"
-                                                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                                                              : exercise.intensity ===
-                                                                  "High"
-                                                                ? "bg-orange-50 text-orange-700 border-orange-200"
-                                                                : "bg-red-50 text-red-700 border-red-200"
-                                                        }`}
-                                                        size="sm"
-                                                        variant="flat"
-                                                      >
-                                                        <div className="flex items-center gap-1">
-                                                          <Icon
-                                                            icon="solar:fire-bold"
-                                                            width={12}
-                                                          />
-                                                          <span className="text-xs font-medium">
-                                                            {exercise.intensity ===
-                                                            "Low"
-                                                              ? "Baja"
-                                                              : exercise.intensity ===
-                                                                  "Moderate"
-                                                                ? "Moderada"
-                                                                : exercise.intensity ===
-                                                                    "High"
-                                                                  ? "Alta"
-                                                                  : exercise.intensity ===
-                                                                      "Interval"
-                                                                    ? "Intervalos"
-                                                                    : exercise.intensity}
-                                                          </span>
-                                                        </div>
-                                                      </Chip>
-                                                    )}
-                                                  </div>
-                                                  <div className="text-sm text-gray-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                    {exercise.duration !==
-                                                      undefined &&
-                                                      exercise.duration > 0 && (
-                                                        <span className="flex items-center gap-1">
-                                                          <Icon
-                                                            className="text-slate-500"
-                                                            icon="solar:clock-circle-bold"
-                                                            width={14}
-                                                          />
-                                                          <span className="font-semibold text-gray-900">
-                                                            {exercise.duration}
-                                                          </span>{" "}
-                                                          min
-                                                        </span>
-                                                      )}
-                                                    {exercise.distance !==
-                                                      undefined &&
-                                                      exercise.distance > 0 && (
-                                                        <span className="flex items-center gap-1">
-                                                          <Icon
-                                                            className="text-slate-500"
-                                                            icon="solar:route-bold"
-                                                            width={14}
-                                                          />
-                                                          <span className="font-semibold text-gray-900">
-                                                            {exercise.distance}
-                                                          </span>{" "}
-                                                          km
-                                                        </span>
-                                                      )}
-                                                    {exercise.heartRateZone && (
-                                                      <span className="flex items-center gap-1">
-                                                        <Icon
-                                                          className="text-red-500"
-                                                          icon="solar:heart-pulse-bold"
-                                                          width={14}
-                                                        />
-                                                        <span className="font-semibold text-gray-900">
-                                                          {
-                                                            exercise
-                                                              .heartRateZone.min
                                                           }
-                                                          -
-                                                          {
-                                                            exercise
-                                                              .heartRateZone.max
-                                                          }
-                                                        </span>{" "}
-                                                        bpm
-                                                      </span>
-                                                    )}
-                                                    {exercise.sets > 0 && (
-                                                      <span className="flex items-center gap-1">
-                                                        <Icon
-                                                          className="text-slate-500"
-                                                          icon="solar:copy-bold"
-                                                          width={14}
-                                                        />
-                                                        <span className="font-semibold text-gray-900">
-                                                          {exercise.sets}
-                                                        </span>{" "}
-                                                        series
-                                                      </span>
-                                                    )}
-                                                    {exercise.reps &&
-                                                      exercise.reps !== "0" &&
-                                                      exercise.reps !== "" && (
-                                                        <span className="flex items-center gap-1">
+                                                        >
                                                           <Icon
-                                                            className="text-slate-500"
-                                                            icon="solar:hashtag-bold"
-                                                            width={14}
+                                                            className="text-gray-400 hover:text-gray-600"
+                                                            icon="solar:pen-linear"
+                                                            width={16}
                                                           />
-                                                          <span className="font-semibold text-gray-900">
-                                                            {exercise.reps}
-                                                          </span>{" "}
-                                                          reps
-                                                        </span>
-                                                      )}
-                                                  </div>
-                                                  {exercise.description && (
-                                                    <p className="text-gray-500 mt-1 text-xs">
-                                                      {exercise.description}
-                                                    </p>
-                                                  )}
-                                                  {exercise.notes && (
-                                                    <p className="text-gray-500 mt-1 text-xs italic">
-                                                      Notas: {exercise.notes}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                                {/* Actions */}
-                                                <div className="flex items-center gap-1">
-                                                  <Button
-                                                    isIconOnly
-                                                    size="sm"
-                                                    variant="light"
-                                                    onPress={() =>
-                                                      handleEditExercise(
-                                                        session.id,
-                                                        exercise
-                                                      )
+                                                        </Button>
+                                                        <Button
+                                                          isIconOnly
+                                                          size="sm"
+                                                          variant="light"
+                                                          onPress={() =>
+                                                            handleDeleteExercise(
+                                                              session.id,
+                                                              exercise
+                                                            )
+                                                          }
+                                                        >
+                                                          <Icon
+                                                            className="text-gray-400 hover:text-red-600"
+                                                            icon="solar:trash-bin-trash-linear"
+                                                            width={16}
+                                                          />
+                                                        </Button>
+                                                      </>
                                                     }
-                                                  >
-                                                    <Icon
-                                                      className="text-gray-400 hover:text-gray-600"
-                                                      icon="solar:pen-linear"
-                                                      width={16}
-                                                    />
-                                                  </Button>
-                                                  <Button
-                                                    isIconOnly
-                                                    size="sm"
-                                                    variant="light"
-                                                    onPress={() =>
-                                                      handleDeleteExercise(
-                                                        session.id,
-                                                        exercise
-                                                      )
+                                                    dragHandleProps={
+                                                      exerciseDragHandleProps
                                                     }
-                                                  >
-                                                    <Icon
-                                                      className="text-gray-400 hover:text-red-600"
-                                                      icon="solar:trash-bin-trash-linear"
-                                                      width={16}
-                                                    />
-                                                  </Button>
+                                                    isExpanded={
+                                                      exercise.id
+                                                        ? isExpanded(
+                                                            exercise.id
+                                                          )
+                                                        : false
+                                                    }
+                                                    logs={getLogsForExercise(
+                                                      exercise.exercise_id ?? ""
+                                                    )}
+                                                    prescribed={exercise}
+                                                    variant="cardio"
+                                                    onPlayVideo={
+                                                      openExerciseVideo
+                                                    }
+                                                    onToggle={() => {
+                                                      if (exercise.id)
+                                                        toggleExerciseExpanded(
+                                                          exercise.id
+                                                        );
+                                                    }}
+                                                  />
                                                 </div>
                                               </div>
                                             )}
@@ -2981,6 +2834,15 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
           }}
         />
       )}
+
+      {/* Off-plan logged cardio exercises */}
+      <OrphanExercisesSection
+        groups={orphanGroups}
+        variant="cardio"
+        onPlayVideo={openExerciseVideo}
+      />
+
+      <TrainerExerciseVideoModal ref={videoModalRef} />
     </div>
   );
 }
