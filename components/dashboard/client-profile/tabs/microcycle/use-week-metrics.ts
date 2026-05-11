@@ -19,6 +19,8 @@ interface UseWeekMetrics {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  /** Drop a cached week (or all if omitted) and refetch the current week. */
+  invalidate: (weekStartYmd?: string) => void;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -30,6 +32,20 @@ function addDays(date: Date, n: number): Date {
 }
 
 function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
+  // Override wins when present.
+  if (row.override_exercises && row.override_exercises.length > 0) {
+    return [...row.override_exercises]
+      .sort((a, b) => a.exercise_order - b.exercise_order)
+      .map((oe) => ({
+        exerciseId: oe.exercise.id,
+        name: oe.exercise.name,
+        category: oe.exercise.category,
+        prescribedSets: oe.sets ?? 0,
+        prescribedReps: oe.reps,
+        prescribedWeightKg: oe.weight_kg,
+      }));
+  }
+
   if (!row.session) return [];
 
   return [...row.session.session_exercises]
@@ -240,5 +256,17 @@ export function useWeekMetrics(
       .catch(() => setError("Error de conexión."));
   }, [weekStart, fetchAndCache]);
 
-  return { data, loading, error, refetch };
+  const invalidate = useCallback(
+    (weekStartYmdToFlush?: string) => {
+      if (weekStartYmdToFlush) {
+        cacheRef.current.delete(weekStartYmdToFlush);
+      } else {
+        cacheRef.current.clear();
+      }
+      refetch();
+    },
+    [refetch]
+  );
+
+  return { data, loading, error, refetch, invalidate };
 }
