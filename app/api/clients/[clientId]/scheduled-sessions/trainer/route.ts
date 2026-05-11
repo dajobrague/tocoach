@@ -36,6 +36,14 @@ interface SessionWithExercises {
   session_exercises: SessionExercise[];
 }
 
+interface PrescribedSet {
+  id: string;
+  set_number: number;
+  reps: string | null;
+  weight_kg: number | null;
+  notes: string | null;
+}
+
 interface OverrideExercise {
   id: string;
   exercise_order: number;
@@ -47,6 +55,7 @@ interface OverrideExercise {
   rest_seconds: number | null;
   notes: string | null;
   exercise: { id: string; name: string; category: string };
+  prescribed_sets: PrescribedSet[];
 }
 
 interface ScheduledSessionResponse {
@@ -134,7 +143,10 @@ export async function GET(
          override_exercises:scheduled_session_exercises(
            id, exercise_order, sets, reps, weight_kg,
            duration_seconds, distance_meters, rest_seconds, notes,
-           exercise:exercises(id, name, category)
+           exercise:exercises(id, name, category),
+           prescribed_sets:scheduled_session_exercise_sets(
+             id, set_number, reps, weight_kg, notes
+           )
          )`
       )
       .eq("client_id", clientId)
