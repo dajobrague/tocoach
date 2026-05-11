@@ -79,7 +79,8 @@ export function ActiveSessionView({
   onExit,
   onLogExercise,
 }: Props) {
-  const { data: resolved } = useResolvedDayPrescription(scheduledDate);
+  const { data: resolved, loading: resolvedLoading } =
+    useResolvedDayPrescription(scheduledDate);
 
   const exercises: Array<ExerciseLike & Record<string, unknown>> =
     useMemo(() => {
@@ -173,7 +174,19 @@ export function ActiveSessionView({
         </div>
       ) : null}
 
-      {exercises.length === 0 ? (
+      {resolvedLoading && !resolved ? (
+        // Don't render the clickable list until the override fetch lands —
+        // otherwise a tap before the data arrives captures stale template
+        // values and the modal opens with empty defaults.
+        <ul aria-busy="true" className="space-y-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <li
+              key={i}
+              className="rounded-md border border-default-200 bg-default-100 h-14 animate-pulse"
+            />
+          ))}
+        </ul>
+      ) : exercises.length === 0 ? (
         <div className="rounded-md border border-default-200 bg-content1 p-3 text-sm text-default-500 font-body">
           Esta sesión no tiene ejercicios todavía.
         </div>
