@@ -4,8 +4,10 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise } from "./types";
 
 import { Icon } from "@iconify/react";
+import { useState } from "react";
 
 import { formatPercent } from "./adherence";
+import { DayEditor } from "./day-editor";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -322,18 +324,50 @@ function OrphanSection({ logs }: { logs: ExerciseLog[] }) {
 // ─── DayDetail (main export) ─────────────────────────────────────────────────
 
 interface Props {
+  clientId: string;
   day: DayMetrics;
   orphanLogs: ExerciseLog[];
+  /** True when editor entry is allowed (today/future or past with no logs). */
+  editable: boolean;
+  /** Called after a successful save / reset so MetricsSection can refetch. */
+  onCommitted: () => void;
   onPlayVideo?: ((url: string, name: string) => void) | undefined;
 }
 
-export function DayDetail({ day, orphanLogs, onPlayVideo }: Props) {
+export function DayDetail({
+  clientId,
+  day,
+  orphanLogs,
+  editable,
+  onCommitted,
+  onPlayVideo,
+}: Props) {
+  const [mode, setMode] = useState<"read" | "edit">("read");
+
+  // Whether an explicit per-date override exists today.
+  const hasExistingOverride =
+    (day.scheduledSession?.override_exercises?.length ?? 0) > 0;
+
   if (day.classification === "rest") {
     return (
       <section className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 capitalize">
         {formatDateLong(day.date)} — día de descanso o sin sesión programada.
         {orphanLogs.length > 0 ? <OrphanSection logs={orphanLogs} /> : null}
       </section>
+    );
+  }
+
+  if (mode === "edit") {
+    return (
+      <DayEditor
+        clientId={clientId}
+        hasExistingOverride={hasExistingOverride}
+        initialPrescribed={day.prescribed}
+        initialSessionId={day.scheduledSession?.session?.id ?? null}
+        scheduledDate={day.date}
+        onClose={() => setMode("read")}
+        onCommitted={onCommitted}
+      />
     );
   }
 
@@ -344,12 +378,24 @@ export function DayDetail({ day, orphanLogs, onPlayVideo }: Props) {
   return (
     <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
       <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
-        <p className="text-sm font-semibold text-gray-900 capitalize">
-          {formatDateLong(day.date)}
-          {day.scheduledSession?.session
-            ? ` · ${day.scheduledSession.session.name}`
-            : ""}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-gray-900 capitalize">
+            {formatDateLong(day.date)}
+            {day.scheduledSession?.session
+              ? ` · ${day.scheduledSession.session.name}`
+              : ""}
+          </p>
+          <button
+            aria-label={`Editar día ${day.date}`}
+            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            disabled={!editable}
+            title={editable ? "Editar día" : "Día con registros — solo lectura"}
+            type="button"
+            onClick={() => setMode("edit")}
+          >
+            <Icon icon="solar:pen-linear" width={16} />
+          </button>
+        </div>
         {showFuture ? (
           <p className="text-xs text-gray-500">
             Día programado — aún por entrenarse.

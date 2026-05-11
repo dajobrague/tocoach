@@ -47,7 +47,10 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     getLocalYmd(new Date())
   );
-  const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
+  const { data, loading, error, refetch, invalidate } = useWeekMetrics(
+    clientId,
+    weekStart
+  );
 
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
   const openVideo = useCallback(
@@ -96,6 +99,15 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     () => data?.days.find((d) => d.date === selectedDate) ?? null,
     [data, selectedDate]
   );
+
+  const todayYmd = useMemo(() => getLocalYmd(new Date()), []);
+  const editable =
+    !!selectedDay &&
+    (selectedDay.date >= todayYmd || selectedDay.logs.length === 0);
+
+  const handleCommitted = useCallback(() => {
+    invalidate(getLocalYmd(weekStart));
+  }, [invalidate, weekStart]);
 
   // "No prescription anywhere this week" is the trigger for the empty-state
   // banner. We don't try to detect a missing client_program globally — if the
@@ -148,8 +160,11 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
 
           {selectedDay ? (
             <DayDetail
+              clientId={clientId}
               day={selectedDay}
+              editable={editable}
               orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
+              onCommitted={handleCommitted}
               onPlayVideo={openVideo}
             />
           ) : null}
