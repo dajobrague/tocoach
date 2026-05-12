@@ -73,6 +73,66 @@ function isYmd(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
+function nextYmd(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+
+  d.setUTCDate(d.getUTCDate() + 1);
+
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Cuenta logs del cliente en una fecha dada, cubriendo BOTH:
+ *   - logs ligados a un scheduled_session (vía scheduled_session_id)
+ *   - logs huérfanos (free-tracking sin scheduled_session_id) cuyo
+ *     completed_at cae el mismo día UTC
+ *
+ * Antes el lock check usaba solo el inner-join, así que el trainer podía
+ * sobreescribir un día pasado con logs huérfanos del cliente sin warning.
+ *
+ * Devuelve el conteo total. Una falla en cualquiera de los dos counts se
+ * trata como "hay logs" (fail-safe lockear) para evitar pisar history.
+ */
+async function countDayLogs(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  date: string
+): Promise<number> {
+  const start = `${date}T00:00:00.000Z`;
+  const end = `${nextYmd(date)}T00:00:00.000Z`;
+
+  const [linkedRes, orphanRes] = await Promise.all([
+    supabase
+      .from("exercise_logs")
+      .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
+        count: "exact",
+        head: true,
+      })
+      .eq("scheduled_sessions.client_id", clientId)
+      .eq("scheduled_sessions.scheduled_date", date),
+    supabase
+      .from("exercise_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .is("scheduled_session_id", null)
+      .gte("completed_at", start)
+      .lt("completed_at", end),
+  ]);
+
+  const linked = linkedRes.error
+    ? Number.MAX_SAFE_INTEGER
+    : (linkedRes.count ?? 0);
+  const orphan = orphanRes.error
+    ? Number.MAX_SAFE_INTEGER
+    : (orphanRes.count ?? 0);
+
+  return linked + orphan;
+}
+
 /**
  * Run the same reset/cleanup the DELETE handler does. Used when PUT arrives
  * with no exercises and no session — those payloads previously created an
@@ -86,16 +146,9 @@ async function resetDay(
   correlationId: string
 ): Promise<NextResponse> {
   if (date < todayYmd()) {
-    const { count } = await supabase
-      .from("exercise_logs")
-      .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
-        count: "exact",
-        head: true,
-      })
-      .eq("scheduled_sessions.client_id", clientId)
-      .eq("scheduled_sessions.scheduled_date", date);
+    const count = await countDayLogs(supabase, clientId, date);
 
-    if ((count ?? 0) > 0) {
+    if (count > 0) {
       return NextResponse.json(
         {
           success: false,
@@ -240,16 +293,9 @@ export async function PUT(
 
     // ── Lock check: past + has logs ────────────────────────────────
     if (body.scheduledDate < todayYmd()) {
-      const { count } = await supabase
-        .from("exercise_logs")
-        .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("scheduled_sessions.client_id", clientId)
-        .eq("scheduled_sessions.scheduled_date", body.scheduledDate);
+      const count = await countDayLogs(supabase, clientId, body.scheduledDate);
 
-      if ((count ?? 0) > 0) {
+      if (count > 0) {
         return NextResponse.json(
           {
             success: false,
