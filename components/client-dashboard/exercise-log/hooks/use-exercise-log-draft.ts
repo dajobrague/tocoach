@@ -60,6 +60,14 @@ export function useExerciseLogDraft(
 
   formDataRef.current = formData;
 
+  // Signature del último estado que la hidratación pisó. La hidratación
+  // solo se permite cuando formData actual MATCHEA esta signature, lo
+  // que indica "el usuario no tipeó nada desde el último hydrate".
+  // Si no matchea, hay keystrokes locales no persistidos y NO los pisamos
+  // — antes el efecto re-corría tras cada autosave (que invalidaba la
+  // query de existingLog) y borraba lo que el cliente estaba escribiendo.
+  const lastHydrateSigRef = useRef<string>("");
+
   const draftKey = exerciseLogDraftStorageKey(
     clientId,
     sessionId,
@@ -76,7 +84,13 @@ export function useExerciseLogDraft(
 
   // Hidratación al abrir o cambiar el ejercicio.
   useEffect(() => {
-    if (!isOpen || !exercise) return;
+    if (!isOpen || !exercise) {
+      // Reset signature al cerrar para que el próximo open hidrate de
+      // cero (incluyendo recuperar draft local si existe).
+      lastHydrateSigRef.current = "";
+
+      return;
+    }
     const base = buildBaseFormData(exercise, existingLog);
     const draftRead = readExerciseLogDraft(draftKey);
     let applyDraft = draftRead;
@@ -102,7 +116,22 @@ export function useExerciseLogDraft(
     ) {
       applyDraft = null;
     }
-    setFormData(applyDraft ? { ...base, ...applyDraft.formData } : base);
+    const next = applyDraft ? { ...base, ...applyDraft.formData } : base;
+    const nextSig = JSON.stringify(next);
+    const currentSig = JSON.stringify(formDataRef.current);
+
+    // Si NO es la primera hidratación (lastHydrateSigRef !== "") y el
+    // formData actual difiere del último hydrate, el usuario tipeó
+    // algo. No pisamos esos keystrokes con datos del servidor.
+    if (
+      lastHydrateSigRef.current !== "" &&
+      currentSig !== lastHydrateSigRef.current
+    ) {
+      return;
+    }
+
+    setFormData(next);
+    lastHydrateSigRef.current = nextSig;
   }, [
     isOpen,
     exercise,

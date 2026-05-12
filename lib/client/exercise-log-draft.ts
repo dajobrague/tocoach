@@ -119,13 +119,36 @@ export function buildPrescriptionSignature(input: {
   duration?: number | null;
   distance?: number | null;
   intensity?: string | null;
+  rest?: string | null;
+  tempo?: string | null;
+  cardioType?: string | null;
+  heartRateZone?: { min?: number | null; max?: number | null } | null;
+  trainingSystem?: string | null;
 }): string {
+  // Campos extra de cardio/coaching: si el trainer edita SOLO uno de
+  // estos (e.g. cambia el tempo de 30-0-30 a 20-1-20), la signature
+  // antes seguía igual y el draft cacheado pisaba la prescripción
+  // nueva en silencio. Incluirlos asegura que invalidación es completa.
+  const hrz = input.heartRateZone
+    ? `${input.heartRateZone.min ?? ""}-${input.heartRateZone.max ?? ""}`
+    : "";
+  const tail = [
+    input.duration ?? "",
+    input.distance ?? "",
+    input.intensity ?? "",
+    input.rest ?? "",
+    input.tempo ?? "",
+    input.cardioType ?? "",
+    hrz,
+    input.trainingSystem ?? "",
+  ].join(":");
+
   if (input.prescribedSets && input.prescribedSets.length > 0) {
     const flat = input.prescribedSets
       .map((s) => `${s.setNumber}:${s.reps ?? ""}:${s.weightKg ?? ""}`)
       .join("|");
 
-    return `ps:${flat}`;
+    return `ps:${flat}|t:${tail}`;
   }
 
   return [
@@ -133,9 +156,7 @@ export function buildPrescriptionSignature(input: {
     input.sets ?? "",
     input.reps ?? "",
     input.weightKg ?? "",
-    input.duration ?? "",
-    input.distance ?? "",
-    input.intensity ?? "",
+    tail,
   ].join(":");
 }
 
