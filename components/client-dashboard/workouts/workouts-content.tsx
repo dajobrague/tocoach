@@ -96,9 +96,17 @@ export function WorkoutsContent() {
   // The trainer's recommended session for the selected date — comes from a
   // per-date override if present, else from the microcycle template. Used to
   // tag the matching card in AvailableSessionsList.
+  //
+  // Solo lo exponemos para hoy y futuro: para fechas pasadas el endpoint
+  // resuelve usando el override-de-hoy o el template proyectado hacia
+  // atrás, así que tagueaba "Recomendado" sobre una sesión que no fue
+  // necesariamente lo que el trainer prescribió en ese momento.
   const { data: resolvedForSelectedDate } =
     useResolvedDayPrescription(selectedDate);
-  const recommendedSessionId = resolvedForSelectedDate?.session?.id ?? null;
+  const isPastDate = selectedDate < todayYmd;
+  const recommendedSessionId = isPastDate
+    ? null
+    : (resolvedForSelectedDate?.session?.id ?? null);
 
   const activeSession = activeSessionId
     ? (availableData?.sessions.find((s) => s.id === activeSessionId) ?? null)
@@ -139,8 +147,14 @@ export function WorkoutsContent() {
       // propio contexto. Si en la nueva fecha hay logs, la pantalla
       // los va a mostrar via LoggedSessionsSection. Si no hay nada, el
       // cliente arranca fresh con la lista de templates.
+      //
+      // setSelectedExercise(null) cierra el modal de log si estaba
+      // abierto: antes cambiar de día con el modal abierto dejaba el
+      // modal apuntando a la fecha vieja y el save persistía contra
+      // ese día.
       setSelectedDate(ymd);
       setActiveSessionId(null);
+      setSelectedExercise(null);
       clearActive();
     },
     [clearActive]
