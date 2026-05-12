@@ -72,8 +72,8 @@ export function KpiRenderer({ buckets, color, unit }: Props) {
             delta >= 0 ? "text-emerald-600" : "text-rose-600"
           }`}
         >
-          {delta >= 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}% vs periodo
-          anterior
+          {delta >= 0 ? "↑" : "↓"} {formatNumber(Math.abs(delta), 1)}% vs
+          periodo anterior
         </p>
       ) : null}
     </div>

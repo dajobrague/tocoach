@@ -188,7 +188,29 @@ export function buildFormQuestionAdapter(
             // day are kept in array order (first submit wins for ties).
             points.sort((a, b) => a.date.localeCompare(b.date));
 
-            return points;
+            // Dedupe same-day, same-url retries (offline/poor-network
+            // retries can produce two form_responses for the same date).
+            const deduped: PhotoPoint[] = [];
+            const seen = new Set<string>();
+
+            for (const p of points) {
+              const key = `${p.date}:${p.url}`;
+
+              if (seen.has(key)) continue;
+              seen.add(key);
+              deduped.push(p);
+            }
+
+            // Cap to the 60 most recent entries so a 12-month strip stays
+            // bounded. With weekly check-ins × 3 angles a year would be
+            // 156 photos per chart; lazy-load helps off-screen rendering
+            // but the layout still allocates a DOM node per entry. 60 is
+            // the same ceiling MAX_BUCKETS uses elsewhere.
+            const MAX_PHOTOS = 60;
+
+            return deduped.length > MAX_PHOTOS
+              ? deduped.slice(deduped.length - MAX_PHOTOS)
+              : deduped;
           },
         }
       : {}),

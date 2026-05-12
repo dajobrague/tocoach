@@ -23,6 +23,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { formatNumber } from "../utils";
 import { xAxisInterval } from "../utils";
 
 import { resolveColor } from "@/lib/charts/palette";
@@ -112,7 +113,7 @@ export function StackedBarRenderer({ buckets, colors, series }: Props) {
                   </p>
                   {series.map((s) => (
                     <p key={s.id} className="text-sm">
-                      {s.label}: {Number(row[s.id] ?? 0)}
+                      {s.label}: {formatNumber(Number(row[s.id] ?? 0), 2, 0)}
                     </p>
                   ))}
                 </div>

@@ -70,6 +70,7 @@ export function PhotoTimelineRenderer({ photos }: Props) {
               alt={p.label}
               className="w-full h-full object-cover"
               loading="lazy"
+              referrerPolicy="no-referrer"
               src={p.url}
             />
             <span className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-[9px] font-medium text-center py-0.5 uppercase tracking-wider">
@@ -110,6 +111,7 @@ export function PhotoTimelineRenderer({ photos }: Props) {
                   <img
                     alt={active.label}
                     className="max-h-[70vh] w-auto rounded-lg object-contain"
+                    referrerPolicy="no-referrer"
                     src={active.url}
                   />
                   {photos.length > 1 ? (
