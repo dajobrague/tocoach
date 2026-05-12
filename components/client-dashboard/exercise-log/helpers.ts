@@ -52,11 +52,25 @@ export function buildBaseFormData(
 ): ExerciseLogFormDraft {
   let sets: SetDraft[];
 
-  if (
+  // Only prefer an existing log over the prescription when the log carries
+  // actual data. An autosave taken before the trainer edited the override
+  // can land here with all sets at reps:"" weight:"", and was winning over
+  // the freshly-updated prescription — leaving the form looking empty.
+  // Treat such empty autosaves as "no log yet" and fall through to the
+  // prescription. A video on a set still counts as data.
+  const hasUsableExistingSets =
     existingLog?.sets &&
     Array.isArray(existingLog.sets) &&
-    existingLog.sets.length > 0
-  ) {
+    existingLog.sets.length > 0 &&
+    (existingLog.finalized_at != null ||
+      existingLog.sets.some(
+        (s: any) =>
+          (s.reps != null && String(s.reps).trim() !== "") ||
+          (s.weight_kg != null && String(s.weight_kg).trim() !== "") ||
+          (typeof s.video_url === "string" && s.video_url.length > 0)
+      ));
+
+  if (hasUsableExistingSets) {
     sets = existingLog.sets.map((s: any) => ({
       reps: s.reps != null ? String(s.reps) : "",
       weight: s.weight_kg != null ? String(s.weight_kg) : "",
