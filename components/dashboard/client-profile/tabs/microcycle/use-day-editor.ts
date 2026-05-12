@@ -27,6 +27,12 @@ export interface EditorRow {
   weightKg: number | null;
   /** Per-set rows (only relevant when mode === "perSet"). */
   setsDetail: EditorSetRow[];
+  /**
+   * Stash of `setsDetail` captured the last time the row was in perSet mode.
+   * Lets switchToUniform → switchToPerSet round-trip restore the user's
+   * per-set work instead of silently re-seeding from the uniform values.
+   */
+  cachedSetsDetail?: EditorSetRow[];
 }
 
 interface UseDayEditor {
@@ -169,8 +175,21 @@ export function useDayEditor({
     setRows((prev) =>
       prev.map((r) => {
         if (r.key !== key) return r;
-        // Pre-fill: build N sets from current uniform values. Default to 1
-        // when sets is null/0 so the user has at least one row to edit.
+        // Round-trip: when the row was previously in perSet mode and the
+        // user only flipped to uniform briefly, restore the cached detail
+        // instead of re-seeding from uniform values (which would silently
+        // erase per-set RPE/weight progressions the trainer just typed).
+        if (r.cachedSetsDetail && r.cachedSetsDetail.length > 0) {
+          const { cachedSetsDetail: _drop, ...rest } = r;
+
+          return {
+            ...rest,
+            mode: "perSet",
+            sets: r.cachedSetsDetail.length,
+            setsDetail: r.cachedSetsDetail,
+          };
+        }
+        // First-time switch: build N sets from current uniform values.
         const count = r.sets && r.sets > 0 ? r.sets : 1;
         const detail: EditorSetRow[] = Array.from(
           { length: count },
@@ -197,6 +216,12 @@ export function useDayEditor({
       prev.map((r) => {
         if (r.key !== key) return r;
         const first = r.setsDetail[0];
+        // Stash so the user can flip back without losing progressions. Only
+        // include `cachedSetsDetail` in the new object when we actually have
+        // something to cache — exactOptionalPropertyTypes forbids assigning
+        // `undefined` to an optional property.
+        const cached =
+          r.setsDetail.length > 0 ? r.setsDetail : r.cachedSetsDetail;
 
         return {
           ...r,
@@ -204,6 +229,7 @@ export function useDayEditor({
           sets: r.setsDetail.length || r.sets,
           reps: first?.reps ?? r.reps,
           weightKg: first?.weightKg ?? r.weightKg,
+          ...(cached ? { cachedSetsDetail: cached } : {}),
           setsDetail: [],
         };
       })
