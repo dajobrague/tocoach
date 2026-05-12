@@ -95,10 +95,20 @@ function ymdInTz(d: Date, tz: string): string {
  * (referencias absolutas) para los adapters que usan ms timestamps
  * (ring/macros).
  */
+function isValidRangeParam(value: string | null): boolean {
+  if (value === null) return true;
+
+  return Object.prototype.hasOwnProperty.call(RANGE_DAYS, value);
+}
+
 function parseRange(
   rangeParam: string | null,
   tz: string
 ): { from: Date; to: Date; fromYmd: string; toYmd: string } {
+  // Caller debe haber validado rangeParam con isValidRangeParam antes.
+  // Para rangeParam=null usamos 30d. Cualquier string desconocido también
+  // cae a 30d pero la ruta GET lo rechaza con 400 antes de llegar acá,
+  // así que en práctica solo "30d" pasa por el fallback.
   const days = RANGE_DAYS[rangeParam ?? "30d"] ?? 30;
 
   const todayYmd = ymdInTz(new Date(), tz);
@@ -175,14 +185,61 @@ async function loadExerciseLogs(
   supabase: ReturnType<typeof createSupabaseClient>,
   args: { clientIdBigint: number; fromYmd: string; toYmd: string }
 ): Promise<ExerciseLogLike[]> {
-  const { data } = await supabase
-    .from("exercise_logs")
-    .select("scheduled_date, exercises(category)")
-    .eq("client_id", args.clientIdBigint)
-    .gte("scheduled_date", args.fromYmd)
-    .lte("scheduled_date", args.toYmd);
+  // exercise_logs no tiene columna `scheduled_date`. La fecha del
+  // entrenamiento viene de scheduled_sessions.scheduled_date (link via
+  // scheduled_session_id). Para logs huérfanos (free-tracking sin
+  // scheduled_session_id) caemos a completed_at::date.
+  //
+  // Hacemos el filtro contra completed_at usando un rango con buffer ±1d
+  // (24h) para cubrir TZ skew entre el cliente y UTC, y luego filtramos
+  // por scheduled_date / completed_at::date contra fromYmd/toYmd ya en
+  // huso del cliente al normalizar.
+  const bufferMs = 24 * 60 * 60 * 1000;
+  const fromTs = new Date(`${args.fromYmd}T00:00:00Z`).getTime() - bufferMs;
+  const toTs =
+    new Date(`${args.toYmd}T00:00:00Z`).getTime() + 86400000 + bufferMs;
+  const fromIso = new Date(fromTs).toISOString();
+  const toIso = new Date(toTs).toISOString();
 
-  return (data ?? []) as ExerciseLogLike[];
+  const { data, error } = await supabase
+    .from("exercise_logs")
+    .select(
+      "completed_at, scheduled_session:scheduled_sessions(scheduled_date), exercises(category)"
+    )
+    .eq("client_id", args.clientIdBigint)
+    .gte("completed_at", fromIso)
+    .lte("completed_at", toIso);
+
+  if (error) {
+    console.warn(
+      `[charts/snapshot] loadExerciseLogs error client=${args.clientIdBigint}: ${error.message}`
+    );
+
+    return [];
+  }
+
+  return (data ?? []).flatMap((row): ExerciseLogLike[] => {
+    const scheduled = (
+      row as {
+        scheduled_session?: { scheduled_date?: string | null } | null;
+      }
+    ).scheduled_session?.scheduled_date;
+    const completedAt = (row as { completed_at?: string | null }).completed_at;
+    const fallback = completedAt ? completedAt.slice(0, 10) : null;
+    const scheduledDate = scheduled ?? fallback;
+
+    if (!scheduledDate) return [];
+    if (scheduledDate < args.fromYmd || scheduledDate > args.toYmd) return [];
+
+    return [
+      {
+        scheduled_date: scheduledDate,
+        exercises:
+          (row as { exercises?: { category?: string | null } | null })
+            .exercises ?? null,
+      },
+    ];
+  });
 }
 
 function ymd(d: Date): string {
@@ -288,9 +345,20 @@ export async function GET(
   // tz del cliente viene del browser. Default UTC si el caller no lo
   // pasa (compat retro / scripts internos).
   const tzParam = url.searchParams.get("tz") || "UTC";
+  const rawRange = url.searchParams.get("range");
+
+  if (!isValidRangeParam(rawRange)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `range param inválido. Valores permitidos: ${Object.keys(RANGE_DAYS).join(", ")}`,
+      },
+      { status: 400 }
+    );
+  }
   // `rangeKey` (string crudo "7d"/"30d"/...) se pasa a
   // `materializeWithCap` para que decida la aggregation efectiva.
-  const rangeKey = url.searchParams.get("range") ?? "30d";
+  const rangeKey = rawRange ?? "30d";
   const range = parseRange(rangeKey, tzParam);
 
   try {
