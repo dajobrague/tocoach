@@ -7,33 +7,61 @@
 
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 const LOG_PREFIX = "[Trainer Day Override API]";
 
-interface PutBody {
-  scheduledDate: string;
-  sessionId: string | null;
-  exercises: Array<{
-    exerciseId: string;
-    exerciseOrder: number;
-    sets: number | null;
-    reps: string | null;
-    weightKg: number | null;
-    durationSeconds?: number | null;
-    distanceMeters?: number | null;
-    restSeconds?: number | null;
-    notes?: string | null;
-    /** When non-empty, per-set values are written and become the source of truth. */
-    setsDetail?: Array<{
-      setNumber: number;
-      reps: string | null;
-      weightKg: number | null;
-    }> | null;
-  }>;
-}
+// ── Validation ─────────────────────────────────────────────────────
+// Caps protect against DoS via huge payloads and surface obvious junk
+// (negatives, NaN, unbounded strings) before they hit the DB.
+const ymdSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const uuidSchema = z.string().uuid();
+
+const setDetailSchema = z.object({
+  setNumber: z.number().int().min(1).max(100),
+  reps: z.string().max(64).nullable(),
+  weightKg: z.number().finite().min(0).max(9999).nullable(),
+});
+
+const exerciseSchema = z.object({
+  exerciseId: uuidSchema,
+  exerciseOrder: z.number().int().min(0).max(1000),
+  sets: z.number().int().min(0).max(100).nullable(),
+  reps: z.string().max(64).nullable(),
+  weightKg: z.number().finite().min(0).max(9999).nullable(),
+  durationSeconds: z.number().int().min(0).max(86400).nullable().optional(),
+  distanceMeters: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  restSeconds: z.number().int().min(0).max(3600).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+  setsDetail: z
+    .array(setDetailSchema)
+    .max(20)
+    .refine((arr) => new Set(arr.map((s) => s.setNumber)).size === arr.length, {
+      message: "setNumber duplicado dentro del ejercicio",
+    })
+    .nullable()
+    .optional(),
+});
+
+const putBodySchema = z
+  .object({
+    scheduledDate: ymdSchema,
+    sessionId: uuidSchema.nullable(),
+    exercises: z.array(exerciseSchema).max(50),
+  })
+  .refine(
+    (b) => {
+      const orders = b.exercises.map((e) => e.exerciseOrder);
+
+      return new Set(orders).size === orders.length;
+    },
+    { message: "exerciseOrder duplicado" }
+  );
+
+type PutBody = z.infer<typeof putBodySchema>;
 
 function todayYmd(): string {
   const d = new Date();
@@ -43,6 +71,95 @@ function todayYmd(): string {
 
 function isYmd(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+/**
+ * Run the same reset/cleanup the DELETE handler does. Used when PUT arrives
+ * with no exercises and no session — those payloads previously created an
+ * empty `scheduled_sessions` row that the client read pipeline treated as
+ * "override empty" instead of falling back to the microcycle template.
+ */
+async function resetDay(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  date: string,
+  correlationId: string
+): Promise<NextResponse> {
+  if (date < todayYmd()) {
+    const { count } = await supabase
+      .from("exercise_logs")
+      .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
+        count: "exact",
+        head: true,
+      })
+      .eq("scheduled_sessions.client_id", clientId)
+      .eq("scheduled_sessions.scheduled_date", date);
+
+    if ((count ?? 0) > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Día con registros — no se puede resetear",
+          code: "DAY_LOCKED",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  const { data: ss } = await supabase
+    .from("scheduled_sessions")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("scheduled_date", date)
+    .maybeSingle();
+
+  if (!ss) {
+    return NextResponse.json({ success: true });
+  }
+
+  const { count: logsCount } = await supabase
+    .from("exercise_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("scheduled_session_id", ss.id);
+
+  if ((logsCount ?? 0) > 0) {
+    const { error: delExError } = await supabase
+      .from("scheduled_session_exercises")
+      .delete()
+      .eq("scheduled_session_id", ss.id);
+
+    if (delExError) {
+      console.error(`${LOG_PREFIX} delete overrides only:`, {
+        correlationId,
+        error: delExError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error reseteando override" },
+        { status: 500 }
+      );
+    }
+  } else {
+    const { error: delSsError } = await supabase
+      .from("scheduled_sessions")
+      .delete()
+      .eq("id", ss.id);
+
+    if (delSsError) {
+      console.error(`${LOG_PREFIX} delete scheduled_session:`, {
+        correlationId,
+        error: delSsError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error eliminando sesión programada" },
+        { status: 500 }
+      );
+    }
+  }
+
+  return NextResponse.json({ success: true });
 }
 
 export async function PUT(
@@ -63,28 +180,16 @@ export async function PUT(
     }
 
     const { clientId } = await params;
-    const body = (await request.json()) as PutBody;
+    let body: PutBody;
 
-    // ── Body validation ─────────────────────────────────────────────
-    if (!isYmd(body.scheduledDate)) {
-      return NextResponse.json(
-        { success: false, error: "scheduledDate inválido" },
-        { status: 400 }
-      );
-    }
-    if (!Array.isArray(body.exercises)) {
-      return NextResponse.json(
-        { success: false, error: "exercises debe ser un array" },
-        { status: 400 }
-      );
-    }
+    try {
+      body = putBodySchema.parse(await request.json());
+    } catch (err) {
+      const issue =
+        err instanceof z.ZodError ? err.issues[0]?.message : "body inválido";
 
-    const orders = body.exercises.map((e) => e.exerciseOrder);
-    const orderSet = new Set(orders);
-
-    if (orderSet.size !== orders.length) {
       return NextResponse.json(
-        { success: false, error: "exerciseOrder duplicado" },
+        { success: false, error: issue ?? "body inválido" },
         { status: 400 }
       );
     }
@@ -101,6 +206,14 @@ export async function PUT(
         { success: false, error: "Cliente no encontrado" },
         { status: 404 }
       );
+    }
+
+    // ── Empty override + no session → reroute to DELETE semantics ──
+    // Saving with no exercises and no session_id used to leave an empty
+    // scheduled_sessions row that the client read pipeline treated as
+    // "override empty" instead of falling back to the microcycle template.
+    if (body.sessionId === null && body.exercises.length === 0) {
+      return resetDay(supabase, clientId, body.scheduledDate, correlationId);
     }
 
     // Resolve the trainer's actual tenant_host from the DB (the JWT's value
@@ -149,8 +262,6 @@ export async function PUT(
     }
 
     // ── Validate referenced sessionId belongs to trainer ───────────
-    // Sessions and exercises both carry trainer_id; that's the canonical
-    // ownership check across the rest of the trainer-side endpoints.
     if (body.sessionId) {
       const { data: sess, error: sessError } = await supabase
         .from("sessions")
@@ -197,161 +308,77 @@ export async function PUT(
       }
     }
 
-    // ── Upsert scheduled_sessions row ──────────────────────────────
-    let scheduledSessionId: string;
+    // ── Transactional replace via RPC ──────────────────────────────
+    // Migration 095. The RPC takes an advisory lock keyed by
+    // (client_id, scheduled_date) so concurrent PUTs for the same day
+    // serialize, then upserts the parent row, deletes the children
+    // (cascading per-set rows), and inserts the new shape atomically.
+    const rpcExercises = body.exercises.map((e) => {
+      const computedSets =
+        e.setsDetail && e.setsDetail.length > 0 ? e.setsDetail.length : e.sets;
 
-    const { data: existing } = await supabase
-      .from("scheduled_sessions")
-      .select("id")
-      .eq("client_id", clientId)
-      .eq("scheduled_date", body.scheduledDate)
-      .maybeSingle();
+      return {
+        exerciseId: e.exerciseId,
+        exerciseOrder: e.exerciseOrder,
+        sets: computedSets,
+        reps: e.reps,
+        weightKg: e.weightKg,
+        durationSeconds: e.durationSeconds ?? null,
+        distanceMeters: e.distanceMeters ?? null,
+        restSeconds: e.restSeconds ?? null,
+        notes: e.notes ?? null,
+      };
+    });
 
-    if (existing) {
-      scheduledSessionId = existing.id;
-      await supabase
-        .from("scheduled_sessions")
-        .update({
-          session_id: body.sessionId,
-          status: "scheduled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", scheduledSessionId);
-    } else {
-      const { data: created, error: createError } = await supabase
-        .from("scheduled_sessions")
-        .insert({
-          tenant_host: tenantHost,
-          client_id: clientId,
-          trainer_id: session.trainer_id,
-          session_id: body.sessionId,
-          scheduled_date: body.scheduledDate,
-          status: "scheduled",
-        })
-        .select("id")
-        .single();
+    const rpcSets: Array<{
+      exerciseOrder: number;
+      setNumber: number;
+      reps: string | null;
+      weightKg: number | null;
+    }> = [];
 
-      if (createError || !created) {
-        console.error(`${LOG_PREFIX} create scheduled_sessions:`, {
-          correlationId,
-          error: createError?.message,
+    for (const e of body.exercises) {
+      if (!e.setsDetail || e.setsDetail.length === 0) continue;
+      for (const s of e.setsDetail) {
+        rpcSets.push({
+          exerciseOrder: e.exerciseOrder,
+          setNumber: s.setNumber,
+          reps: s.reps,
+          weightKg: s.weightKg,
         });
-
-        return NextResponse.json(
-          { success: false, error: "Error creando sesión programada" },
-          { status: 500 }
-        );
       }
-      scheduledSessionId = created.id;
     }
 
-    // ── Replace scheduled_session_exercises (delete + insert) ─────
-    const { error: delError } = await supabase
-      .from("scheduled_session_exercises")
-      .delete()
-      .eq("scheduled_session_id", scheduledSessionId);
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "replace_scheduled_session_overrides",
+      {
+        p_tenant_host: tenantHost,
+        p_client_id: Number(clientId),
+        p_trainer_id: session.trainer_id,
+        p_scheduled_date: body.scheduledDate,
+        p_session_id: body.sessionId,
+        p_exercises: rpcExercises,
+        p_sets: rpcSets,
+      }
+    );
 
-    if (delError) {
-      console.error(`${LOG_PREFIX} delete overrides:`, {
+    if (rpcError || !rpcResult) {
+      console.error(`${LOG_PREFIX} RPC replace_scheduled_session_overrides:`, {
         correlationId,
-        error: delError.message,
+        error: rpcError?.message,
       });
 
       return NextResponse.json(
-        { success: false, error: "Error reemplazando override" },
+        { success: false, error: "Error guardando override" },
         { status: 500 }
       );
     }
 
-    if (body.exercises.length > 0) {
-      const rows = body.exercises.map((e) => ({
-        tenant_host: tenantHost,
-        scheduled_session_id: scheduledSessionId,
-        exercise_id: e.exerciseId,
-        exercise_order: e.exerciseOrder,
-        // When per-set is provided, sets count is derived from setsDetail.length.
-        sets:
-          e.setsDetail && e.setsDetail.length > 0
-            ? e.setsDetail.length
-            : (e.sets ?? null),
-        reps: e.reps ?? null,
-        weight_kg: e.weightKg ?? null,
-        duration_seconds: e.durationSeconds ?? null,
-        distance_meters: e.distanceMeters ?? null,
-        rest_seconds: e.restSeconds ?? null,
-        notes: e.notes ?? null,
-      }));
-
-      const { data: inserted, error: insError } = await supabase
-        .from("scheduled_session_exercises")
-        .insert(rows)
-        .select("id, exercise_order");
-
-      if (insError || !inserted) {
-        console.error(`${LOG_PREFIX} insert overrides:`, {
-          correlationId,
-          error: insError?.message,
-        });
-
-        return NextResponse.json(
-          { success: false, error: "Error guardando override" },
-          { status: 500 }
-        );
-      }
-
-      // ── Per-set rows: insert when any exercise carries setsDetail ──
-      const orderToParentId = new Map<number, string>();
-
-      for (const r of inserted as Array<{
-        id: string;
-        exercise_order: number;
-      }>) {
-        orderToParentId.set(r.exercise_order, r.id);
-      }
-
-      const setRows: Array<{
-        tenant_host: string;
-        scheduled_session_exercise_id: string;
-        set_number: number;
-        reps: string | null;
-        weight_kg: number | null;
-      }> = [];
-
-      for (const e of body.exercises) {
-        if (!e.setsDetail || e.setsDetail.length === 0) continue;
-        const parentId = orderToParentId.get(e.exerciseOrder);
-
-        if (!parentId) continue;
-
-        for (const s of e.setsDetail) {
-          setRows.push({
-            tenant_host: tenantHost,
-            scheduled_session_exercise_id: parentId,
-            set_number: s.setNumber,
-            reps: s.reps,
-            weight_kg: s.weightKg,
-          });
-        }
-      }
-
-      if (setRows.length > 0) {
-        const { error: setInsError } = await supabase
-          .from("scheduled_session_exercise_sets")
-          .insert(setRows);
-
-        if (setInsError) {
-          console.error(`${LOG_PREFIX} insert per-set rows:`, {
-            correlationId,
-            error: setInsError.message,
-          });
-
-          return NextResponse.json(
-            { success: false, error: "Error guardando series prescritas" },
-            { status: 500 }
-          );
-        }
-      }
-    }
+    const scheduledSessionId = Array.isArray(rpcResult)
+      ? (rpcResult[0] as { scheduled_session_id: string } | undefined)
+          ?.scheduled_session_id
+      : (rpcResult as { scheduled_session_id: string } | null)
+          ?.scheduled_session_id;
 
     return NextResponse.json({ success: true, scheduledSessionId });
   } catch (error) {
@@ -405,84 +432,7 @@ export async function DELETE(
       );
     }
 
-    if (date! < todayYmd()) {
-      const { count } = await supabase
-        .from("exercise_logs")
-        .select("scheduled_sessions!inner(id, scheduled_date, client_id)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("scheduled_sessions.client_id", clientId)
-        .eq("scheduled_sessions.scheduled_date", date!);
-
-      if ((count ?? 0) > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Día con registros — no se puede resetear",
-            code: "DAY_LOCKED",
-          },
-          { status: 409 }
-        );
-      }
-    }
-
-    const { data: ss } = await supabase
-      .from("scheduled_sessions")
-      .select("id")
-      .eq("client_id", clientId)
-      .eq("scheduled_date", date!)
-      .maybeSingle();
-
-    if (!ss) {
-      // Nothing to reset; idempotent success.
-      return NextResponse.json({ success: true });
-    }
-
-    // Defensive: even if not "past" by date, a logged session exists →
-    // keep the row (logs FK to it) and only drop the override exercises.
-    const { count: logsCount } = await supabase
-      .from("exercise_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("scheduled_session_id", ss.id);
-
-    if ((logsCount ?? 0) > 0) {
-      const { error: delExError } = await supabase
-        .from("scheduled_session_exercises")
-        .delete()
-        .eq("scheduled_session_id", ss.id);
-
-      if (delExError) {
-        console.error(`${LOG_PREFIX} delete overrides only:`, {
-          correlationId,
-          error: delExError.message,
-        });
-
-        return NextResponse.json(
-          { success: false, error: "Error reseteando override" },
-          { status: 500 }
-        );
-      }
-    } else {
-      const { error: delSsError } = await supabase
-        .from("scheduled_sessions")
-        .delete()
-        .eq("id", ss.id);
-
-      if (delSsError) {
-        console.error(`${LOG_PREFIX} delete scheduled_session:`, {
-          correlationId,
-          error: delSsError.message,
-        });
-
-        return NextResponse.json(
-          { success: false, error: "Error eliminando sesión programada" },
-          { status: 500 }
-        );
-      }
-    }
-
-    return NextResponse.json({ success: true });
+    return resetDay(supabase, clientId, date, correlationId);
   } catch (error) {
     console.error(`${LOG_PREFIX} DELETE unexpected:`, error);
 
