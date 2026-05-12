@@ -38,6 +38,19 @@ interface ResolvedExercise {
   distance_meters: number | null;
   rest_seconds: number | null;
   notes: string | null;
+  /**
+   * Cardio coaching meta (intensidad subjetiva, tipo cardio, zona FC).
+   * Antes el SELECT no incluía `metadata` y los overrides de cardio
+   * llegaban al cliente sin estos campos, así que isExerciseCardio()
+   * fallaba y la sesión se renderizaba en modo strength.
+   */
+  intensity: string | null;
+  cardio_type: string | null;
+  heart_rate_min: number | null;
+  heart_rate_max: number | null;
+  /** Strength coaching meta (tempo, sistema de entrenamiento). */
+  tempo: string | null;
+  training_system: string | null;
   /** Per-set values when the override has them (Phase 3.5). Empty = uniform. */
   prescribed_sets: ResolvedSet[];
 }
@@ -96,7 +109,7 @@ export async function GET(
          session:sessions(id, name,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
-             duration_seconds, distance_meters, rest_seconds, notes,
+             duration_seconds, distance_meters, rest_seconds, notes, metadata,
              exercise:exercises(id, name, category, image_url, video_url)
            )
          ),
@@ -175,7 +188,7 @@ export async function GET(
           `id, name,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
-             duration_seconds, distance_meters, rest_seconds, notes,
+             duration_seconds, distance_meters, rest_seconds, notes, metadata,
              exercise:exercises(id, name, category, image_url, video_url)
            )`
         )
@@ -228,6 +241,7 @@ function makeResolvedDay(
     distance_meters: number | null;
     rest_seconds: number | null;
     notes: string | null;
+    metadata?: Record<string, unknown> | null;
     exercise: {
       id: string;
       name: string;
@@ -258,6 +272,18 @@ function makeResolvedDay(
           weight_kg: s.weight_kg ?? r.weight_kg,
         }));
 
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      const readStr = (k: string): string | null => {
+        const v = meta[k];
+
+        return typeof v === "string" && v.trim() !== "" ? v : null;
+      };
+      const readNum = (k: string): number | null => {
+        const v = meta[k];
+
+        return typeof v === "number" && Number.isFinite(v) ? v : null;
+      };
+
       return {
         exercise_id: r.exercise.id,
         name: r.exercise.name,
@@ -272,6 +298,12 @@ function makeResolvedDay(
         distance_meters: r.distance_meters,
         rest_seconds: r.rest_seconds,
         notes: r.notes,
+        intensity: readStr("intensity"),
+        cardio_type: readStr("cardio_type"),
+        heart_rate_min: readNum("heart_rate_min"),
+        heart_rate_max: readNum("heart_rate_max"),
+        tempo: readStr("tempo"),
+        training_system: readStr("training_system"),
         prescribed_sets: sets,
       };
     });

@@ -29,6 +29,8 @@ interface ExerciseLike {
   sets?: number;
   reps?: string;
   rest?: string;
+  tempo?: string;
+  trainingSystem?: string;
   /** Uniform prescribed weight in kg. Set when the trainer overrides the day. */
   weightKg?: number | null;
   /**
@@ -45,6 +47,7 @@ interface ExerciseLike {
   distance?: number;
   intensity?: string;
   cardioType?: string;
+  heartRateZone?: { min: number; max: number };
   // Video del trainer (referencia o subida custom)
   videoUrl?: string;
   uploadedVideoUrl?: string;
@@ -445,6 +448,17 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.distance_meters != null) {
     out.distance = parseFloat((r.distance_meters / 1000).toFixed(2));
   }
+  // Coaching meta — antes no se mapeaban y un override de cardio caía
+  // al branch de strength porque isExerciseCardio() no veía intensity
+  // ni cardio_type. También tempo/trainingSystem para que el draft
+  // signature detecte cambios cuando el trainer ajusta cadencia/sistema.
+  if (r.intensity) out.intensity = r.intensity;
+  if (r.cardio_type) out.cardioType = r.cardio_type;
+  if (r.heart_rate_min != null && r.heart_rate_max != null) {
+    out.heartRateZone = { min: r.heart_rate_min, max: r.heart_rate_max };
+  }
+  if (r.tempo) out.tempo = r.tempo;
+  if (r.training_system) out.trainingSystem = r.training_system;
   if (perSet) out.prescribedSets = perSet;
 
   return out;
