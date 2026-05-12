@@ -24,6 +24,14 @@ export interface ResolvedExercise {
   distance_meters: number | null;
   rest_seconds: number | null;
   notes: string | null;
+  /** Cardio coaching meta — antes el endpoint los dropeaba y override de cardio se renderizaba como strength. */
+  intensity: string | null;
+  cardio_type: string | null;
+  heart_rate_min: number | null;
+  heart_rate_max: number | null;
+  /** Strength coaching meta (tempo, sistema de entrenamiento). */
+  tempo: string | null;
+  training_system: string | null;
   prescribed_sets: ResolvedSet[];
 }
 
@@ -56,6 +64,12 @@ export function useResolvedDayPrescription(
   useEffect(() => {
     let cancelled = false;
 
+    // CRÍTICO: reset data al cambiar fecha. Antes solo seteábamos
+    // loading=true pero data quedaba con el día anterior; el gate
+    // `resolvedLoading && !resolved` en active-session-view evaluaba
+    // `false` (porque resolved seguía existiendo) y el cliente abría
+    // el modal de log con la prescripción del día equivocado.
+    setData(null);
     setLoading(true);
     setError(null);
 
