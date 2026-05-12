@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useEffect, useRef } from "react";
 
 import { DayEditorExercisePicker } from "./day-editor-exercise-picker";
 import { DayEditorRow } from "./day-editor-row";
@@ -88,6 +89,18 @@ export function DayEditor({
     },
   });
 
+  // Aborts in-flight session-pick fetches when the editor closes/unmounts
+  // o cuando cambia clientId/scheduledDate (vía key remount). Antes el
+  // fetch podía resolverse después del unmount y disparar
+  // replaceFromPrescribed contra estado huérfano.
+  const sessionPickAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      sessionPickAbortRef.current?.abort();
+    };
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -119,35 +132,76 @@ export function DayEditor({
       if (!ok) return;
     }
 
+    // Cancela cualquier pick previo en vuelo: si el usuario abre el
+    // dropdown y elige rápido dos sesiones, la primera no debe ganar la
+    // carrera y pisar las exercises de la segunda.
+    sessionPickAbortRef.current?.abort();
+    const controller = new AbortController();
+
+    sessionPickAbortRef.current = controller;
+
     void (async () => {
       try {
-        const res = await fetch(`/api/clients/${clientId}/programs`);
+        const res = await fetch(`/api/clients/${clientId}/programs`, {
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) return;
+        if (!res.ok) {
+          editor.setError("No se pudieron cargar las sesiones del programa.");
+
+          return;
+        }
         const json = await res.json();
 
-        if (!json.success) return;
+        if (controller.signal.aborted) return;
+        if (!json.success) {
+          editor.setError(json.error ?? "Error al cargar sesiones.");
+
+          return;
+        }
 
         let pickedExercises: PrescribedExercise[] = [];
+        let sessionFound = false;
 
         for (const program of json.programs ?? []) {
           for (const sess of program.sessions ?? []) {
             if (sess.id === nextSessionId) {
+              sessionFound = true;
               pickedExercises = (sess.exercises ?? []).map((e: any) => ({
+                // El transformer expone `exercise_id` (UUID real) y `id`
+                // (session_exercises row id). exerciseId debe ser el UUID.
                 exerciseId: e.exercise_id ?? e.exerciseId ?? e.id,
                 name: e.name,
                 category: e.category ?? "strength",
                 prescribedSets: e.sets ?? 0,
                 prescribedReps: e.reps ?? null,
+                // NOTA: WorkoutExercise actualmente no expone `weight_kg`
+                // (ver lib/utils/training-utils.ts:330). El swap llega
+                // sin peso prescripto hasta que el transformer lo
+                // surface. Mejor null que adivinar.
                 prescribedWeightKg: e.weight_kg ?? null,
                 perSet: [],
               }));
               break;
             }
           }
+          if (sessionFound) break;
+        }
+
+        if (!sessionFound) {
+          editor.setError(
+            "La sesión seleccionada ya no existe. Recargá el editor."
+          );
+
+          return;
         }
 
         editor.replaceFromPrescribed(pickedExercises, nextSessionId);
-      } catch {
-        /* swallow — at worst the editor keeps its current rows */
+      } catch (err) {
+        // AbortError es el caso esperado al cancelar — no mostrar error.
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        editor.setError("Error de conexión al cargar la sesión.");
       }
     })();
   };

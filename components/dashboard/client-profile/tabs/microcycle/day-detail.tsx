@@ -4,7 +4,7 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise } from "./types";
 
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { formatPercent } from "./adherence";
 import { DayEditor } from "./day-editor";
@@ -359,6 +359,13 @@ export function DayDetail({
 }: Props) {
   const [mode, setMode] = useState<"read" | "edit">("read");
 
+  // Si el trainer salta a otro día con el editor abierto, salimos del
+  // modo edit para evitar mostrar el editor con `rows` del día anterior
+  // (useState no se reinicializa al cambiar `initialPrescribed`).
+  useEffect(() => {
+    setMode("read");
+  }, [day.date]);
+
   // Whether an explicit per-date override exists today.
   const hasExistingOverride =
     (day.scheduledSession?.override_exercises?.length ?? 0) > 0;
@@ -374,7 +381,11 @@ export function DayDetail({
 
   if (mode === "edit") {
     return (
+      // `key={day.date}` fuerza remount cuando cambia el día, así
+      // useState(initialRows) re-inicializa desde la nueva prescripción
+      // y no quedan rows del día anterior en estado del hook.
       <DayEditor
+        key={day.date}
         clientId={clientId}
         hasExistingOverride={hasExistingOverride}
         initialPrescribed={day.prescribed}

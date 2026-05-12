@@ -43,6 +43,8 @@ interface UseDayEditor {
   saving: boolean;
   resetting: boolean;
   error: string | null;
+  /** Permite al consumidor surface errores externos (e.g. al swappear sesión). */
+  setError: (message: string | null) => void;
   setSessionId: (id: string | null) => void;
   updateRow: (key: string, patch: Partial<EditorRow>) => void;
   reorderRows: (next: EditorRow[]) => void;
@@ -298,6 +300,9 @@ export function useDayEditor({
     (prescribed: PrescribedExercise[], nextSessionId: string | null) => {
       setRows(prescribed.map(fromPrescribed));
       setSessionId(nextSessionId);
+      // Limpia errores stale: un error previo ("Día con registros") no
+      // aplica más cuando swappeás a otra sesión.
+      setError(null);
     },
     []
   );
@@ -335,6 +340,17 @@ export function useDayEditor({
       if (a.mode === "uniform") {
         if (a.sets !== b.sets || a.reps !== b.reps || a.weightKg !== b.weightKg)
           return true;
+        // El usuario puede haber flipeado perSet→edits→uniform: en uniform
+        // los valores principales coinciden con el initial pero cached
+        // tiene trabajo per-set que se perdería en silencio. Si los
+        // valores cacheados difieren de las uniform actuales, marcamos
+        // como cambiado para habilitar Guardar (uniform se persiste, y
+        // el usuario puede decidir flipear de vuelta antes).
+        if (a.cachedSetsDetail) {
+          for (const s of a.cachedSetsDetail) {
+            if (s.reps !== a.reps || s.weightKg !== a.weightKg) return true;
+          }
+        }
       } else {
         if (a.setsDetail.length !== b.setsDetail.length) return true;
         for (let j = 0; j < a.setsDetail.length; j++) {
@@ -474,6 +490,7 @@ export function useDayEditor({
     saving,
     resetting,
     error,
+    setError,
     setSessionId,
     updateRow,
     reorderRows,
