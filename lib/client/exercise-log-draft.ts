@@ -38,6 +38,8 @@ export function exerciseLogDraftStorageKey(
 export type ExerciseLogDraftRead = {
   formData: ExerciseLogFormDraft;
   updatedAt: number;
+  /** Fingerprint of the prescription the draft was authored against. */
+  prescriptionSignature?: string;
 };
 
 export function readExerciseLogDraft(key: string): ExerciseLogDraftRead | null {
@@ -49,6 +51,7 @@ export function readExerciseLogDraft(key: string): ExerciseLogDraftRead | null {
     const parsed = JSON.parse(raw) as {
       formData?: ExerciseLogFormDraft;
       updatedAt?: number;
+      prescriptionSignature?: string;
     };
 
     if (!parsed?.formData || typeof parsed.formData !== "object") {
@@ -63,7 +66,13 @@ export function readExerciseLogDraft(key: string): ExerciseLogDraftRead | null {
       return null;
     }
 
-    return { formData: parsed.formData, updatedAt };
+    return {
+      formData: parsed.formData,
+      updatedAt,
+      ...(parsed.prescriptionSignature
+        ? { prescriptionSignature: parsed.prescriptionSignature }
+        : {}),
+    };
   } catch {
     return null;
   }
@@ -71,17 +80,63 @@ export function readExerciseLogDraft(key: string): ExerciseLogDraftRead | null {
 
 export function writeExerciseLogDraft(
   key: string,
-  formData: ExerciseLogFormDraft
+  formData: ExerciseLogFormDraft,
+  prescriptionSignature?: string
 ): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(
       key,
-      JSON.stringify({ formData, updatedAt: Date.now() })
+      JSON.stringify({
+        formData,
+        updatedAt: Date.now(),
+        ...(prescriptionSignature ? { prescriptionSignature } : {}),
+      })
     );
   } catch {
     // Quota or private mode — ignore
   }
+}
+
+/**
+ * Fingerprint of a prescription. When the trainer edits an override the
+ * fingerprint changes, so any draft cached against the old prescription is
+ * detectable as stale and discarded (otherwise the empty draft from before
+ * the override was saved would silently override the new prefilled values).
+ *
+ * Cheap stringify is enough — these arrays are O(20 sets) and the signature
+ * is only computed at modal open / draft persist.
+ */
+export function buildPrescriptionSignature(input: {
+  sets?: number | null;
+  reps?: string | null;
+  weightKg?: number | null;
+  prescribedSets?: Array<{
+    setNumber: number;
+    reps: string | null;
+    weightKg: number | null;
+  }>;
+  duration?: number | null;
+  distance?: number | null;
+  intensity?: string | null;
+}): string {
+  if (input.prescribedSets && input.prescribedSets.length > 0) {
+    const flat = input.prescribedSets
+      .map((s) => `${s.setNumber}:${s.reps ?? ""}:${s.weightKg ?? ""}`)
+      .join("|");
+
+    return `ps:${flat}`;
+  }
+
+  return [
+    "u",
+    input.sets ?? "",
+    input.reps ?? "",
+    input.weightKg ?? "",
+    input.duration ?? "",
+    input.distance ?? "",
+    input.intensity ?? "",
+  ].join(":");
 }
 
 export function clearExerciseLogDraft(key: string): void {

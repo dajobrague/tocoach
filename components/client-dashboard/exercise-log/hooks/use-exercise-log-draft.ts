@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { buildBaseFormData, defaultSet, type ExerciseShape } from "../helpers";
 
 import {
+  buildPrescriptionSignature,
   exerciseLogDraftStorageKey,
   readExerciseLogDraft,
   writeExerciseLogDraft,
@@ -66,6 +67,13 @@ export function useExerciseLogDraft(
     scheduledDate
   );
 
+  // Fingerprint of the current prescription. When the trainer saves an
+  // override the fingerprint changes, so any cached draft authored against
+  // the previous prescription is detected as stale and discarded.
+  const prescriptionSignature = exercise
+    ? buildPrescriptionSignature(exercise)
+    : "";
+
   // Hidratación al abrir o cambiar el ejercicio.
   useEffect(() => {
     if (!isOpen || !exercise) return;
@@ -80,6 +88,17 @@ export function useExerciseLogDraft(
         applyDraft = null;
       }
     }
+    // Drop the draft when it was authored against a different prescription
+    // (trainer edited sets/reps/weight after the client cached the draft).
+    // Without this, an empty draft from before the override silently wins
+    // over the freshly-saved prescription's prefilled values.
+    if (
+      applyDraft &&
+      applyDraft.prescriptionSignature &&
+      applyDraft.prescriptionSignature !== prescriptionSignature
+    ) {
+      applyDraft = null;
+    }
     setFormData(applyDraft ? { ...base, ...applyDraft.formData } : base);
   }, [
     isOpen,
@@ -90,23 +109,33 @@ export function useExerciseLogDraft(
     exerciseId,
     scheduledDate,
     draftKey,
+    prescriptionSignature,
   ]);
 
   // Persistencia con debounce mientras el usuario escribe.
   useEffect(() => {
     if (!isOpen || !exercise) return;
     const t = window.setTimeout(() => {
-      writeExerciseLogDraft(draftKey, formDataRef.current);
+      writeExerciseLogDraft(
+        draftKey,
+        formDataRef.current,
+        prescriptionSignature
+      );
     }, DEBOUNCE_MS);
 
     return () => window.clearTimeout(t);
-  }, [formData, isOpen, exercise, draftKey]);
+  }, [formData, isOpen, exercise, draftKey, prescriptionSignature]);
 
   // Persistencia agresiva en pagehide / visibility hidden — el debounce
   // anterior puede no llegar a disparar si el usuario navega fuera.
   useEffect(() => {
     if (!isOpen || !exercise) return;
-    const persist = () => writeExerciseLogDraft(draftKey, formDataRef.current);
+    const persist = () =>
+      writeExerciseLogDraft(
+        draftKey,
+        formDataRef.current,
+        prescriptionSignature
+      );
     const onVisibility = () => {
       if (document.visibilityState === "hidden") persist();
     };
@@ -118,7 +147,7 @@ export function useExerciseLogDraft(
       window.removeEventListener("pagehide", persist);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [isOpen, exercise, draftKey]);
+  }, [isOpen, exercise, draftKey, prescriptionSignature]);
 
   return { formData, setFormData, draftKey };
 }
