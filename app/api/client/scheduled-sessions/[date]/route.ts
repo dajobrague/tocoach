@@ -131,10 +131,17 @@ export async function GET(
       const sessionRow = ssRow.session as any;
       const sessExercises = (sessionRow?.session_exercises ?? []) as any[];
 
-      return NextResponse.json({
-        success: true,
-        day: makeResolvedDay(date, "session", sessionRow, sessExercises),
-      });
+      // Only return "session" when there's actually a session linked with
+      // exercises. An empty overrides array + no session_id on the row used
+      // to fall through here as an empty "session" payload — distinct from
+      // an intentional rest day. Fall through to template step instead so
+      // the trainer's microcycle template still applies.
+      if (sessionRow && sessExercises.length > 0) {
+        return NextResponse.json({
+          success: true,
+          day: makeResolvedDay(date, "session", sessionRow, sessExercises),
+        });
+      }
     }
 
     // 2. No real row — derive from microcycle template.
@@ -238,13 +245,17 @@ function makeResolvedDay(
   const exercises = [...raws]
     .sort((a, b) => a.exercise_order - b.exercise_order)
     .map((r) => {
+      // Per-set NULL fall-through. If a per-set row has reps/weight NULL,
+      // coalesce to the parent's uniform prescription so the documented
+      // precedence (per-set > uniform > template) is respected per field
+      // rather than per row.
       const sets = (r.prescribed_sets ?? [])
         .slice()
         .sort((a, b) => a.set_number - b.set_number)
         .map((s) => ({
           set_number: s.set_number,
-          reps: s.reps,
-          weight_kg: s.weight_kg,
+          reps: s.reps ?? r.reps,
+          weight_kg: s.weight_kg ?? r.weight_kg,
         }));
 
       return {
