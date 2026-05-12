@@ -37,13 +37,17 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
     return [...row.override_exercises]
       .sort((a, b) => a.exercise_order - b.exercise_order)
       .map((oe) => {
+        // Paridad con el endpoint cliente (/api/client/scheduled-sessions/[date]):
+        // un per-set con reps/weight NULL hereda los valores uniform del
+        // padre. Antes el trainer-side mostraba `—` mientras el cliente
+        // veía valores — las dos vistas divergían.
         const perSet = (oe.prescribed_sets ?? [])
           .slice()
           .sort((a, b) => a.set_number - b.set_number)
           .map((s) => ({
             setNumber: s.set_number,
-            reps: s.reps,
-            weightKg: s.weight_kg,
+            reps: s.reps ?? oe.reps,
+            weightKg: s.weight_kg ?? oe.weight_kg,
           }));
 
         return {

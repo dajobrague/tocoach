@@ -24,11 +24,33 @@ const EMPTY_ADHERENCE: DayAdherence = Object.freeze({
   carga: 1,
 }) as DayAdherence;
 
+/**
+ * Convierte la prescripción de reps (TEXT) en un número promedio usable
+ * para cálculo de carga prescripta. Soporta:
+ *   - "10"        → 10
+ *   - "10-12"     → 11 (promedio del rango)
+ *   - "12+"       → 12 (lower bound)
+ *   - "AMRAP"     → 0  (no contribuye a load total)
+ *   - "10/8/6"    → 8  (promedio de la lista — drop sets típicos)
+ * Antes solo matcheaba el primer run de dígitos, así que "10-12" → 10
+ * (subestima rango) y "10/8/6" → 10 (sobreestima drop set).
+ */
 function parseReps(reps: string | null | undefined): number {
   if (reps == null) return 0;
-  const match = String(reps).match(/\d+/);
+  const text = String(reps).trim();
 
-  return match ? parseInt(match[0]) : 0;
+  if (text === "" || /^amrap$/i.test(text)) return 0;
+  const matches = text.match(/\d+/g);
+
+  if (!matches || matches.length === 0) return 0;
+  const nums = matches.map((m) => parseInt(m, 10)).filter((n) => !isNaN(n));
+
+  if (nums.length === 0) return 0;
+
+  // Range "a-b" → avg. Drop sets "a/b/c" → avg. Single + suffix ("12+") → first.
+  const sum = nums.reduce((a, b) => a + b, 0);
+
+  return Math.round(sum / nums.length);
 }
 
 export function computeDayAdherence(
