@@ -302,19 +302,30 @@ const macrosBreakdown: DataAdapter = {
     // validation layer should have prevented this.
     void aggregation;
 
-    const fromMs = ctx.range.from.getTime();
-    const toMs = ctx.range.to.getTime();
+    // Comparamos contra response_date (string YYYY-MM-DD) en lugar de
+    // submitted_at ms. El SQL pre-filter usa response_date; mezclar ms
+    // de submitted_at acá dropeaba rows submitidas cerca de medianoche
+    // local en husos no-UTC (submitted_at caía fuera del rango UTC pero
+    // response_date sí estaba adentro). Comparar por YMD mantiene
+    // consistencia entre las dos capas.
+    const ymd = (d: Date): string => {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+
+      return `${y}-${m}-${day}`;
+    };
+    const fromYmd = ymd(ctx.range.from);
+    const toYmd = ymd(ctx.range.to);
 
     type Triple = { p: number | null; c: number | null; f: number | null };
     const days: Triple[] = [];
 
     for (const r of ctx.formResponses.habits) {
-      // Use submitted_at when present, else response_date noon UTC.
-      const submitted = r.submitted_at
-        ? new Date(r.submitted_at).getTime()
-        : new Date(`${r.response_date}T12:00:00.000Z`).getTime();
+      const responseDate = r.response_date;
 
-      if (submitted < fromMs || submitted > toMs) continue;
+      if (!responseDate) continue;
+      if (responseDate < fromYmd || responseDate > toYmd) continue;
 
       const t: Triple = {
         p: resolveProteinAnswer(r.answers),
