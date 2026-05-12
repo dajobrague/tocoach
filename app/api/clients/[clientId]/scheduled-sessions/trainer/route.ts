@@ -150,6 +150,11 @@ export async function GET(
          )`
       )
       .eq("client_id", clientId)
+      // Skip cancelled/rescheduled rows: they should not count toward
+      // adherence "prescribed" (the day was explicitly retired by the
+      // trainer or client), otherwise the day stays "0/N pendiente"
+      // forever and pollutes the microcycle metrics.
+      .not("status", "in", '("cancelled","rescheduled")')
       .order("scheduled_date", { ascending: true });
 
     if (startDate) realQuery = realQuery.gte("scheduled_date", startDate);
