@@ -238,7 +238,7 @@ function PrescribedRow({
             <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
               Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
               {prescribed.prescribedReps ?? "—"}
-              {prescribed.prescribedWeightKg
+              {prescribed.prescribedWeightKg != null
                 ? ` @ ${prescribed.prescribedWeightKg} kg`
                 : ""}
             </p>

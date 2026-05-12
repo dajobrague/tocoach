@@ -53,11 +53,11 @@ function StrengthSetRow({
   onPlayVideo: (url: string, name: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
+    <div className="inline-flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-100 rounded-md px-1.5 py-1 w-fit">
+      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
         {set.set_number}
       </span>
-      <span className="text-gray-900 tabular-nums flex-1 min-w-0">
+      <span className="text-gray-900 tabular-nums whitespace-nowrap">
         <span className="font-semibold">{set.reps ?? "—"}</span>
         <span className="text-gray-400 mx-0.5">reps</span>
         <span className="text-gray-400 mx-0.5">×</span>
@@ -73,10 +73,10 @@ function StrengthSetRow({
               ? `Ver video de ${exerciseName} (sesión completa)`
               : `Ver video de ${exerciseName} serie ${set.set_number}`
           }
-          className={`inline-flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0 ${
+          className={`inline-flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0 -mr-0.5 ${
             videoIsLegacy
               ? "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-              : "text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+              : "text-blue-600 hover:text-blue-800 hover:bg-blue-100"
           }`}
           title={videoIsLegacy ? "Video de la sesión completa" : undefined}
           type="button"
@@ -188,7 +188,7 @@ function StrengthSessionCard({
         </div>
 
         {sets.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-0.5">
+          <div className="flex flex-wrap gap-1.5">
             {sets.map((set, idx) => {
               const perSetVideo = set.video_url ?? null;
               const showLegacyHere =
@@ -328,11 +328,23 @@ export function ExerciseHistoryTable({
   const [page, setPage] = useState(1);
   const [dateFilter, setDateFilter] = useState<string>("");
 
-  // Reset filter and page when the dataset changes (exercise switch, refetch).
+  // Reset filter and page when the underlying dataset changes (exercise
+  // switch, refetch). Keying on logs.length missed refetches that returned
+  // the same count but different rows — the filter could then hide every
+  // row of the new dataset until manually cleared. Hashing the first/last
+  // ids captures a row-identity change without iterating the whole array.
+  const datasetKey = useMemo(() => {
+    if (logs.length === 0) return "empty";
+    const first = logs[0]?.id ?? "";
+    const last = logs[logs.length - 1]?.id ?? "";
+
+    return `${logs.length}:${first}:${last}`;
+  }, [logs]);
+
   useEffect(() => {
     setPage(1);
     setDateFilter("");
-  }, [logs.length]);
+  }, [datasetKey]);
 
   // Reset page to 1 whenever the filter changes.
   useEffect(() => {
