@@ -193,6 +193,28 @@ async function resetDay(
         { status: 500 }
       );
     }
+
+    // CRÍTICO: limpia session_id stale. Antes el reset borraba solo los
+    // overrides pero dejaba scheduled_sessions.session_id apuntando a la
+    // última sesión que el trainer había elegido. La próxima lectura
+    // entraba por la rama "session" con esa sesión vieja en vez de caer
+    // al template del microciclo — "Restaurar al template" mentía.
+    const { error: clearSessionError } = await supabase
+      .from("scheduled_sessions")
+      .update({ session_id: null, status: "scheduled" })
+      .eq("id", ss.id);
+
+    if (clearSessionError) {
+      console.error(`${LOG_PREFIX} clear session_id on reset:`, {
+        correlationId,
+        error: clearSessionError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error reseteando sesión asignada" },
+        { status: 500 }
+      );
+    }
   } else {
     const { error: delSsError } = await supabase
       .from("scheduled_sessions")
