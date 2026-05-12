@@ -124,10 +124,47 @@ function buildWeekMetrics(
   const orphansByDate = new Map<string, ExerciseLog[]>();
 
   for (const [date, dayLogs] of logsByDate.entries()) {
-    if (!scheduledByDate.has(date)) orphansByDate.set(date, dayLogs);
+    const sched = scheduledByDate.get(date);
+
+    if (!sched) {
+      // No scheduled session at all → every log on this date is off-plan.
+      orphansByDate.set(date, dayLogs);
+      continue;
+    }
+
+    // Scheduled session exists. Logs whose exercise_id is NOT in the day's
+    // prescribed list are still off-plan ("did something extra"). Previously
+    // these were silently dropped, so the trainer couldn't see them.
+    const prescribed = toPrescribed(sched);
+    const prescribedIds = new Set(prescribed.map((p) => p.exerciseId));
+    const offPlan = dayLogs.filter(
+      (l) => l.exercise_id != null && !prescribedIds.has(l.exercise_id)
+    );
+
+    if (offPlan.length > 0) orphansByDate.set(date, offPlan);
   }
 
   return { days, orphansByDate };
+}
+
+// Bounded LRU on top of Map insertion order. Browsing many weeks during a
+// single trainer session used to grow this cache unboundedly (each entry
+// holds the week's logs + override rows + prescription tree).
+const MAX_CACHED_WEEKS = 12;
+
+function setLru(
+  cache: Map<string, WeekMetrics>,
+  key: string,
+  value: WeekMetrics
+): void {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > MAX_CACHED_WEEKS) {
+    const oldest = cache.keys().next().value;
+
+    if (oldest == null) break;
+    cache.delete(oldest);
+  }
 }
 
 /**
@@ -166,7 +203,10 @@ export function useWeekMetrics(
 
       try {
         const init = signal ? { signal } : {};
-        const [schedRes, logsRes] = await Promise.all([
+        // allSettled so one endpoint 5xx-ing doesn't black-hole the whole
+        // week: if scheduled-sessions resolves but exercise-logs fails we
+        // can still render the prescription side with empty adherence.
+        const [schedSettled, logsSettled] = await Promise.allSettled([
           fetch(
             `/api/clients/${clientId}/scheduled-sessions/trainer?startDate=${startYmd}&endDate=${endYmd}`,
             init
@@ -177,20 +217,25 @@ export function useWeekMetrics(
           ),
         ]);
 
-        const [schedJson, logsJson] = await Promise.all([
-          schedRes.json(),
-          logsRes.json(),
-        ]);
+        const schedJson =
+          schedSettled.status === "fulfilled"
+            ? await schedSettled.value.json().catch(() => null)
+            : null;
+        const logsJson =
+          logsSettled.status === "fulfilled"
+            ? await logsSettled.value.json().catch(() => null)
+            : null;
 
-        if (!schedJson.success || !logsJson.success) return null;
+        // Both failed → genuine failure, surface to caller as null.
+        if (!schedJson?.success && !logsJson?.success) return null;
 
         const weekMetrics = buildWeekMetrics(
           start,
-          schedJson.scheduledSessions ?? [],
-          logsJson.exerciseLogs ?? []
+          schedJson?.success ? (schedJson.scheduledSessions ?? []) : [],
+          logsJson?.success ? (logsJson.exerciseLogs ?? []) : []
         );
 
-        cacheRef.current.set(startYmd, weekMetrics);
+        setLru(cacheRef.current, startYmd, weekMetrics);
 
         return weekMetrics;
       } catch (e) {
