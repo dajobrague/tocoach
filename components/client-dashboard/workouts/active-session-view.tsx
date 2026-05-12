@@ -84,10 +84,14 @@ export function ActiveSessionView({
 
   const exercises: Array<ExerciseLike & Record<string, unknown>> =
     useMemo(() => {
-      // When the trainer has saved a per-date override, prefer the resolved
-      // prescription over the program-cache template so the client sees the
-      // exact sets/reps/weight the trainer set for this date.
-      if (resolved && resolved.source === "override") {
+      // Prefer the resolved prescription whenever it carries exercises —
+      // covers all of "override" (per-date custom prescription), "session"
+      // (trainer swapped the day's session_id, even without per-exercise
+      // edits), and "template" (microcycle slot resolution). Falling back
+      // to the program-cache template only when the resolved response is
+      // empty or still loading means client never gets stale data after
+      // a trainer change that didn't strictly trigger source === "override".
+      if (resolved && resolved.exercises.length > 0) {
         return resolved.exercises.map(toExerciseLike) as Array<
           ExerciseLike & Record<string, unknown>
         >;
