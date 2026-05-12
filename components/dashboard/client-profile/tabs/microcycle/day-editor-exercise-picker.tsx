@@ -22,51 +22,66 @@ export function DayEditorExercisePicker({ onPick, disabled = false }: Props) {
 
   // Initial browse list (capped) so the dropdown opens with content.
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/exercises?limit=100`);
+        const res = await fetch(`/api/exercises?limit=100`, {
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) return;
         const json = await res.json();
 
-        if (!cancelled && json.success) {
+        if (json.success) {
           setResults(json.exercises ?? []);
         }
-      } catch {
-        /* non-critical */
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, []);
 
-  // Debounced server-side search when the user types.
+  // Debounced server-side search when the user types. Aborta el fetch
+  // anterior en cada keystroke para que una respuesta vieja no pueda
+  // pisar los resultados de una búsqueda más reciente (race típico de
+  // "primero llega lo viejo después").
   useEffect(() => {
     const term = search.trim();
 
     if (!term) return;
 
     setLoading(true);
+    const controller = new AbortController();
     const handle = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ search: term, limit: "50" });
-        const res = await fetch(`/api/exercises?${params}`);
+        const res = await fetch(`/api/exercises?${params}`, {
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) return;
         const json = await res.json();
 
         if (json.success) setResults(json.exercises ?? []);
-      } catch {
-        /* leave previous results */
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 250);
 
-    return () => clearTimeout(handle);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
   }, [search]);
 
   return (

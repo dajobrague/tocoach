@@ -185,6 +185,12 @@ export function useWeekMetrics(
   weekStart: Date
 ): UseWeekMetrics {
   const cacheRef = useRef<Map<string, WeekMetrics>>(new Map());
+  // Outstanding prefetch controllers — keyed por weekStart YMD. Cuando
+  // el usuario navega rápido, abortamos prefetches viejos para no
+  // saturar la red.
+  const prefetchControllersRef = useRef<Map<string, AbortController>>(
+    new Map()
+  );
   const [data, setData] = useState<WeekMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,8 +199,22 @@ export function useWeekMetrics(
   // microcycle and different logs.
   useEffect(() => {
     cacheRef.current = new Map();
+    // Aborta prefetches del cliente anterior.
+    for (const c of prefetchControllersRef.current.values()) c.abort();
+    prefetchControllersRef.current.clear();
     setData(null);
   }, [clientId]);
+
+  // Abort prefetches al desmontar (evita fetches huérfanos cuando el
+  // trainer cambia de cliente o cierra la pestaña).
+  useEffect(() => {
+    const controllers = prefetchControllersRef.current;
+
+    return () => {
+      for (const c of controllers.values()) c.abort();
+      controllers.clear();
+    };
+  }, []);
 
   const fetchAndCache = useCallback(
     async (start: Date, signal?: AbortSignal): Promise<WeekMetrics | null> => {
@@ -247,15 +267,29 @@ export function useWeekMetrics(
   );
 
   // Background prefetch — fire-and-forget. No state updates here; we just
-  // warm the cache so the next user click is instant.
+  // warm the cache so the next user click is instant. Cada prefetch
+  // registra su AbortController para que reset/unmount lo pueda cortar.
   const prefetch = useCallback(
     (start: Date) => {
       const startYmd = getLocalYmd(start);
 
       if (cacheRef.current.has(startYmd)) return;
-      fetchAndCache(start).catch(() => {
-        /* best-effort prefetch */
-      });
+      // Si ya hay un prefetch en vuelo para esa semana, no dispares otro.
+      if (prefetchControllersRef.current.has(startYmd)) return;
+      const controller = new AbortController();
+
+      prefetchControllersRef.current.set(startYmd, controller);
+      fetchAndCache(start, controller.signal)
+        .catch(() => {
+          /* best-effort prefetch */
+        })
+        .finally(() => {
+          // Limpia el registro cuando el prefetch termina (resuelto o
+          // abortado) para no acumular controllers ya consumidos.
+          if (prefetchControllersRef.current.get(startYmd) === controller) {
+            prefetchControllersRef.current.delete(startYmd);
+          }
+        });
     },
     [fetchAndCache]
   );
@@ -265,6 +299,10 @@ export function useWeekMetrics(
     const cached = cacheRef.current.get(startYmd);
 
     if (cached) {
+      // LRU promote-on-read: re-set el entry para moverlo al final del
+      // insertion order, evitando que la semana más recientemente vista
+      // sea evictada antes que una vieja nunca consultada.
+      setLru(cacheRef.current, startYmd, cached);
       setData(cached);
       setLoading(false);
       setError(null);
