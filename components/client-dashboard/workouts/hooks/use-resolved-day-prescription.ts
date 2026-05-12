@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { clientFetch } from "@/lib/auth/client-token-storage";
+
 export interface ResolvedSet {
   set_number: number;
   reps: string | null;
@@ -59,7 +61,7 @@ export function useResolvedDayPrescription(
 
     (async () => {
       try {
-        const res = await fetch(`/api/client/scheduled-sessions/${date}`);
+        const res = await clientFetch(`/api/client/scheduled-sessions/${date}`);
         const json = await res.json();
 
         if (cancelled) return;
