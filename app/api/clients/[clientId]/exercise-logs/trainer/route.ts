@@ -39,8 +39,23 @@ export async function GET(
 
     const { clientId } = await params;
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get("startDate");
+    let startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    // Caller can opt-in to a longer window with ?days=<N> (cap 730 ≈ 2 years).
+    // The progress card sets days=180 by default so a multi-year client doesn't
+    // blow up the trainer UI; explicit startDate/endDate (microcycle metrics)
+    // still take precedence.
+    const daysParam = parseInt(searchParams.get("days") ?? "", 10);
+    const days = Number.isFinite(daysParam)
+      ? Math.min(Math.max(daysParam, 1), 730)
+      : 180;
+
+    if (!startDate && !endDate) {
+      const d = new Date();
+
+      d.setDate(d.getDate() - days);
+      startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
 
     const { data: client, error: clientError } = await supabase
       .from("clients")
@@ -70,7 +85,9 @@ export async function GET(
         `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date), exercise_log_sets(id, set_number, reps, weight_kg, video_url)`
       )
       .eq("client_id", clientId)
-      .order("completed_at", { ascending: true });
+      .order("completed_at", { ascending: true })
+      // Hard cap defense against runaway payloads regardless of window.
+      .limit(2000);
 
     if (startDate) {
       query = query.gte("scheduled_sessions.scheduled_date", startDate);
