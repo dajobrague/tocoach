@@ -92,9 +92,12 @@ export function useExerciseLogDraft(
     // (trainer edited sets/reps/weight after the client cached the draft).
     // Without this, an empty draft from before the override silently wins
     // over the freshly-saved prescription's prefilled values.
+    //
+    // Drafts written before this fix didn't carry a signature; treat them
+    // the same as a mismatch so a one-time refresh after deploy picks up
+    // any new prescription. Users mid-edit lose at most one draft.
     if (
       applyDraft &&
-      applyDraft.prescriptionSignature &&
       applyDraft.prescriptionSignature !== prescriptionSignature
     ) {
       applyDraft = null;
