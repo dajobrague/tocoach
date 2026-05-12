@@ -135,11 +135,45 @@ export function computeCardioStats(logs: ExerciseLog[]): CardioStats {
 export interface VolumeChartPoint {
   date: string;
   volume: number;
+  /** Suma de reps de todas las series. Útil cuando volume === 0 (bodyweight). */
+  totalReps: number;
+}
+
+/**
+ * Order logs by scheduled_date ASCENDING para el eje X cronológico.
+ * Antes el chart usaba el orden recibido (que típicamente vino de la API
+ * por completed_at), entonces logs back-dated zigzagueaban en el eje.
+ */
+function sortLogsByDateAsc(logs: ExerciseLog[]): ExerciseLog[] {
+  return [...logs].sort((a, b) => {
+    const da = a.scheduled_date ?? "";
+    const db = b.scheduled_date ?? "";
+
+    if (da !== db) return da.localeCompare(db);
+    const ia = String(a.id ?? "");
+    const ib = String(b.id ?? "");
+
+    return ia.localeCompare(ib);
+  });
+}
+
+function computeSessionTotalReps(log: ExerciseLog): number {
+  if (!log.sets || log.sets.length === 0) return 0;
+
+  return log.sets.reduce((acc, s: ExerciseLogSet) => {
+    const reps =
+      typeof s.reps === "number" && Number.isFinite(s.reps) && s.reps > 0
+        ? s.reps
+        : 0;
+
+    return acc + reps;
+  }, 0);
 }
 
 export function buildVolumeChartData(logs: ExerciseLog[]): VolumeChartPoint[] {
-  return logs.map((l) => ({
+  return sortLogsByDateAsc(logs).map((l) => ({
     date: l.scheduled_date,
     volume: computeSessionVolume(l),
+    totalReps: computeSessionTotalReps(l),
   }));
 }

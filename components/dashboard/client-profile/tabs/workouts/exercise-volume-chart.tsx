@@ -16,23 +16,41 @@ export function ExerciseVolumeChart({ logs, variant }: Props) {
   if (logs.length === 0) return null;
 
   if (variant === "strength") {
-    const data = buildVolumeChartData(logs).map((p) => ({
+    const points = buildVolumeChartData(logs);
+    // Bodyweight fallback: si ningún log tiene volumen kg·reps (típico
+    // calistenia o sesión sin peso registrado), graficamos total reps
+    // para no mostrar una línea plana en 0. Análogo al fallback
+    // distance→duration de cardio.
+    const hasVolume = points.some((p) => p.volume > 0);
+    const data = points.map((p) => ({
       date: formatDate(p.date),
       volume: p.volume,
+      reps: p.totalReps,
     }));
 
     return (
       <ExerciseLineChart
         data={data}
-        lines={[
-          {
-            key: "volume",
-            label: "Volumen (kg·reps)",
-            color: "#2563eb",
-            formatter: (v) => `${v} kg·reps`,
-          },
-        ]}
-        title="Volumen por sesión"
+        lines={
+          hasVolume
+            ? [
+                {
+                  key: "volume",
+                  label: "Volumen (kg·reps)",
+                  color: "#2563eb",
+                  formatter: (v) => `${v} kg·reps`,
+                },
+              ]
+            : [
+                {
+                  key: "reps",
+                  label: "Reps totales",
+                  color: "#2563eb",
+                  formatter: (v) => `${v} reps`,
+                },
+              ]
+        }
+        title={hasVolume ? "Volumen por sesión" : "Reps por sesión"}
         yFormatter={(v) => `${v}`}
       />
     );
@@ -41,7 +59,13 @@ export function ExerciseVolumeChart({ logs, variant }: Props) {
   // Cardio: prefer distance_km when any session has a non-zero value;
   // fall back to duration_minutes so bodyweight cardio (no distance) still charts.
   const hasDistance = logs.some((l) => (l.distance_km ?? 0) > 0);
-  const data = logs.map((l) => ({
+  const sortedLogs = [...logs].sort((a, b) => {
+    const da = a.scheduled_date ?? "";
+    const db = b.scheduled_date ?? "";
+
+    return da.localeCompare(db);
+  });
+  const data = sortedLogs.map((l) => ({
     date: formatDate(l.scheduled_date),
     distance: l.distance_km ?? 0,
     duration: l.duration_minutes ?? 0,
