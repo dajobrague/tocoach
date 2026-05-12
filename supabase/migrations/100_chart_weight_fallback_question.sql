@@ -15,6 +15,13 @@
 --      as an empty/orphan card until the trainer fixes the source. No
 --      data is destroyed.
 --
+-- NOTE: form_templates.questions_config has two historical shapes:
+--   - canonical: { "questions": [ ... ] }  (post-088)
+--   - legacy:    [ ... ]                    (pre-088, default in 020)
+-- The helper expression below normalises both into a JSONB array before
+-- unnesting. Without this, jsonb_array_elements() raises
+-- "cannot extract elements from an object" on the canonical shape.
+--
 -- Idempotent: re-running only rewrites tenants that still have the
 -- mismatch.
 
@@ -46,11 +53,23 @@ BEGIN
 
     FOR v_tenant IN SELECT unnest(v_affected_tenants) LOOP
         -- Does this tenant actually have a body_weight question in its
-        -- checkins template?
+        -- checkins template? Handle both questions_config shapes.
         SELECT EXISTS (
             SELECT 1
             FROM form_templates ft,
-                 jsonb_array_elements(ft.questions_config) q
+                 jsonb_array_elements(
+                     COALESCE(
+                         CASE
+                             WHEN jsonb_typeof(ft.questions_config) = 'object'
+                                  AND jsonb_typeof(ft.questions_config -> 'questions') = 'array'
+                                 THEN ft.questions_config -> 'questions'
+                             WHEN jsonb_typeof(ft.questions_config) = 'array'
+                                 THEN ft.questions_config
+                             ELSE '[]'::jsonb
+                         END,
+                         '[]'::jsonb
+                     )
+                 ) q
             WHERE ft.tenant_host = v_tenant
               AND ft.form_type = 'checkins'
               AND ft.is_active = true
@@ -66,7 +85,19 @@ BEGIN
         -- unit kg, label containing peso/weight, AND enabled.
         SELECT q->>'id' INTO v_alt_qid
         FROM form_templates ft,
-             jsonb_array_elements(ft.questions_config) q
+             jsonb_array_elements(
+                 COALESCE(
+                     CASE
+                         WHEN jsonb_typeof(ft.questions_config) = 'object'
+                              AND jsonb_typeof(ft.questions_config -> 'questions') = 'array'
+                             THEN ft.questions_config -> 'questions'
+                         WHEN jsonb_typeof(ft.questions_config) = 'array'
+                             THEN ft.questions_config
+                         ELSE '[]'::jsonb
+                     END,
+                     '[]'::jsonb
+                 )
+             ) q
         WHERE ft.tenant_host = v_tenant
           AND ft.form_type = 'checkins'
           AND ft.is_active = true
