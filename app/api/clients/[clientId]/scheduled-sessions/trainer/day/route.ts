@@ -374,11 +374,11 @@ export async function PUT(
       );
     }
 
-    const scheduledSessionId = Array.isArray(rpcResult)
-      ? (rpcResult[0] as { scheduled_session_id: string } | undefined)
-          ?.scheduled_session_id
-      : (rpcResult as { scheduled_session_id: string } | null)
-          ?.scheduled_session_id;
+    // Migration 098 returns the UUID as a scalar (RETURNS UUID, not
+    // RETURNS TABLE) — the supabase-js client surfaces it directly as
+    // a string, not wrapped in a row object.
+    const scheduledSessionId =
+      typeof rpcResult === "string" ? rpcResult : String(rpcResult);
 
     return NextResponse.json({ success: true, scheduledSessionId });
   } catch (error) {
