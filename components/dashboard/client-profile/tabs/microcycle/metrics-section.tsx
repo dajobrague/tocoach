@@ -100,7 +100,11 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     [data, selectedDate]
   );
 
-  const todayYmd = useMemo(() => getLocalYmd(new Date()), []);
+  // Recalculado cada render para que el flag `editable` no quede stale
+  // cuando la pestaña permanece abierta cruzando medianoche. El costo es
+  // negligible (un format de Date local). Si llega a ser caliente, usar un
+  // interval que invalide a las 00:00 local.
+  const todayYmd = getLocalYmd(new Date());
   const editable =
     !!selectedDay &&
     (selectedDay.date >= todayYmd || selectedDay.logs.length === 0);
