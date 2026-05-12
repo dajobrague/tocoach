@@ -87,8 +87,12 @@ export interface DayAdherence {
   loggedLoadTotal: number;
   /** 0..1 — proportion of exercises with at least one logged set. */
   ejercicios: number;
-  /** 0..1 — proportion of prescribed sets that were logged. */
+  /** 0..1 — proportion of prescribed sets that were logged (clamped at 1). */
   series: number;
+  /** Unclamped sets ratio (>1 when client did more sets than prescribed). */
+  seriesRaw: number;
+  /** True when loggedSetsTotal > prescribedSetsTotal on a day with any work. */
+  hasOverage: boolean;
   /** 0..1 — proportion of prescribed load lifted. 1 when no prescribed load. */
   carga: number;
 }

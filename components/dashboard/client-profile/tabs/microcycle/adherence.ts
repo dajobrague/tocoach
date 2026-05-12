@@ -7,7 +7,10 @@ import type {
   PrescribedExercise,
 } from "./types";
 
-const EMPTY_ADHERENCE: DayAdherence = {
+// Returned by reference today, but every consumer must treat as read-only —
+// any mutation would silently corrupt every "no prescription" day in the
+// week. Frozen to surface the contract loudly.
+const EMPTY_ADHERENCE: DayAdherence = Object.freeze({
   totalPrescribed: 0,
   completedExercises: 0,
   prescribedSetsTotal: 0,
@@ -16,8 +19,10 @@ const EMPTY_ADHERENCE: DayAdherence = {
   loggedLoadTotal: 0,
   ejercicios: 0,
   series: 0,
+  seriesRaw: 0,
+  hasOverage: false,
   carga: 1,
-};
+}) as DayAdherence;
 
 function parseReps(reps: string | null | undefined): number {
   if (reps == null) return 0;
@@ -42,12 +47,26 @@ export function computeDayAdherence(
     const exerciseLogs = logs.filter((l) => l.exercise_id === p.exerciseId);
     const loggedSetsForExercise = exerciseLogs.flatMap((l) => l.sets ?? []);
 
-    if (loggedSetsForExercise.length > 0) completedExercises += 1;
-    loggedSetsTotal += loggedSetsForExercise.length;
-
     const prescribedSets = p.prescribedSets ?? 0;
     const prescribedReps = parseReps(p.prescribedReps);
     const prescribedWeight = p.prescribedWeightKg ?? 0;
+
+    // An exercise counts as "completed" only when:
+    //   - there is at least one logged set, AND
+    //   - if the prescription specifies a set count > 0, the logged set count
+    //     reaches it (a single-set log against a 4-set prescription used to
+    //     mark the exercise complete and the day "100% ejercicios" with one
+    //     trivial set; that's the bug being fixed here).
+    if (loggedSetsForExercise.length > 0) {
+      if (
+        prescribedSets > 0
+          ? loggedSetsForExercise.length >= prescribedSets
+          : true
+      ) {
+        completedExercises += 1;
+      }
+    }
+    loggedSetsTotal += loggedSetsForExercise.length;
 
     prescribedSetsTotal += prescribedSets;
 
@@ -63,10 +82,14 @@ export function computeDayAdherence(
   }
 
   const ejercicios = completedExercises / prescribed.length;
-  const series =
-    prescribedSetsTotal === 0
-      ? 0
-      : Math.min(loggedSetsTotal / prescribedSetsTotal, 1);
+  // seriesRaw exposes the unclamped ratio so the UI can distinguish "did
+  // exactly the prescription" from "did more than prescribed" (e.g. 1.5 =
+  // 6 sets done of 4 prescribed). series stays clamped for backwards-
+  // compat with consumers that drive a progress bar.
+  const seriesRaw =
+    prescribedSetsTotal === 0 ? 0 : loggedSetsTotal / prescribedSetsTotal;
+  const series = Math.min(seriesRaw, 1);
+  const hasOverage = seriesRaw > 1;
   const carga =
     prescribedLoadTotal === 0
       ? 1
@@ -81,6 +104,8 @@ export function computeDayAdherence(
     loggedLoadTotal,
     ejercicios,
     series,
+    seriesRaw,
+    hasOverage,
     carga,
   };
 }
