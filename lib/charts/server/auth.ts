@@ -206,6 +206,19 @@ export async function authorizeClientAccess(
     return { ok: false, response: deny(403, "No autorizado") };
   }
 
+  // Bind session client_id to URL clientId — without this, ClientA can read
+  // any ClientB chart config under the same tenant by guessing the BIGINT.
+  // client_session.client_id is the clients.id BIGINT serialized as a string
+  // (see app/api/auth/client-login/route.ts:124, setClientSessionCookie).
+  const sessionClientId = parseInt(clientSession.client_id, 10);
+
+  if (Number.isNaN(sessionClientId) || sessionClientId !== clientIdBigint) {
+    return {
+      ok: false,
+      response: deny(403, "No autorizado para este cliente"),
+    };
+  }
+
   return {
     ok: true,
     tenantHost,
