@@ -32,6 +32,10 @@ import { CATALOG_BY_ID, CATALOG_ADAPTERS } from "./adapters/catalog";
 import { buildFormQuestionAdapter } from "./adapters/form-question";
 
 import { flattenQuestions } from "@/lib/forms/types";
+import {
+  CATALOG_DATA_FEED,
+  questionMatchesSpec,
+} from "@/lib/forms/analytics-keys";
 
 /**
  * Registry-validation accepts the zod-inferred shape (ChartConfigInput)
@@ -163,10 +167,23 @@ export function buildFormQuestionAdaptersFromTemplates(
 }
 
 /**
- * Catalog + form-question adapters, deduped (catalog wins on id collision —
- * a trainer can't override a catalog adapter by naming a form question
- * "weight"). Order: catalog first (in their predefined order), then form
- * questions in the order returned by the templates query.
+ * Catalog + form-question adapters, deduped. Order: catalog first (en su
+ * orden predefinido), después form_question en el orden del template.
+ *
+ * Filtro de duplicación con form_question:
+ *   Un catalog/X que tiene un FieldSpec declarado en CATALOG_DATA_FEED
+ *   se ESCONDE del picker cuando el tenant tiene al menos una pregunta
+ *   que matchea ese spec (típicamente la pregunta nativa del template
+ *   default). El trainer no debería ver "Calorías (catálogo)" Y
+ *   "Calorías Totales (mi template)" en la misma lista — son la misma
+ *   cosa con dos rutas.
+ *
+ *   Excepciones que siempre se muestran:
+ *     - training_breakdown: no depende de form_responses (lee
+ *       exercise_logs), no tiene equivalente form_question
+ *     - macros_breakdown: composite multi-series; el form_question no
+ *       lo reemplaza directamente
+ *   Estos NO están en CATALOG_DATA_FEED y por eso pasan el filtro.
  */
 export function listAvailableSources(
   templates: ReadonlyArray<FormTemplateRow>
@@ -174,7 +191,34 @@ export function listAvailableSources(
   const seen = new Set<string>();
   const merged: DataAdapter[] = [];
 
+  // Pre-computar las preguntas planas del tenant para el filtro.
+  const tenantQuestions: Array<{ id?: string | null; unit?: string | null }> =
+    [];
+
+  for (const tpl of templates) {
+    if (tpl.form_type !== "checkins" && tpl.form_type !== "habits") continue;
+    const questions = extractQuestions(tpl.questions_config);
+
+    for (const q of questions) {
+      if (!q.id) continue;
+      if (q.enabled === false) continue;
+      tenantQuestions.push({
+        id: q.id,
+        unit: typeof q.unit === "string" ? q.unit : null,
+      });
+    }
+  }
+
+  function catalogIsRedundant(catalogId: string): boolean {
+    const spec = CATALOG_DATA_FEED[catalogId];
+
+    if (!spec) return false; // no spec → siempre se muestra (training_breakdown, etc.)
+
+    return tenantQuestions.some((q) => questionMatchesSpec(q, spec));
+  }
+
   for (const a of CATALOG_ADAPTERS) {
+    if (catalogIsRedundant(a.metadata.id)) continue;
     seen.add(a.metadata.id);
     merged.push(a);
   }
