@@ -18,6 +18,10 @@ import {
   loadClientChartConfig,
   loadEffectiveClientCharts,
 } from "@/lib/charts/server/template-loader";
+import {
+  filterUnresolvableCharts,
+  loadValidQuestionKeys,
+} from "@/lib/charts/server/resolvability";
 import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { validateDocumentWithRegistry } from "@/lib/charts/registry";
 import { chartsDocumentSchema } from "@/lib/charts/validation";
@@ -63,10 +67,25 @@ export async function GET(
       clientTrainerId: trainerId,
     });
 
+    // Filtrar charts irresolubles (catalog id retirado del código, o
+    // form_question apuntando a una pregunta borrada/disabled) ANTES
+    // de cualquier otro filtro. Si el chart no se puede renderizar,
+    // preferimos que desaparezca a mostrarle al trainer/cliente un
+    // card vacío con "Esta pregunta ya no existe".
+    const validQuestionKeys = await loadValidQuestionKeys(
+      supabase,
+      auth.tenantHost
+    );
+    const resolvableCharts = filterUnresolvableCharts(
+      effective.charts,
+      validQuestionKeys,
+      { logContext: `client=${auth.clientIdBigint}` }
+    );
+
     // Drop trainer-only charts when the caller is a client session.
     // Trainers always see the full doc (they own the config).
     const visibleCharts = filterChartsForAudience(
-      effective.charts,
+      resolvableCharts,
       auth.actor.kind
     );
 
