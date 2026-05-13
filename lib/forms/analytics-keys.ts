@@ -27,7 +27,7 @@
 
 type AnswerMap = Record<string, unknown> | null | undefined;
 
-interface FieldSpec {
+export interface FieldSpec {
   /** Ids exactos que se prueban primero, en orden de preferencia. */
   canonicalIds: string[];
   /** Substrings (lowercase) que, si están en el id de la pregunta, matchean. */
@@ -67,6 +67,107 @@ const FATS_SPEC: FieldSpec = {
   canonicalIds: ["fats", "grasas"],
   idIncludes: ["fat", "grasa", "lipid"],
 };
+
+// El template default usa `*_levels` para mood/energy/stress (rating
+// 1-10). Antes los adapters de catalog hacían resolveByKey con solo
+// `mood/animo/energy/...`, que NO matchea con `mood_levels`, y los
+// charts iban siempre vacíos para todo tenant en template default.
+const MOOD_SPEC: FieldSpec = {
+  canonicalIds: ["mood", "mood_levels", "animo", "ánimo"],
+  idIncludes: ["mood", "animo", "ánimo"],
+};
+
+const ENERGY_SPEC: FieldSpec = {
+  canonicalIds: ["energy", "energy_levels", "energia", "energía"],
+  idIncludes: ["energy", "energia", "energía"],
+};
+
+const STRESS_SPEC: FieldSpec = {
+  canonicalIds: ["stress", "stress_levels", "estres", "estrés"],
+  idIncludes: ["stress", "estres", "estrés"],
+};
+
+const WATER_SPEC: FieldSpec = {
+  canonicalIds: [
+    "water",
+    "water_liters",
+    "agua",
+    "litros_agua",
+    "hydration",
+    "hidratacion",
+    "hidratación",
+  ],
+  idIncludes: ["water", "agua", "hydrat", "hidrat"],
+  units: ["l", "litros", "liters", "ml"],
+};
+
+const BODY_FAT_SPEC: FieldSpec = {
+  canonicalIds: ["body_fat", "body_fat_pct", "bf_pct", "grasa_corporal"],
+  idIncludes: ["body_fat", "bodyfat", "grasa_corp", "grasacorp", "bf_"],
+  units: ["%"],
+};
+
+const BODY_WEIGHT_SPEC: FieldSpec = {
+  canonicalIds: ["body_weight", "weight", "peso", "peso_corporal"],
+  idIncludes: ["body_weight", "bodyweight", "weight", "peso"],
+  units: ["kg"],
+};
+
+// Mapa exportado: para cada catalog id que depende de form responses,
+// el spec que define qué pregunta puede alimentarlo. Adapters cuyo
+// catalog id no dependa de form_responses (training_breakdown lee
+// exercise_logs) NO aparecen aquí — la auditoría de "chart sin feed"
+// los skipea.
+//
+// macros_breakdown se cubre con un OR de protein||carbs||fats en el
+// caller (filterCatalogChartsWithoutFeed) — declarar acá solo los
+// componentes simplifica la generalización.
+export const CATALOG_DATA_FEED: Readonly<Record<string, FieldSpec>> = {
+  body_fat: BODY_FAT_SPEC,
+  sleep_hours: SLEEP_HOURS_SPEC,
+  steps: STEPS_SPEC,
+  calories: CALORIES_SPEC,
+  protein: PROTEIN_SPEC,
+  carbs: CARBS_SPEC,
+  fats: FATS_SPEC,
+  water: WATER_SPEC,
+  mood: MOOD_SPEC,
+  energy: ENERGY_SPEC,
+  stress: STRESS_SPEC,
+  // Legacy "weight" catalog id: no longer in CATALOG_ADAPTERS (movido a
+  // form_question post-migration 096) pero los specs sirven para el
+  // shim 100 cuando intenta auto-descubrir alternativas.
+  weight: BODY_WEIGHT_SPEC,
+};
+
+/**
+ * Chequea si una pregunta concreta matchea un spec. Reusa la misma
+ * priorización que resolveFieldNumber: canonical → substring → unit.
+ */
+export function questionMatchesSpec(
+  question: { id?: string | null; unit?: string | null },
+  spec: FieldSpec
+): boolean {
+  const id = question.id?.toLowerCase();
+  const unit = question.unit?.toLowerCase();
+
+  if (id) {
+    for (const c of spec.canonicalIds) {
+      if (c.toLowerCase() === id) return true;
+    }
+    for (const sub of spec.idIncludes) {
+      if (id.includes(sub.toLowerCase())) return true;
+    }
+  }
+
+  if (unit && spec.units) {
+    for (const u of spec.units) {
+      if (u.toLowerCase() === unit) return true;
+    }
+  }
+
+  return false;
+}
 
 function toFiniteNumber(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -130,4 +231,28 @@ export function resolveCarbsAnswer(answers: AnswerMap): number | null {
 
 export function resolveFatsAnswer(answers: AnswerMap): number | null {
   return resolveFieldNumber(answers, FATS_SPEC);
+}
+
+export function resolveMoodAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, MOOD_SPEC);
+}
+
+export function resolveEnergyAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, ENERGY_SPEC);
+}
+
+export function resolveStressAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, STRESS_SPEC);
+}
+
+export function resolveWaterAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, WATER_SPEC);
+}
+
+export function resolveBodyFatAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, BODY_FAT_SPEC);
+}
+
+export function resolveBodyWeightAnswer(answers: AnswerMap): number | null {
+  return resolveFieldNumber(answers, BODY_WEIGHT_SPEC);
 }

@@ -27,33 +27,18 @@ import type { AdapterContext, DataAdapter, ExerciseLogLike } from "./types";
 import { averageInWindow, generateBuckets, sumInWindow } from "./bucketing";
 
 import {
+  resolveBodyFatAnswer,
   resolveCaloriesAnswer,
   resolveCarbsAnswer,
+  resolveEnergyAnswer,
   resolveFatsAnswer,
+  resolveMoodAnswer,
   resolveProteinAnswer,
   resolveSleepHoursAnswer,
   resolveStepsAnswer,
+  resolveStressAnswer,
+  resolveWaterAnswer,
 } from "@/lib/forms/analytics-keys";
-
-// ─── Generic resolver (any answer key, finite-number coercion) ─────────────
-
-function resolveByKey(keys: string[]) {
-  return (r: FormResponse): number | null => {
-    if (!r.answers) return null;
-    for (const k of keys) {
-      if (k in r.answers) {
-        const raw = r.answers[k];
-
-        if (raw === null || raw === undefined || raw === "") continue;
-        const n = Number(raw);
-
-        if (Number.isFinite(n)) return n;
-      }
-    }
-
-    return null;
-  };
-}
 
 // ─── Factory: 1-D adapter backed by form responses ─────────────────────────
 
@@ -133,12 +118,7 @@ const bodyFat = formResponse1D({
   icon: "solar:scale-bold",
   category: "checkin",
   formType: "checkins",
-  resolve: resolveByKey([
-    "body_fat",
-    "grasa_corporal",
-    "body_fat_pct",
-    "bf_pct",
-  ]),
+  resolve: (r) => resolveBodyFatAnswer(r.answers),
   default_chart_type: "area",
   default_color: "neutral-slate",
 });
@@ -222,12 +202,18 @@ const water = formResponse1D({
   icon: "solar:waterdrop-bold",
   category: "habit",
   formType: "habits",
-  resolve: resolveByKey(["water", "agua", "water_liters", "litros_agua"]),
+  resolve: (r) => resolveWaterAnswer(r.answers),
   default_chart_type: "bar",
   default_color: "water-sky",
 });
 
 // Rating-style metrics: 1-10 scale, daily reset → bar with fixed Y-axis.
+// Antes los resolvers acá solo aceptaban canonical exacto (mood/animo,
+// energy/energia, stress/estres). El template default usa
+// `mood_levels`/`energy_levels`/`stress_levels` y el chart aparecía
+// SIEMPRE vacío para todo cliente — bug estructural equivalente al de
+// body_weight. Ahora los resolvers viven en analytics-keys.ts y
+// matchean canonical + idIncludes (`*_levels`, `*_level`) por defecto.
 const mood = formResponse1D({
   id: "mood",
   label: "Ánimo",
@@ -235,7 +221,7 @@ const mood = formResponse1D({
   y_max: 10,
   category: "habit",
   formType: "habits",
-  resolve: resolveByKey(["mood", "animo", "ánimo"]),
+  resolve: (r) => resolveMoodAnswer(r.answers),
   default_chart_type: "bar",
   default_color: "mood-violet",
 });
@@ -247,7 +233,7 @@ const energy = formResponse1D({
   y_max: 10,
   category: "habit",
   formType: "habits",
-  resolve: resolveByKey(["energy", "energia", "energía"]),
+  resolve: (r) => resolveEnergyAnswer(r.answers),
   default_chart_type: "bar",
   default_color: "mood-violet",
 });
@@ -259,7 +245,7 @@ const stress = formResponse1D({
   y_max: 10,
   category: "habit",
   formType: "habits",
-  resolve: resolveByKey(["stress", "estres", "estrés"]),
+  resolve: (r) => resolveStressAnswer(r.answers),
   default_chart_type: "bar",
   default_color: "mood-violet",
 });
