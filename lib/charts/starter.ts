@@ -1,27 +1,33 @@
 /**
- * Starter chart template — the seven charts that exactly reproduce today's
- * client dashboard (PESO, CALORÍAS, PROTEÍNA, HIDRATOS, GRASAS, SUEÑO,
- * ENTRENAMIENTO).
+ * Starter chart template — seven charts apuntando a las preguntas reales
+ * del template del trainer (PESO, CALORÍAS, PROTEÍNA, HIDRATOS, GRASAS,
+ * SUEÑO, ENTRENAMIENTO).
  *
- * PESO points at the `body_weight` question seeded in the check-in form
- * template (migrations 020 + 087). Each trainer can repoint it to a
- * different numeric question — or to the daily-habit `body_weight` — via
- * the chart editor.
- *
- * The migration (083_create_chart_system.sql) seeded an older shape that
- * used `{kind:"catalog", id:"weight"}`; that adapter was removed in the
- * 2026-05 cleanup. Trainers whose template was created before this change
- * will see the weight chart in its orphan empty-state until they delete
- * and re-add it via the picker.
- *
- * This TS factory is used by:
- *   - the lazy-create path in /api/charts/template GET (for trainers
- *     created after the migration ran, or whose row is missing)
- *   - the trainer template page's "Restore defaults" button when the
- *     template is empty
+ * Dos modos:
+ *   - `buildStarterCharts()` — versión legacy hardcoded usada como
+ *     fallback en el cliente "Restaurar default" y en el path ephemeral
+ *     del loader (tenant sin row en `tenants`). PESO viene como
+ *     form_question/checkins/body_weight; el resto como catalog/* que
+ *     el filtro de resolvability esconderá si el tenant no tiene la
+ *     pregunta. Sin iconos default.
+ *   - `buildStarterChartsFromTemplates(templates)` — versión
+ *     template-aware: inspecciona el form_templates real del trainer
+ *     (descendiendo en subQuestions) y siembra form_question puro
+ *     apuntando a las preguntas concretas. Si una intent no tiene
+ *     match en el template del tenant, skipea ese chart (cero
+ *     orphans). Esta es la versión "personalización absoluta" que el
+ *     loader llama al lazy-create de un nuevo trainer.
  */
 
-import type { ChartConfig, ChartsDocument } from "./types";
+import type { ChartConfig, ChartsDocument, ColorToken } from "./types";
+import type { QuestionConfig } from "@/lib/forms/types";
+
+import {
+  CATALOG_DATA_FEED,
+  questionMatchesSpec,
+  type FieldSpec,
+} from "@/lib/forms/analytics-keys";
+import { flattenQuestions } from "@/lib/forms/types";
 
 /**
  * Isomorphic UUID generator. Node ≥19 and all modern browsers expose
@@ -41,6 +47,21 @@ function randomUUID(): string {
   });
 }
 
+/**
+ * Legacy hardcoded starter — usado como fallback en el cliente
+ * ("Restaurar default" en chart-surface) y en el path ephemeral del
+ * loader (tenant sin row). Asume las preguntas del template default
+ * (migration 020): body_weight, sleep_hours, steps, y las macros
+ * anidadas calories/protein/carbs/fats dentro de macro_tracking.
+ *
+ * Si el trainer ya disabled / borró una de esas preguntas, el chart
+ * correspondiente quedará huérfano y el filtro de resolvability lo
+ * esconderá. Para trainers nuevos, el server-side
+ * `buildStarterChartsFromTemplates` se prefiere y detecta el template
+ * real (incluyendo preguntas custom anidadas).
+ *
+ * Sin iconos default: el trainer los configura desde el icon picker.
+ */
 export function buildStarterCharts(): ChartConfig[] {
   return [
     {
@@ -55,13 +76,16 @@ export function buildStarterCharts(): ChartConfig[] {
       chart_type: "area",
       color: "weight-amber",
       aggregation: "checkin_period",
-      icon: "solar:body-bold",
     },
     {
       id: randomUUID(),
       position: 1,
       label: "CALORÍAS",
-      source: { kind: "catalog", id: "calories" },
+      source: {
+        kind: "form_question",
+        form_type: "habits",
+        question_id: "calories",
+      },
       chart_type: "bar",
       color: "calorie-coral",
       aggregation: "checkin_period",
@@ -71,7 +95,11 @@ export function buildStarterCharts(): ChartConfig[] {
       id: randomUUID(),
       position: 2,
       label: "PROTEÍNA",
-      source: { kind: "catalog", id: "protein" },
+      source: {
+        kind: "form_question",
+        form_type: "habits",
+        question_id: "protein",
+      },
       chart_type: "bar",
       color: "protein-indigo",
       aggregation: "checkin_period",
@@ -81,7 +109,11 @@ export function buildStarterCharts(): ChartConfig[] {
       id: randomUUID(),
       position: 3,
       label: "HIDRATOS",
-      source: { kind: "catalog", id: "carbs" },
+      source: {
+        kind: "form_question",
+        form_type: "habits",
+        question_id: "carbs",
+      },
       chart_type: "bar",
       color: "carbs-emerald-deep",
       aggregation: "checkin_period",
@@ -91,7 +123,11 @@ export function buildStarterCharts(): ChartConfig[] {
       id: randomUUID(),
       position: 4,
       label: "GRASAS",
-      source: { kind: "catalog", id: "fats" },
+      source: {
+        kind: "form_question",
+        form_type: "habits",
+        question_id: "fats",
+      },
       chart_type: "bar",
       color: "fats-amber-deep",
       aggregation: "checkin_period",
@@ -101,7 +137,11 @@ export function buildStarterCharts(): ChartConfig[] {
       id: randomUUID(),
       position: 5,
       label: "SUEÑO",
-      source: { kind: "catalog", id: "sleep_hours" },
+      source: {
+        kind: "form_question",
+        form_type: "habits",
+        question_id: "sleep_hours",
+      },
       chart_type: "bar",
       color: "sleep-emerald",
       target_zone: { min: 7, max: 9, margin: 1 },
@@ -121,4 +161,184 @@ export function buildStarterCharts(): ChartConfig[] {
 
 export function buildStarterDocument(): ChartsDocument {
   return { version: 1, charts: buildStarterCharts() };
+}
+
+// ─── Template-aware starter ────────────────────────────────────────────
+
+/**
+ * Una "intent" del starter: WHAT queremos (label + chart_type + color)
+ * y HOW encontrar la pregunta que la alimenta en el template del
+ * trainer (vía FieldSpec). Si no encontramos pregunta compatible,
+ * la intent se skipea — cero orphans.
+ *
+ * Cada intent tiene un `id` que controla el orden y permite dedup
+ * (no duplicar PESO si ya está incluido vía otra ruta).
+ */
+interface StarterIntent {
+  id: string;
+  label: string;
+  spec: FieldSpec;
+  chart_type: ChartConfig["chart_type"];
+  color: ColorToken;
+  aggregation: ChartConfig["aggregation"];
+  target_zone?: { min: number; max: number; margin: number };
+  show_average_line?: boolean;
+}
+
+const STARTER_INTENTS: ReadonlyArray<StarterIntent> = [
+  {
+    id: "weight",
+    label: "PESO",
+    spec: CATALOG_DATA_FEED.weight!,
+    chart_type: "area",
+    color: "weight-amber",
+    aggregation: "checkin_period",
+  },
+  {
+    id: "calories",
+    label: "CALORÍAS",
+    spec: CATALOG_DATA_FEED.calories!,
+    chart_type: "bar",
+    color: "calorie-coral",
+    aggregation: "checkin_period",
+    show_average_line: true,
+  },
+  {
+    id: "protein",
+    label: "PROTEÍNA",
+    spec: CATALOG_DATA_FEED.protein!,
+    chart_type: "bar",
+    color: "protein-indigo",
+    aggregation: "checkin_period",
+    show_average_line: true,
+  },
+  {
+    id: "carbs",
+    label: "HIDRATOS",
+    spec: CATALOG_DATA_FEED.carbs!,
+    chart_type: "bar",
+    color: "carbs-emerald-deep",
+    aggregation: "checkin_period",
+    show_average_line: true,
+  },
+  {
+    id: "fats",
+    label: "GRASAS",
+    spec: CATALOG_DATA_FEED.fats!,
+    chart_type: "bar",
+    color: "fats-amber-deep",
+    aggregation: "checkin_period",
+    show_average_line: true,
+  },
+  {
+    id: "sleep_hours",
+    label: "SUEÑO",
+    spec: CATALOG_DATA_FEED.sleep_hours!,
+    chart_type: "bar",
+    color: "sleep-emerald",
+    aggregation: "checkin_period",
+    target_zone: { min: 7, max: 9, margin: 1 },
+  },
+];
+
+export interface StarterTemplateRow {
+  form_type: "checkins" | "habits";
+  questions_config: unknown;
+}
+
+interface FlatQuestion {
+  formType: "checkins" | "habits";
+  id: string;
+  unit: string | null;
+}
+
+function flattenTemplates(
+  templates: ReadonlyArray<StarterTemplateRow>
+): FlatQuestion[] {
+  const out: FlatQuestion[] = [];
+
+  for (const tpl of templates) {
+    if (tpl.form_type !== "checkins" && tpl.form_type !== "habits") continue;
+
+    let questions: QuestionConfig[] = [];
+
+    try {
+      // flattenQuestions desciende subQuestions y propaga
+      // enabled-from-parent. Así descubre calories/protein/carbs/fats
+      // anidadas en macro_tracking.
+      questions = flattenQuestions(
+        tpl.questions_config as QuestionConfig[] | never
+      );
+    } catch {
+      continue;
+    }
+    for (const q of questions) {
+      if (!q.id) continue;
+      if (q.enabled === false) continue;
+      out.push({
+        formType: tpl.form_type,
+        id: q.id,
+        unit: typeof q.unit === "string" ? q.unit : null,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Construye charts del starter usando las preguntas reales del trainer.
+ * Para cada intent, busca la mejor pregunta compatible (canonical
+ * primero, luego substring, luego unit). Si no encuentra ninguna,
+ * skipea la intent. El chart ENTRENAMIENTO se agrega siempre porque
+ * lee `exercise_logs` (no depende de form_responses).
+ */
+export function buildStarterChartsFromTemplates(
+  templates: ReadonlyArray<StarterTemplateRow>
+): ChartConfig[] {
+  const questions = flattenTemplates(templates);
+  const out: ChartConfig[] = [];
+
+  for (const intent of STARTER_INTENTS) {
+    const match = questions.find((q) => questionMatchesSpec(q, intent.spec));
+
+    if (!match) continue;
+
+    out.push({
+      id: randomUUID(),
+      position: out.length,
+      label: intent.label,
+      source: {
+        kind: "form_question",
+        form_type: match.formType,
+        question_id: match.id,
+      },
+      chart_type: intent.chart_type,
+      color: intent.color,
+      aggregation: intent.aggregation,
+      ...(intent.target_zone ? { target_zone: intent.target_zone } : {}),
+      ...(intent.show_average_line
+        ? { show_average_line: intent.show_average_line }
+        : {}),
+    });
+  }
+
+  // ENTRENAMIENTO siempre: lee exercise_logs, independiente del form template.
+  out.push({
+    id: randomUUID(),
+    position: out.length,
+    label: "ENTRENAMIENTO",
+    source: { kind: "catalog", id: "training_breakdown" },
+    chart_type: "stacked_bar",
+    color: ["training-blue", "cardio-rose"],
+    aggregation: "checkin_period",
+  });
+
+  return out;
+}
+
+export function buildStarterDocumentFromTemplates(
+  templates: ReadonlyArray<StarterTemplateRow>
+): ChartsDocument {
+  return { version: 1, charts: buildStarterChartsFromTemplates(templates) };
 }

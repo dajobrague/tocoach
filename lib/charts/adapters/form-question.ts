@@ -98,6 +98,11 @@ export function buildFormQuestionAdapter(
   const id = `form_q:${spec.formType}:${spec.questionId}`;
   const isPhoto = spec.kind === "photo";
 
+  // Sin icono por defecto: el trainer elige explícitamente via icon
+  // picker. Antes los adapters traían "solar:gallery-bold" (photo) y los
+  // catalog otros iconos hardcoded; el chart-card hacía fallback a
+  // metadata.icon. El user pidió que ninguna selección venga con icono
+  // pre-cargado.
   const metadata: ChartDataSource = {
     id,
     label: spec.label,
@@ -106,7 +111,6 @@ export function buildFormQuestionAdapter(
     dimensions: isPhoto ? "photo" : 1,
     default_chart_type: isPhoto ? "photo_timeline" : "area",
     default_color: FALLBACK_COLOR,
-    ...(isPhoto ? { icon: "solar:gallery-bold" } : {}),
   };
 
   const resolveNumeric = (r: FormResponse): number | null => {
