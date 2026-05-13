@@ -249,24 +249,40 @@ export class ProgramService {
     scheduledTime?: string,
     clientProgramId?: string
   ) {
-    const { data, error } = await this.supabase
-      .from("scheduled_sessions")
-      .insert({
-        tenant_host: tenantHost,
-        client_id: clientId,
-        trainer_id: trainerId,
-        session_id: sessionId,
-        client_program_id: clientProgramId,
-        scheduled_date: scheduledDate,
-        scheduled_time: scheduledTime,
-        status: "scheduled",
-      })
-      .select()
-      .single();
+    // Atomic upsert via RPC (F4.5 migration 104). Antes el INSERT
+    // directo creaba duplicados cuando el batch corría dos veces o si
+    // concurría con un cliente loggeando el mismo día.
+    const { data: scheduledSessionId, error } = await this.supabase.rpc(
+      "upsert_scheduled_session",
+      {
+        p_tenant_host: tenantHost,
+        p_client_id: parseInt(clientId, 10),
+        p_trainer_id: trainerId,
+        p_session_id: sessionId,
+        p_scheduled_date: scheduledDate,
+        p_status: "scheduled",
+        p_client_program_id: clientProgramId ?? null,
+      }
+    );
 
     if (error) {
       throw new Error(`Failed to schedule session: ${error.message}`);
     }
+
+    // scheduled_time se setea aparte si vino — la RPC no lo acepta para
+    // mantener el contrato simple, y este caller es el único que lo usa.
+    if (scheduledTime) {
+      await this.supabase
+        .from("scheduled_sessions")
+        .update({ scheduled_time: scheduledTime })
+        .eq("id", scheduledSessionId);
+    }
+
+    const { data } = await this.supabase
+      .from("scheduled_sessions")
+      .select("*")
+      .eq("id", scheduledSessionId)
+      .single();
 
     return data;
   }

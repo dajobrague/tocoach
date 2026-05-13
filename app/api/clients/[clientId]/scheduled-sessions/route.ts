@@ -128,22 +128,24 @@ export async function POST(
       metadata.original_plan_date = originalPlanDate;
     }
 
-    const { data: scheduledSession, error: createError } = await supabase
-      .from("scheduled_sessions")
-      .insert({
-        tenant_host: sessionData.tenant_host,
-        session_id: sessionId,
-        client_id: parseInt(clientId),
-        trainer_id: sessionData.trainer_id,
-        scheduled_date: scheduledDate,
-        status: status || "pending",
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-      })
-      .select()
-      .single();
+    // Atomic upsert via RPC (F4.5 migration 104). Previene duplicados
+    // bajo concurrencia (dos requests para el mismo client/date ven
+    // SELECT vacío y ambas insertaban).
+    const { data: scheduledSessionId, error: upsertError } = await supabase.rpc(
+      "upsert_scheduled_session",
+      {
+        p_tenant_host: sessionData.tenant_host,
+        p_client_id: parseInt(clientId),
+        p_trainer_id: sessionData.trainer_id,
+        p_session_id: sessionId,
+        p_scheduled_date: scheduledDate,
+        p_status: status || "pending",
+        p_metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      }
+    );
 
-    if (createError || !scheduledSession) {
-      console.error("[Scheduled Sessions API] Error creating:", createError);
+    if (upsertError || !scheduledSessionId) {
+      console.error("[Scheduled Sessions API] Error creating:", upsertError);
 
       return NextResponse.json(
         { success: false, error: "Error al crear sesión programada" },
@@ -151,7 +153,13 @@ export async function POST(
       );
     }
 
-    console.log("[Scheduled Sessions API] Created:", scheduledSession.id);
+    const { data: scheduledSession } = await supabase
+      .from("scheduled_sessions")
+      .select("*")
+      .eq("id", scheduledSessionId)
+      .single();
+
+    console.log("[Scheduled Sessions API] Created/Found:", scheduledSessionId);
 
     return NextResponse.json({
       success: true,

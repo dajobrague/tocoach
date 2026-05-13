@@ -207,45 +207,33 @@ export async function POST(
       );
     }
 
-    let scheduledSessionId: string;
-
-    const { data: existingScheduled } = await supabase
-      .from("scheduled_sessions")
-      .select("id")
-      .eq("session_id", sessionId)
-      .eq("client_id", clientId)
-      .eq("scheduled_date", scheduledDate)
-      .maybeSingle();
-
-    if (existingScheduled) {
-      scheduledSessionId = existingScheduled.id;
-    } else {
-      const { data: newScheduled, error: scheduledCreateError } = await supabase
-        .from("scheduled_sessions")
-        .insert({
-          tenant_host: sessionData.tenant_host,
-          session_id: sessionId,
-          client_id: parseInt(clientId),
-          trainer_id: sessionData.trainer_id,
-          scheduled_date: scheduledDate,
-          status: "scheduled",
-        })
-        .select("id")
-        .single();
-
-      if (scheduledCreateError || !newScheduled) {
-        console.error(
-          "[Exercise Logs API] Error creating scheduled session:",
-          scheduledCreateError
-        );
-
-        return NextResponse.json(
-          { success: false, error: "Error al crear sesión programada" },
-          { status: 500 }
-        );
+    // Atomic upsert via RPC con advisory lock por (client_id, date).
+    // Antes el patrón SELECT-then-INSERT acá creaba duplicados bajo
+    // concurrencia + cuando el trainer cambiaba session_id vía override
+    // (el SELECT filtraba por session_id viejo y no encontraba).
+    // F4.5 migration 104.
+    const { data: scheduledSessionId, error: upsertError } = await supabase.rpc(
+      "upsert_scheduled_session",
+      {
+        p_tenant_host: sessionData.tenant_host,
+        p_client_id: parseInt(clientId),
+        p_trainer_id: sessionData.trainer_id,
+        p_session_id: sessionId,
+        p_scheduled_date: scheduledDate,
+        p_status: "scheduled",
       }
+    );
 
-      scheduledSessionId = newScheduled.id;
+    if (upsertError || !scheduledSessionId) {
+      console.error(
+        "[Exercise Logs API] Error upserting scheduled session:",
+        upsertError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al crear sesión programada" },
+        { status: 500 }
+      );
     }
 
     const isCardio = !!(durationCompleted || distanceCompleted);
