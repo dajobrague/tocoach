@@ -19,6 +19,8 @@ interface Props {
   rightContent?: ReactNode;
   expandedContent?: ReactNode;
   isExpanded?: boolean;
+  /** Featured variant: trainer-prescribed session for the visible date. */
+  isRecommended?: boolean;
 }
 
 export function SessionCard({
@@ -29,12 +31,34 @@ export function SessionCard({
   rightContent,
   expandedContent,
   isExpanded = false,
+  isRecommended = false,
 }: Props) {
   const style = getSessionTypeStyle(sessionType);
 
   return (
-    <Card className="bg-content1 border border-default-200 w-full">
+    <Card
+      className={
+        isRecommended
+          ? "bg-content1 border border-primary w-full"
+          : "bg-content1 border border-default-200 w-full"
+      }
+    >
       <CardBody className="p-4">
+        {isRecommended ? (
+          <div className="mb-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 shadow-sm">
+              <Icon
+                aria-hidden="true"
+                className="text-primary-foreground"
+                icon="solar:medal-ribbon-star-bold"
+                width={13}
+              />
+              <span className="text-[12px] font-semibold text-primary-foreground leading-none">
+                Recomendado por tu coach
+              </span>
+            </span>
+          </div>
+        ) : null}
         <div className="flex items-start gap-3 w-full">
           {dateBadge ? (
             <div className="shrink-0">{dateBadge}</div>

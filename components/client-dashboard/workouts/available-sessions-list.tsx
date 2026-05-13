@@ -131,37 +131,22 @@ function SessionRow({
         }
       }}
     >
-      <div
-        className={
-          isRecommended
-            ? "rounded-xl ring-2 ring-primary/40 ring-offset-1 ring-offset-background"
-            : ""
+      <SessionCard
+        exerciseCount={session.exercise_count}
+        isRecommended={isRecommended}
+        name={session.name}
+        rightContent={
+          <Button
+            color="primary"
+            size="sm"
+            startContent={<Icon icon="solar:play-bold" width={16} />}
+            onPress={() => onActivate(session.id)}
+          >
+            Comenzar
+          </Button>
         }
-      >
-        {isRecommended ? (
-          <div className="flex items-center gap-1 mb-1.5 ml-1">
-            <Icon className="text-primary" icon="solar:star-bold" width={12} />
-            <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">
-              Recomendado por tu entrenador
-            </span>
-          </div>
-        ) : null}
-        <SessionCard
-          exerciseCount={session.exercise_count}
-          name={session.name}
-          rightContent={
-            <Button
-              color="primary"
-              size="sm"
-              startContent={<Icon icon="solar:play-bold" width={16} />}
-              onPress={() => onActivate(session.id)}
-            >
-              Comenzar
-            </Button>
-          }
-          sessionType={session.session_type}
-        />
-      </div>
+        sessionType={session.session_type}
+      />
     </div>
   );
 }
