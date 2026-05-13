@@ -55,18 +55,6 @@ const aggregationSchema = z.enum([
 const formTypeSchema = z.enum(["checkins", "habits"] as const);
 
 const catalogIdSchema = z.enum([
-  "weight",
-  "body_fat",
-  "sleep_hours",
-  "steps",
-  "calories",
-  "protein",
-  "carbs",
-  "fats",
-  "water",
-  "mood",
-  "energy",
-  "stress",
   "macros_breakdown",
   "training_breakdown",
 ] as const);

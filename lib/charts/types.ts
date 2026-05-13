@@ -106,21 +106,13 @@ export type Aggregation =
  * marked in the adapter implementation; consumers use the `dimensions`
  * field of the resolved adapter, not this list.
  */
-export type CatalogId =
-  | "weight"
-  | "body_fat"
-  | "sleep_hours"
-  | "steps"
-  | "calories"
-  | "protein"
-  | "carbs"
-  | "fats"
-  | "water"
-  | "mood"
-  | "energy"
-  | "stress"
-  | "macros_breakdown"
-  | "training_breakdown";
+// Solo los ids que TIENEN un adapter vivo. Los retirados (weight,
+// body_fat, sleep_hours, steps, calories, protein, carbs, fats, water,
+// mood, energy, stress) se migraron a form_question/* en producción
+// vía migrations 096/102 y los huérfanos restantes se borraron con
+// migration 103. Cualquier intento de PUT con uno de esos ids ahora
+// falla en zod (catalogIdSchema) — comportamiento esperado.
+export type CatalogId = "macros_breakdown" | "training_breakdown";
 
 export type FormType = "checkins" | "habits";
 
