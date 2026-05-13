@@ -199,56 +199,88 @@ async function loadExerciseLogs(
   // scheduled_session_id). Para logs huérfanos (free-tracking sin
   // scheduled_session_id) caemos a completed_at::date.
   //
-  // Hacemos el filtro contra completed_at usando un rango con buffer ±1d
-  // (24h) para cubrir TZ skew entre el cliente y UTC, y luego filtramos
-  // por scheduled_date / completed_at::date contra fromYmd/toYmd ya en
-  // huso del cliente al normalizar.
+  // Dos queries paralelas:
+  //   1. Linked: logs ligados a un scheduled_session cuyo scheduled_date
+  //      cae en el rango. Esto cubre el caso "cliente loguea con delay"
+  //      (completed_at puede ser muy posterior al scheduled_date pero el
+  //      log sigue perteneciendo a la fecha programada).
+  //   2. Orphan: logs sin scheduled_session_id cuyo completed_at cae en
+  //      el rango. Para free-tracking. Buffer ±1d para cubrir TZ skew
+  //      (cliente UTC-3 loguea 23:00 local → completed_at en día UTC+1).
   const bufferMs = 24 * 60 * 60 * 1000;
-  const fromTs = new Date(`${args.fromYmd}T00:00:00Z`).getTime() - bufferMs;
-  const toTs =
+  const orphanFromTs =
+    new Date(`${args.fromYmd}T00:00:00Z`).getTime() - bufferMs;
+  const orphanToTs =
     new Date(`${args.toYmd}T00:00:00Z`).getTime() + 86400000 + bufferMs;
-  const fromIso = new Date(fromTs).toISOString();
-  const toIso = new Date(toTs).toISOString();
+  const orphanFromIso = new Date(orphanFromTs).toISOString();
+  const orphanToIso = new Date(orphanToTs).toISOString();
 
-  const { data, error } = await supabase
-    .from("exercise_logs")
-    .select(
-      "completed_at, scheduled_session:scheduled_sessions(scheduled_date), exercises(category)"
-    )
-    .eq("client_id", args.clientIdBigint)
-    .gte("completed_at", fromIso)
-    .lte("completed_at", toIso);
+  const [linkedRes, orphanRes] = await Promise.all([
+    supabase
+      .from("exercise_logs")
+      .select(
+        "completed_at, scheduled_session:scheduled_sessions!inner(scheduled_date), exercises(category)"
+      )
+      .eq("client_id", args.clientIdBigint)
+      .gte("scheduled_session.scheduled_date", args.fromYmd)
+      .lte("scheduled_session.scheduled_date", args.toYmd),
+    supabase
+      .from("exercise_logs")
+      .select("completed_at, exercises(category)")
+      .eq("client_id", args.clientIdBigint)
+      .is("scheduled_session_id", null)
+      .gte("completed_at", orphanFromIso)
+      .lte("completed_at", orphanToIso),
+  ]);
 
-  if (error) {
+  if (linkedRes.error) {
     console.warn(
-      `[charts/snapshot] loadExerciseLogs error client=${args.clientIdBigint}: ${error.message}`
+      `[charts/snapshot] loadExerciseLogs.linked error client=${args.clientIdBigint}: ${linkedRes.error.message}`
     );
-
-    return [];
+  }
+  if (orphanRes.error) {
+    console.warn(
+      `[charts/snapshot] loadExerciseLogs.orphan error client=${args.clientIdBigint}: ${orphanRes.error.message}`
+    );
   }
 
-  return (data ?? []).flatMap((row): ExerciseLogLike[] => {
+  const linked = (linkedRes.data ?? []).flatMap((row): ExerciseLogLike[] => {
     const scheduled = (
       row as {
         scheduled_session?: { scheduled_date?: string | null } | null;
       }
     ).scheduled_session?.scheduled_date;
-    const completedAt = (row as { completed_at?: string | null }).completed_at;
-    const fallback = completedAt ? completedAt.slice(0, 10) : null;
-    const scheduledDate = scheduled ?? fallback;
 
-    if (!scheduledDate) return [];
-    if (scheduledDate < args.fromYmd || scheduledDate > args.toYmd) return [];
+    if (!scheduled) return [];
 
     return [
       {
-        scheduled_date: scheduledDate,
+        scheduled_date: scheduled,
         exercises:
           (row as { exercises?: { category?: string | null } | null })
             .exercises ?? null,
       },
     ];
   });
+
+  const orphans = (orphanRes.data ?? []).flatMap((row): ExerciseLogLike[] => {
+    const completedAt = (row as { completed_at?: string | null }).completed_at;
+    const fallback = completedAt ? completedAt.slice(0, 10) : null;
+
+    if (!fallback) return [];
+    if (fallback < args.fromYmd || fallback > args.toYmd) return [];
+
+    return [
+      {
+        scheduled_date: fallback,
+        exercises:
+          (row as { exercises?: { category?: string | null } | null })
+            .exercises ?? null,
+      },
+    ];
+  });
+
+  return [...linked, ...orphans];
 }
 
 function ymd(d: Date): string {

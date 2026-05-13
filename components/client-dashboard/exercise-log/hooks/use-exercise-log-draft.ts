@@ -67,6 +67,10 @@ export function useExerciseLogDraft(
   // — antes el efecto re-corría tras cada autosave (que invalidaba la
   // query de existingLog) y borraba lo que el cliente estaba escribiendo.
   const lastHydrateSigRef = useRef<string>("");
+  // Contexto (cliente/sesión/ejercicio/fecha) del último hydrate. Si
+  // cambia, forzamos una hidratación fresca aunque el usuario haya
+  // tipeado — el modal sigue abierto pero apunta a otro ejercicio.
+  const lastContextKeyRef = useRef<string>("");
 
   const draftKey = exerciseLogDraftStorageKey(
     clientId,
@@ -88,6 +92,7 @@ export function useExerciseLogDraft(
       // Reset signature al cerrar para que el próximo open hidrate de
       // cero (incluyendo recuperar draft local si existe).
       lastHydrateSigRef.current = "";
+      lastContextKeyRef.current = "";
 
       return;
     }
@@ -119,11 +124,18 @@ export function useExerciseLogDraft(
     const next = applyDraft ? { ...base, ...applyDraft.formData } : base;
     const nextSig = JSON.stringify(next);
     const currentSig = JSON.stringify(formDataRef.current);
+    const contextKey = `${clientId}|${sessionId}|${exerciseId}|${scheduledDate}`;
+    const contextChanged = contextKey !== lastContextKeyRef.current;
 
-    // Si NO es la primera hidratación (lastHydrateSigRef !== "") y el
-    // formData actual difiere del último hydrate, el usuario tipeó
-    // algo. No pisamos esos keystrokes con datos del servidor.
+    // Si el contexto NO cambió y NO es la primera hidratación, y el
+    // usuario tipeó algo desde el último hydrate, no pisamos sus
+    // keystrokes con datos del servidor (autosave invalida existingLog
+    // y reactiva este efecto sin que el usuario haya cambiado de modal).
+    //
+    // Si el contexto cambió (otro ejercicio/fecha/sesión), forzamos
+    // hydrate fresco: lo que escribió antes pertenecía a otro contexto.
     if (
+      !contextChanged &&
       lastHydrateSigRef.current !== "" &&
       currentSig !== lastHydrateSigRef.current
     ) {
@@ -132,6 +144,7 @@ export function useExerciseLogDraft(
 
     setFormData(next);
     lastHydrateSigRef.current = nextSig;
+    lastContextKeyRef.current = contextKey;
   }, [
     isOpen,
     exercise,

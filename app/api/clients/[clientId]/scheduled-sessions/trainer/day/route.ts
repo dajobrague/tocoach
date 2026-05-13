@@ -102,8 +102,19 @@ async function countDayLogs(
   clientId: string,
   date: string
 ): Promise<number> {
-  const start = `${date}T00:00:00.000Z`;
-  const end = `${nextYmd(date)}T00:00:00.000Z`;
+  // Ventana ±24h alrededor del día UTC. Sin buffer: cliente en UTC-3
+  // loguea 22:00 local en día X → completed_at en día X+1 UTC → la
+  // query "completed_at en UTC día X" lo dropea y el trainer puede
+  // pisar el día X aunque haya trabajo del cliente. Con buffer, la
+  // ventana incluye logs cercanos a medianoche en cualquier tz —
+  // aceptamos falsos positivos (lockear cuando el log es del día
+  // vecino) para evitar el silent overwrite. F4.4 (TZ tenant) lo
+  // resolvería de forma precisa.
+  const bufferMs = 24 * 60 * 60 * 1000;
+  const dayStartMs = new Date(`${date}T00:00:00.000Z`).getTime();
+  const dayEndMs = new Date(`${nextYmd(date)}T00:00:00.000Z`).getTime();
+  const start = new Date(dayStartMs - bufferMs).toISOString();
+  const end = new Date(dayEndMs + bufferMs).toISOString();
 
   const [linkedRes, orphanRes] = await Promise.all([
     supabase
