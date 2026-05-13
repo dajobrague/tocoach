@@ -19,8 +19,8 @@ import {
   loadEffectiveClientCharts,
 } from "@/lib/charts/server/template-loader";
 import {
-  filterUnresolvableCharts,
-  loadValidQuestionKeys,
+  filterUnusableCharts,
+  loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
 import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { validateDocumentWithRegistry } from "@/lib/charts/registry";
@@ -67,18 +67,24 @@ export async function GET(
       clientTrainerId: trainerId,
     });
 
-    // Filtrar charts irresolubles (catalog id retirado del código, o
-    // form_question apuntando a una pregunta borrada/disabled) ANTES
-    // de cualquier otro filtro. Si el chart no se puede renderizar,
-    // preferimos que desaparezca a mostrarle al trainer/cliente un
-    // card vacío con "Esta pregunta ya no existe".
-    const validQuestionKeys = await loadValidQuestionKeys(
+    // Filtrar charts inutilizables ANTES de cualquier otro filtro.
+    // Cubre:
+    //   - catalog id retirado del registro (`catalog/weight`)
+    //   - form_question apuntando a una pregunta borrada/disabled
+    //   - catalog cuyo data feed (vía heurísticas en
+    //     CATALOG_DATA_FEED) no matchea NINGUNA pregunta del template
+    //     del tenant (e.g. tenant sin pregunta de calorías → chart
+    //     `catalog/calories` siempre vacío → lo escondemos)
+    //
+    // Si el chart no se puede renderizar con datos, preferimos que
+    // desaparezca a mostrarle al trainer/cliente un card vacío.
+    const tenantQuestions = await loadTenantQuestions(
       supabase,
       auth.tenantHost
     );
-    const resolvableCharts = filterUnresolvableCharts(
+    const resolvableCharts = filterUnusableCharts(
       effective.charts,
-      validQuestionKeys,
+      tenantQuestions,
       { logContext: `client=${auth.clientIdBigint}` }
     );
 

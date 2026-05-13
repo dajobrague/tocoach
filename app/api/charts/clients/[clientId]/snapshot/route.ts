@@ -31,8 +31,8 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { authorizeClientAccess } from "@/lib/charts/server/auth";
 import { loadEffectiveClientCharts } from "@/lib/charts/server/template-loader";
 import {
-  filterUnresolvableCharts,
-  loadValidQuestionKeys,
+  filterUnusableCharts,
+  loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
 import { filterChartsForAudience } from "@/lib/charts/server/visibility";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
@@ -407,35 +407,30 @@ export async function GET(
   const range = parseRange(rangeKey, tzParam);
 
   try {
-    const [
-      effective,
-      schedule,
-      formResponses,
-      exerciseLogs,
-      validQuestionKeys,
-    ] = await Promise.all([
-      loadEffectiveClientCharts(supabase, {
-        tenantHost: auth.tenantHost,
-        clientIdBigint: auth.clientIdBigint,
-        clientTrainerId: trainerId,
-      }),
-      loadCheckinSchedule(supabase, {
-        tenantHost: auth.tenantHost,
-        clientIdBigint: auth.clientIdBigint,
-      }),
-      loadFormResponses(supabase, {
-        tenantHost: auth.tenantHost,
-        clientIdBigint: auth.clientIdBigint,
-        fromYmd: range.fromYmd,
-        toYmd: range.toYmd,
-      }),
-      loadExerciseLogs(supabase, {
-        clientIdBigint: auth.clientIdBigint,
-        fromYmd: range.fromYmd,
-        toYmd: range.toYmd,
-      }),
-      loadValidQuestionKeys(supabase, auth.tenantHost),
-    ]);
+    const [effective, schedule, formResponses, exerciseLogs, tenantQuestions] =
+      await Promise.all([
+        loadEffectiveClientCharts(supabase, {
+          tenantHost: auth.tenantHost,
+          clientIdBigint: auth.clientIdBigint,
+          clientTrainerId: trainerId,
+        }),
+        loadCheckinSchedule(supabase, {
+          tenantHost: auth.tenantHost,
+          clientIdBigint: auth.clientIdBigint,
+        }),
+        loadFormResponses(supabase, {
+          tenantHost: auth.tenantHost,
+          clientIdBigint: auth.clientIdBigint,
+          fromYmd: range.fromYmd,
+          toYmd: range.toYmd,
+        }),
+        loadExerciseLogs(supabase, {
+          clientIdBigint: auth.clientIdBigint,
+          fromYmd: range.fromYmd,
+          toYmd: range.toYmd,
+        }),
+        loadTenantQuestions(supabase, auth.tenantHost),
+      ]);
 
     const ctx: AdapterContext = {
       schedule,
@@ -451,13 +446,17 @@ export async function GET(
       clientTz: tzParam,
     };
 
-    // Drop charts cuya fuente no se puede resolver (catalog id retirado,
-    // form_question apuntando a una pregunta borrada/disabled). Lo
-    // hacemos ANTES del filtro de audiencia y del materialize: nadie
-    // (ni trainer ni cliente) debería ver el orphan card.
-    const resolvableCharts = filterUnresolvableCharts(
+    // Drop charts inutilizables ANTES del filtro de audiencia y del
+    // materialize. Cubre tres modos de fallo:
+    //   - catalog id retirado del registro
+    //   - form_question apuntando a pregunta borrada/disabled
+    //   - catalog sin data feed compatible en el template del tenant
+    //     (e.g. tenant sin pregunta de calorías → chart `calories`
+    //     siempre vacío → lo escondemos)
+    // Ni trainer ni cliente deberían ver el orphan card.
+    const resolvableCharts = filterUnusableCharts(
       effective.charts,
-      validQuestionKeys,
+      tenantQuestions,
       { logContext: `client=${auth.clientIdBigint} snapshot` }
     );
 

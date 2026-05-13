@@ -1,54 +1,83 @@
 /**
- * Filtra charts cuya fuente no puede resolverse en runtime para que
- * NUNCA lleguen a UI como "orphan card". El trainer puede haber
- * borrado/disabled la pregunta de check-in que un chart referencia, o
- * un catalog id puede haber sido retirado del código entre deploys.
+ * Filtra charts cuya fuente no puede producir datos para que NUNCA
+ * lleguen a UI como "orphan card". Hay dos modos de fallo:
  *
- * En lugar de mostrarle al cliente (o al trainer) un card vacío con
- * "Esta pregunta ya no existe", filtramos el chart server-side y
- * renumeramos posiciones. El documento crudo en DB queda intacto:
- * si la pregunta se re-activa, el chart vuelve solo.
+ *   1. **Source inexistente**: catalog id retirado del registro, o
+ *      form_question apuntando a una pregunta borrada/disabled en el
+ *      tenant. resolveAdapter devolvería null o un adapter cuyo
+ *      materialize nunca encuentra datos. Sin filtrar, ChartCard
+ *      rendea "Esta pregunta ya no existe".
  *
- * Casos cubiertos:
- *   - catalog/<id> donde <id> no está en CATALOG_BY_ID (id retirado en código)
- *   - form_question donde la pregunta no existe en form_templates
- *   - form_question donde la pregunta existe pero está disabled
+ *   2. **Source válido pero sin feed**: catalog charts (mood, energy,
+ *      calories, etc.) cuyas heurísticas de answer-key no matchean
+ *      NINGUNA pregunta del template del tenant. El chart estaría
+ *      siempre vacío silenciosamente. Equivalente estructural al
+ *      caso 1 desde la perspectiva del cliente.
+ *
+ * En ambos casos preferimos que el chart desaparezca a que se renderee
+ * un card huérfano o un eje sin datos.
+ *
+ * El doc en DB queda intacto: si el trainer reactiva la pregunta o
+ * agrega una compatible, el chart vuelve solo.
  *
  * Diseño fail-open: si el lookup de form_templates falla por error,
  * devolvemos el doc sin filtrar (mejor mostrar charts viejos que
- * blankear el dashboard del cliente). El error se loguea.
+ * blankear el dashboard). El error se loguea.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ChartsDocument, ChartConfig, FormType } from "../types";
+import type {
+  ChartsDocument,
+  ChartConfig,
+  CatalogId,
+  FormType,
+} from "../types";
 
 import { EMPTY_CHARTS_DOCUMENT } from "../types";
 import { CATALOG_BY_ID } from "../adapters/catalog";
 
+import {
+  CATALOG_DATA_FEED,
+  questionMatchesSpec,
+  type FieldSpec,
+} from "@/lib/forms/analytics-keys";
 import { normalizeFormConfig } from "@/lib/forms/types";
 
 /**
- * Key shape: "<form_type>:<question_id>". El "form_type" puede ser
- * "checkins" o "habits" — el mismo question_id en diferentes form_types
- * es legítimamente distinto.
+ * Una pregunta enabled del template de un tenant, con la info mínima
+ * que los matchers necesitan (id + unit + label).
  */
-export type QuestionKey = `${FormType}:${string}`;
-
-function questionKey(formType: FormType, questionId: string): QuestionKey {
-  return `${formType}:${questionId}` as QuestionKey;
+export interface TenantQuestion {
+  formType: FormType;
+  id: string;
+  unit: string | null;
+  label: string | null;
 }
 
+export interface TenantQuestionsResult {
+  questions: TenantQuestion[];
+  /**
+   * True cuando la query de form_templates falló. Los filtros deben
+   * fail-open (no filtrar) en este caso para no blankear el dashboard
+   * por un error transitorio.
+   */
+  unavailable: boolean;
+}
+
+const UNAVAILABLE_RESULT: TenantQuestionsResult = Object.freeze({
+  questions: [],
+  unavailable: true,
+}) as TenantQuestionsResult;
+
 /**
- * Construye el set de keys "form_type:question_id" de preguntas
- * activas y enabled para un tenant. Cubre ambos shapes de
- * questions_config (legacy array y nuevo wrapper con .questions).
+ * Lee form_templates del tenant y normaliza ambos shapes históricos
+ * de questions_config (array legacy + wrapper { questions: [...] }).
+ * Solo incluye preguntas enabled.
  */
-export async function loadValidQuestionKeys(
+export async function loadTenantQuestions(
   supabase: SupabaseClient,
   tenantHost: string
-): Promise<Set<QuestionKey>> {
-  const out = new Set<QuestionKey>();
-
+): Promise<TenantQuestionsResult> {
   const { data, error } = await supabase
     .from("form_templates")
     .select("form_type, questions_config, is_active")
@@ -56,21 +85,14 @@ export async function loadValidQuestionKeys(
     .eq("is_active", true);
 
   if (error) {
-    // Fail-open intencional: si la query falla, no filtramos. Loguear
-    // para visibilidad; los charts a tocar son los que están en DB,
-    // así que el riesgo de no filtrar es solo que se muestre un card
-    // vacío (no es regresión sobre el estado pre-fix).
     console.warn(
-      `[charts/resolvability] loadValidQuestionKeys error tenant=${tenantHost}: ${error.message}. Skipping filter (fail-open).`
+      `[charts/resolvability] loadTenantQuestions error tenant=${tenantHost}: ${error.message}. Filters will fail-open.`
     );
 
-    // Sentinel: vacío implica "filtrar TODO form_question". Necesitamos
-    // una forma de decir "no filtrar". Devolver un Set marcado con un
-    // sentinel string que el filter chequea.
-    out.add("__UNAVAILABLE__:__" as QuestionKey);
-
-    return out;
+    return UNAVAILABLE_RESULT;
   }
+
+  const out: TenantQuestion[] = [];
 
   for (const row of data ?? []) {
     const formType = row.form_type as FormType;
@@ -87,70 +109,229 @@ export async function loadValidQuestionKeys(
     for (const q of questions) {
       if (!q.id) continue;
       if (q.enabled === false) continue;
-      out.add(questionKey(formType, q.id));
+      out.push({
+        formType,
+        id: q.id,
+        unit: typeof q.unit === "string" ? q.unit : null,
+        label: typeof q.label === "string" ? q.label : null,
+      });
     }
   }
+
+  return { questions: out, unavailable: false };
+}
+
+/** Key shape: "<form_type>:<question_id>". */
+export type QuestionKey = `${FormType}:${string}`;
+
+function questionKey(formType: FormType, questionId: string): QuestionKey {
+  return `${formType}:${questionId}` as QuestionKey;
+}
+
+/**
+ * Set de "form_type:question_id" para uso por el filtro form_question.
+ */
+export function buildValidQuestionKeys(
+  result: TenantQuestionsResult
+): Set<QuestionKey> {
+  const out = new Set<QuestionKey>();
+
+  for (const q of result.questions) out.add(questionKey(q.formType, q.id));
 
   return out;
 }
 
-function isQuestionLookupUnavailable(keys: Set<QuestionKey>): boolean {
-  return keys.has("__UNAVAILABLE__:__" as QuestionKey);
+/**
+ * Devuelve true si el catalog id puede producir datos para este tenant.
+ *   - Adapters cuyo catalog id NO esté en CATALOG_DATA_FEED (e.g.
+ *     training_breakdown que lee exercise_logs) → siempre true.
+ *   - macros_breakdown → matchea si protein || carbs || fats matchean.
+ *   - Resto → matchea si alguna pregunta del tenant matchea el spec.
+ */
+function catalogHasFeed(
+  catalogId: CatalogId | string,
+  questions: TenantQuestion[]
+): boolean {
+  if (catalogId === "macros_breakdown") {
+    const components: FieldSpec[] = [
+      CATALOG_DATA_FEED.protein,
+      CATALOG_DATA_FEED.carbs,
+      CATALOG_DATA_FEED.fats,
+    ].filter((s): s is FieldSpec => Boolean(s));
+
+    return components.some((spec) =>
+      questions.some((q) => questionMatchesSpec(q, spec))
+    );
+  }
+
+  const spec = CATALOG_DATA_FEED[catalogId];
+
+  // Catalog id que no declara un spec → asumimos que no depende de
+  // form_responses (e.g. training_breakdown). Pasa el filtro.
+  if (!spec) return true;
+
+  return questions.some((q) => questionMatchesSpec(q, spec));
 }
 
 /**
- * Decide si un chart concreto es resolvible.
+ * Decide si un chart concreto es "usable":
+ *   - source resolvible (catalog en registry, o form_question en
+ *     preguntas del tenant)
+ *   - para catalog: el spec del data feed matchea alguna pregunta
  */
-function isResolvable(
+function isChartUsable(
   chart: ChartConfig,
-  validQuestionKeys: Set<QuestionKey>
+  validQuestionKeys: Set<QuestionKey>,
+  tenantQuestions: TenantQuestion[],
+  unavailable: boolean
 ): boolean {
   if (chart.source.kind === "catalog") {
-    return CATALOG_BY_ID.has(chart.source.id);
+    if (!CATALOG_BY_ID.has(chart.source.id)) return false;
+    // Fail-open: si el lookup de preguntas no estuvo disponible, no
+    // filtramos por feed (asumimos OK).
+    if (unavailable) return true;
+
+    return catalogHasFeed(chart.source.id, tenantQuestions);
   }
 
   if (chart.source.kind === "form_question") {
-    // Fail-open: si el lookup de preguntas no estuvo disponible, no
-    // filtramos form_question (asumimos OK).
-    if (isQuestionLookupUnavailable(validQuestionKeys)) return true;
+    if (unavailable) return true;
 
     return validQuestionKeys.has(
       questionKey(chart.source.form_type, chart.source.question_id)
     );
   }
 
-  // Otros kinds futuros: por seguridad no los filtramos.
+  // Kinds futuros: por seguridad no los filtramos.
   return true;
 }
 
 /**
- * Devuelve un nuevo ChartsDocument sin los charts irresolubles.
- * Renumera `position` para mantener el contrato `position === index`.
+ * Devuelve un nuevo ChartsDocument sin los charts inutilizables.
+ * Renumera `position` para mantener `position === index`.
  *
  * Si nada se filtra, devuelve la referencia original.
  *
- * Loguea un warning con la cantidad y los ids dropeados (para que el
- * trainer/ops puedan diagnosticar; el card en sí no llega a UI).
+ * Loguea los ids dropeados (el card en sí no llega a UI; este log es
+ * para diagnóstico de ops / trainer support).
+ */
+export function filterUnusableCharts(
+  doc: ChartsDocument,
+  tenantQuestionsResult: TenantQuestionsResult,
+  options?: { logContext?: string }
+): ChartsDocument {
+  const validQuestionKeys = buildValidQuestionKeys(tenantQuestionsResult);
+  const kept: ChartConfig[] = [];
+  const dropped: Array<{ id: string; reason: string }> = [];
+
+  for (const c of doc.charts) {
+    if (
+      isChartUsable(
+        c,
+        validQuestionKeys,
+        tenantQuestionsResult.questions,
+        tenantQuestionsResult.unavailable
+      )
+    ) {
+      kept.push(c);
+      continue;
+    }
+
+    let reason: string;
+
+    if (c.source.kind === "catalog") {
+      reason = CATALOG_BY_ID.has(c.source.id)
+        ? `catalog "${c.source.id}" has no matching question in tenant template`
+        : `catalog id "${c.source.id}" not in registry`;
+    } else if (c.source.kind === "form_question") {
+      reason = `form_question "${c.source.form_type}:${c.source.question_id}" missing or disabled`;
+    } else {
+      reason = "unknown source kind";
+    }
+
+    dropped.push({ id: c.id, reason });
+  }
+
+  if (dropped.length === 0) return doc;
+
+  console.warn(
+    `[charts/resolvability] dropped ${dropped.length} unusable chart(s)${
+      options?.logContext ? ` (${options.logContext})` : ""
+    }: ${dropped.map((d) => `${d.id}=${d.reason}`).join("; ")}`
+  );
+
+  if (kept.length === 0) return { ...EMPTY_CHARTS_DOCUMENT };
+
+  return {
+    ...doc,
+    charts: kept.map((c, i) => ({ ...c, position: i })),
+  };
+}
+
+// ─── Deprecated re-exports (legacy callers) ──────────────────────────────
+
+/**
+ * @deprecated Use loadTenantQuestions + filterUnusableCharts. Mantenido
+ * por compat retro si algún caller externo lo importa.
+ */
+export async function loadValidQuestionKeys(
+  supabase: SupabaseClient,
+  tenantHost: string
+): Promise<Set<QuestionKey>> {
+  const result = await loadTenantQuestions(supabase, tenantHost);
+
+  if (result.unavailable) {
+    // Mantiene el sentinel-set para que filterUnresolvableCharts viejo
+    // siga haciendo fail-open.
+    const out = new Set<QuestionKey>();
+
+    out.add("__UNAVAILABLE__:__" as QuestionKey);
+
+    return out;
+  }
+
+  return buildValidQuestionKeys(result);
+}
+
+/**
+ * @deprecated Use filterUnusableCharts en su lugar.
  */
 export function filterUnresolvableCharts(
   doc: ChartsDocument,
   validQuestionKeys: Set<QuestionKey>,
   options?: { logContext?: string }
 ): ChartsDocument {
+  const unavailable = validQuestionKeys.has(
+    "__UNAVAILABLE__:__" as QuestionKey
+  );
   const kept: ChartConfig[] = [];
   const dropped: Array<{ id: string; reason: string }> = [];
 
   for (const c of doc.charts) {
-    if (isResolvable(c, validQuestionKeys)) {
-      kept.push(c);
-      continue;
-    }
-    const reason =
-      c.source.kind === "catalog"
-        ? `catalog id "${c.source.id}" not in registry`
-        : `form_question "${c.source.form_type}:${c.source.question_id}" missing or disabled`;
+    let usable = true;
 
-    dropped.push({ id: c.id, reason });
+    if (c.source.kind === "catalog") {
+      usable = CATALOG_BY_ID.has(c.source.id);
+    } else if (c.source.kind === "form_question") {
+      usable =
+        unavailable ||
+        validQuestionKeys.has(
+          questionKey(c.source.form_type, c.source.question_id)
+        );
+    }
+
+    if (usable) {
+      kept.push(c);
+    } else {
+      const reason =
+        c.source.kind === "catalog"
+          ? `catalog id "${c.source.id}" not in registry`
+          : c.source.kind === "form_question"
+            ? `form_question "${c.source.form_type}:${c.source.question_id}" missing or disabled`
+            : "unknown";
+
+      dropped.push({ id: c.id, reason });
+    }
   }
 
   if (dropped.length === 0) return doc;
