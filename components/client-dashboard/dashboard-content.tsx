@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -10,9 +10,7 @@ import { ChartsSection } from "@/components/client-dashboard/charts-section";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
-import { NeatChartCard } from "@/components/client-dashboard/neat-chart-card";
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import { resolveStepsAnswer } from "@/lib/forms/analytics-keys";
 import {
   chartPeriodCountForRange,
   daysToFetchForChartRange,
@@ -33,8 +31,7 @@ import {
   FormResponse,
   type CheckInSchedule,
 } from "@/lib/forms/types";
-import { useFormResponses, useNeatCards } from "@/lib/hooks/use-client-queries";
-import { ClientNeatCard } from "@/types";
+import { useFormResponses } from "@/lib/hooks/use-client-queries";
 
 /** Weekly default schedule if parsing or chart math fails (Monday 12:00 Europe/Madrid). */
 const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
@@ -143,9 +140,6 @@ export function DashboardContent() {
     isError: isErrorDaily,
   } = useFormResponses(clientId, "habits", fetchDays);
 
-  const { data: neatCards = [] as ClientNeatCard[] } = useNeatCards();
-  const hasNeatCards = neatCards.length > 0;
-
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
   const isErrorForms = isErrorWeekly || isErrorDaily;
 
@@ -214,8 +208,7 @@ export function DashboardContent() {
   }, []);
 
   // Indexa las respuestas diarias por `response_date` una sola vez.
-  // Antes hacíamos `dailyResponses.find()` en cada uno de los memos
-  // siguientes (`dailyFormDays`, `weekSteps`, `todaySteps`) — con
+  // Antes hacíamos `dailyResponses.find()` en `dailyFormDays` — con
   // `fetchDays` hasta ~365 días eso era O(n·m) por render.
   const responsesByDate = useMemo(() => {
     const map = new Map<string, FormResponse>();
@@ -279,70 +272,6 @@ export function DashboardContent() {
 
     return days;
   }, [responsesByDate, todayYmd]);
-
-  const todaySteps = useMemo(() => {
-    const row = responsesByDate.get(todayYmd);
-
-    return resolveStepsAnswer(row?.answers) ?? 0;
-  }, [responsesByDate, todayYmd]);
-
-  // Últimos 7 días en orden cronológico (más antiguo → hoy) para la tira
-  // semanal del NeatChartCard. Reusa `responsesByDate` (Map) y se ancla
-  // a `todayYmd` para refrescar al cruzar medianoche.
-  const weekSteps = useMemo(() => {
-    const anchor = new Date(`${todayYmd}T00:00:00`);
-    const days: {
-      date: string;
-      weekday: number;
-      steps: number;
-      isToday: boolean;
-    }[] = [];
-
-    for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date(anchor);
-
-      d.setDate(anchor.getDate() - i);
-      const ymd = getLocalYmd(d);
-      const row = responsesByDate.get(ymd);
-
-      days.push({
-        date: ymd,
-        weekday: d.getDay(),
-        steps: resolveStepsAnswer(row?.answers) ?? 0,
-        isToday: ymd === todayYmd,
-      });
-    }
-
-    return days;
-  }, [responsesByDate, todayYmd]);
-
-  // Weekday del anchor `todayYmd` (0=Domingo, 1=Lunes, … 6=Sábado).
-  // Memo separado para que `shouldShowNeatChart` y NeatChartCard
-  // compartan exactamente el mismo "hoy" — evita que el padre y el
-  // hijo divergan al cruzar medianoche.
-  const todayWeekday = useMemo(
-    () => new Date(`${todayYmd}T00:00:00`).getDay(),
-    [todayYmd]
-  );
-
-  // Si el entrenador configuró tarjetas NEAT y al menos una aplica al
-  // weekday de hoy, mostramos el card de Actividad diaria.
-  const shouldShowNeatChart = useMemo(() => {
-    if (!hasNeatCards || neatCards.length === 0) return false;
-
-    const applicableCards = neatCards.filter(
-      (card: ClientNeatCard) =>
-        !card.weekdays ||
-        card.weekdays.length === 0 ||
-        card.weekdays.includes(todayWeekday)
-    );
-    const totalGoal = applicableCards.reduce(
-      (sum: number, card: ClientNeatCard) => sum + (card.steps_goal || 0),
-      0
-    );
-
-    return applicableCards.length > 0 && totalGoal > 0;
-  }, [hasNeatCards, neatCards, todayWeekday]);
 
   return (
     <>
@@ -627,38 +556,6 @@ export function DashboardContent() {
               clientId={clientId}
               selectedPeriod={selectedPeriod}
             />
-
-            {/* Actividad diaria — antes "NEAT - ACTIVIDAD DIARIA". Se
-                muestra solo si el entrenador configuró tarjetas NEAT y al
-                menos una aplica hoy (ver `shouldShowNeatChart`). El
-                header ahora sigue el patrón de <ChartCard> (icono-left)
-                para que visualmente case con el resto de la sección. */}
-            {shouldShowNeatChart && (
-              <Card radius="lg" shadow="sm">
-                <CardBody>
-                  <div className="flex items-center mb-3 gap-2 min-h-[28px]">
-                    <div className="bg-success/10 p-1.5 rounded-full flex-shrink-0">
-                      <Icon
-                        aria-hidden
-                        className="text-success"
-                        icon="solar:walking-bold"
-                        width={16}
-                      />
-                    </div>
-                    <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate">
-                      Actividad diaria
-                    </p>
-                  </div>
-
-                  <NeatChartCard
-                    neatCards={neatCards}
-                    todaySteps={todaySteps}
-                    todayWeekday={todayWeekday}
-                    weekSteps={weekSteps}
-                  />
-                </CardBody>
-              </Card>
-            )}
           </div>
         </div>
       </div>
