@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SignJWT } from "jose";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { getPublicOrigin } from "@/lib/utils/public-origin";
 
 // Verify admin authentication
 async function verifyAdminAuth(request: NextRequest) {
@@ -132,7 +133,7 @@ export async function POST(
     // (see middleware.ts). `tenant.host` is a legacy column from the
     // pre-slug architecture and is NOT a routable domain — using it here
     // produced broken impersonation URLs.
-    const impersonationUrl = `${request.nextUrl.origin}/${tenant.slug}/auth/impersonate?token=${impersonationToken}`;
+    const impersonationUrl = `${getPublicOrigin(request)}/${tenant.slug}/auth/impersonate?token=${impersonationToken}`;
 
     return NextResponse.json(
       {

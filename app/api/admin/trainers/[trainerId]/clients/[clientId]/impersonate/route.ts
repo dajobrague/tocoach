@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SignJWT } from "jose";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { getPublicOrigin } from "@/lib/utils/public-origin";
 
 // Verify admin authentication (mirror of the trainer impersonate route)
 async function verifyAdminAuth(request: NextRequest) {
@@ -141,7 +142,7 @@ export async function POST(
       `[ClientImpersonation] Admin ${admin.email} (${admin.id}) is impersonating client ${client.email} (id=${client.id}) under tenant ${tenant.slug}`
     );
 
-    const impersonationUrl = `${request.nextUrl.origin}/${tenant.slug}/auth/client-impersonate?token=${impersonationToken}`;
+    const impersonationUrl = `${getPublicOrigin(request)}/${tenant.slug}/auth/client-impersonate?token=${impersonationToken}`;
 
     return NextResponse.json(
       {
