@@ -41,7 +41,7 @@ import {
   questionMatchesSpec,
   type FieldSpec,
 } from "@/lib/forms/analytics-keys";
-import { normalizeFormConfig } from "@/lib/forms/types";
+import { flattenQuestions } from "@/lib/forms/types";
 
 /**
  * Una pregunta enabled del template de un tenant, con la info mínima
@@ -99,10 +99,16 @@ export async function loadTenantQuestions(
 
     if (formType !== "checkins" && formType !== "habits") continue;
 
-    let questions: ReturnType<typeof normalizeFormConfig>["questions"] = [];
+    // flattenQuestions desciende en subQuestions, así que captura
+    // calories/protein/carbs/fats anidadas dentro de `macro_tracking`
+    // y propaga enabled-from-parent (si el grupo está disabled, las
+    // hijas también lo están). Antes solo se enumeraban top-level y
+    // las macros eran invisibles para el filtro → habríamos escondido
+    // ~100 charts vivos en producción.
+    let questions: ReturnType<typeof flattenQuestions> = [];
 
     try {
-      questions = normalizeFormConfig(row.questions_config).questions;
+      questions = flattenQuestions(row.questions_config);
     } catch {
       continue;
     }
@@ -204,6 +210,70 @@ function isChartUsable(
 
   // Kinds futuros: por seguridad no los filtramos.
   return true;
+}
+
+/**
+ * Clave de equivalencia para dedupar charts por su fuente subyacente.
+ * Dos charts con la misma fuente producen el MISMO data feed —
+ * mostrarlos ambos confunde al usuario sin agregar info. Auditoría en
+ * prod (2026-05-12) reporta 0 duplicados exactos hoy; este helper es
+ * defensa para evitar regresiones.
+ */
+function chartSourceKey(chart: ChartConfig): string {
+  if (chart.source.kind === "catalog") {
+    return `catalog:${chart.source.id}`;
+  }
+  if (chart.source.kind === "form_question") {
+    return `fq:${chart.source.form_type}:${chart.source.question_id}`;
+  }
+
+  return `unknown:${JSON.stringify(chart.source)}`;
+}
+
+/**
+ * Filtra duplicados dentro del mismo documento conservando el chart
+ * con menor `position` (el primero en aparecer en UI). Renumera
+ * posiciones tras el dedup para mantener `position === index`.
+ *
+ * Loguea cada drop con el id para diagnóstico.
+ */
+export function dedupChartsBySource(
+  doc: ChartsDocument,
+  options?: { logContext?: string }
+): ChartsDocument {
+  const seen = new Map<string, ChartConfig>();
+  const dropped: Array<{ id: string; key: string }> = [];
+
+  // Recorremos en orden de position ASC para que el "primero" sea el
+  // que el trainer ve más arriba en el dashboard.
+  const orderedCharts = [...doc.charts].sort((a, b) => a.position - b.position);
+
+  for (const c of orderedCharts) {
+    const key = chartSourceKey(c);
+
+    if (seen.has(key)) {
+      dropped.push({ id: c.id, key });
+      continue;
+    }
+    seen.set(key, c);
+  }
+
+  if (dropped.length === 0) return doc;
+
+  console.warn(
+    `[charts/resolvability] dedup dropped ${dropped.length} duplicate chart(s)${
+      options?.logContext ? ` (${options.logContext})` : ""
+    }: ${dropped.map((d) => `${d.id}=${d.key}`).join("; ")}`
+  );
+
+  const kept = Array.from(seen.values());
+
+  if (kept.length === 0) return { ...EMPTY_CHARTS_DOCUMENT };
+
+  return {
+    ...doc,
+    charts: kept.map((c, i) => ({ ...c, position: i })),
+  };
 }
 
 /**

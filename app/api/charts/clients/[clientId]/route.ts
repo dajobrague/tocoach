@@ -19,6 +19,7 @@ import {
   loadEffectiveClientCharts,
 } from "@/lib/charts/server/template-loader";
 import {
+  dedupChartsBySource,
   filterUnusableCharts,
   loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
@@ -82,8 +83,15 @@ export async function GET(
       supabase,
       auth.tenantHost
     );
+    // 1) dedup → 2) filtrar inutilizables → 3) filtrar por audiencia.
+    // El dedup va primero para que, si hay duplicados, no gastemos
+    // ciclos filtrando dos veces el mismo chart y para que el filtro
+    // unusable opere sobre la lista canónica.
+    const dedupedCharts = dedupChartsBySource(effective.charts, {
+      logContext: `client=${auth.clientIdBigint}`,
+    });
     const resolvableCharts = filterUnusableCharts(
-      effective.charts,
+      dedupedCharts,
       tenantQuestions,
       { logContext: `client=${auth.clientIdBigint}` }
     );

@@ -31,6 +31,7 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { authorizeClientAccess } from "@/lib/charts/server/auth";
 import { loadEffectiveClientCharts } from "@/lib/charts/server/template-loader";
 import {
+  dedupChartsBySource,
   filterUnusableCharts,
   loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
@@ -446,8 +447,15 @@ export async function GET(
       clientTz: tzParam,
     };
 
-    // Drop charts inutilizables ANTES del filtro de audiencia y del
-    // materialize. Cubre tres modos de fallo:
+    // 1) dedup → 2) filtrar inutilizables → 3) filtrar por audiencia.
+    // Dedup primero para no gastar materialize en charts con misma
+    // fuente. Auditoría 2026-05-12: 0 duplicados exactos en prod, el
+    // helper es defensa por si el starter o un import futuro generan
+    // colisiones.
+    const dedupedCharts = dedupChartsBySource(effective.charts, {
+      logContext: `client=${auth.clientIdBigint} snapshot`,
+    });
+    // Drop charts inutilizables. Cubre tres modos de fallo:
     //   - catalog id retirado del registro
     //   - form_question apuntando a pregunta borrada/disabled
     //   - catalog sin data feed compatible en el template del tenant
@@ -455,7 +463,7 @@ export async function GET(
     //     siempre vacío → lo escondemos)
     // Ni trainer ni cliente deberían ver el orphan card.
     const resolvableCharts = filterUnusableCharts(
-      effective.charts,
+      dedupedCharts,
       tenantQuestions,
       { logContext: `client=${auth.clientIdBigint} snapshot` }
     );
