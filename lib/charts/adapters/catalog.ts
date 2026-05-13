@@ -1,251 +1,45 @@
 /**
- * Catalog adapters — the 14 predefined data sources.
+ * Catalog adapters — fuentes especiales que NO se pueden expresar como
+ * form_question puro.
  *
- * 12 of them are 1-D wrappers around form_responses (checkins or habits)
- * with an `analytics-keys.ts` resolver. We build those via the
- * `formResponse1D` factory to keep them DRY.
+ * Post-migration 102 (2026-05-12) los 11 adapters 1-D que envolvían
+ * form_responses con un resolver heurístico (sleep_hours, steps,
+ * calories, protein, carbs, fats, water, mood, energy, stress,
+ * body_fat) se RETIRARON: las charts que apuntaban a ellos fueron
+ * reescritas a form_question/<form_type>/<question_id> apuntando a la
+ * pregunta concreta del template del trainer. La forma "personalización
+ * absoluta" reemplazó el matching por nombre con un binding directo.
  *
- * 2 are multi-dim composites:
- *   - macros_breakdown (3 series: protein/carbs/fats, range_total only)
- *   - training_breakdown (2 series: strength/cardio, time-bucketed)
+ * Los 2 adapters que quedan son composites multi-dim sin equivalente
+ * form_question:
+ *   - macros_breakdown (3 series: protein/carbs/fats, ring/range_total)
+ *   - training_breakdown (2 series: strength/cardio, lee exercise_logs)
  *
- * Each adapter is also stable in the sense that `metadata.id` is what
- * gets stored in ChartConfig.source.id — never rename without a migration.
+ * Charts huérfanos en producción que aún apuntan a uno de los 11 ids
+ * retirados (porque su tenant nunca tuvo la pregunta compatible) se
+ * filtran en runtime por `filterUnusableCharts` — el adapter no
+ * resuelve y el chart no se renderea.
+ *
+ * `metadata.id` es lo que se serializa en ChartConfig.source.id — NUNCA
+ * renombrar sin un shim.
  */
 
-import type { FormResponse } from "@/lib/forms/types";
-import type {
-  Aggregation,
-  BucketedPoint,
-  CatalogId,
-  ChartDataSource,
-  ColorToken,
-  FormType,
-} from "../types";
-import type { AdapterContext, DataAdapter, ExerciseLogLike } from "./types";
+import type { BucketedPoint } from "../types";
+import type { DataAdapter, ExerciseLogLike } from "./types";
 
-import { averageInWindow, generateBuckets, sumInWindow } from "./bucketing";
+import { generateBuckets, sumInWindow } from "./bucketing";
 
 import {
-  resolveBodyFatAnswer,
-  resolveCaloriesAnswer,
   resolveCarbsAnswer,
-  resolveEnergyAnswer,
   resolveFatsAnswer,
-  resolveMoodAnswer,
   resolveProteinAnswer,
-  resolveSleepHoursAnswer,
-  resolveStepsAnswer,
-  resolveStressAnswer,
-  resolveWaterAnswer,
 } from "@/lib/forms/analytics-keys";
-
-// ─── Factory: 1-D adapter backed by form responses ─────────────────────────
-
-// `icon` ya no es parte del spec: el user pidió que ninguna selección
-// venga con icono pre-cargado. Lo agrega el trainer explícitamente via
-// icon picker en el editor de chart.
-interface FormResponse1DSpec {
-  id: CatalogId;
-  label: string;
-  unit?: string;
-  y_max?: number;
-  category: "checkin" | "habit";
-  formType: FormType;
-  resolve: (r: FormResponse) => number | null;
-  default_chart_type: ChartDataSource["default_chart_type"];
-  default_color: ColorToken;
-}
-
-function formResponse1D(spec: FormResponse1DSpec): DataAdapter {
-  const metadata: ChartDataSource = {
-    id: spec.id,
-    label: spec.label,
-    ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
-    ...(spec.y_max !== undefined ? { y_max: spec.y_max } : {}),
-    category: spec.category,
-    dimensions: 1,
-    default_chart_type: spec.default_chart_type,
-    default_color: spec.default_color,
-  };
-
-  return {
-    metadata,
-    materialize(
-      ctx: AdapterContext,
-      aggregation: Aggregation
-    ): BucketedPoint[] {
-      const responses =
-        spec.formType === "checkins"
-          ? ctx.formResponses.checkins
-          : ctx.formResponses.habits;
-      const buckets = generateBuckets(
-        ctx.range,
-        aggregation,
-        ctx.schedule,
-        ctx.clientTz
-      );
-
-      return buckets.map((w) => ({
-        label: w.label,
-        value: averageInWindow(
-          responses,
-          w,
-          spec.resolve,
-          ctx.schedule,
-          ctx.clientTz
-        ),
-        periodTooltip: w.tooltip,
-      }));
-    },
-  };
-}
-
-// ─── Catalog: 1-D adapters ─────────────────────────────────────────────────
-
-// Note: there is no `weight` adapter on purpose. The catalog id literal
-// `"weight"` is retained in CatalogId / catalogIdSchema so stored docs
-// from before 2026-05 still parse, but the adapter has moved to a
-// per-trainer form-question source (see lib/charts/starter.ts). Legacy
-// charts pointing at {kind:"catalog", id:"weight"} resolve to undefined
-// here and render the orphan empty-state in ChartCard — the trainer
-// then deletes / re-adds the chart pointing at their body_weight
-// question.
-
-const bodyFat = formResponse1D({
-  id: "body_fat",
-  label: "Grasa corporal",
-  unit: "%",
-  category: "checkin",
-  formType: "checkins",
-  resolve: (r) => resolveBodyFatAnswer(r.answers),
-  default_chart_type: "area",
-  default_color: "neutral-slate",
-});
-
-const sleepHours = formResponse1D({
-  id: "sleep_hours",
-  label: "Sueño",
-  unit: "h",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveSleepHoursAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "sleep-emerald",
-});
-
-const steps = formResponse1D({
-  id: "steps",
-  label: "Pasos",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveStepsAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "steps-cyan",
-});
-
-const calories = formResponse1D({
-  id: "calories",
-  label: "Calorías",
-  unit: "kcal",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveCaloriesAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "calorie-coral",
-});
-
-const protein = formResponse1D({
-  id: "protein",
-  label: "Proteína",
-  unit: "g",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveProteinAnswer(r.answers),
-  // Macros reset every day — bars are more honest than a continuous area.
-  default_chart_type: "bar",
-  default_color: "protein-indigo",
-});
-
-const carbs = formResponse1D({
-  id: "carbs",
-  label: "Carbohidratos",
-  unit: "g",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveCarbsAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "carbs-emerald-deep",
-});
-
-const fats = formResponse1D({
-  id: "fats",
-  label: "Grasas",
-  unit: "g",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveFatsAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "fats-amber-deep",
-});
-
-const water = formResponse1D({
-  id: "water",
-  label: "Agua",
-  unit: "L",
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveWaterAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "water-sky",
-});
-
-// Rating-style metrics: 1-10 scale, daily reset → bar with fixed Y-axis.
-// Antes los resolvers acá solo aceptaban canonical exacto (mood/animo,
-// energy/energia, stress/estres). El template default usa
-// `mood_levels`/`energy_levels`/`stress_levels` y el chart aparecía
-// SIEMPRE vacío para todo cliente — bug estructural equivalente al de
-// body_weight. Ahora los resolvers viven en analytics-keys.ts y
-// matchean canonical + idIncludes (`*_levels`, `*_level`) por defecto.
-const mood = formResponse1D({
-  id: "mood",
-  label: "Ánimo",
-  y_max: 10,
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveMoodAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "mood-violet",
-});
-
-const energy = formResponse1D({
-  id: "energy",
-  label: "Energía",
-  y_max: 10,
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveEnergyAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "mood-violet",
-});
-
-const stress = formResponse1D({
-  id: "stress",
-  label: "Estrés",
-  y_max: 10,
-  category: "habit",
-  formType: "habits",
-  resolve: (r) => resolveStressAnswer(r.answers),
-  default_chart_type: "bar",
-  default_color: "mood-violet",
-});
 
 // ─── Catalog: macros_breakdown (multi-dim, range_total) ────────────────────
 //
-// Replicates today's `avgMacros` calculation in dashboard-content.tsx:
-// average per-day macros across days where the client reported AT LEAST ONE
-// of the three macros. Days with no macro data are skipped (so an
-// unreported day doesn't dilute the mean to 0).
+// Promedio diario de macros entre días donde el cliente reportó AL MENOS
+// uno de los tres. Días sin datos se skipean (un día sin registro no
+// diluye la media a 0).
 
 const MACROS_SERIES = [
   {
@@ -280,9 +74,7 @@ const macrosBreakdown: DataAdapter = {
     // Comparamos contra response_date (string YYYY-MM-DD) en lugar de
     // submitted_at ms. El SQL pre-filter usa response_date; mezclar ms
     // de submitted_at acá dropeaba rows submitidas cerca de medianoche
-    // local en husos no-UTC (submitted_at caía fuera del rango UTC pero
-    // response_date sí estaba adentro). Comparar por YMD mantiene
-    // consistencia entre las dos capas.
+    // local en husos no-UTC.
     const ymd = (d: Date): string => {
       const y = d.getUTCFullYear();
       const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -344,9 +136,8 @@ const macrosBreakdown: DataAdapter = {
 
 // ─── Catalog: training_breakdown (multi-dim, time-bucketed) ────────────────
 //
-// Replicates today's `trainingActivity` calculation: count strength vs
-// cardio sessions per period. Uses scheduled_date for bucketing because
-// that's what exercise_logs are keyed by today.
+// Counts strength vs cardio sessions per period. Lee `ctx.exerciseLogs`
+// (no form_responses) → no tiene equivalente form_question.
 
 const TRAINING_SERIES = [
   { id: "strength", label: "Fuerza", default_color: "training-blue" as const },
@@ -399,29 +190,20 @@ const trainingBreakdown: DataAdapter = {
 // ─── Public registry table ─────────────────────────────────────────────────
 
 /**
- * The 14 catalog adapters. Order is the display order in the picker.
- * Adding a new catalog adapter:
- *   1) Add the id to CatalogId in lib/charts/types.ts
- *   2) Add the id to catalogIdSchema in lib/charts/validation.ts
- *   3) Add the adapter here
+ * Adapters catalog VIVOS. Para agregar uno nuevo:
+ *   1) Add the id to CatalogId en lib/charts/types.ts
+ *   2) Add the id a catalogIdSchema en lib/charts/validation.ts
+ *   3) Add the adapter aquí
+ *
+ * Charts huérfanos cuyo source.kind === "catalog" pero source.id no
+ * está acá → filterUnusableCharts los esconde runtime.
  */
 export const CATALOG_ADAPTERS: ReadonlyArray<DataAdapter> = [
-  bodyFat,
-  sleepHours,
-  steps,
-  calories,
-  protein,
-  carbs,
-  fats,
-  water,
-  mood,
-  energy,
-  stress,
   macrosBreakdown,
   trainingBreakdown,
 ];
 
-/** Map for O(1) lookup by CatalogId. */
-export const CATALOG_BY_ID: ReadonlyMap<CatalogId, DataAdapter> = new Map(
-  CATALOG_ADAPTERS.map((a) => [a.metadata.id as CatalogId, a])
+/** Map for O(1) lookup. */
+export const CATALOG_BY_ID = new Map(
+  CATALOG_ADAPTERS.map((a) => [a.metadata.id, a])
 );

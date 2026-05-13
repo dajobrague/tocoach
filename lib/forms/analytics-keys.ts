@@ -233,26 +233,9 @@ export function resolveFatsAnswer(answers: AnswerMap): number | null {
   return resolveFieldNumber(answers, FATS_SPEC);
 }
 
-export function resolveMoodAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, MOOD_SPEC);
-}
-
-export function resolveEnergyAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, ENERGY_SPEC);
-}
-
-export function resolveStressAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, STRESS_SPEC);
-}
-
-export function resolveWaterAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, WATER_SPEC);
-}
-
-export function resolveBodyFatAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, BODY_FAT_SPEC);
-}
-
-export function resolveBodyWeightAnswer(answers: AnswerMap): number | null {
-  return resolveFieldNumber(answers, BODY_WEIGHT_SPEC);
-}
+// Los resolvers mood/energy/stress/water/body_fat/body_weight se
+// retiraron post-migration 102 — los charts catalog que los usaban se
+// reescribieron a form_question puro y leen `answers[question_id]`
+// directo. Las FieldSpec siguen vivas porque CATALOG_DATA_FEED las
+// usa para el picker filter, el resolvability check y el starter
+// template-aware.
