@@ -38,8 +38,7 @@ export function MicrocycleReferenceModal({
             </span>
           </div>
           <p className="text-xs font-body text-foreground/60">
-            Esta es la guía que armó tu entrenador. Puedes hacerlo en el orden
-            que quieras.
+            Esta es la guía que armó tu entrenador.
           </p>
         </ModalHeader>
         <ModalBody className="pb-6">
