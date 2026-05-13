@@ -211,7 +211,14 @@ export async function POST(
     // Antes el patrón SELECT-then-INSERT acá creaba duplicados bajo
     // concurrencia + cuando el trainer cambiaba session_id vía override
     // (el SELECT filtraba por session_id viejo y no encontraba).
-    // F4.5 migration 104.
+    // F4.5 migration 104, p_caller_role agregado en migration 109.
+    //
+    // p_caller_role='client': si la fila no existe, scheduled_sessions
+    // se crea con prescribed_by='client', así el resolver sabe que esto
+    // es la elección del cliente (no recomendación del trainer) cuando
+    // calcula el badge "Recomendado". Si la fila ya existía
+    // (por override del trainer), el RPC no toca prescribed_by y la
+    // autoría del trainer se preserva.
     const { data: scheduledSessionId, error: upsertError } = await supabase.rpc(
       "upsert_scheduled_session",
       {
@@ -221,6 +228,7 @@ export async function POST(
         p_session_id: sessionId,
         p_scheduled_date: scheduledDate,
         p_status: "scheduled",
+        p_caller_role: "client",
       }
     );
 

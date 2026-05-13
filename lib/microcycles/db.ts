@@ -146,6 +146,7 @@ export async function upsertMicrocycle(
   supabase: Supabase,
   ownedProgram: OwnedProgram,
   durationDays: number,
+  startDate: string,
   correlationId: string
 ): Promise<string | null> {
   const { data, error } = await supabase
@@ -155,6 +156,7 @@ export async function upsertMicrocycle(
         tenant_host: ownedProgram.tenant_host,
         client_program_id: ownedProgram.id,
         duration_days: durationDays,
+        start_date: startDate,
       },
       { onConflict: "client_program_id" }
     )

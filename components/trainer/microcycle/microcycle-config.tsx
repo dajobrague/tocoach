@@ -7,7 +7,7 @@
 
 import type { Session } from "@/types/training";
 
-import { Button, Skeleton, addToast } from "@heroui/react";
+import { Button, Input, Skeleton, addToast } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import AvailableSessionsAside from "./available-sessions-aside";
@@ -32,6 +32,7 @@ export default function MicrocycleConfig({ clientId }: Props) {
     save.mutate(
       {
         duration_days: editor.durationDays,
+        start_date: editor.startDate,
         slots: editor.toPayloadSlots(),
       },
       {
@@ -106,21 +107,48 @@ export default function MicrocycleConfig({ clientId }: Props) {
           </Button>
         </div>
         {!noActiveProgram ? (
-          <div className="flex items-end gap-6">
-            <div className="flex-1 min-w-0">
-              <MicrocycleDurationSelector
-                isDisabled={isSaving}
-                maxAssignedDay={editor.maxAssignedDay}
-                value={editor.durationDays}
-                onChange={editor.setDurationDays}
-              />
-            </div>
-            <div className="bg-blue-50 px-4 py-2 rounded-md min-w-[110px] shrink-0">
-              <div className="text-base font-semibold text-blue-900 tabular-nums">
-                {editor.assignedCount} / {editor.durationDays}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end gap-6 flex-wrap">
+              <div className="flex-1 min-w-[180px]">
+                <MicrocycleDurationSelector
+                  isDisabled={isSaving}
+                  maxAssignedDay={editor.maxAssignedDay}
+                  value={editor.durationDays}
+                  onChange={editor.setDurationDays}
+                />
               </div>
-              <div className="text-[10px] text-blue-700 leading-tight">
-                días asignados
+              <div className="flex-1 min-w-[180px]">
+                {/* Fecha en que cae el Día 1 del microciclo. Sin esta
+                    columna el ancla del ciclo era client_program.start_date,
+                    que el trainer no podía elegir. Ahora el trainer decide
+                    explícitamente en qué fecha arranca la rutina semanal. */}
+                <label
+                  className="block text-xs text-gray-600 mb-1"
+                  htmlFor="microcycle-start-date"
+                >
+                  Día 1 del microciclo
+                </label>
+                <Input
+                  id="microcycle-start-date"
+                  isDisabled={isSaving}
+                  size="sm"
+                  type="date"
+                  value={editor.startDate}
+                  onChange={(e) => editor.setStartDate(e.target.value)}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  El cliente entrenará la sesión del Día 1 a partir de esta
+                  fecha. El ciclo se repite cada {editor.durationDays}{" "}
+                  {editor.durationDays === 1 ? "día" : "días"}.
+                </p>
+              </div>
+              <div className="bg-blue-50 px-4 py-2 rounded-md min-w-[110px] shrink-0">
+                <div className="text-base font-semibold text-blue-900 tabular-nums">
+                  {editor.assignedCount} / {editor.durationDays}
+                </div>
+                <div className="text-[10px] text-blue-700 leading-tight">
+                  días asignados
+                </div>
               </div>
             </div>
           </div>

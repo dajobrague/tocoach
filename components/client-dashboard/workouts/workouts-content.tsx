@@ -101,12 +101,19 @@ export function WorkoutsContent() {
   // resuelve usando el override-de-hoy o el template proyectado hacia
   // atrás, así que tagueaba "Recomendado" sobre una sesión que no fue
   // necesariamente lo que el trainer prescribió en ese momento.
+  //
+  // Usamos `trainer_recommended_session_id` (no `session.id`) para que el
+  // badge "Recomendado por tu entrenador" siempre apunte a la prescripción
+  // real del trainer (microciclo o override por-fecha del trainer), nunca
+  // a la sesión que el cliente eligió hacer al loguear. Antes el badge
+  // se movía a la elección del cliente porque scheduled_sessions no
+  // distinguía quién había creado la fila.
   const { data: resolvedForSelectedDate } =
     useResolvedDayPrescription(selectedDate);
   const isPastDate = selectedDate < todayYmd;
   const recommendedSessionId = isPastDate
     ? null
-    : (resolvedForSelectedDate?.session?.id ?? null);
+    : (resolvedForSelectedDate?.trainer_recommended_session_id ?? null);
 
   const activeSession = activeSessionId
     ? (availableData?.sessions.find((s) => s.id === activeSessionId) ?? null)

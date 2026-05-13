@@ -263,7 +263,11 @@ async function materializeTemplate(
       correlationId
     );
 
-    if (!microcycle || !program.start_date) continue;
+    // Ancla del ciclo: microcycle.start_date (controlable por el trainer
+    // desde la migración 108) en vez de program.start_date. Si por algún
+    // motivo el microciclo no tiene start_date (no debería ocurrir tras
+    // la migración + NOT NULL, pero defensivo), saltamos.
+    if (!microcycle || !microcycle.start_date) continue;
 
     const slotByDayIndex = new Map<number, string | null>();
 
@@ -273,7 +277,7 @@ async function materializeTemplate(
     }
 
     programCycles.push({
-      startDate: program.start_date,
+      startDate: microcycle.start_date,
       durationDays: microcycle.duration_days,
       slotByDayIndex,
     });

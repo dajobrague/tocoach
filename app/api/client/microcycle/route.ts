@@ -75,6 +75,7 @@ export async function GET(_request: NextRequest) {
       success: true,
       microcycle: {
         duration_days: microcycle.duration_days,
+        start_date: microcycle.start_date,
         slots: expanded,
       },
     });

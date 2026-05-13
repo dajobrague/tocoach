@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
@@ -40,6 +40,15 @@ export interface ResolvedDay {
   source: "override" | "session" | "template" | "rest";
   session: { id: string; name: string } | null;
   exercises: ResolvedExercise[];
+  /**
+   * Sesión que el trainer recomienda para este día. Independiente de
+   * `session` (estado actual del día, que puede haber sido sobrescrito
+   * cuando el cliente loguea otra sesión). Calculado server-side
+   * combinando override del trainer + slot del microciclo. Null = sin
+   * recomendación (descanso, no hay microciclo, o aún no aplica el
+   * start_date del ciclo).
+   */
+  trainer_recommended_session_id: string | null;
 }
 
 interface UseResolvedDayPrescription {
@@ -48,54 +57,59 @@ interface UseResolvedDayPrescription {
   error: string | null;
 }
 
+interface ApiResponse {
+  success: boolean;
+  day?: ResolvedDay;
+  error?: string;
+}
+
+async function fetchResolvedDay(date: string): Promise<ResolvedDay> {
+  const res = await clientFetch(`/api/client/scheduled-sessions/${date}`);
+  const json = (await res.json()) as ApiResponse;
+
+  if (!json.success || !json.day) {
+    throw new Error(json.error ?? "No se pudo cargar la prescripción del día.");
+  }
+
+  return json.day;
+}
+
 /**
  * Fetches the resolved prescription for a date from
  * GET /api/client/scheduled-sessions/[date]. Used to surface trainer
  * overrides (sets, reps, weight, per-set values) to the active session
  * view without disturbing the template-cache flow when no override exists.
+ *
+ * Backed por React Query con cache compartido por `date`. Antes el hook
+ * usaba useState/useEffect aislado por instancia, así que workouts-content
+ * y active-session-view disparaban dos fetches separados al mismo endpoint
+ * cada vez que el cliente entraba a una sesión, y el skeleton de
+ * active-session-view se mostraba aunque los datos ya estuvieran cargados
+ * un nivel arriba.
  */
 export function useResolvedDayPrescription(
   date: string
 ): UseResolvedDayPrescription {
-  const [data, setData] = useState<ResolvedDay | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: ["client", "resolved-day", date],
+    queryFn: () => fetchResolvedDay(date),
+    // Datos del día son baratos de revalidar pero rara vez cambian dentro
+    // de la misma sesión del cliente. 30s da hit instantáneo en
+    // navegaciones típicas (entrar a sesión activa, volver al listado)
+    // sin volverse stale frente a cambios del trainer.
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // CRÍTICO: reset data al cambiar fecha. Antes solo seteábamos
-    // loading=true pero data quedaba con el día anterior; el gate
-    // `resolvedLoading && !resolved` en active-session-view evaluaba
-    // `false` (porque resolved seguía existiendo) y el cliente abría
-    // el modal de log con la prescripción del día equivocado.
-    setData(null);
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const res = await clientFetch(`/api/client/scheduled-sessions/${date}`);
-        const json = await res.json();
-
-        if (cancelled) return;
-        if (json.success) {
-          setData(json.day as ResolvedDay);
-        } else {
-          setError("No se pudo cargar la prescripción del día.");
-        }
-      } catch {
-        if (cancelled) return;
-        setError("Error de conexión.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [date]);
-
-  return { data, loading, error };
+  return {
+    // El contrato anterior devolvía null (no undefined) cuando no había
+    // datos cargados. Mantenemos esa convención para no obligar a tocar
+    // los consumidores.
+    data: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error
+      ? query.error instanceof Error
+        ? query.error.message
+        : "Error de conexión."
+      : null,
+  };
 }

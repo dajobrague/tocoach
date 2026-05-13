@@ -210,9 +210,20 @@ async function resetDay(
     // última sesión que el trainer había elegido. La próxima lectura
     // entraba por la rama "session" con esa sesión vieja en vez de caer
     // al template del microciclo — "Restaurar al template" mentía.
+    //
+    // También marcamos prescribed_by='trainer': el trainer acaba de
+    // hacer una acción explícita sobre el día. Si la fila había sido
+    // creada por un log del cliente (prescribed_by='client'), pasarla
+    // a 'trainer' refleja que la intención más reciente del trainer
+    // manda (consistente con el comportamiento de
+    // replace_scheduled_session_overrides en migration 110).
     const { error: clearSessionError } = await supabase
       .from("scheduled_sessions")
-      .update({ session_id: null, status: "scheduled" })
+      .update({
+        session_id: null,
+        status: "scheduled",
+        prescribed_by: "trainer",
+      })
       .eq("id", ss.id);
 
     if (clearSessionError) {

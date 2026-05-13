@@ -18,8 +18,19 @@ import { useEffect, useMemo, useState } from "react";
 
 const DEFAULT_DURATION_DAYS = 7;
 
+function todayYmd(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export interface MicrocycleEditorState {
   durationDays: number;
+  /** Fecha (YYYY-MM-DD) en que cae el "Día 1" del microciclo. */
+  startDate: string;
   slotByDay: Map<number, string | null>;
   selectedDay: number | null;
   /** day_index más alto con sesión asignada (no null). 0 si nada asignado. */
@@ -27,6 +38,7 @@ export interface MicrocycleEditorState {
   /** Cuántos slots dentro del rango actual tienen sesión asignada (no null). */
   assignedCount: number;
   setDurationDays: (next: number) => void;
+  setStartDate: (next: string) => void;
   selectDay: (day: number | null) => void;
   selectSession: (sessionId: string) => void;
   removeSlot: (day: number) => void;
@@ -44,6 +56,7 @@ export function useMicrocycleEditor(
   const [durationDays, setDurationDaysState] = useState<number>(
     DEFAULT_DURATION_DAYS
   );
+  const [startDate, setStartDateState] = useState<string>(() => todayYmd());
   const [slotByDay, setSlotByDay] = useState<Map<number, string | null>>(
     new Map()
   );
@@ -57,6 +70,7 @@ export function useMicrocycleEditor(
     const initial = buildInitialSlots(loaded ?? null, DEFAULT_DURATION_DAYS);
 
     setDurationDaysState(initial.durationDays);
+    setStartDateState(initial.startDate);
     setSlotByDay(initial.slotByDay);
     setHydrated(true);
   }, [isDataReady, hydrated, loaded]);
@@ -84,6 +98,10 @@ export function useMicrocycleEditor(
   const setDurationDays = (next: number) => {
     setDurationDaysState(next);
     if (selectedDay !== null && selectedDay > next) setSelectedDay(null);
+  };
+
+  const setStartDate = (next: string) => {
+    setStartDateState(next);
   };
 
   const selectDay = (day: number | null) => {
@@ -137,11 +155,13 @@ export function useMicrocycleEditor(
 
   return {
     durationDays,
+    startDate,
     slotByDay,
     selectedDay,
     maxAssignedDay,
     assignedCount,
     setDurationDays,
+    setStartDate,
     selectDay,
     selectSession,
     removeSlot,
@@ -152,8 +172,13 @@ export function useMicrocycleEditor(
 function buildInitialSlots(
   microcycle: MicrocycleWithSlots | null,
   fallbackDays: number
-): { durationDays: number; slotByDay: Map<number, string | null> } {
+): {
+  durationDays: number;
+  startDate: string;
+  slotByDay: Map<number, string | null>;
+} {
   const durationDays = microcycle?.duration_days ?? fallbackDays;
+  const startDate = microcycle?.start_date ?? todayYmd();
   const map = new Map<number, string | null>();
 
   for (let day = 1; day <= durationDays; day++) {
@@ -165,7 +190,7 @@ function buildInitialSlots(
     }
   }
 
-  return { durationDays, slotByDay: map };
+  return { durationDays, startDate, slotByDay: map };
 }
 
 function findFirstEmpty(

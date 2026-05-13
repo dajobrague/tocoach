@@ -10,6 +10,8 @@ import { TRAINER_MICROCYCLE_QUERY_KEY } from "./use-trainer-microcycle";
 
 export interface SaveMicrocycleInput {
   duration_days: number;
+  /** Fecha (YYYY-MM-DD) que el trainer eligió como "Día 1" del ciclo. */
+  start_date: string;
   slots: Array<{ day_index: number; session_id: string | null }>;
 }
 

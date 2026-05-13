@@ -130,7 +130,9 @@ export async function POST(
 
     // Atomic upsert via RPC (F4.5 migration 104). Previene duplicados
     // bajo concurrencia (dos requests para el mismo client/date ven
-    // SELECT vacío y ambas insertaban).
+    // SELECT vacío y ambas insertaban). p_caller_role='client' agregado
+    // en migration 109 — esta endpoint autentica con getClientSession,
+    // así que si crea una fila nueva la marca como elección del cliente.
     const { data: scheduledSessionId, error: upsertError } = await supabase.rpc(
       "upsert_scheduled_session",
       {
@@ -141,6 +143,7 @@ export async function POST(
         p_scheduled_date: scheduledDate,
         p_status: status || "pending",
         p_metadata: Object.keys(metadata).length > 0 ? metadata : null,
+        p_caller_role: "client",
       }
     );
 

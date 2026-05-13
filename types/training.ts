@@ -366,6 +366,14 @@ export interface Microcycle {
   tenant_host: string;
   client_program_id: string;
   duration_days: number;
+  /**
+   * Fecha (YYYY-MM-DD) en que cae el "Día 1" del microciclo. El resolver
+   * de prescripciones del cliente la usa como ancla del modulo:
+   * `dayIndex = ((date - start_date) % duration_days) + 1`. Antes el ancla
+   * era `client_program.start_date` y el trainer no podía elegirla; ahora
+   * la setea desde el editor del microciclo.
+   */
+  start_date: string;
   created_at: string;
   updated_at: string;
 }

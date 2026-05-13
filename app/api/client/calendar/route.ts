@@ -175,10 +175,19 @@ async function countExerciseLogsByScheduled(
 ): Promise<Map<string, number>> {
   if (scheduledIds.length === 0) return new Map();
 
+  // Solo contamos logs FINALIZADOS — alineado con la definición de
+  // "completado" en active-session-view (que filtra por finalized_at).
+  // Antes el calendario incluía autosaves no finalizados, así que la
+  // misma sesión podía mostrar "5/5 hechos" en past-workouts y "4/5"
+  // en la pantalla activa cuando el cliente había guardado un autosave
+  // de un ejercicio extra después de completar la sesión. Migración
+  // 092 backfilleó finalized_at = completed_at en logs legacy, así que
+  // este filtro no esconde historial viejo.
   const { data, error } = await supabase
     .from("exercise_logs")
     .select("scheduled_session_id")
-    .in("scheduled_session_id", scheduledIds);
+    .in("scheduled_session_id", scheduledIds)
+    .not("finalized_at", "is", null);
 
   if (error) {
     console.warn(`${LOG_PREFIX} Failed to count exercise_logs:`, {

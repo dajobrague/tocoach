@@ -10,6 +10,11 @@ export interface MicrocycleSlotInput {
 
 export interface MicrocyclePutInput {
   duration_days: number;
+  /**
+   * Fecha (YYYY-MM-DD) que el trainer eligió como "Día 1" del ciclo.
+   * El resolver del cliente la usa como ancla del modulo.
+   */
+  start_date: string;
   slots: MicrocycleSlotInput[];
 }
 
@@ -27,6 +32,7 @@ export type ValidationResult = ValidationSuccess | ValidationFailure;
 
 const MIN_DURATION_DAYS = 1;
 const MAX_DURATION_DAYS = 28;
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function validateMicrocyclePutBody(raw: unknown): ValidationResult {
   if (!raw || typeof raw !== "object") {
@@ -46,6 +52,31 @@ export function validateMicrocyclePutBody(raw: unknown): ValidationResult {
     return {
       ok: false,
       error: `duration_days debe ser un entero entre ${MIN_DURATION_DAYS} y ${MAX_DURATION_DAYS}`,
+    };
+  }
+
+  // start_date es obligatoria desde la migración 108. Aceptamos sólo
+  // YYYY-MM-DD y verificamos que sea una fecha real (Date.parse no
+  // alcanza porque tolera strings raros como "2026-13-99"). Sin upper/
+  // lower bound — el trainer puede anclar el ciclo a cualquier fecha,
+  // incluso futura ("la rutina empieza el lunes que viene").
+  const startDate = body.start_date;
+
+  if (typeof startDate !== "string" || !YMD_RE.test(startDate)) {
+    return {
+      ok: false,
+      error: "start_date debe tener formato YYYY-MM-DD",
+    };
+  }
+  const parsed = new Date(`${startDate}T00:00:00Z`);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== startDate
+  ) {
+    return {
+      ok: false,
+      error: "start_date no es una fecha válida",
     };
   }
 
@@ -103,6 +134,6 @@ export function validateMicrocyclePutBody(raw: unknown): ValidationResult {
 
   return {
     ok: true,
-    value: { duration_days: durationDays, slots },
+    value: { duration_days: durationDays, start_date: startDate, slots },
   };
 }

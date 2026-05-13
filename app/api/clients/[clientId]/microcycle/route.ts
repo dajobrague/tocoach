@@ -278,6 +278,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       supabase,
       primary,
       validation.value.duration_days,
+      validation.value.start_date,
       correlationId
     );
 

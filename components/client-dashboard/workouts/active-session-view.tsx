@@ -87,14 +87,26 @@ export function ActiveSessionView({
 
   const exercises: Array<ExerciseLike & Record<string, unknown>> =
     useMemo(() => {
-      // Prefer the resolved prescription whenever it carries exercises —
-      // covers all of "override" (per-date custom prescription), "session"
-      // (trainer swapped the day's session_id, even without per-exercise
-      // edits), and "template" (microcycle slot resolution). Falling back
-      // to the program-cache template only when the resolved response is
-      // empty or still loading means client never gets stale data after
-      // a trainer change that didn't strictly trigger source === "override".
-      if (resolved && resolved.exercises.length > 0) {
+      // Use the resolved prescription only when it describes the SAME
+      // session the client actually picked. resolved is keyed by date,
+      // not session: it always returns whatever scheduled_sessions /
+      // microcycle template points at for that date — which can be a
+      // different session than the one the client tapped to start.
+      // Without the session.id guard, the screen rendered the
+      // recommended session's exercises under the picked session's
+      // banner, and exercise_logs were saved with mismatched
+      // (session_id, exercise_id) pairs.
+      //
+      // When the ids match, resolved is authoritative because it carries
+      // any trainer overrides (sets/reps/weight, per-set values, cardio
+      // and coaching meta). When they don't, fall back to the program
+      // template for the picked session — that template is the truth
+      // for sessions the trainer didn't override for this date.
+      if (
+        resolved &&
+        resolved.exercises.length > 0 &&
+        resolved.session?.id === session.id
+      ) {
         return resolved.exercises.map(toExerciseLike) as Array<
           ExerciseLike & Record<string, unknown>
         >;
@@ -124,6 +136,12 @@ export function ActiveSessionView({
   ).length;
   const total = trackable.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+  // Conteo a mostrar en el banner. Preferimos `total` (alineado con la
+  // lista renderizada — incluye overrides del trainer que pueden tener
+  // un conteo distinto al template). Caemos a `session.exercise_count`
+  // mientras no hay datos resueltos todavía para no parpadear de "0"
+  // a "5".
+  const displayExerciseCount = total > 0 ? total : session.exercise_count;
 
   const typeStyle = getSessionTypeStyle(session.session_type);
 
@@ -157,8 +175,8 @@ export function ActiveSessionView({
             {session.name}
           </h2>
           <p className="text-xs text-primary-foreground/80 font-body">
-            {session.exercise_count}{" "}
-            {session.exercise_count === 1 ? "ejercicio" : "ejercicios"}
+            {displayExerciseCount}{" "}
+            {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
             {total > 0 && completed > 0 ? ` · ${completed} hechos` : null}
           </p>
         </div>

@@ -60,6 +60,21 @@ interface ResolvedDay {
   source: "override" | "session" | "template" | "rest";
   session: { id: string; name: string } | null;
   exercises: ResolvedExercise[];
+  /**
+   * Sesión que el trainer recomendó para este día (microciclo o
+   * override por-fecha del trainer). Independiente de `session`, que
+   * refleja el estado actual del día (puede haber sido sobrescrito
+   * por una elección del cliente al loguear).
+   *
+   * Reglas:
+   *   - Si scheduled_sessions existe con prescribed_by='trainer' y
+   *     session_id no nulo → usar ese session_id (el trainer hizo
+   *     un override explícito que tiene prioridad sobre el template).
+   *   - Si no, calcular desde el slot del microciclo para esa fecha.
+   *   - null = el trainer no recomendó nada (rest day o sin
+   *     microciclo/programa).
+   */
+  trainer_recommended_session_id: string | null;
 }
 
 function isYmd(s: unknown): s is string {
@@ -102,10 +117,14 @@ export async function GET(
     const clientId = String(session.client_id);
 
     // 1. Real scheduled_sessions row for this date (with override + template).
+    //    SELECT incluye prescribed_by + session_id sueltos: necesitamos
+    //    saber si la fila la creó el trainer o el cliente para distinguir
+    //    "esto es lo recomendado por el trainer" de "esto es lo que el
+    //    cliente eligió hacer".
     const { data: ssRow } = await supabase
       .from("scheduled_sessions")
       .select(
-        `id,
+        `id, prescribed_by, session_id,
          session:sessions(id, name,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
@@ -126,6 +145,50 @@ export async function GET(
       .eq("scheduled_date", date)
       .maybeSingle();
 
+    // Cache las queries de programas/microciclo: el cómputo de
+    // trainer_recommended_session_id puede necesitarlo, y el fallback
+    // template también. Cargamos a demanda para no pagar el costo si la
+    // ssRow ya satisface ambos lados.
+    let programsCache: Awaited<
+      ReturnType<typeof loadAllActiveOwnedPrograms>
+    > | null = null;
+    const loadPrograms = async () => {
+      if (programsCache === null) {
+        programsCache = await loadAllActiveOwnedPrograms(
+          supabase,
+          clientId,
+          null,
+          correlationId
+        );
+      }
+
+      return programsCache;
+    };
+
+    // ── Compute trainer's recommendation for this date ────────────────
+    // Prioridad: override del trainer en la fila > template del microciclo.
+    // El cliente que sólo loguea no puede generar "recomendación" — esa
+    // es siempre intención del trainer (microciclo o per-date override).
+    let trainerRecommendedSessionId: string | null = null;
+
+    if (
+      ssRow?.prescribed_by === "trainer" &&
+      typeof ssRow.session_id === "string"
+    ) {
+      trainerRecommendedSessionId = ssRow.session_id;
+    } else {
+      const programs = await loadPrograms();
+      const slotMatch = await resolveMicrocycleSlot(
+        supabase,
+        programs,
+        date,
+        correlationId
+      );
+
+      trainerRecommendedSessionId = slotMatch?.sessionId ?? null;
+    }
+
+    // ── Compute current state (override / session / template / rest) ──
     if (ssRow) {
       const overrides = (ssRow.override_exercises ?? []) as any[];
 
@@ -136,7 +199,8 @@ export async function GET(
             date,
             "override",
             ssRow.session as any,
-            overrides
+            overrides,
+            trainerRecommendedSessionId
           ),
         });
       }
@@ -152,36 +216,27 @@ export async function GET(
       if (sessionRow && sessExercises.length > 0) {
         return NextResponse.json({
           success: true,
-          day: makeResolvedDay(date, "session", sessionRow, sessExercises),
+          day: makeResolvedDay(
+            date,
+            "session",
+            sessionRow,
+            sessExercises,
+            trainerRecommendedSessionId
+          ),
         });
       }
     }
 
     // 2. No real row — derive from microcycle template.
-    const programs = await loadAllActiveOwnedPrograms(
+    const programs = await loadPrograms();
+    const slotMatch = await resolveMicrocycleSlot(
       supabase,
-      clientId,
-      null,
+      programs,
+      date,
       correlationId
     );
 
-    for (const program of programs) {
-      if (!program.start_date) continue;
-      const microcycle = await loadMicrocycleWithSlots(
-        supabase,
-        program.id,
-        correlationId
-      );
-
-      if (!microcycle) continue;
-      if (date < program.start_date) continue;
-
-      const offset = diffDays(program.start_date, date);
-      const dayIndex = (offset % microcycle.duration_days) + 1;
-      const slot = microcycle.slots.find((s) => s.day_index === dayIndex);
-
-      if (!slot?.session_id) continue;
-
+    if (slotMatch) {
       const { data: sessionDetail } = await supabase
         .from("sessions")
         .select(
@@ -192,20 +247,21 @@ export async function GET(
              exercise:exercises(id, name, category, image_url, video_url)
            )`
         )
-        .eq("id", slot.session_id)
+        .eq("id", slotMatch.sessionId)
         .maybeSingle();
 
-      if (!sessionDetail) continue;
-
-      return NextResponse.json({
-        success: true,
-        day: makeResolvedDay(
-          date,
-          "template",
-          sessionDetail as any,
-          ((sessionDetail as any).session_exercises ?? []) as any[]
-        ),
-      });
+      if (sessionDetail) {
+        return NextResponse.json({
+          success: true,
+          day: makeResolvedDay(
+            date,
+            "template",
+            sessionDetail as any,
+            ((sessionDetail as any).session_exercises ?? []) as any[],
+            trainerRecommendedSessionId
+          ),
+        });
+      }
     }
 
     // 3. No prescription at all → rest day.
@@ -216,6 +272,7 @@ export async function GET(
         source: "rest",
         session: null,
         exercises: [],
+        trainer_recommended_session_id: trainerRecommendedSessionId,
       } satisfies ResolvedDay,
     });
   } catch (error) {
@@ -226,6 +283,43 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+/**
+ * Camina los programas activos del cliente, carga sus microciclos, y
+ * devuelve la sesión que el slot del microciclo recomienda para `date`.
+ * El primer programa con un slot válido gana (programs vienen ordenados
+ * desc por start_date upstream — el más reciente tiene precedencia).
+ *
+ * El ancla del modulo es `microcycle.start_date` (no `program.start_date`)
+ * desde la migración 108: el trainer escoge cuándo arranca el ciclo.
+ */
+async function resolveMicrocycleSlot(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  programs: Awaited<ReturnType<typeof loadAllActiveOwnedPrograms>>,
+  date: string,
+  correlationId: string
+): Promise<{ sessionId: string } | null> {
+  for (const program of programs) {
+    const microcycle = await loadMicrocycleWithSlots(
+      supabase,
+      program.id,
+      correlationId
+    );
+
+    if (!microcycle?.start_date) continue;
+    if (date < microcycle.start_date) continue;
+
+    const offset = diffDays(microcycle.start_date, date);
+    const dayIndex = (offset % microcycle.duration_days) + 1;
+    const slot = microcycle.slots.find((s) => s.day_index === dayIndex);
+
+    if (!slot?.session_id) continue;
+
+    return { sessionId: slot.session_id };
+  }
+
+  return null;
 }
 
 function makeResolvedDay(
@@ -254,7 +348,8 @@ function makeResolvedDay(
       reps: string | null;
       weight_kg: number | null;
     }> | null;
-  }>
+  }>,
+  trainerRecommendedSessionId: string | null
 ): ResolvedDay {
   const exercises = [...raws]
     .sort((a, b) => a.exercise_order - b.exercise_order)
@@ -313,5 +408,6 @@ function makeResolvedDay(
     source,
     session: session ? { id: session.id, name: session.name } : null,
     exercises,
+    trainer_recommended_session_id: trainerRecommendedSessionId,
   };
 }
