@@ -247,6 +247,54 @@ export function ChartSurface({ mode, clientId }: Props) {
     return doc.charts.find((c) => c.id === editingId) ?? null;
   }, [doc, editingId]);
 
+  // Set de fuentes ya usadas en el doc actual. Sirve para esconder del
+  // picker las opciones que duplicarían un chart existente. La key
+  // matchea tanto la forma de ChartDataSource.id (que para
+  // form_question ya viene como "form_q:<form_type>:<question_id>")
+  // como la que produce dataSourceRefKey en edit-panel.
+  function chartSourceKey(source: ChartConfig["source"]): string {
+    if (source.kind === "catalog") return `catalog:${source.id}`;
+
+    return `form_q:${source.form_type}:${source.question_id}`;
+  }
+
+  function adapterToSourceKey(source: ChartDataSource): string {
+    if (source.id.startsWith("form_q:")) return source.id;
+
+    return `catalog:${source.id}`;
+  }
+
+  // Para el botón "Añadir gráfica": excluir TODAS las fuentes en uso.
+  const sourcesForAdd = useMemo(() => {
+    if (!doc) return sources;
+    const used = new Set<string>();
+
+    for (const c of doc.charts) used.add(chartSourceKey(c.source));
+
+    return sources.filter((s) => !used.has(adapterToSourceKey(s)));
+  }, [doc, sources]);
+
+  // Para el editor de un chart existente: excluir fuentes de OTROS
+  // charts, pero mantener visible la del chart actual (para que el
+  // trainer la siga viendo seleccionada y pueda cambiarla por otra
+  // disponible o conservarla).
+  const sourcesForEdit = useMemo(() => {
+    if (!doc || !editing) return sources;
+    const currentKey = chartSourceKey(editing.source);
+    const used = new Set<string>();
+
+    for (const c of doc.charts) {
+      if (c.id === editing.id) continue;
+      used.add(chartSourceKey(c.source));
+    }
+
+    return sources.filter((s) => {
+      const key = adapterToSourceKey(s);
+
+      return key === currentKey || !used.has(key);
+    });
+  }, [doc, editing, sources]);
+
   // Compute renderable buckets per chart. Tres caminos según mode:
   //
   // - trainer-template: SIEMPRE demo data (no hay clientId, no hay
@@ -748,7 +796,7 @@ export function ChartSurface({ mode, clientId }: Props) {
                   {editMode && !isReadOnly ? (
                     <AddChartCard
                       isLoading={sourcesQuery.isLoading}
-                      sources={sources}
+                      sources={sourcesForAdd}
                       onAdd={(id) => handleAdd(id)}
                       {...(sourcesQuery.error
                         ? { error: sourcesQuery.error as Error }
@@ -793,7 +841,7 @@ export function ChartSurface({ mode, clientId }: Props) {
                     <AddChartCard
                       private
                       isLoading={sourcesQuery.isLoading}
-                      sources={sources}
+                      sources={sourcesForAdd}
                       onAdd={(id) => handleAdd(id, "trainer_only")}
                       {...(sourcesQuery.error
                         ? { error: sourcesQuery.error as Error }
@@ -829,7 +877,7 @@ export function ChartSurface({ mode, clientId }: Props) {
         config={editing}
         isOpen={!!editing}
         saveState={autosave.state}
-        sources={sources}
+        sources={sourcesForEdit}
         onChange={handleChartChange}
         onClose={() => setEditingId(null)}
       />
