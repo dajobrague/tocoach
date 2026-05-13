@@ -150,6 +150,14 @@ export async function GET(
          )`
       )
       .eq("client_id", clientId)
+      // Solo prescripciones del trainer (override per-fecha o session
+      // swap explícito). Filas con prescribed_by='client' son creadas
+      // automáticamente cuando el cliente loguea una sesión distinta a
+      // la recomendada — no son prescripción del trainer y no deben
+      // pisar el microciclo template en la vista de Métricas. Los
+      // exercise_logs ligados a esas filas siguen llegando vía el
+      // endpoint de logs y use-week-metrics los detecta como off-plan.
+      .eq("prescribed_by", "trainer")
       // Skip cancelled/rescheduled rows: they should not count toward
       // adherence "prescribed" (the day was explicitly retired by the
       // trainer or client), otherwise the day stays "0/N pendiente"
