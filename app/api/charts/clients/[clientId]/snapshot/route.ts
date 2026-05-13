@@ -173,6 +173,15 @@ async function loadFormResponses(
     .eq("client_id", args.clientIdBigint)
     .gte("response_date", args.fromYmd)
     .lte("response_date", args.toYmd);
+
+  if (both.error) {
+    // Antes el error se silenciaba con `data ?? []` y los charts de
+    // check-in/hábitos aparecían vacíos sin warning. Logueamos para
+    // que un fallo de PostgREST sea visible en logs de ops.
+    console.warn(
+      `[charts/snapshot] loadFormResponses error client=${args.clientIdBigint}: ${both.error.message}`
+    );
+  }
   const rows = (both.data ?? []) as FormResponse[];
 
   return {
