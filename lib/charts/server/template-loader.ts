@@ -13,7 +13,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChartsDocument } from "../types";
 
-import { buildStarterDocument } from "../starter";
+import {
+  buildStarterDocument,
+  buildStarterDocumentFromTemplates,
+  type StarterTemplateRow,
+} from "../starter";
 import { chartConfigSchema } from "../validation";
 
 export interface TemplateRecord {
@@ -127,8 +131,31 @@ export async function loadOrCreateTrainerTemplate(
     };
   }
 
-  // Lazy-create with the starter shape.
-  const starter = buildStarterDocument();
+  // Lazy-create con starter template-aware: inspecciona los
+  // form_templates del trainer y siembra form_question puro apuntando
+  // a las preguntas concretas (top-level y anidadas en groups). Si una
+  // intent no tiene match, se skipea (cero orphans). El chart
+  // ENTRENAMIENTO siempre se siembra porque lee exercise_logs.
+  //
+  // Fallback al starter hardcoded si la query de form_templates falla
+  // (transitorio): mejor seedear el shape default que dejar al trainer
+  // sin charts.
+  const tplRes = await supabase
+    .from("form_templates")
+    .select("form_type, questions_config")
+    .eq("tenant_host", tenantHost)
+    .eq("is_active", true);
+  const templates: StarterTemplateRow[] =
+    !tplRes.error && tplRes.data
+      ? tplRes.data.map((r) => ({
+          form_type: r.form_type as "checkins" | "habits",
+          questions_config: r.questions_config as unknown,
+        }))
+      : [];
+  const starter =
+    templates.length > 0
+      ? buildStarterDocumentFromTemplates(templates)
+      : buildStarterDocument();
   const insert = await supabase
     .from("trainer_chart_templates")
     .insert({
