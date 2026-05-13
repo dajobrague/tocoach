@@ -182,6 +182,55 @@ export function normalizeFormConfig(
   return { pages: [defaultPage], questions };
 }
 
+/**
+ * Devuelve todas las preguntas — top-level Y anidadas dentro de groups —
+ * en una sola lista plana.
+ *
+ * Casos de uso:
+ *   - El picker de fuentes para charts (que el trainer ve al editar un
+ *     chart) debe listar TODAS las preguntas numéricas / photo,
+ *     incluidas las que viven dentro de `subQuestions` de un grupo
+ *     (e.g. calories/protein/carbs/fats dentro de `macro_tracking`).
+ *   - El filtro de "chart sin feed" del server (resolvability.ts) debe
+ *     considerar la pregunta anidada como fuente válida, porque las
+ *     answers se guardan planas (`answers.calories = 123`) y los
+ *     adapters resuelven contra esos keys directos.
+ *
+ * Antes el filtro y el picker usaban `normalizeFormConfig().questions`,
+ * que solo devuelve top-level. Resultado: el trainer no podía pickar
+ * `calories` como fuente (el picker no la mostraba), y mi filtro B
+ * iba a ocultar ~100 charts catalog cuyas subQuestions sí están
+ * presentes en producción (175+ respuestas/90d para calories,
+ * 168 para protein/carbs/fats).
+ *
+ * Propaga `enabled`: si un grupo padre está disabled, sus hijas se
+ * tratan como disabled (las answers no se recolectan). Si el padre
+ * está enabled, el flag de cada hija decide por sí misma.
+ */
+export function flattenQuestions(
+  raw: QuestionConfig[] | FormConfigData
+): QuestionConfig[] {
+  const normalized = normalizeFormConfig(raw);
+  const out: QuestionConfig[] = [];
+
+  function walk(qs: QuestionConfig[], parentEnabled: boolean): void {
+    for (const q of qs) {
+      const ownEnabled = q.enabled !== false;
+      const effectiveEnabled = parentEnabled && ownEnabled;
+
+      out.push({ ...q, enabled: effectiveEnabled });
+
+      if (q.subQuestions && q.subQuestions.length > 0) {
+        walk(q.subQuestions, effectiveEnabled);
+      }
+    }
+  }
+
+  walk(normalized.questions, true);
+
+  return out;
+}
+
 export interface FormTemplate {
   id: string;
   tenant_host: string;

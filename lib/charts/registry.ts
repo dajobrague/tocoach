@@ -31,7 +31,7 @@ import { z } from "zod";
 import { CATALOG_BY_ID, CATALOG_ADAPTERS } from "./adapters/catalog";
 import { buildFormQuestionAdapter } from "./adapters/form-question";
 
-import { normalizeFormConfig } from "@/lib/forms/types";
+import { flattenQuestions } from "@/lib/forms/types";
 
 /**
  * Registry-validation accepts the zod-inferred shape (ChartConfigInput)
@@ -110,10 +110,16 @@ function isStructuredFormConfig(v: unknown): v is FormConfigData {
  * Pull a flat `QuestionConfig[]` out of a `questions_config` JSONB cell,
  * handling both legacy and structured shapes. Returns an empty array when
  * the cell is null / malformed (so the API route stays a 200, not a 500).
+ *
+ * Usa `flattenQuestions` (no `normalizeFormConfig`) para descender en
+ * subQuestions y exponer preguntas anidadas en groups (e.g.
+ * calories/protein/carbs/fats dentro de `macro_tracking`). El picker
+ * del trainer y el filtro de resolvability dependen de esto para
+ * mostrar/aceptar preguntas que viven dentro de groups.
  */
 function extractQuestions(raw: unknown): QuestionConfig[] {
   if (isQuestionConfigArray(raw) || isStructuredFormConfig(raw)) {
-    return normalizeFormConfig(raw).questions;
+    return flattenQuestions(raw);
   }
 
   return [];
