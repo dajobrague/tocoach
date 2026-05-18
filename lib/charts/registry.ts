@@ -20,7 +20,7 @@
  * the registry available.
  */
 
-import type { FormType } from "./types";
+import type { ChartType, FormType } from "./types";
 import type { CatalogId, DataSourceRef } from "./types";
 import type { DataAdapter } from "./adapters/types";
 import type { ChartConfigInput } from "./validation";
@@ -51,18 +51,34 @@ type ChartLike = ChartConfigInput;
  * Returns undefined when the reference can't be resolved (catalog id
  * removed in code, or anything else that fails sanity). The caller
  * should treat undefined as "render the orphan empty-state."
+ *
+ * `hint.chartType` lets photo charts resolve to a photo adapter. Without
+ * it, form_question refs always build a numeric adapter, so a
+ * `photo_timeline` chart validating against `wantsPhoto ↔ isPhoto`
+ * (validateChartConfigWithRegistry below) would incorrectly fail with
+ * "photo_timeline requires a photo source" at save time. Render-time
+ * callers don't need to pass this — the snapshot endpoint builds its
+ * own photo adapter inline before reaching here, and surface code only
+ * reads `metadata.unit / .icon / .series`, none of which depend on the
+ * photo-vs-numeric distinction.
  */
-export function resolveAdapter(ref: DataSourceRef): DataAdapter | undefined {
+export function resolveAdapter(
+  ref: DataSourceRef,
+  hint?: { chartType?: ChartType }
+): DataAdapter | undefined {
   if (ref.kind === "catalog") {
     return CATALOG_BY_ID.get(ref.id);
   }
 
   // form_question — build on-demand. Label/unit come from ChartConfig at
   // render time; this shell is enough for `materialize`.
+  const isPhoto = hint?.chartType === "photo_timeline";
+
   return buildFormQuestionAdapter({
     formType: ref.form_type,
     questionId: ref.question_id,
     label: ref.question_id, // placeholder; real label is on ChartConfig
+    ...(isPhoto ? { kind: "photo" as const } : {}),
   });
 }
 
@@ -246,7 +262,7 @@ export function validateChartConfigWithRegistry(
 ): { valid: true } | { valid: false; issues: z.core.$ZodIssue[] } {
   const issues: z.core.$ZodIssue[] = [];
 
-  const adapter = resolveAdapter(cfg.source);
+  const adapter = resolveAdapter(cfg.source, { chartType: cfg.chart_type });
 
   if (!adapter) {
     issues.push({

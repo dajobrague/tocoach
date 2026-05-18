@@ -153,6 +153,14 @@ export async function PUT(
   const parsed = chartsDocumentSchema.safeParse(body.charts);
 
   if (!parsed.success) {
+    console.error(
+      "[charts/clients PUT] structural validation failed\n" +
+        "Issues: " +
+        JSON.stringify(parsed.error.issues, null, 2) +
+        "\nBody.charts received: " +
+        JSON.stringify(body.charts, null, 2)
+    );
+
     return NextResponse.json(
       {
         success: false,
@@ -165,6 +173,11 @@ export async function PUT(
   const reg = validateDocumentWithRegistry(parsed.data.charts);
 
   if (!reg.valid) {
+    console.error(
+      "[charts/clients PUT] adapter validation failed",
+      JSON.stringify(reg.issues, null, 2)
+    );
+
     return NextResponse.json(
       {
         success: false,
