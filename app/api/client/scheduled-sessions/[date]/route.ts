@@ -53,6 +53,14 @@ interface ResolvedExercise {
   training_system: string | null;
   /** Per-set values when the override has them (Phase 3.5). Empty = uniform. */
   prescribed_sets: ResolvedSet[];
+  /**
+   * Pesos del último log finalizado del mismo cliente+ejercicio, indexados
+   * por posición de set (0..N-1). El form usa estos valores para prellenar
+   * inputs vacíos: si el trainer no prescribió peso, el cliente abre el
+   * modal con su último peso usado ya cargado y no pierde la progresión
+   * por olvido. `[]` cuando el cliente nunca finalizó ese ejercicio.
+   */
+  last_used_weights: Array<number | null>;
 }
 
 interface ResolvedDay {
@@ -193,15 +201,17 @@ export async function GET(
       const overrides = (ssRow.override_exercises ?? []) as any[];
 
       if (overrides.length > 0) {
+        const day = makeResolvedDay(
+          date,
+          "override",
+          ssRow.session as any,
+          overrides,
+          trainerRecommendedSessionId
+        );
+
         return NextResponse.json({
           success: true,
-          day: makeResolvedDay(
-            date,
-            "override",
-            ssRow.session as any,
-            overrides,
-            trainerRecommendedSessionId
-          ),
+          day: await enrichWithLastUsedWeights(supabase, clientId, day),
         });
       }
 
@@ -214,15 +224,17 @@ export async function GET(
       // an intentional rest day. Fall through to template step instead so
       // the trainer's microcycle template still applies.
       if (sessionRow && sessExercises.length > 0) {
+        const day = makeResolvedDay(
+          date,
+          "session",
+          sessionRow,
+          sessExercises,
+          trainerRecommendedSessionId
+        );
+
         return NextResponse.json({
           success: true,
-          day: makeResolvedDay(
-            date,
-            "session",
-            sessionRow,
-            sessExercises,
-            trainerRecommendedSessionId
-          ),
+          day: await enrichWithLastUsedWeights(supabase, clientId, day),
         });
       }
     }
@@ -251,15 +263,17 @@ export async function GET(
         .maybeSingle();
 
       if (sessionDetail) {
+        const day = makeResolvedDay(
+          date,
+          "template",
+          sessionDetail as any,
+          ((sessionDetail as any).session_exercises ?? []) as any[],
+          trainerRecommendedSessionId
+        );
+
         return NextResponse.json({
           success: true,
-          day: makeResolvedDay(
-            date,
-            "template",
-            sessionDetail as any,
-            ((sessionDetail as any).session_exercises ?? []) as any[],
-            trainerRecommendedSessionId
-          ),
+          day: await enrichWithLastUsedWeights(supabase, clientId, day),
         });
       }
     }
@@ -400,6 +414,12 @@ function makeResolvedDay(
         tempo: readStr("tempo"),
         training_system: readStr("training_system"),
         prescribed_sets: sets,
+        // Se completa después con enrichWithLastUsedWeights — la query
+        // necesita el supabase client y el clientId, que viven en el GET
+        // handler, así que makeResolvedDay deja el array vacío como
+        // placeholder y el caller hace el enriquecimiento en una sola
+        // query batch para todos los ejercicios del día.
+        last_used_weights: [] as Array<number | null>,
       };
     });
 
@@ -409,5 +429,73 @@ function makeResolvedDay(
     session: session ? { id: session.id, name: session.name } : null,
     exercises,
     trainer_recommended_session_id: trainerRecommendedSessionId,
+  };
+}
+
+/**
+ * Para cada ejercicio del día, busca el último exercise_log FINALIZADO
+ * del mismo cliente+ejercicio e inyecta los `weight_kg` de sus sets
+ * ordenados por `set_number`. Una sola query batch para todos los
+ * ejercicios del día. El cliente usa estos pesos para prellenar inputs
+ * vacíos del form de log (evita pérdida de progresión por olvido).
+ */
+async function enrichWithLastUsedWeights(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  day: ResolvedDay
+): Promise<ResolvedDay> {
+  const exerciseIds = day.exercises
+    .map((e) => e.exercise_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  if (exerciseIds.length === 0) return day;
+
+  const { data: logs, error } = await supabase
+    .from("exercise_logs")
+    .select(
+      "exercise_id, completed_at, exercise_log_sets(set_number, weight_kg)"
+    )
+    .eq("client_id", clientId)
+    .in("exercise_id", exerciseIds)
+    .not("finalized_at", "is", null)
+    .order("completed_at", { ascending: false });
+
+  if (error) {
+    console.warn(`${LOG_PREFIX} last_used_weights query failed:`, error);
+
+    return day;
+  }
+
+  // Conservar solo el log MÁS RECIENTE por exercise_id (la query viene
+  // ordenada desc, así que el primer hit gana).
+  const lastByExId = new Map<string, Array<number | null>>();
+
+  for (const log of (logs ?? []) as Array<{
+    exercise_id: string;
+    exercise_log_sets: Array<{ set_number: number; weight_kg: unknown }> | null;
+  }>) {
+    if (lastByExId.has(log.exercise_id)) continue;
+    const setsRaw = log.exercise_log_sets ?? [];
+    const sorted = [...setsRaw].sort((a, b) => a.set_number - b.set_number);
+    const weights = sorted.map((s) => {
+      const n =
+        typeof s.weight_kg === "number"
+          ? s.weight_kg
+          : s.weight_kg != null
+            ? Number(s.weight_kg)
+            : null;
+
+      return n != null && Number.isFinite(n) ? n : null;
+    });
+
+    lastByExId.set(log.exercise_id, weights);
+  }
+
+  return {
+    ...day,
+    exercises: day.exercises.map((ex) => ({
+      ...ex,
+      last_used_weights: lastByExId.get(ex.exercise_id) ?? [],
+    })),
   };
 }

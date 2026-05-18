@@ -33,6 +33,13 @@ export interface ResolvedExercise {
   tempo: string | null;
   training_system: string | null;
   prescribed_sets: ResolvedSet[];
+  /**
+   * Pesos del último log finalizado del mismo ejercicio (indexados por
+   * posición de set, 0..N-1). El form de log usa estos valores para
+   * prellenar inputs vacíos: si la prescripción no trae peso, el
+   * cliente abre el modal con su última carga ya cargada.
+   */
+  last_used_weights: Array<number | null>;
 }
 
 export interface ResolvedDay {

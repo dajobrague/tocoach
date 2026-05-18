@@ -63,8 +63,29 @@ interface ScheduledSessionResponse {
   scheduled_date: string;
   status: string;
   completion_date: string | null;
+  /**
+   * Sesión que se muestra como prescripción del día. Cuando el cliente
+   * divergió del microciclo (entrenó otra sesión), `session` lleva la
+   * sesión que ELIGIÓ entrenar (no la del template) para que la vista del
+   * trainer muestre lo que pasó realmente: ejercicios, métricas y logs
+   * alineados con la sesión efectivamente ejecutada.
+   */
   session: SessionWithExercises | null;
   override_exercises: OverrideExercise[];
+  /**
+   * Sesión que el microciclo originalmente recomendaba para esta fecha,
+   * presente solo cuando el cliente divergió. La UI la usa para mostrar un
+   * chip informativo "Originalmente prescrito: X" sin pisar la prescripción
+   * visible (ya reemplazada por lo que realmente entrenó).
+   * `null` cuando no hay divergencia.
+   */
+  originally_prescribed_session: SessionWithExercises | null;
+  /**
+   * Marca quién creó la fila `scheduled_sessions` que respalda esta fecha.
+   * 'trainer' = override explícito o template vacío; 'client' = el cliente
+   * loggeó y no había override previo. La UI lo usa para tagging.
+   */
+  prescribed_by: "trainer" | "client" | null;
 }
 
 function diffDays(fromYmd: string, toYmd: string): number {
@@ -128,11 +149,19 @@ export async function GET(
     }
 
     // 1. Real scheduled_sessions rows for the range (status, completion_date,
-    //    and the linked session prescription).
+    //    prescribed_by, y la sesión vinculada con sus ejercicios prescritos).
+    //
+    // Traemos TODAS las filas (trainer y client), porque el merge en (3)
+    // necesita distinguir tres escenarios:
+    //   - prescribed_by='trainer': la prescripción es del trainer. Tal cual.
+    //   - prescribed_by='client' + session matches template: el cliente entrenó
+    //     lo recomendado. Mostrar status/completion_date como completado.
+    //   - prescribed_by='client' + session diverge del template: split view —
+    //     prescripción del template + badge "cliente entrenó X".
     let realQuery = supabase
       .from("scheduled_sessions")
       .select(
-        `id, scheduled_date, status, completion_date,
+        `id, scheduled_date, status, completion_date, prescribed_by,
          session:sessions(
            id, name,
            session_exercises(
@@ -150,14 +179,6 @@ export async function GET(
          )`
       )
       .eq("client_id", clientId)
-      // Solo prescripciones del trainer (override per-fecha o session
-      // swap explícito). Filas con prescribed_by='client' son creadas
-      // automáticamente cuando el cliente loguea una sesión distinta a
-      // la recomendada — no son prescripción del trainer y no deben
-      // pisar el microciclo template en la vista de Métricas. Los
-      // exercise_logs ligados a esas filas siguen llegando vía el
-      // endpoint de logs y use-week-metrics los detecta como off-plan.
-      .eq("prescribed_by", "trainer")
       // Skip cancelled/rescheduled rows: they should not count toward
       // adherence "prescribed" (the day was explicitly retired by the
       // trainer or client), otherwise the day stays "0/N pendiente"
@@ -188,6 +209,10 @@ export async function GET(
       []) as unknown as ScheduledSessionResponse[];
 
     for (const row of realRowsTyped) {
+      // Defaults para campos que el merge agrega abajo
+      // (originally_prescribed_session arranca null y se setea si detectamos
+      // divergencia con el template del microciclo).
+      row.originally_prescribed_session = null;
       realByDate.set(row.scheduled_date, row);
     }
 
@@ -207,7 +232,21 @@ export async function GET(
       );
     }
 
-    // 3. Merge: real rows beat template rows for the same date.
+    // 3. Merge: política por fecha
+    //    - solo template (cliente no entrenó): usar template.
+    //    - solo real (no hay template ese día): usar real.
+    //    - ambos + real es 'trainer' (override explícito): usar real, ignorar
+    //      template. El override del trainer manda.
+    //    - ambos + real es 'client' + sesión coincide con template: hidratar
+    //      template con status/completion_date/id del real → trainer ve que
+    //      el cliente entrenó lo recomendado.
+    //    - ambos + real es 'client' + sesión diverge del template: usar la
+    //      sesión REAL como prescripción del día (lo que el cliente entrenó),
+    //      y exponer el template como `originally_prescribed_session` para que
+    //      la UI muestre el chip informativo "Originalmente prescrito: X".
+    //      Métricas y logs se calculan contra lo que efectivamente entrenó,
+    //      no contra lo que se esperaba — así el trainer ve "sí entrenó X"
+    //      en vez de "0% pendiente" cuando el cliente cumplió otro día.
     const merged: ScheduledSessionResponse[] = [];
     const allDates = new Set<string>([
       ...realByDate.keys(),
@@ -215,7 +254,41 @@ export async function GET(
     ]);
 
     for (const date of allDates) {
-      merged.push(realByDate.get(date) ?? templateByDate.get(date)!);
+      const real = realByDate.get(date);
+      const template = templateByDate.get(date);
+
+      if (!real) {
+        merged.push(template!);
+        continue;
+      }
+      if (!template) {
+        merged.push(real);
+        continue;
+      }
+      if (real.prescribed_by === "trainer") {
+        merged.push(real);
+        continue;
+      }
+
+      // real.prescribed_by === 'client': la fila la creó el cliente al
+      // loguear. Si la sesión que eligió diverge del template, esa elección
+      // pasa al frente como prescripción visible — el template queda como
+      // contexto auxiliar.
+      const templateSessionId = template.session?.id ?? null;
+      const realSessionId = real.session?.id ?? null;
+      const diverged =
+        realSessionId != null && realSessionId !== templateSessionId;
+
+      if (diverged) {
+        merged.push({
+          ...real,
+          originally_prescribed_session: template.session,
+        });
+      } else {
+        // Cliente entrenó la sesión recomendada: usar real (que ya tiene
+        // status/completion_date/id correctos). Sin chip de divergencia.
+        merged.push(real);
+      }
     }
 
     merged.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
@@ -326,6 +399,8 @@ async function materializeTemplate(
         completion_date: null,
         session: sessionDetail,
         override_exercises: [],
+        originally_prescribed_session: null,
+        prescribed_by: null,
       });
     }
   }

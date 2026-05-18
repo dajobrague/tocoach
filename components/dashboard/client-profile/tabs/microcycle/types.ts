@@ -49,26 +49,39 @@ export interface OverrideExerciseRow {
   exercise: { id: string; name: string; category: string };
 }
 
+/** A session as it travels back from the trainer endpoint (template or actual). */
+export interface SessionLite {
+  id: string;
+  name: string;
+  session_exercises: Array<{
+    id: string;
+    exercise_order: number;
+    sets: number | null;
+    reps: string | null;
+    weight_kg: number | null;
+    exercise: { id: string; name: string; category: string };
+  }>;
+}
+
 /** Result of the API: a scheduled_sessions row with its session + exercises. */
 export interface ScheduledSessionRow {
   id: string;
   scheduled_date: string;
   status: "scheduled" | "completed" | "missed" | "cancelled" | "rescheduled";
   completion_date: string | null;
-  session: {
-    id: string;
-    name: string;
-    session_exercises: Array<{
-      id: string;
-      exercise_order: number;
-      sets: number | null;
-      reps: string | null;
-      weight_kg: number | null;
-      exercise: { id: string; name: string; category: string };
-    }>;
-  } | null;
+  session: SessionLite | null;
   /** Override rows — when present, they win over session.session_exercises. */
   override_exercises: OverrideExerciseRow[];
+  /**
+   * Sesión que el microciclo originalmente recomendaba para esta fecha.
+   * Presente solo cuando el cliente divergió: la sesión visible (`session`)
+   * ya es la que el cliente entrenó, y `originally_prescribed_session`
+   * conserva la del template como referencia para mostrar un chip
+   * informativo "Originalmente prescrito: X" en la UI.
+   */
+  originally_prescribed_session?: SessionLite | null;
+  /** Autoría de la fila scheduled_sessions: 'trainer', 'client', o null para template virtual. */
+  prescribed_by?: "trainer" | "client" | null;
 }
 
 export type DayClassification =

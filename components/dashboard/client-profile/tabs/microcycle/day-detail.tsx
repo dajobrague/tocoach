@@ -422,6 +422,22 @@ export function DayDetail({
             <Icon icon="solar:pen-linear" width={16} />
           </button>
         </div>
+        {day.scheduledSession?.originally_prescribed_session ? (
+          <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
+            <Icon
+              className="mt-0.5 shrink-0"
+              icon="solar:info-circle-linear"
+              width={12}
+            />
+            <span>
+              Originalmente prescrito:{" "}
+              <span className="font-semibold">
+                {day.scheduledSession.originally_prescribed_session.name}
+              </span>
+              . El cliente cambió de sesión.
+            </span>
+          </div>
+        ) : null}
         {showFuture ? (
           <p className="text-xs text-gray-500">
             Día programado — aún por entrenarse.

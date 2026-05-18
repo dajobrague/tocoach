@@ -42,6 +42,12 @@ interface ExerciseLike {
     reps: string | null;
     weightKg: number | null;
   }>;
+  /**
+   * Pesos del último log finalizado del cliente para este ejercicio
+   * (indexados por set position). Se usan como fallback para prellenar
+   * inputs del form cuando la prescripción no trae peso.
+   */
+  lastUsedWeights?: Array<number | null>;
   // Cardio
   duration?: number;
   distance?: number;
@@ -398,7 +404,17 @@ function formatExerciseStats(
       const sets = exercise.sets;
       const reps = exercise.reps?.toString().trim();
 
-      if (sets && reps) {
+      // Convención per-set codificada en uniform reps: "12 | 12 | 10 | 8"
+      // → render legible "12 · 12 · 10 · 8" (sin el "4 ×" delante que
+      // duplica info, y mejor que mostrar la pipe cruda en la card).
+      if (reps && reps.includes("|")) {
+        const perSet = reps
+          .split("|")
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0);
+
+        if (perSet.length > 0) parts.push(perSet.join(" · "));
+      } else if (sets && reps) {
         parts.push(`${sets} × ${reps}`);
       } else if (sets) {
         parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
@@ -477,7 +493,11 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   }
   if (r.tempo) out.tempo = r.tempo;
   if (r.training_system) out.trainingSystem = r.training_system;
+  if (r.rest_seconds != null) out.rest = `${Math.round(r.rest_seconds)}s`;
   if (perSet) out.prescribedSets = perSet;
+  if (r.last_used_weights && r.last_used_weights.length > 0) {
+    out.lastUsedWeights = r.last_used_weights;
+  }
 
   return out;
 }

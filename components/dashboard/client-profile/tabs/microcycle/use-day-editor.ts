@@ -40,6 +40,12 @@ interface UseDayEditor {
   sessionId: string | null;
   hasChanges: boolean;
   isValid: boolean;
+  /**
+   * Mensaje descriptivo del primer problema de validación encontrado, o null
+   * si todas las filas son válidas. La UI lo muestra debajo del botón Guardar
+   * para que el trainer entienda por qué está deshabilitado.
+   */
+  validationError: string | null;
   saving: boolean;
   resetting: boolean;
   error: string | null;
@@ -307,24 +313,37 @@ export function useDayEditor({
     []
   );
 
-  const isValid = useMemo(() => {
-    for (const r of rows) {
+  const validationError = useMemo<string | null>(() => {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]!;
+      const label = `${r.name}`;
+
       if (r.mode === "uniform") {
-        if (r.sets != null && r.sets <= 0) return false;
-        if (r.sets != null && r.sets > 0 && (!r.reps || r.reps.trim() === ""))
-          return false;
-        if (r.weightKg != null && r.weightKg < 0) return false;
+        if (r.sets != null && r.sets <= 0) {
+          return `${label}: las series deben ser mayores a 0.`;
+        }
+        if (r.sets != null && r.sets > 0 && (!r.reps || r.reps.trim() === "")) {
+          return `${label}: falta reps.`;
+        }
+        if (r.weightKg != null && r.weightKg < 0) {
+          return `${label}: el peso no puede ser negativo.`;
+        }
       } else {
-        if (r.setsDetail.length === 0) return false;
+        if (r.setsDetail.length === 0) {
+          return `${label}: agrega al menos un set o vuelve a modo uniforme.`;
+        }
         for (const s of r.setsDetail) {
-          if (!s.reps || s.reps.trim() === "") return false;
-          if (s.weightKg != null && s.weightKg < 0) return false;
+          if (s.weightKg != null && s.weightKg < 0) {
+            return `${label}: el set ${s.setNumber} tiene peso negativo.`;
+          }
         }
       }
     }
 
-    return true;
+    return null;
   }, [rows]);
+
+  const isValid = validationError === null;
 
   const hasChanges = useMemo(() => {
     if (sessionId !== initialSessionId) return true;
@@ -487,6 +506,7 @@ export function useDayEditor({
     sessionId,
     hasChanges,
     isValid,
+    validationError,
     saving,
     resetting,
     error,

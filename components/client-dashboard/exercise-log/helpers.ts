@@ -24,6 +24,12 @@ export interface ExerciseShape {
     reps: string | null;
     weightKg: number | null;
   }>;
+  /**
+   * Pesos del último log finalizado del cliente para este ejercicio
+   * (indexados por set position). El form los usa para prellenar inputs
+   * de peso vacíos tras aplicar la prescripción y/o el log existente.
+   */
+  lastUsedWeights?: Array<number | null>;
   duration?: number;
   distance?: number;
   intensity?: string;
@@ -36,6 +42,32 @@ export function isExerciseCardio(exercise: ExerciseShape): boolean {
     exercise.category === "cardio" ||
     !!(exercise.duration || exercise.distance || exercise.cardioType)
   );
+}
+
+/**
+ * Convención usada por varios trainers para codificar prescripción per-set
+ * dentro del campo uniform reps: "12 | 12 | 10 | 8" indica 4 sets con esos
+ * reps individuales. El cliente debe desglosar el string en una entrada
+ * por set en vez de mostrar el pipe completo en cada input.
+ *
+ * Reglas:
+ *   - Sin pipe: devuelve [reps, reps, ..., reps] (count veces, comportamiento uniforme).
+ *   - Con pipe: split por `|`, trim espacios, devuelve hasta `count` partes
+ *     rellenando con "" si faltan, descartando si sobran.
+ */
+export function parsePipeReps(reps: string, count: number): string[] {
+  const safeCount = Math.max(1, count);
+
+  if (!reps.includes("|")) {
+    return Array.from({ length: safeCount }, () => reps);
+  }
+
+  const parts = reps
+    .split("|")
+    .map((p) => p.trim())
+    .filter((_, i) => i < safeCount);
+
+  return Array.from({ length: safeCount }, (_, i) => parts[i] ?? "");
 }
 
 export function defaultSet(): SetDraft {
@@ -112,16 +144,41 @@ export function buildBaseFormData(
     }));
   } else {
     // Uniform prescription: build N empty rows, prefilled with the trainer's
-    // uniform reps/weight when present (Phase 3 override).
+    // uniform reps/weight when present (Phase 3 override). Cuando reps lleva
+    // formato pipe-separated ("12 | 12 | 10 | 8") cada set toma su valor
+    // individual; sin pipe, los N sets comparten el mismo reps.
     const count = exercise.sets || 1;
     const repsStr = exercise.reps != null ? String(exercise.reps) : "";
     const weightStr =
       exercise.weightKg != null ? String(exercise.weightKg) : "";
+    const perSetReps = parsePipeReps(repsStr, count);
 
-    sets = Array.from({ length: count }, () => ({
-      reps: repsStr,
+    sets = Array.from({ length: count }, (_, i) => ({
+      reps: perSetReps[i] ?? "",
       weight: weightStr,
     }));
+  }
+
+  // Fallback: prellenar pesos vacíos con el último valor usado por el
+  // cliente en este ejercicio. Aplica a CUALQUIER path anterior — un set
+  // sin peso (autosave previo sin completar, prescripción sin weight, o
+  // simple olvido del cliente) hereda el peso del último log finalizado
+  // del mismo ejercicio. Si una posición no existe en el log anterior,
+  // cae al último peso disponible para no dejar el input vacío.
+  if (exercise.lastUsedWeights && exercise.lastUsedWeights.length > 0) {
+    const lastNonNull = [...exercise.lastUsedWeights]
+      .reverse()
+      .find((w) => w != null);
+
+    sets = sets.map((s, i) => {
+      if (s.weight && s.weight.trim() !== "") return s;
+      const positional = exercise.lastUsedWeights?.[i] ?? null;
+      const fallback = positional ?? lastNonNull ?? null;
+
+      if (fallback == null) return s;
+
+      return { ...s, weight: String(fallback) };
+    });
   }
 
   return {

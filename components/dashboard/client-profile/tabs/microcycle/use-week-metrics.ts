@@ -78,6 +78,65 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
     }));
 }
 
+/**
+ * Cuando el cliente divergió del microciclo, la "sesión" declarada en
+ * `scheduled_sessions` no representa fielmente lo que entrenó: el cliente
+ * pudo haber elegido "Día 1" pero loggeado ejercicios de "Día 2", o haber
+ * combinado ejercicios de varias sesiones. Construimos la prescripción
+ * directamente desde los logs (cada ejercicio loggeado = una tarjeta) y
+ * heredamos sets/reps/weight de cualquier `session_exercise` del propio
+ * row.session que matchee por exercise_id. Si no matchea, queda sin
+ * prescripción específica — el ejercicio se ve como "extra" pero dentro
+ * del mismo listado, sin sección "fuera del plan".
+ */
+function toPrescribedFromLogs(
+  row: ScheduledSessionRow,
+  dayLogs: ExerciseLog[]
+): PrescribedExercise[] {
+  // Index session_exercises por exercise_id para enriquecer logs.
+  const prescriptionByExId = new Map<
+    string,
+    { sets: number | null; reps: string | null; weight_kg: number | null }
+  >();
+
+  if (row.session) {
+    for (const se of row.session.session_exercises) {
+      prescriptionByExId.set(se.exercise.id, {
+        sets: se.sets,
+        reps: se.reps,
+        weight_kg: se.weight_kg,
+      });
+    }
+  }
+
+  // Ejercicio único por exercise_id, conservando orden del primer log
+  // (el cliente normalmente entrena secuencialmente).
+  const seen = new Set<string>();
+  const ordered: ExerciseLog[] = [];
+
+  for (const log of [...dayLogs].sort((a, b) =>
+    a.completed_at.localeCompare(b.completed_at)
+  )) {
+    if (!log.exercise_id || seen.has(log.exercise_id)) continue;
+    seen.add(log.exercise_id);
+    ordered.push(log);
+  }
+
+  return ordered.map((log) => {
+    const prescription = prescriptionByExId.get(log.exercise_id) ?? null;
+
+    return {
+      exerciseId: log.exercise_id,
+      name: log.exercises?.name ?? "Ejercicio",
+      category: log.exercises?.category ?? "strength",
+      prescribedSets: prescription?.sets ?? 0,
+      prescribedReps: prescription?.reps ?? null,
+      prescribedWeightKg: prescription?.weight_kg ?? null,
+      perSet: [],
+    };
+  });
+}
+
 function buildWeekMetrics(
   weekStart: Date,
   scheduled: ScheduledSessionRow[],
@@ -103,8 +162,20 @@ function buildWeekMetrics(
     const date = addDays(weekStart, i);
     const ymd = getLocalYmd(date);
     const scheduledSession = scheduledByDate.get(ymd) ?? null;
-    const prescribed = scheduledSession ? toPrescribed(scheduledSession) : [];
     const dayLogs = logsByDate.get(ymd) ?? [];
+
+    // Cuando hay divergencia (cliente creó la fila y eligió una sesión
+    // distinta al template), derivar la prescripción visible de los logs:
+    // así el trainer ve EXACTAMENTE lo que el cliente entrenó como
+    // "prescripción del día" — sin sección "fuera del plan", sin huecos.
+    const isDivergent =
+      !!scheduledSession?.originally_prescribed_session && dayLogs.length > 0;
+    const prescribed = scheduledSession
+      ? isDivergent
+        ? toPrescribedFromLogs(scheduledSession, dayLogs)
+        : toPrescribed(scheduledSession)
+      : [];
+
     const adherence = computeDayAdherence(prescribed, dayLogs);
     const isFuture = ymd > todayYmd;
     const classification = classifyDay(
@@ -136,9 +207,13 @@ function buildWeekMetrics(
       continue;
     }
 
-    // Scheduled session exists. Logs whose exercise_id is NOT in the day's
-    // prescribed list are still off-plan ("did something extra"). Previously
-    // these were silently dropped, so the trainer couldn't see them.
+    // En días divergentes la "prescripción visible" ya se derivó de los
+    // logs (cada ejercicio entrenado es una tarjeta), así que por definición
+    // no hay huérfanos — todo lo que entrenó ya aparece arriba.
+    if (sched.originally_prescribed_session) continue;
+
+    // Día no divergente: logs cuyo exercise_id no está en la prescripción
+    // son off-plan ("did something extra"). Antes se descartaban silenciosos.
     const prescribed = toPrescribed(sched);
     const prescribedIds = new Set(prescribed.map((p) => p.exerciseId));
     const offPlan = dayLogs.filter(

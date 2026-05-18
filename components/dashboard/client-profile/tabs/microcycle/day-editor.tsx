@@ -281,6 +281,13 @@ export function DayEditor({
           </div>
         ) : null}
 
+        {editor.validationError && editor.hasChanges ? (
+          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex items-center gap-1">
+            <Icon icon="solar:danger-triangle-linear" width={12} />
+            {editor.validationError}
+          </div>
+        ) : null}
+
         <DndContext
           collisionDetection={closestCenter}
           sensors={sensors}
