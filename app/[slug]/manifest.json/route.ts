@@ -41,10 +41,12 @@ export async function GET(
     );
   }
 
-  const version = iconVersion(logoUrl, surfaceColor);
+  const version = logoUrl ? iconVersion(logoUrl, surfaceColor) : "";
 
   const icons = TENANT_MANIFEST_ICON_SIZES.map((size) => ({
-    src: tenantIconUrl(slug, size, version),
+    src: logoUrl
+      ? tenantIconUrl(slug, size, version)
+      : `/icons/icon-${size}x${size}.png`,
     sizes: `${size}x${size}`,
     type: "image/png",
     purpose: "maskable any",
