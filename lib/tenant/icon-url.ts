@@ -58,7 +58,10 @@ export function resolveSurfaceColor(
 ): string {
   const candidate = themeJson?.colors?.surface?.["1"];
 
-  if (typeof candidate === "string" && /^#[0-9a-fA-F]{3,8}$/.test(candidate)) {
+  if (
+    typeof candidate === "string" &&
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(candidate)
+  ) {
     return candidate;
   }
 
