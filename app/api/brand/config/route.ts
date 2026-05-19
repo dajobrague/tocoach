@@ -60,6 +60,24 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Validates that a value intended for persistence is a real HTTPS URL.
+ * Rejects in-browser blob: URLs, data: URLs, plain strings, and anything
+ * else that would silently break the second a client closes their tab.
+ */
+function isPersistableImageUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // PATCH: Update brand configuration
 export async function PATCH(request: NextRequest) {
   try {
@@ -71,6 +89,35 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
     const supabase = createSupabaseClient();
+
+    // Reject non-https logo URLs (e.g. browser blob: previews) before they
+    // get persisted and break for every other viewer once the uploader
+    // closes their tab.
+    if (body.logo_url !== undefined && body.logo_url !== null) {
+      if (!isPersistableImageUrl(body.logo_url)) {
+        return NextResponse.json(
+          {
+            error:
+              "logo_url must be an https:// URL. Wait for upload to complete before saving.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (
+      body.assets?.logo !== undefined &&
+      body.assets?.logo !== null &&
+      !isPersistableImageUrl(body.assets.logo)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "assets.logo must be an https:// URL. Wait for upload to complete before saving.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Get current tenant
     const { data: tenant, error: tenantError } = await supabase
