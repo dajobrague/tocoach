@@ -29,9 +29,14 @@ import { isServedIconSize, resolveSurfaceColor } from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
 export const runtime = "nodejs";
+// force-dynamic prevents Next from trying to ISR/static-cache this route.
+// CDN caching is driven entirely by the Cache-Control headers below.
 export const dynamic = "force-dynamic";
 
 const LOGO_FETCH_TIMEOUT_MS = 3000;
+// Defensive cap. The upload route at app/api/setup/upload-logo enforces
+// a 2MB limit on writes; this is a 2x safety margin in case that ever
+// drifts or a stored URL points at something larger.
 const LOGO_MAX_BYTES = 4 * 1024 * 1024;
 const SAFE_ZONE_RATIO = 0.7;
 
@@ -40,6 +45,32 @@ const FALLBACK_CACHE = "public, max-age=300";
 
 function correlationId(): string {
   return `icons-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function logoUrlIsAllowed(rawUrl: string): boolean {
+  const allowedHost = (() => {
+    try {
+      return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").hostname;
+    } catch {
+      return "";
+    }
+  })();
+
+  if (!allowedHost) return false;
+
+  try {
+    const parsed = new URL(rawUrl);
+
+    if (parsed.protocol !== "https:") return false;
+
+    // Allow exact match or any subdomain of the Supabase project host.
+    return (
+      parsed.hostname === allowedHost ||
+      parsed.hostname.endsWith(`.${allowedHost}`)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function serveDefault(
@@ -64,6 +95,8 @@ async function serveDefault(
     // Stream so we don't buffer the file into memory.
     const stream = createReadStream(file);
 
+    // Node Readable is accepted by NextResponse on the nodejs runtime; the
+    // cast to ReadableStream satisfies the (web) type signature.
     return new NextResponse(stream as unknown as ReadableStream, {
       status: 200,
       headers: {
@@ -123,7 +156,7 @@ async function fetchLogoBytes(
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; size: string }> }
 ): Promise<NextResponse> {
   const cid = correlationId();
@@ -131,15 +164,18 @@ export async function GET(
 
   // Strip the trailing ".png" the route path embeds.
   const match = /^(\d+)\.png$/.exec(rawSize);
+  const sizeStr = match?.[1];
 
-  if (!match) {
+  if (!sizeStr) {
     return new NextResponse("Invalid size", { status: 400 });
   }
-  const size = Number(match[1]);
+  const size = Number(sizeStr);
 
   if (!isServedIconSize(size)) {
     return new NextResponse("Unsupported size", { status: 400 });
   }
+
+  const hasVersion = req.nextUrl.searchParams.has("v");
 
   let tenant;
 
@@ -162,6 +198,14 @@ export async function GET(
 
   if (!logoUrl) {
     return serveDefault(size, cid, "no-logo");
+  }
+
+  if (!logoUrlIsAllowed(logoUrl)) {
+    console.warn(`[Icons] logo url not allowed: ${logoUrl}`, {
+      correlationId: cid,
+    });
+
+    return serveDefault(size, cid, "logo-url-not-allowed");
   }
 
   const logo = await fetchLogoBytes(logoUrl, cid);
@@ -191,12 +235,14 @@ export async function GET(
       .withMetadata({})
       .toBuffer();
 
+    const successCache = hasVersion ? IMMUTABLE_CACHE : FALLBACK_CACHE;
+
     return new NextResponse(png, {
       status: 200,
       headers: {
         "Content-Type": "image/png",
         "Content-Length": String(png.length),
-        "Cache-Control": IMMUTABLE_CACHE,
+        "Cache-Control": successCache,
         "X-TopCoach-Icon-Source": "dynamic",
       },
     });
