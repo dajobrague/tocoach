@@ -13,6 +13,11 @@ import { TenantProvider } from "@/components/tenant-provider";
 import { fontSans } from "@/config/fonts";
 import { siteConfig } from "@/config/site";
 import { getSafeThemeSlug } from "@/lib/tenant/fallbacks";
+import {
+  iconVersion,
+  resolveSurfaceColor,
+  tenantIconUrl,
+} from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
 
@@ -41,6 +46,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const pathname = headersList.get("x-pathname") || "";
 
   let pageTitle = siteConfig.name;
+  let appleIcon = "/icons/icon-180x180.png"; // TopCoach default
 
   // Check if it's an admin route
   if (pathname.startsWith("/admin")) {
@@ -60,6 +66,15 @@ export async function generateMetadata(): Promise<Metadata> {
           tenantContext.theme_json?.meta?.name || tenantContext.slug;
 
         pageTitle = `${tenantName} - TopCoach App`;
+
+        const logoUrl = tenantContext.logo_url ?? "";
+
+        if (logoUrl) {
+          const surface = resolveSurfaceColor(tenantContext.theme_json);
+          const version = iconVersion(logoUrl, surface);
+
+          appleIcon = tenantIconUrl(tenantSlug, 180, version);
+        }
       }
     } catch (error) {
       // Fallback to slug if tenant load fails
@@ -79,7 +94,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: manifestUrl,
     icons: {
       icon: "/favicon.ico",
-      apple: "/icons/icon-180x180.png",
+      apple: appleIcon,
     },
     appleWebApp: {
       capable: true,
