@@ -416,8 +416,7 @@ export default function ProfileTab({
             Comunidad
           </h3>
           <p className="text-sm text-gray-500 mb-4">
-            Configura la URL de tu comunidad (Go High Level u otra plataforma)
-            para mostrarla a tus clientes
+            Configura la URL de tu comunidad para mostrarla a tus clientes
           </p>
           <Input
             description="Los clientes verán esta página en una pestaña 'Comunidad' en su dashboard"
