@@ -29,8 +29,16 @@ export async function GET(
       logoUrl = tenantContext.logo_url ?? "";
       surfaceColor = resolveSurfaceColor(tenantContext.theme_json);
     }
-  } catch {
-    // Fall back to defaults
+  } catch (error) {
+    const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    console.warn(
+      `[Manifest] loadTenantContext failed for ${slug}, falling back to defaults`,
+      {
+        correlationId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    );
   }
 
   const version = iconVersion(logoUrl, surfaceColor);
