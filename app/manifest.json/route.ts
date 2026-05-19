@@ -14,19 +14,18 @@ export async function GET() {
   }));
 
   const manifest = {
-    id: "https://app.topcoach.io/trainer",
-    name: "TopCoach Trainer",
-    short_name: "Trainer",
-    description: "TopCoach — Panel de entrenadores",
-    start_url: "/trainer/login",
-    scope: "/trainer",
+    name: "TopCoach - Personal Training Platform",
+    short_name: "TopCoach",
+    description: "Professional personal training management platform",
+    start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#000000",
-    orientation: "any",
+    orientation: "portrait-primary",
+    scope: "/",
     icons,
     categories: ["health", "fitness", "productivity", "business"],
-    lang: "es",
+    lang: "en",
     dir: "ltr",
   };
 

@@ -15,10 +15,10 @@ import { siteConfig } from "@/config/site";
 import { getSafeThemeSlug } from "@/lib/tenant/fallbacks";
 import {
   APPLE_TOUCH_ICON_SIZE,
-  DEFAULT_APPLE_TOUCH_ICON,
   iconVersion,
   resolveSurfaceColor,
   tenantIconUrl,
+  topcoachIconUrl,
 } from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
@@ -48,7 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const pathname = headersList.get("x-pathname") || "";
 
   let pageTitle = siteConfig.name;
-  let appleIcon: string = DEFAULT_APPLE_TOUCH_ICON;
+  let appleIcon: string = topcoachIconUrl(APPLE_TOUCH_ICON_SIZE);
 
   // Check if it's an admin route
   if (pathname.startsWith("/admin")) {

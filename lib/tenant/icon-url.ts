@@ -1,5 +1,7 @@
 // lib/tenant/icon-url.ts
 import { createHash } from "crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * The PNG sizes emitted in the per-tenant manifest icons array.
@@ -29,10 +31,45 @@ export type ServedIconSize = (typeof TENANT_ICON_SERVED_SIZES)[number];
 export const APPLE_TOUCH_ICON_SIZE = 180 as const;
 
 /**
- * Static fallback path served as apple-touch-icon when no tenant logo
- * applies (trainer/admin/root paths, or tenant without logo_url).
+ * Stable version string for the static TopCoach icons under
+ * /public/icons. Computed once at module load by hashing the
+ * canonical 512x512 PNG.
+ *
+ * All 9 sizes are regenerated together by
+ * scripts/generate-topcoach-icons.mjs, so a change to the source
+ * mark produces new bytes for icon-512x512.png and bumps this hash —
+ * which then bumps every static icon URL we emit, prompting Chrome
+ * (Android/desktop WebAPK) to refresh installed app icons on its
+ * next manifest re-check without requiring a reinstall.
+ *
+ * iOS still won't refresh apple-touch-icon after install; that's a
+ * platform limitation, not something we can solve with cache busting.
  */
-export const DEFAULT_APPLE_TOUCH_ICON = "/icons/icon-180x180.png";
+function computeTopcoachIconVersion(): string {
+  try {
+    // Read as hex string to sidestep cross-version Buffer/Uint8Array
+    // typing friction with crypto.createHash().update(...).
+    const data = readFileSync(
+      join(process.cwd(), "public", "icons", "icon-512x512.png"),
+      "hex"
+    );
+
+    return createHash("sha1").update(data, "hex").digest("hex").slice(0, 10);
+  } catch {
+    return "v1";
+  }
+}
+
+export const TOPCOACH_ICON_VERSION = computeTopcoachIconVersion();
+
+/**
+ * URL for a static TopCoach icon, content-versioned via ?v=.
+ * Used in /public/manifest.json (root), /trainer/manifest.json, and
+ * as the default apple-touch-icon in app/layout.tsx.
+ */
+export function topcoachIconUrl(size: number): string {
+  return `/icons/icon-${size}x${size}.png?v=${TOPCOACH_ICON_VERSION}`;
+}
 
 export function isServedIconSize(n: number): n is ServedIconSize {
   return (TENANT_ICON_SERVED_SIZES as readonly number[]).includes(n);
