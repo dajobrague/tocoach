@@ -328,5 +328,15 @@ Already-installed PWAs running off the old placeholder icon won't refresh until 
 
 1. Merge static TopCoach icon replacement first (low risk — purely content swap, trainer/root paths look correct immediately).
 2. Merge dynamic endpoint + manifest/layout changes (client paths now pick up tenant logos).
-3. Existing installs continue to show old icons until users remove + re-add. New installs see the new behavior. No user-visible regressions on existing installs.
-4. No feature flag — the change is purely additive (new endpoint + content swap of existing static files). Rollback = revert.
+3. No feature flag — the change is purely additive (new endpoint + content swap of existing static files). Rollback = revert.
+
+### Icon propagation to existing installs
+
+| Install type                                       | Behavior on rollout                                                                                    | Timing                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| Brand-new install (any platform)                   | Sees new icon                                                                                          | Immediate                          |
+| Existing Android Chrome install (WebAPK)           | Chrome's periodic manifest re-fetch detects new icon URLs and regenerates the home-screen shortcut     | Automatic, typically ~24h          |
+| Existing desktop PWA install (Chrome/Edge)         | Same manifest refresh mechanism                                                                        | Automatic, ~1–2 days               |
+| Existing iOS Safari install ("Add to Home Screen") | iOS captures the icon at install time and never re-fetches; no manifest field or API can force refresh | Stuck until user removes + re-adds |
+
+Trainers will communicate the iOS limitation to their clients out-of-band. No in-app refresh banner ships in v1.
