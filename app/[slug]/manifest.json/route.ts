@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  TENANT_MANIFEST_ICON_SIZES,
+  iconVersion,
+  resolveSurfaceColor,
+  tenantIconUrl,
+} from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
 export async function GET(
@@ -10,6 +16,8 @@ export async function GET(
 
   let appName = "TopCoach";
   let shortName = "TopCoach";
+  let logoUrl = "";
+  let surfaceColor = "#ffffff";
 
   try {
     const tenantContext = await loadTenantContext(slug);
@@ -18,10 +26,21 @@ export async function GET(
       appName =
         tenantContext.theme_json?.meta?.name || tenantContext.slug || appName;
       shortName = appName;
+      logoUrl = tenantContext.logo_url ?? "";
+      surfaceColor = resolveSurfaceColor(tenantContext.theme_json);
     }
   } catch {
     // Fall back to defaults
   }
+
+  const version = iconVersion(logoUrl, surfaceColor);
+
+  const icons = TENANT_MANIFEST_ICON_SIZES.map((size) => ({
+    src: tenantIconUrl(slug, size, version),
+    sizes: `${size}x${size}`,
+    type: "image/png",
+    purpose: "maskable any",
+  }));
 
   const manifest = {
     id: `https://app.topcoach.io/${slug}`,
@@ -34,56 +53,7 @@ export async function GET(
     background_color: "#ffffff",
     theme_color: "#000000",
     orientation: "any",
-    icons: [
-      {
-        src: "/icons/icon-72x72.png",
-        sizes: "72x72",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-96x96.png",
-        sizes: "96x96",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-128x128.png",
-        sizes: "128x128",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-144x144.png",
-        sizes: "144x144",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-152x152.png",
-        sizes: "152x152",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-384x384.png",
-        sizes: "384x384",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-      {
-        src: "/icons/icon-512x512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable any",
-      },
-    ],
+    icons,
     categories: ["health", "fitness", "productivity"],
     lang: "es",
     dir: "ltr",
