@@ -14,6 +14,8 @@ import { fontSans } from "@/config/fonts";
 import { siteConfig } from "@/config/site";
 import { getSafeThemeSlug } from "@/lib/tenant/fallbacks";
 import {
+  APPLE_TOUCH_ICON_SIZE,
+  DEFAULT_APPLE_TOUCH_ICON,
   iconVersion,
   resolveSurfaceColor,
   tenantIconUrl,
@@ -46,7 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const pathname = headersList.get("x-pathname") || "";
 
   let pageTitle = siteConfig.name;
-  let appleIcon = "/icons/icon-180x180.png"; // TopCoach default
+  let appleIcon: string = DEFAULT_APPLE_TOUCH_ICON;
 
   // Check if it's an admin route
   if (pathname.startsWith("/admin")) {
@@ -73,11 +75,17 @@ export async function generateMetadata(): Promise<Metadata> {
           const surface = resolveSurfaceColor(tenantContext.theme_json);
           const version = iconVersion(logoUrl, surface);
 
-          appleIcon = tenantIconUrl(tenantSlug, 180, version);
+          appleIcon = tenantIconUrl(tenantSlug, APPLE_TOUCH_ICON_SIZE, version);
         }
       }
     } catch (error) {
-      // Fallback to slug if tenant load fails
+      console.error(
+        `[generateMetadata] Tenant load failed for slug: ${tenantSlug}`,
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          correlationId: headersList.get("x-correlation-id") || "unknown",
+        }
+      );
       pageTitle = `${tenantSlug} - TopCoach App`;
     }
   }

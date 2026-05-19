@@ -22,6 +22,18 @@ export const TENANT_ICON_SERVED_SIZES = [
 
 export type ServedIconSize = (typeof TENANT_ICON_SERVED_SIZES)[number];
 
+/**
+ * The iOS apple-touch-icon dimension. Used by app/layout.tsx for the
+ * <link rel="apple-touch-icon"> tag.
+ */
+export const APPLE_TOUCH_ICON_SIZE = 180 as const;
+
+/**
+ * Static fallback path served as apple-touch-icon when no tenant logo
+ * applies (trainer/admin/root paths, or tenant without logo_url).
+ */
+export const DEFAULT_APPLE_TOUCH_ICON = "/icons/icon-180x180.png";
+
 export function isServedIconSize(n: number): n is ServedIconSize {
   return (TENANT_ICON_SERVED_SIZES as readonly number[]).includes(n);
 }
