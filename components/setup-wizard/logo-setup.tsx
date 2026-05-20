@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Button,
-  Card,
-  CardBody,
-  Input,
-} from "@heroui/react";
+import { Button, Card, CardBody, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
@@ -21,16 +16,13 @@ export default function LogoSetup() {
       const file = acceptedFiles[0];
 
       if (file) {
-        // Create preview URL
+        // Local preview only — NEVER persisted. It dies with this browser tab.
         const previewUrl = URL.createObjectURL(file);
 
         setLogoPreview(previewUrl);
-
-        // Set file in state
         actions.setLogoFile(file);
 
         try {
-          // Upload to Supabase Storage
           const formData = new FormData();
 
           formData.append("logo", file);
@@ -43,18 +35,24 @@ export default function LogoSetup() {
           const result = await response.json();
 
           if (result.success) {
-            // Set permanent URL from storage
+            // Persist only the real Supabase Storage URL.
             actions.setLogoUrl(result.logoUrl);
             console.log("Logo uploaded successfully:", result.logoUrl);
           } else {
             console.error("Logo upload failed:", result.error);
-            // Keep preview URL as fallback
-            actions.setLogoUrl(previewUrl);
+            // Do NOT persist the blob preview — it's tab-local and would
+            // break for every other viewer the moment this tab closes.
+            actions.setLogoUrl(null);
+            actions.setLogoFile(null);
+            URL.revokeObjectURL(previewUrl);
+            setLogoPreview(null);
           }
         } catch (error) {
           console.error("Logo upload error:", error);
-          // Keep preview URL as fallback
-          actions.setLogoUrl(previewUrl);
+          actions.setLogoUrl(null);
+          actions.setLogoFile(null);
+          URL.revokeObjectURL(previewUrl);
+          setLogoPreview(null);
         }
       }
     },

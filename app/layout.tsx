@@ -13,6 +13,13 @@ import { TenantProvider } from "@/components/tenant-provider";
 import { fontSans } from "@/config/fonts";
 import { siteConfig } from "@/config/site";
 import { getSafeThemeSlug } from "@/lib/tenant/fallbacks";
+import {
+  APPLE_TOUCH_ICON_SIZE,
+  iconVersion,
+  resolveSurfaceColor,
+  tenantIconUrl,
+  topcoachIconUrl,
+} from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
 
@@ -41,6 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const pathname = headersList.get("x-pathname") || "";
 
   let pageTitle = siteConfig.name;
+  let appleIcon: string = topcoachIconUrl(APPLE_TOUCH_ICON_SIZE);
 
   // Check if it's an admin route
   if (pathname.startsWith("/admin")) {
@@ -60,9 +68,24 @@ export async function generateMetadata(): Promise<Metadata> {
           tenantContext.theme_json?.meta?.name || tenantContext.slug;
 
         pageTitle = `${tenantName} - TopCoach App`;
+
+        const logoUrl = tenantContext.logo_url ?? "";
+
+        if (logoUrl) {
+          const surface = resolveSurfaceColor(tenantContext.theme_json);
+          const version = iconVersion(logoUrl, surface);
+
+          appleIcon = tenantIconUrl(tenantSlug, APPLE_TOUCH_ICON_SIZE, version);
+        }
       }
     } catch (error) {
-      // Fallback to slug if tenant load fails
+      console.error(
+        `[generateMetadata] Tenant load failed for slug: ${tenantSlug}`,
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          correlationId: headersList.get("x-correlation-id") || "unknown",
+        }
+      );
       pageTitle = `${tenantSlug} - TopCoach App`;
     }
   }
@@ -79,7 +102,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: manifestUrl,
     icons: {
       icon: "/favicon.ico",
-      apple: "/icons/icon-180x180.png",
+      apple: appleIcon,
     },
     appleWebApp: {
       capable: true,

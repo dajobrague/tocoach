@@ -1,19 +1,16 @@
 "use client";
 
-import {
-  Alert,
-  Button,
-  Card,
-  CardBody,
-  Input,
-  Spinner,
-} from "@heroui/react";
+import { Alert, Button, Card, CardBody, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 export default function BrandLogoTab() {
+  // logoUrl is what gets persisted: only ever a real https URL (or null).
+  // previewUrl is the in-browser blob: shown while an upload is in flight;
+  // it must NEVER be persisted because it dies with the browser tab.
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [logoText, setLogoText] = React.useState("");
   const [isUploading, setIsUploading] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -34,13 +31,14 @@ export default function BrandLogoTab() {
           const data = await response.json();
 
           console.log("[Logo Tab] Brand config data:", data);
-          
+
           // Try multiple possible locations for the logo
-          const logo = data.logo_url || 
-                       data.theme_json?.assets?.logo || 
-                       data.theme_json?.logo_url ||
-                       null;
-          
+          const logo =
+            data.logo_url ||
+            data.theme_json?.assets?.logo ||
+            data.theme_json?.logo_url ||
+            null;
+
           console.log("[Logo Tab] Logo URL found:", logo);
           setLogoUrl(logo);
           setLogoText(data.brand_name || "");
@@ -60,13 +58,14 @@ export default function BrandLogoTab() {
 
     if (file) {
       setIsUploading(true);
+
+      // Local preview only — never persisted. Cleared once the real
+      // Supabase URL comes back, or on failure.
+      const localPreview = URL.createObjectURL(file);
+
+      setPreviewUrl(localPreview);
+
       try {
-        // Create preview URL
-        const previewUrl = URL.createObjectURL(file);
-
-        setLogoUrl(previewUrl);
-
-        // Upload to Supabase Storage
         const formData = new FormData();
 
         formData.append("logo", file);
@@ -85,13 +84,13 @@ export default function BrandLogoTab() {
         } else {
           console.error("Logo upload failed:", result.error);
           setMessage({ type: "error", text: "Error al subir el logo" });
-          setLogoUrl(null);
         }
       } catch (error) {
         console.error("Logo upload error:", error);
         setMessage({ type: "error", text: "Error al subir el logo" });
-        setLogoUrl(null);
       } finally {
+        URL.revokeObjectURL(localPreview);
+        setPreviewUrl(null);
         setIsUploading(false);
       }
     }
@@ -107,6 +106,10 @@ export default function BrandLogoTab() {
   });
 
   const handleRemoveLogo = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
     setLogoUrl(null);
     setMessage({ type: "success", text: "Logo eliminado" });
     setTimeout(() => setMessage(null), 5000);
@@ -197,8 +200,8 @@ export default function BrandLogoTab() {
               </div>
             </CardBody>
           </Card>
-        ) : logoUrl ? (
-          // Show uploaded logo
+        ) : previewUrl || logoUrl ? (
+          // Show uploaded logo (or in-flight preview during upload)
           <Card className="border border-gray-200">
             <CardBody className="p-6">
               <div className="flex items-center gap-4">
@@ -206,13 +209,17 @@ export default function BrandLogoTab() {
                   <img
                     alt="Logo preview"
                     className="w-16 h-16 object-contain rounded-lg border border-gray-200"
-                    src={logoUrl}
+                    src={previewUrl ?? logoUrl ?? ""}
                   />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-black">Logo actual</p>
+                  <p className="text-sm font-medium text-black">
+                    {isUploading ? "Subiendo logo..." : "Logo actual"}
+                  </p>
                   <p className="text-xs text-gray-500">
-                    Haz clic en "Cambiar" para subir uno nuevo
+                    {isUploading
+                      ? "Espera a que termine antes de guardar"
+                      : 'Haz clic en "Cambiar" para subir uno nuevo'}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -293,12 +300,17 @@ export default function BrandLogoTab() {
       <div className="flex justify-end pt-6 border-t border-gray-200">
         <Button
           className="bg-black text-white hover:bg-slate-800"
+          isDisabled={isUploading}
           isLoading={isSaving}
           size="lg"
           startContent={<Icon icon="solar:floppy-disk-linear" />}
           onPress={handleSave}
         >
-          {isSaving ? "Guardando..." : "Guardar Cambios"}
+          {isSaving
+            ? "Guardando..."
+            : isUploading
+              ? "Esperando subida..."
+              : "Guardar Cambios"}
         </Button>
       </div>
     </div>
