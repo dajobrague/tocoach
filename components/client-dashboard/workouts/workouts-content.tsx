@@ -22,12 +22,10 @@ import {
 import { useAvailableSessions } from "./hooks/use-available-sessions";
 import { useLoggedSessionsForDate } from "./hooks/use-logged-sessions-for-date";
 import { useMicrocycle } from "./hooks/use-microcycle";
-import { usePastSessions } from "./hooks/use-past-sessions";
 import { usePersistedActiveTraining } from "./hooks/use-persisted-active-training";
 import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
 import { LoggedSessionsSection } from "./logged-sessions-section";
 import { MicrocycleReferenceModal } from "./microcycle-reference-modal";
-import { PastWorkoutsList } from "./past-workouts-list";
 import { WeekDateSelector } from "./week-date-selector";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -59,7 +57,6 @@ export function WorkoutsContent() {
     refetch: refetchAvailable,
   } = useAvailableSessions();
   const { data: microcycle } = useMicrocycle();
-  const { data: pastSessions = [] } = usePastSessions();
 
   // Programs y exerciseLogs siguen siendo la fuente de verdad para los
   // datos completos de ejercicios y el estado de logs por fecha. El
@@ -358,10 +355,6 @@ export function WorkoutsContent() {
                       Ver mi microciclo
                     </Button>
                   </div>
-                ) : null}
-
-                {isViewingToday ? (
-                  <PastWorkoutsList sessions={pastSessions} />
                 ) : null}
               </>
             ) : null}
