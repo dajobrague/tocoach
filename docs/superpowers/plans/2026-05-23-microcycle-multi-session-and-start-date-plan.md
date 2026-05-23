@@ -4,11 +4,26 @@
 
 **Goal:** Make `scheduled_sessions` per `(client, date, session_id)` instead of per `(client, date)` so clients can train multiple sessions on the same day without log corruption; derive the daily prescription live from the microcycle + trainer per-date pins so changing a microcycle's `start_date` propagates forward.
 
-**Architecture:** One SQL migration widens the uniqueness key and rewires the `upsert_scheduled_session` RPC. Three API endpoints (`/api/client/scheduled-sessions/[date]`, `/api/clients/[clientId]/scheduled-sessions/trainer`, `/api/clients/[clientId]/microcycle`) and two frontend hooks/components (`use-week-metrics`, `microcycle-config`) get updated to support multiple sessions per date and to handle the `start_date` cascade. No automated test framework exists in this repo; verification is via SQL queries against the live database and manual UI flows in the dev server.
+**Architecture:** Two SQL migrations rewire the data layer: 113 dedupes existing rows + widens the uniqueness key + updates `upsert_scheduled_session`; 114 rewrites `replace_scheduled_session_overrides` for per-session keying with stale-pin reconciliation. Three API endpoints (`/api/client/scheduled-sessions/[date]`, `/api/clients/[clientId]/scheduled-sessions/trainer`, `/api/clients/[clientId]/microcycle`) and two frontend hooks/components (`use-week-metrics`, `microcycle-config`) get updated to support multiple sessions per date and to handle the `start_date` cascade. The cascade is scoped by `microcycleId` so multi-program clients don't lose unrelated pins. No automated test framework exists in this repo; verification is via SQL queries against the live database and manual UI flows in the dev server.
 
 **Tech Stack:** Next.js 15 (App Router) + TypeScript, Supabase (Postgres + RLS), React Query, HeroUI v2 + Tailwind v4. Spec: `docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md`.
 
 **Verification convention:** Every task ends with concrete SQL or curl/browser steps you can run yourself plus the expected result. If your output diverges, fix before moving on. Commits are bite-sized but landable independently — each one leaves the app in a working state.
+
+**Edge cases stress-tested before writing this plan:**
+
+1. Client opens session A, logs, finalizes (single-session day) → behaves the same as today.
+2. Client opens A then B on same day, logs from both → after Task 1, two rows, two correct status calculations.
+3. Trainer pins X, client trains X → row already exists as 'trainer', client's upsert preserves `prescribed_by='trainer'`. Status completes when client finishes X.
+4. Trainer pins X, client trains Y (different) → trainer pin row stays, new client row created for Y. Both adherence-scored independently.
+5. Trainer pins X, then changes pin to Y (no client activity yet) → Task 1b's RPC deletes the stale X pin and inserts/updates Y.
+6. Trainer pins X, client trains X (logs attached), trainer changes pin to Y → Task 1b demotes X row to `prescribed_by='client'` (preserving logs), inserts Y as the new trainer pin.
+7. Trainer changes `start_date` only → Task 6 clears future trainer pins scoped to this microcycle's session set. Past untouched, client activity untouched.
+8. Trainer changes `start_date` AND swaps slots in same save → scoping is by union of old+new slot session_ids, so pins for removed sessions also get cleared.
+9. Trainer changes one microcycle's `start_date` while client has a second active program with its own microcycle → scoping is per-microcycle's session set, so the other program's pins are untouched.
+10. Production data already has 13 duplicate `(client, date, session_id)` groups (~16 excess rows) — Task 1's preflight dedupe handles them before adding the constraint.
+11. `replace_scheduled_session_overrides` callers (`scheduled-sessions/trainer/day/route.ts:442`) and `upsert_scheduled_session` callers (`exercise-logs/route.ts:222`, `scheduled-sessions/route.ts:136`) all pass `p_session_id` non-null today, so the new NOT NULL + required-arg checks won't surprise any path.
+12. Cron sidecar (`cron-service/`) has zero references to `scheduled_sessions` — no migration risk there.
 
 ---
 
@@ -18,7 +33,26 @@
 
 - Create: `supabase/migrations/113_scheduled_sessions_per_session_uniqueness.sql`
 
-**Context:** Today (per the spec) one `scheduled_sessions` row per `(client_id, scheduled_date)` is enforced by the `upsert_scheduled_session` RPC's SELECT (`migrations/111_drop_old_upsert_scheduled_session_overload.sql:56-60`). Migration 106 added a hard UNIQUE constraint with the same shape (it may or may not still be present in your environment — the production DB I inspected didn't have it in `pg_indexes`; the migration script tried to add it but might have been rolled back). The new shape is `(client_id, scheduled_date, session_id)`.
+**Context:** Today one `scheduled_sessions` row per `(client_id, scheduled_date)` is enforced by the `upsert_scheduled_session` RPC's SELECT (`migrations/111_drop_old_upsert_scheduled_session_overload.sql:56-60`). Migration 106 added a hard UNIQUE constraint with the same shape but production no longer has it in `pg_constraint` (only the PK on `id` remains) — likely it was dropped or never applied. The new shape is `(client_id, scheduled_date, session_id)`.
+
+**Pre-flight: production has duplicates already.** A `GROUP BY (client_id, scheduled_date, session_id) HAVING COUNT(*) > 1` returns 13 groups, ~16 excess rows. Migration 113 must dedupe them inside the same transaction before `ADD CONSTRAINT`, otherwise the `ADD CONSTRAINT` fails. Strategy per group: keep the row with the most attached `exercise_logs` (tiebreak by oldest `created_at`), repoint that group's logs to the survivor, drop the losers' per-exercise overrides, delete the loser rows.
+
+- [ ] **Step 0: Snapshot the current duplicate count for verification**
+
+```sql
+SELECT
+  COUNT(*) AS dup_groups,
+  COALESCE(SUM(n), 0) - COUNT(*) AS excess_rows_to_dedupe
+FROM (
+  SELECT client_id, scheduled_date, session_id, COUNT(*) AS n
+  FROM scheduled_sessions
+  WHERE session_id IS NOT NULL
+  GROUP BY client_id, scheduled_date, session_id
+  HAVING COUNT(*) > 1
+) t;
+```
+
+Expected at time of writing: `dup_groups=13, excess_rows_to_dedupe=16`. Note these numbers — Step 4's post-migration verification will assert they're 0.
 
 - [ ] **Step 1: Create the migration file**
 
@@ -55,6 +89,76 @@ Write the file `supabase/migrations/113_scheduled_sessions_per_session_uniquenes
 
 BEGIN;
 
+-- 0. Dedupe existing (client_id, scheduled_date, session_id) duplicates.
+--    Producción tiene ~13 grupos con duplicados (revisar antes con
+--    `GROUP BY ... HAVING COUNT(*) > 1`). Sin este paso, el ADD CONSTRAINT
+--    de la sección 3 falla con "could not create unique index".
+--
+--    Estrategia: por cada grupo duplicado, elegir un "sobreviviente"
+--    (más logs adjuntos; tiebreak por created_at más antiguo). Re-apuntar
+--    sus exercise_logs al sobreviviente. Borrar los loser rows
+--    (scheduled_session_exercises de los losers cascadean por FK).
+WITH ranked AS (
+  SELECT
+    ss.id,
+    ss.client_id,
+    ss.scheduled_date,
+    ss.session_id,
+    ss.created_at,
+    (SELECT COUNT(*) FROM exercise_logs el
+       WHERE el.scheduled_session_id = ss.id) AS log_count,
+    ROW_NUMBER() OVER (
+      PARTITION BY ss.client_id, ss.scheduled_date, ss.session_id
+      ORDER BY
+        (SELECT COUNT(*) FROM exercise_logs el
+           WHERE el.scheduled_session_id = ss.id) DESC,
+        ss.created_at ASC,
+        ss.id ASC
+    ) AS rn
+  FROM scheduled_sessions ss
+  WHERE ss.session_id IS NOT NULL
+),
+survivors AS (
+  SELECT client_id, scheduled_date, session_id, id AS survivor_id
+  FROM ranked
+  WHERE rn = 1
+),
+losers AS (
+  SELECT r.id AS loser_id, s.survivor_id
+  FROM ranked r
+  JOIN survivors s
+    ON s.client_id = r.client_id
+   AND s.scheduled_date = r.scheduled_date
+   AND s.session_id = r.session_id
+  WHERE r.rn > 1
+)
+UPDATE exercise_logs el
+SET scheduled_session_id = l.survivor_id
+FROM losers l
+WHERE el.scheduled_session_id = l.loser_id;
+
+-- Borrar las filas loser (sus overrides + exercise_sets cascadean por FK
+-- a través de scheduled_session_exercises ON DELETE CASCADE).
+DELETE FROM scheduled_sessions ss
+WHERE ss.id IN (
+  SELECT r.id
+  FROM (
+    SELECT
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY client_id, scheduled_date, session_id
+        ORDER BY
+          (SELECT COUNT(*) FROM exercise_logs el
+             WHERE el.scheduled_session_id = scheduled_sessions.id) DESC,
+          created_at ASC,
+          id ASC
+      ) AS rn
+    FROM scheduled_sessions
+    WHERE session_id IS NOT NULL
+  ) r
+  WHERE r.rn > 1
+);
+
 -- 1. session_id NOT NULL — todas las filas en producción ya tienen valor;
 --    el modelo nuevo exige que cada fila represente actividad contra una
 --    sesión concreta.
@@ -66,7 +170,9 @@ ALTER TABLE scheduled_sessions
 ALTER TABLE scheduled_sessions
   DROP CONSTRAINT IF EXISTS scheduled_sessions_client_date_unique;
 
--- 3. Add la UNIQUE nueva.
+-- 3. Add la UNIQUE nueva. Si el paso 0 dejó algún duplicado por error,
+--    falla loudly acá — preferible romper la migración que aceptar data
+--    inconsistente.
 ALTER TABLE scheduled_sessions
   ADD CONSTRAINT scheduled_sessions_client_date_session_unique
   UNIQUE (client_id, scheduled_date, session_id);
@@ -160,6 +266,33 @@ Use the Supabase MCP tool `apply_migration` with project `ydqhndnvrkvycnkaghro` 
 
 Expected: success message, no errors.
 
+- [ ] **Step 2b: Verify dedupe was clean**
+
+```sql
+SELECT
+  COUNT(*) AS dup_groups,
+  COALESCE(SUM(n), 0) - COUNT(*) AS excess_rows_to_dedupe
+FROM (
+  SELECT client_id, scheduled_date, session_id, COUNT(*) AS n
+  FROM scheduled_sessions
+  WHERE session_id IS NOT NULL
+  GROUP BY client_id, scheduled_date, session_id
+  HAVING COUNT(*) > 1
+) t;
+```
+
+Expected: `dup_groups=0, excess_rows_to_dedupe=0`. If non-zero, the migration didn't run the dedupe block — open it and reapply.
+
+```sql
+-- Also verify no logs were orphaned by the dedupe (every log still has a valid scheduled_session_id):
+SELECT COUNT(*) AS orphan_logs
+FROM exercise_logs el
+LEFT JOIN scheduled_sessions ss ON ss.id = el.scheduled_session_id
+WHERE el.scheduled_session_id IS NOT NULL AND ss.id IS NULL;
+```
+
+Expected: `orphan_logs=0`.
+
 - [ ] **Step 3: Verify the constraint and the function exist**
 
 Run via Supabase MCP `execute_sql`:
@@ -236,6 +369,336 @@ upsert_scheduled_session RPC to lock and SELECT on the triple, so two
 sessions touched the same day no longer collapse into one row.
 
 See docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md.
+
+Co-Authored-By: RuFlo <ruv@ruv.net>"
+```
+
+---
+
+## Task 1b: Migration 114 — rewrite `replace_scheduled_session_overrides` for per-session keying
+
+**Files:**
+
+- Create: `supabase/migrations/114_replace_overrides_per_session_keying.sql`
+
+**Context:** The current override RPC (migration 110) locks on `(client_id, scheduled_date)`, SELECTs the row by `(client_id, scheduled_date)` (single-row assumption), and `UPDATE`s `session_id` on the existing row to the trainer's new choice. Under the new per-(client, date, session_id) model this breaks two ways:
+
+1. **UNIQUE violation:** if the trainer changes their pin from session X → Y and a client-created row for Y already exists, the UPDATE `SET session_id = Y` collides with the existing Y row.
+2. **Stale pin retention:** if the trainer pinned X yesterday and pins Y today, the X row stays around (with `prescribed_by='trainer'`) and the resolver now sees two trainer pins — undefined behavior.
+
+The new RPC must:
+
+- Lock on `(client_id, scheduled_date)` (still coarse — trainer override is an infrequent operation, no need for fine-grained).
+- Upsert the row for `(client_id, scheduled_date, p_session_id)` — flip `prescribed_by='trainer'` if it was 'client' (the spec's "trainer ratifies what the client trained" case).
+- Replace `scheduled_session_exercises` rows on the target row.
+- Reconcile **stale trainer pins** for the same `(client, date)` on _different_ session_ids:
+
+  - If the stale pin has no `exercise_logs` → DELETE it.
+  - If the stale pin has logs → demote it to `prescribed_by='client'` (preserve activity, just no longer the prescription anchor).
+
+- [ ] **Step 1: Create the migration file**
+
+Write `supabase/migrations/114_replace_overrides_per_session_keying.sql` with this exact content:
+
+```sql
+-- Update replace_scheduled_session_overrides to key per (client, date, session_id).
+--
+-- Antes: SELECT por (client, date), UPDATE session_id en la fila
+-- encontrada. Bajo el modelo nuevo (migration 113) puede haber N filas
+-- por (client, date) — una por sesión tocada. Esa lógica:
+--   1. Choca con la UNIQUE nueva si el trainer cambia su pin a una
+--      sesión donde ya existe una fila prescribed_by='client'.
+--   2. Deja stale trainer pins en sesiones distintas a la elegida,
+--      creando "doble prescripción" para una misma fecha.
+--
+-- Comportamiento nuevo:
+--   - Upsert la fila (client, date, p_session_id) con prescribed_by='trainer'.
+--     Si la fila existía como 'client' (cliente entrenó esa sesión sin
+--     prescripción previa), se flippea — el trainer ratifica.
+--   - Reemplaza per-exercise overrides en la fila target.
+--   - Reconcilia stale trainer pins en OTRAS session_ids del mismo
+--     (client, date): si no tienen exercise_logs, DELETE; si tienen
+--     logs, demote a 'client' (preserva actividad, deja de ser anchor
+--     de prescripción). Los overrides per-exercise en esas filas se
+--     dejan como snapshot histórico.
+
+DROP FUNCTION IF EXISTS replace_scheduled_session_overrides(
+    TEXT, BIGINT, UUID, DATE, UUID, JSONB, JSONB
+);
+
+CREATE OR REPLACE FUNCTION replace_scheduled_session_overrides(
+    p_tenant_host TEXT,
+    p_client_id BIGINT,
+    p_trainer_id UUID,
+    p_scheduled_date DATE,
+    p_session_id UUID,
+    p_exercises JSONB,
+    p_sets JSONB
+)
+RETURNS UUID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_scheduled_session_id UUID;
+    v_lock_key BIGINT;
+    v_ex_orders INT[];
+    v_set_orders INT[];
+    v_missing INT[];
+BEGIN
+    IF p_session_id IS NULL THEN
+        RAISE EXCEPTION 'p_session_id no puede ser NULL'
+            USING ERRCODE = '22023';
+    END IF;
+
+    -- Validación cruzada exerciseOrder p_sets vs p_exercises (igual que 110).
+    IF jsonb_array_length(p_sets) > 0 THEN
+        SELECT array_agg(DISTINCT (e->>'exerciseOrder')::INT)
+        INTO v_ex_orders
+        FROM jsonb_array_elements(p_exercises) AS e;
+
+        SELECT array_agg(DISTINCT (s->>'exerciseOrder')::INT)
+        INTO v_set_orders
+        FROM jsonb_array_elements(p_sets) AS s;
+
+        SELECT array_agg(o) INTO v_missing
+        FROM unnest(COALESCE(v_set_orders, ARRAY[]::INT[])) AS o
+        WHERE NOT (o = ANY(COALESCE(v_ex_orders, ARRAY[]::INT[])));
+
+        IF v_missing IS NOT NULL AND array_length(v_missing, 1) > 0 THEN
+            RAISE EXCEPTION
+                'replace_scheduled_session_overrides: p_sets refers to exerciseOrder(s) % not present in p_exercises',
+                v_missing
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+
+    -- Lock coarse-grained sobre (client, date) — el RPC toca múltiples
+    -- filas potenciales (target + stale pins), conviene serializar todo
+    -- el RPC para esa fecha.
+    v_lock_key := hashtextextended(
+        p_client_id::text || ':' || p_scheduled_date::text, 0
+    );
+    PERFORM pg_advisory_xact_lock(v_lock_key);
+
+    -- 1. Upsert la fila target (client, date, p_session_id).
+    SELECT id INTO v_scheduled_session_id
+    FROM scheduled_sessions
+    WHERE client_id = p_client_id
+      AND scheduled_date = p_scheduled_date
+      AND session_id = p_session_id
+    FOR UPDATE;
+
+    IF v_scheduled_session_id IS NULL THEN
+        INSERT INTO scheduled_sessions(
+            tenant_host, client_id, trainer_id, session_id,
+            scheduled_date, status, prescribed_by
+        )
+        VALUES (
+            p_tenant_host, p_client_id, p_trainer_id, p_session_id,
+            p_scheduled_date, 'scheduled', 'trainer'
+        )
+        RETURNING id INTO v_scheduled_session_id;
+    ELSE
+        UPDATE scheduled_sessions
+        SET status = 'scheduled',
+            prescribed_by = 'trainer',
+            updated_at = NOW()
+        WHERE id = v_scheduled_session_id;
+    END IF;
+
+    -- 2. Reconciliar stale trainer pins en OTRAS session_ids para esta
+    --    (client, date). Si no tienen logs: DELETE; si tienen logs:
+    --    demote a 'client'.
+    WITH stale AS (
+        SELECT ss.id,
+               EXISTS(
+                 SELECT 1 FROM exercise_logs el
+                 WHERE el.scheduled_session_id = ss.id
+               ) AS has_logs
+        FROM scheduled_sessions ss
+        WHERE ss.client_id = p_client_id
+          AND ss.scheduled_date = p_scheduled_date
+          AND ss.prescribed_by = 'trainer'
+          AND ss.id != v_scheduled_session_id
+    ),
+    demoted AS (
+        UPDATE scheduled_sessions ss
+        SET prescribed_by = 'client',
+            updated_at = NOW()
+        FROM stale
+        WHERE ss.id = stale.id AND stale.has_logs = true
+        RETURNING ss.id
+    )
+    DELETE FROM scheduled_sessions ss
+    USING stale
+    WHERE ss.id = stale.id AND stale.has_logs = false;
+
+    -- 3. Replace overrides en la fila target (DELETE + INSERT — idéntico
+    --    al patrón de 110).
+    DELETE FROM scheduled_session_exercises
+    WHERE scheduled_session_id = v_scheduled_session_id;
+
+    IF jsonb_array_length(p_exercises) > 0 THEN
+        INSERT INTO scheduled_session_exercises(
+            tenant_host, scheduled_session_id, exercise_id, exercise_order,
+            sets, reps, weight_kg,
+            duration_seconds, distance_meters, rest_seconds, notes
+        )
+        SELECT
+            p_tenant_host,
+            v_scheduled_session_id,
+            (e->>'exerciseId')::UUID,
+            (e->>'exerciseOrder')::INT,
+            NULLIF(e->>'sets', '')::INT,
+            NULLIF(e->>'reps', ''),
+            NULLIF(e->>'weightKg', '')::DECIMAL,
+            NULLIF(e->>'durationSeconds', '')::INT,
+            NULLIF(e->>'distanceMeters', '')::DECIMAL,
+            NULLIF(e->>'restSeconds', '')::INT,
+            NULLIF(e->>'notes', '')
+        FROM jsonb_array_elements(p_exercises) AS e;
+    END IF;
+
+    IF jsonb_array_length(p_sets) > 0 THEN
+        INSERT INTO scheduled_session_exercise_sets(
+            tenant_host, scheduled_session_exercise_id,
+            set_number, reps, weight_kg
+        )
+        SELECT
+            p_tenant_host,
+            sse.id,
+            (s->>'setNumber')::INT,
+            NULLIF(s->>'reps', ''),
+            NULLIF(s->>'weightKg', '')::DECIMAL
+        FROM jsonb_array_elements(p_sets) AS s
+        JOIN scheduled_session_exercises sse
+            ON sse.scheduled_session_id = v_scheduled_session_id
+           AND sse.exercise_order = (s->>'exerciseOrder')::INT;
+    END IF;
+
+    RETURN v_scheduled_session_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION replace_scheduled_session_overrides(
+    TEXT, BIGINT, UUID, DATE, UUID, JSONB, JSONB
+) TO anon, authenticated;
+```
+
+- [ ] **Step 2: Apply the migration**
+
+Same procedure as Task 1 — apply via Supabase MCP `apply_migration` with project `ydqhndnvrkvycnkaghro`.
+
+Expected: success.
+
+- [ ] **Step 3: Verify the new RPC handles stale pins**
+
+```sql
+-- Setup: simulate "trainer pinned X yesterday, client trained Y today"
+-- for a fresh future date (use 2026-07-15 and Pedro client 179).
+INSERT INTO scheduled_sessions(
+  tenant_host, client_id, trainer_id, session_id, scheduled_date, status, prescribed_by
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co', 179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  'e7c1ac45-6443-4132-987b-ca8754c99f21',  -- Torso Fuerza (stale pin, no logs)
+  '2026-07-15', 'scheduled', 'trainer'
+);
+
+-- Now call the override RPC pinning a DIFFERENT session for the same
+-- date — Bíceps y Pierna Fuerza:
+SELECT replace_scheduled_session_overrides(
+  'ydqhndnvrkvycnkaghro.supabase.co'::text,
+  179::bigint,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a'::uuid,
+  '2026-07-15'::date,
+  '2518e241-e97b-49bf-960b-8c8880676a0c'::uuid,
+  '[]'::jsonb,
+  '[]'::jsonb
+);
+
+SELECT id, session_id, prescribed_by FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date = '2026-07-15';
+```
+
+Expected: ONE row only, `session_id='2518e241...'`, `prescribed_by='trainer'`. The stale Torso Fuerza pin was deleted because it had no logs.
+
+- [ ] **Step 4: Verify stale pins WITH logs get demoted not deleted**
+
+```sql
+-- Setup: pin X with a log attached, then trainer pins Y.
+INSERT INTO scheduled_sessions(
+  tenant_host, client_id, trainer_id, session_id, scheduled_date, status, prescribed_by
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co', 179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  '93a349f4-b60f-4e63-a26a-86ec456f7796',  -- Torso Hipertrofia (stale pin with log)
+  '2026-07-16', 'scheduled', 'trainer'
+) RETURNING id;
+-- Use the returned id below as :pin_id. Attach a synthetic log:
+-- (replace :pin_id with the actual UUID from the RETURNING above)
+
+-- For simplicity, use Pedro's existing exercise + log_set pattern; we
+-- can borrow any exercise_id from his template:
+INSERT INTO exercise_logs(
+  tenant_host, scheduled_session_id, exercise_id, client_id, trainer_id, completed_at
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co',
+  (SELECT id FROM scheduled_sessions WHERE client_id=179 AND scheduled_date='2026-07-16'),
+  'fd8a3cfe-b9b1-449c-b157-94e158c45456',  -- Hip thrust unilateral
+  179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  NOW()
+);
+
+-- Now trainer pins a DIFFERENT session for 2026-07-16:
+SELECT replace_scheduled_session_overrides(
+  'ydqhndnvrkvycnkaghro.supabase.co'::text,
+  179::bigint,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a'::uuid,
+  '2026-07-16'::date,
+  'e7c1ac45-6443-4132-987b-ca8754c99f21'::uuid,
+  '[]'::jsonb,
+  '[]'::jsonb
+);
+
+SELECT session_id, prescribed_by,
+  (SELECT COUNT(*) FROM exercise_logs WHERE scheduled_session_id = ss.id) AS logs
+FROM scheduled_sessions ss
+WHERE client_id = 179 AND scheduled_date = '2026-07-16'
+ORDER BY prescribed_by;
+```
+
+Expected: TWO rows.
+
+- `(session_id=93a349f4..., prescribed_by='client', logs=1)` — the old pin demoted because it had a log.
+- `(session_id=e7c1ac45..., prescribed_by='trainer', logs=0)` — the new pin.
+
+- [ ] **Step 5: Clean up the smoke-test data**
+
+```sql
+DELETE FROM exercise_logs WHERE scheduled_session_id IN (
+  SELECT id FROM scheduled_sessions
+  WHERE client_id = 179 AND scheduled_date IN ('2026-07-15','2026-07-16')
+);
+DELETE FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date IN ('2026-07-15','2026-07-16');
+```
+
+Expected: all smoke-test rows gone.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add supabase/migrations/114_replace_overrides_per_session_keying.sql
+git commit -m "feat(microcycle): rewrite replace_scheduled_session_overrides for per-session keying
+
+Locks coarse on (client, date) but operates per session_id. When the
+trainer pins a new session for a date that already had a different
+trainer pin, the stale pin is deleted if it has no logs, or demoted to
+prescribed_by='client' (preserving client activity) if it does. Avoids
+UNIQUE violations under the new (client, date, session_id) constraint
+and eliminates lingering double-prescription rows.
 
 Co-Authored-By: RuFlo <ruv@ruv.net>"
 ```
@@ -869,6 +1332,8 @@ Co-Authored-By: RuFlo <ruv@ruv.net>"
 
 **Context:** When the trainer changes `microcycle.start_date`, future per-date trainer pins (rows with `prescribed_by='trainer'` and no logs attached) need to be deleted so the resolver re-derives them from the new alignment. Past rows (before the new `start_date`) stay untouched — they represent history. Rows that have client logs attached also stay — that's preserved client activity.
 
+**Multi-program scoping**: a client can have several active `client_programs` simultaneously (e.g. fuerza + cardio), each with its own microcycle. Changing `start_date` on ONE microcycle must NOT wipe trainer pins derived from a different microcycle. We scope the cascade by "the session is referenced in the changed microcycle's slots — both before and after this save". The pre-save slots union ensures pins for sessions the trainer just _removed_ from the microcycle also get cleared (otherwise they'd linger as ghost overrides). The post-save slots ensure new-alignment pins clear too. Either union is local to this microcycle, so multi-program is untouched. Edge case: if a session is shared between two microcycles, the cascade clears its pin (acceptable — trainer can re-pin; this is a deliberate `start_date` change with a confirmation modal).
+
 - [ ] **Step 1: Add the cleanup helper in `lib/microcycles/db.ts`**
 
 Open `lib/microcycles/db.ts` and append at the bottom:
@@ -876,31 +1341,39 @@ Open `lib/microcycles/db.ts` and append at the bottom:
 ```typescript
 /**
  * Borra las filas scheduled_sessions del cliente desde `fromDate`
- * inclusive que cumplan: prescribed_by='trainer' AND no tienen
- * exercise_logs ligados. Use case: trainer cambia microcycle.start_date
- * y quiere que las prescripciones futuras pre-cargadas se re-deriven
- * con la nueva alineación.
+ * inclusive que cumplan TODAS:
+ *   - prescribed_by='trainer' (no tocamos actividad del cliente).
+ *   - No tienen exercise_logs ligados (preservamos historia entrenada).
+ *   - session_id está en `scopedSessionIds` (las sesiones del microciclo
+ *     que cambió — unión de slots pre-save y post-save para limpiar
+ *     tanto pins de la alineación vieja como de la nueva).
  *
- * No toca:
- *  - Filas con prescribed_by='client' (actividad del cliente, no es
- *    nuestra para borrar).
- *  - Filas con exercise_logs (el cliente ya entrenó esa fecha — borrar
- *    rompería su historial).
- *  - Filas con fecha < fromDate (eso es pasado, lo dejamos intacto).
+ * Use case: trainer cambia microcycle.start_date y quiere que las
+ * prescripciones futuras pre-cargadas se re-deriven con la nueva
+ * alineación, sin colateral en otros microciclos activos del cliente.
  */
 export async function cleanFuturePrescribedRowsForReset(
   supabase: Supabase,
   clientId: string,
   fromDate: string,
+  scopedSessionIds: string[],
   correlationId: string
 ): Promise<{ deletedCount: number; error: string | null }> {
-  // 1. Buscar candidatos: trainer-pinned rows del cliente desde fromDate.
+  if (scopedSessionIds.length === 0) {
+    // El microciclo cambiado no referencia sesiones (todo descanso) ni
+    // tenía sesiones antes. Nada que limpiar.
+    return { deletedCount: 0, error: null };
+  }
+
+  // 1. Buscar candidatos: trainer-pinned rows del cliente desde fromDate
+  //    cuyo session_id pertenezca al scope.
   const { data: candidates, error: selectError } = await supabase
     .from("scheduled_sessions")
     .select("id")
     .eq("client_id", clientId)
     .eq("prescribed_by", "trainer")
-    .gte("scheduled_date", fromDate);
+    .gte("scheduled_date", fromDate)
+    .in("session_id", scopedSessionIds);
 
   if (selectError) {
     console.error(`${LOG_PREFIX} clean reset select failed:`, {
@@ -975,6 +1448,8 @@ In `app/api/clients/[clientId]/microcycle/route.ts`, inside the PUT handler, fin
 ```typescript
     // Detect start_date change to trigger the future-rows cascade.
     // Compare against the existing microcycle's start_date (if any).
+    // Also capture the OLD slot session_ids — needed to clear pins of
+    // sessions that get removed from the microcycle in this same save.
     const existingMicrocycle = await loadMicrocycleWithSlots(
       supabase,
       primary.id,
@@ -984,6 +1459,9 @@ In `app/api/clients/[clientId]/microcycle/route.ts`, inside the PUT handler, fin
     const startDateChanged =
       previousStartDate !== null &&
       previousStartDate !== validation.value.start_date;
+    const previousSlotSessionIds = (existingMicrocycle?.slots ?? [])
+      .map((s) => s.session_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
 
     const microcycleId = await upsertMicrocycle(
 ```
@@ -992,10 +1470,25 @@ And after `replaceSlots` succeeds (around line 297-304), before reloading the mi
 
 ```typescript
 if (startDateChanged) {
+  // Union of old + new slot session_ids. Old → para limpiar pins de
+  // sesiones que el trainer acaba de remover del microciclo en este
+  // mismo save (no quedan referenciadas pero igual tenían pins). New →
+  // para limpiar pins alineados a la versión vieja del cronograma.
+  // El cascade NO toca pins cuya session esté fuera de ambos sets
+  // (esos vienen de otro microciclo activo del cliente — fuera de
+  // scope).
+  const newSlotSessionIds = validation.value.slots
+    .map((s) => s.session_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const scopedSessionIds = Array.from(
+    new Set([...previousSlotSessionIds, ...newSlotSessionIds])
+  );
+
   const cleanup = await cleanFuturePrescribedRowsForReset(
     supabase,
     clientId,
     validation.value.start_date,
+    scopedSessionIds,
     correlationId
   );
 
@@ -1005,6 +1498,7 @@ if (startDateChanged) {
     console.warn(`${LOG_PREFIX} start_date cascade had errors:`, {
       correlationId,
       clientId,
+      microcycleId,
       error: cleanup.error,
     });
   }
@@ -1077,6 +1571,43 @@ WHERE client_id = 179 AND scheduled_date = '2026-05-13';
 Expected: row still exists (5-13 is before new start_date 2026-05-25).
 
 Reset Pedro's start_date back to 2026-05-11 via the editor to leave the system in a known state.
+
+- [ ] **Step 4b: Verify multi-program scoping**
+
+If Pedro has only one active program, you can't exercise this path live — but you can simulate it. Add a fake trainer pin for a future date pointing to a session that is NOT in Pedro's microcycle:
+
+```sql
+-- Pick any session that does NOT appear as a slot in Pedro's microcycle
+-- d2b06fdb-85f3-41f1-86c7-6c45d49af595. Use SELECT * FROM sessions
+-- WHERE trainer_id = 'f35d7800...' LIMIT 5 to find one outside his slot
+-- list. Suppose its id is :foreign_session_id. Then:
+INSERT INTO scheduled_sessions(
+  tenant_host, client_id, trainer_id, session_id,
+  scheduled_date, status, prescribed_by
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co', 179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  ':foreign_session_id'::uuid,
+  '2026-07-02', 'scheduled', 'trainer'
+);
+```
+
+Now change Pedro's microcycle `start_date` again from 2026-05-11 → 2026-05-26 via the editor. Then:
+
+```sql
+SELECT scheduled_date, session_id, prescribed_by FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date = '2026-07-02';
+```
+
+Expected: the row STILL EXISTS because its session_id isn't in the changed microcycle's slot set. The scoping correctly excluded it.
+
+Clean up:
+
+```sql
+DELETE FROM scheduled_sessions WHERE client_id = 179 AND scheduled_date = '2026-07-02';
+```
+
+And reset Pedro's start_date back to 2026-05-11 again.
 
 - [ ] **Step 5: Commit**
 
@@ -1307,5 +1838,7 @@ If nothing else changed, skip this step.
 
 - **No historical backfill.** Pedro's existing 5-12 through 5-23 polluted rows stay as-is per the spec's §7. The trainer view will surface them as best-effort one-card-per-row entries.
 - **Backwards compatibility of `upsert_scheduled_session`.** The new signature has the same parameter list and ordering as the post-111 version. Existing callers (`app/api/clients/[clientId]/exercise-logs/route.ts:222-233`, and any other) require no changes.
+- **Backwards compatibility of `replace_scheduled_session_overrides`.** Same signature as post-110; existing callers (the trainer per-date override flow) require no changes. The reconciliation of stale pins is internal to the RPC.
+- **Existing duplicate rows are deduplicated in-place** by migration 113. We keep the row with most logs (tie-break by oldest), repoint other rows' logs to the survivor, and drop the losers. About 16 rows in production at time of writing. The dedupe is part of the same migration transaction — if it fails, the constraint isn't added and nothing changes.
 - **`scheduled_sessions.session_id` becomes effectively required.** Migration 113 sets it NOT NULL. If any code path was relying on inserting NULL, it'll fail loudly — there shouldn't be any (the RPC has always required `p_session_id`).
 - **Concurrency.** The advisory lock is now per (client, date, session_id), strictly finer-grained than before. Two clients (or two requests for the same client across different sessions) on the same date no longer serialize against each other. Wins.
