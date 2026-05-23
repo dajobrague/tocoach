@@ -203,22 +203,21 @@ export async function GET(
       );
     }
 
-    const realByDate = new Map<string, ScheduledSessionResponse>();
-
+    // Key real rows on (date, session_id). Multiple rows per date are
+    // now first-class — one per session the client/trainer touched.
+    const realByKey = new Map<string, ScheduledSessionResponse>();
     const realRowsTyped = (realRows ??
       []) as unknown as ScheduledSessionResponse[];
 
     for (const row of realRowsTyped) {
-      // Defaults para campos que el merge agrega abajo
-      // (originally_prescribed_session arranca null y se setea si detectamos
-      // divergencia con el template del microciclo).
       row.originally_prescribed_session = null;
-      realByDate.set(row.scheduled_date, row);
+      const key = `${row.scheduled_date}|${row.session?.id ?? ""}`;
+
+      realByKey.set(key, row);
     }
 
-    // 2. Materialize from the microcycle template: load every active
-    //    client_program owned by this trainer, then walk slots → sessions →
-    //    session_exercises and project per-date prescriptions.
+    // 2. Materialize from the microcycle template — unchanged from
+    //    before, indexed by date (one template row per date).
     let templateByDate = new Map<string, ScheduledSessionResponse>();
 
     if (startDate && endDate) {
@@ -232,66 +231,83 @@ export async function GET(
       );
     }
 
-    // 3. Merge: política por fecha
-    //    - solo template (cliente no entrenó): usar template.
-    //    - solo real (no hay template ese día): usar real.
-    //    - ambos + real es 'trainer' (override explícito): usar real, ignorar
-    //      template. El override del trainer manda.
-    //    - ambos + real es 'client' + sesión coincide con template: hidratar
-    //      template con status/completion_date/id del real → trainer ve que
-    //      el cliente entrenó lo recomendado.
-    //    - ambos + real es 'client' + sesión diverge del template: usar la
-    //      sesión REAL como prescripción del día (lo que el cliente entrenó),
-    //      y exponer el template como `originally_prescribed_session` para que
-    //      la UI muestre el chip informativo "Originalmente prescrito: X".
-    //      Métricas y logs se calculan contra lo que efectivamente entrenó,
-    //      no contra lo que se esperaba — así el trainer ve "sí entrenó X"
-    //      en vez de "0% pendiente" cuando el cliente cumplió otro día.
+    // 3. Merge. Política por fecha:
+    //    - Cada fila real (real, real, ...) se incluye tal cual; las
+    //      prescribed_by='client' aparecen como actividad off-plan
+    //      cuando su session_id diverge del template, o como sesión
+    //      recomendada cuando coincide.
+    //    - Si para la fecha existe slot de template y NO hay ninguna
+    //      fila real con ese mismo session_id, agregamos la fila virtual
+    //      del template (la prescripción pendiente).
+    //    - Cuando hay divergencia entre fila real (cliente) y template,
+    //      el real lleva `originally_prescribed_session` con la sesión
+    //      del template para que la UI muestre el chip "Recomendado: X".
+
     const merged: ScheduledSessionResponse[] = [];
-    const allDates = new Set<string>([
-      ...realByDate.keys(),
-      ...templateByDate.keys(),
-    ]);
+    const allDates = new Set<string>();
+
+    for (const row of realRowsTyped) allDates.add(row.scheduled_date);
+    for (const date of templateByDate.keys()) allDates.add(date);
 
     for (const date of allDates) {
-      const real = realByDate.get(date);
-      const template = templateByDate.get(date);
+      const template = templateByDate.get(date) ?? null;
+      const realsForDate = realRowsTyped.filter(
+        (r) => r.scheduled_date === date
+      );
 
-      if (!real) {
-        merged.push(template!);
-        continue;
-      }
-      if (!template) {
-        merged.push(real);
-        continue;
-      }
-      if (real.prescribed_by === "trainer") {
-        merged.push(real);
-        continue;
+      // Determinar la "sesión recomendada" para la fecha: el pin del
+      // trainer (real con prescribed_by='trainer') si existe; si no, el
+      // session_id del template.
+      const trainerPin =
+        realsForDate.find((r) => r.prescribed_by === "trainer") ?? null;
+      const recommendedSessionId = trainerPin
+        ? (trainerPin.session?.id ?? null)
+        : (template?.session?.id ?? null);
+
+      // Emitir cada fila real con anotación de divergencia.
+      for (const row of realsForDate) {
+        if (
+          row.prescribed_by === "client" &&
+          recommendedSessionId != null &&
+          row.session?.id !== recommendedSessionId
+        ) {
+          // Cliente entrenó algo distinto a lo recomendado: anotar la
+          // sesión recomendada como "originalmente prescrito" para que
+          // la UI le ponga el chip.
+          row.originally_prescribed_session =
+            trainerPin?.session ?? template?.session ?? null;
+        }
+        merged.push(row);
       }
 
-      // real.prescribed_by === 'client': la fila la creó el cliente al
-      // loguear. Si la sesión que eligió diverge del template, esa elección
-      // pasa al frente como prescripción visible — el template queda como
-      // contexto auxiliar.
-      const templateSessionId = template.session?.id ?? null;
-      const realSessionId = real.session?.id ?? null;
-      const diverged =
-        realSessionId != null && realSessionId !== templateSessionId;
-
-      if (diverged) {
-        merged.push({
-          ...real,
-          originally_prescribed_session: template.session,
-        });
-      } else {
-        // Cliente entrenó la sesión recomendada: usar real (que ya tiene
-        // status/completion_date/id correctos). Sin chip de divergencia.
-        merged.push(real);
+      // Si el template recomienda una sesión y ninguna fila real la
+      // cubre, agregar la fila virtual del template (prescripción
+      // pendiente, sin actividad).
+      if (
+        template &&
+        recommendedSessionId != null &&
+        !realsForDate.some((r) => r.session?.id === recommendedSessionId)
+      ) {
+        // Si hay trainerPin con un session_id distinto al template, no
+        // emitimos el template — el pin ya manda. Esto solo dispara
+        // cuando no hay pin y el template recomienda una sesión que el
+        // cliente no ha tocado todavía.
+        if (!trainerPin) merged.push(template);
       }
     }
 
-    merged.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+    merged.sort((a, b) => {
+      if (a.scheduled_date !== b.scheduled_date) {
+        return a.scheduled_date.localeCompare(b.scheduled_date);
+      }
+
+      // Estable dentro del día: trainer pin/prescripción primero,
+      // actividad del cliente después.
+      const aRank = a.prescribed_by === "trainer" ? 0 : 1;
+      const bRank = b.prescribed_by === "trainer" ? 0 : 1;
+
+      return aRank - bRank;
+    });
 
     return NextResponse.json({ success: true, scheduledSessions: merged });
   } catch (error) {
