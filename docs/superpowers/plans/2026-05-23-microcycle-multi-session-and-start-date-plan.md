@@ -4,7 +4,7 @@
 
 **Goal:** Make `scheduled_sessions` per `(client, date, session_id)` instead of per `(client, date)` so clients can train multiple sessions on the same day without log corruption; derive the daily prescription live from the microcycle + trainer per-date pins so changing a microcycle's `start_date` propagates forward.
 
-**Architecture:** Two SQL migrations rewire the data layer: 113 dedupes existing rows + widens the uniqueness key + updates `upsert_scheduled_session`; 114 rewrites `replace_scheduled_session_overrides` for per-session keying with stale-pin reconciliation. Three API endpoints (`/api/client/scheduled-sessions/[date]`, `/api/clients/[clientId]/scheduled-sessions/trainer`, `/api/clients/[clientId]/microcycle`) and two frontend hooks/components (`use-week-metrics`, `microcycle-config`) get updated to support multiple sessions per date and to handle the `start_date` cascade. The cascade is scoped by `microcycleId` so multi-program clients don't lose unrelated pins. No automated test framework exists in this repo; verification is via SQL queries against the live database and manual UI flows in the dev server.
+**Architecture:** Two SQL migrations rewire the data layer: 113 dedupes existing rows + widens the uniqueness key + updates `upsert_scheduled_session`; 114 rewrites `replace_scheduled_session_overrides` for per-session keying with stale-pin reconciliation. Four API endpoints (`/api/client/scheduled-sessions/[date]`, `/api/clients/[clientId]/scheduled-sessions/trainer`, `/api/clients/[clientId]/scheduled-sessions/trainer/day` reset flow, `/api/clients/[clientId]/microcycle`) and two frontend hooks/components (`use-week-metrics`, `microcycle-config`) get updated to support multiple sessions per date and to handle the `start_date` cascade. The cascade is scoped by the union of old + new microcycle slot session_ids so multi-program clients don't lose unrelated pins. No automated test framework exists in this repo; verification is via SQL queries against the live database and manual UI flows in the dev server.
 
 **Tech Stack:** Next.js 15 (App Router) + TypeScript, Supabase (Postgres + RLS), React Query, HeroUI v2 + Tailwind v4. Spec: `docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md`.
 
@@ -24,6 +24,8 @@
 10. Production data already has 13 duplicate `(client, date, session_id)` groups (~16 excess rows) — Task 1's preflight dedupe handles them before adding the constraint.
 11. `replace_scheduled_session_overrides` callers (`scheduled-sessions/trainer/day/route.ts:442`) and `upsert_scheduled_session` callers (`exercise-logs/route.ts:222`, `scheduled-sessions/route.ts:136`) all pass `p_session_id` non-null today, so the new NOT NULL + required-arg checks won't surprise any path.
 12. Cron sidecar (`cron-service/`) has zero references to `scheduled_sessions` — no migration risk there.
+13. Trainer's "Reset to template" day action (`trainer/day` PUT-empty and DELETE handlers) called `UPDATE session_id = null` on a row with logs — that would break under the new NOT NULL constraint. Task 6b rewrites it to use the same stale-pin reconciliation as Task 1b: demote pins with logs to `'client'`, delete pins without logs.
+14. Other `scheduled_sessions` consumers audited: `/api/client/calendar`, `/api/metrics/dashboard`, `/api/clients/[clientId]/scheduled-sessions/[sessionId]`, `/api/clients/[clientId]/route.ts`, `/api/charts/clients/[clientId]/snapshot`, `/api/client/exercises/[exerciseId]/history`, `/api/clients/[clientId]/programs`, `/api/client/programs` — all either key by row `id` or run aggregates that benefit from the multi-row semantics (e.g. "completed sessions this week" now counts each session done, not each date trained — more accurate, not regressive).
 
 ---
 
@@ -1653,6 +1655,290 @@ When the trainer changes microcycle.start_date, scheduled_sessions rows
 from the new start_date forward that are prescribed_by='trainer' with
 no exercise_logs attached get deleted, so the resolver re-derives them
 from the new alignment. Past rows and rows with logs are preserved.
+
+Co-Authored-By: RuFlo <ruv@ruv.net>"
+```
+
+---
+
+## Task 6b: Fix the trainer day reset flow for multi-row + NOT NULL session_id
+
+**Files:**
+
+- Modify: `app/api/clients/[clientId]/scheduled-sessions/trainer/day/route.ts` (the `resetDay` helper around lines 174-260, used by both PUT-with-empty-payload and DELETE handlers)
+
+**Context:** This route's `resetDay(supabase, clientId, date, correlationId)` is what the trainer's day-editor calls when they hit "Reset to template" or save an empty override. Today's behavior:
+
+```typescript
+// Old shape — broken after migration 113:
+const { data: ss } = await supabase
+  .from("scheduled_sessions")
+  .select("id")
+  .eq("client_id", clientId)
+  .eq("scheduled_date", date)
+  .maybeSingle();   // ← undefined behavior with multiple rows
+
+if (logsCount > 0) {
+  // ...
+  await supabase
+    .from("scheduled_sessions")
+    .update({ session_id: null, ... })  // ← NOT NULL violation after migration 113
+    .eq("id", ss.id);
+} else {
+  await supabase.from("scheduled_sessions").delete().eq("id", ss.id);
+}
+```
+
+Two failures after migration 113:
+
+1. `.maybeSingle()` on `(client_id, scheduled_date)` is undefined when multiple rows exist — Postgres picks one arbitrarily.
+2. `UPDATE session_id = null` violates the new NOT NULL on `session_id` → 500 error every time the trainer resets a date that has logs.
+
+The semantic of "reset to template" under the new model: remove the trainer pin(s) for this date entirely. If a pin has client logs attached, demote it to `prescribed_by='client'` (preserve activity); if it has no logs, delete it outright. Identical pattern to Task 1b's stale-pin reconciliation, just triggered by a different action.
+
+- [ ] **Step 1: Rewrite `resetDay`**
+
+In `app/api/clients/[clientId]/scheduled-sessions/trainer/day/route.ts`, locate the `resetDay` function (starts around line 174). Replace its body with:
+
+```typescript
+async function resetDay(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  date: string,
+  correlationId: string
+): Promise<NextResponse> {
+  // Find ALL trainer-pinned rows for (client, date). The new model
+  // allows multiple ss rows per date (one per session_id), so we walk
+  // them all. prescribed_by='client' rows (pure client activity) are
+  // never touched by reset — those belong to the client, not the trainer.
+  const { data: pins, error: pinsError } = await supabase
+    .from("scheduled_sessions")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("scheduled_date", date)
+    .eq("prescribed_by", "trainer");
+
+  if (pinsError) {
+    console.error(`${LOG_PREFIX} resetDay fetch pins:`, {
+      correlationId,
+      error: pinsError.message,
+    });
+
+    return NextResponse.json(
+      { success: false, error: "Error leyendo prescripciones del día" },
+      { status: 500 }
+    );
+  }
+
+  if (!pins || pins.length === 0) {
+    // Nothing to reset — already at template.
+    return NextResponse.json({ success: true });
+  }
+
+  // Determine which pins have logs vs no logs in one batch query.
+  const pinIds = pins.map((p) => p.id);
+  const { data: pinsWithLogs, error: logsError } = await supabase
+    .from("exercise_logs")
+    .select("scheduled_session_id")
+    .in("scheduled_session_id", pinIds);
+
+  if (logsError) {
+    console.error(`${LOG_PREFIX} resetDay logs probe:`, {
+      correlationId,
+      error: logsError.message,
+    });
+
+    return NextResponse.json(
+      { success: false, error: "Error verificando logs" },
+      { status: 500 }
+    );
+  }
+
+  const idsWithLogs = new Set(
+    (pinsWithLogs ?? []).map((r) => r.scheduled_session_id)
+  );
+  const toDemote = pinIds.filter((id) => idsWithLogs.has(id));
+  const toDelete = pinIds.filter((id) => !idsWithLogs.has(id));
+
+  // Demote pins with logs to 'client' — preserves activity but drops
+  // their role as prescription anchor. Their scheduled_session_exercises
+  // (overrides) stay as a historic snapshot of what was prescribed when
+  // the client trained.
+  if (toDemote.length > 0) {
+    const { error: demoteError } = await supabase
+      .from("scheduled_sessions")
+      .update({
+        prescribed_by: "client",
+        status: "scheduled",
+      })
+      .in("id", toDemote);
+
+    if (demoteError) {
+      console.error(`${LOG_PREFIX} resetDay demote:`, {
+        correlationId,
+        error: demoteError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error degradando prescripciones" },
+        { status: 500 }
+      );
+    }
+  }
+
+  // Delete pins with no logs (cascades through scheduled_session_exercises
+  // and scheduled_session_exercise_sets via existing ON DELETE CASCADE).
+  if (toDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("scheduled_sessions")
+      .delete()
+      .in("id", toDelete);
+
+    if (deleteError) {
+      console.error(`${LOG_PREFIX} resetDay delete:`, {
+        correlationId,
+        error: deleteError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error borrando prescripciones" },
+        { status: 500 }
+      );
+    }
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+(The original implementation also had an early return when `ss` was null after the maybeSingle — the new version handles that via the `pins.length === 0` guard.)
+
+- [ ] **Step 2: Type-check**
+
+```bash
+npm run type-check
+```
+
+Expected: exits 0.
+
+- [ ] **Step 3: Manual verification — reset with logs preserves activity**
+
+Setup: pick a date where Pedro has logs and an active trainer pin (e.g. 2026-05-20 — has `prescribed_by='trainer'` and 6 finalized logs):
+
+```sql
+SELECT id, session_id, prescribed_by,
+  (SELECT COUNT(*) FROM exercise_logs WHERE scheduled_session_id = ss.id) AS logs,
+  (SELECT COUNT(*) FROM scheduled_session_exercises WHERE scheduled_session_id = ss.id) AS overrides
+FROM scheduled_sessions ss
+WHERE client_id = 179 AND scheduled_date = '2026-05-20';
+```
+
+Note the pre-reset state. Now call the reset endpoint as trainer Carlos:
+
+```bash
+curl -s -X DELETE "http://localhost:3000/api/clients/179/scheduled-sessions/trainer/day?date=2026-05-20" \
+  -H "Cookie: trainer-session=<get-from-browser>"
+```
+
+Re-run the SQL query. Expected:
+
+- The row that was `prescribed_by='trainer'` is now `prescribed_by='client'`.
+- Its `logs` count unchanged (activity preserved).
+- Its `overrides` count unchanged (historic snapshot of what was prescribed).
+- The `scheduled_session_exercises` rows for this scheduled_session still exist.
+
+**Restore** the row to trainer-pinned for subsequent verifications:
+
+```sql
+UPDATE scheduled_sessions SET prescribed_by = 'trainer'
+WHERE client_id = 179 AND scheduled_date = '2026-05-20';
+```
+
+- [ ] **Step 4: Manual verification — reset on a no-logs trainer pin deletes the row**
+
+Setup: create a synthetic trainer pin on a future date with no logs:
+
+```sql
+INSERT INTO scheduled_sessions(
+  tenant_host, client_id, trainer_id, session_id,
+  scheduled_date, status, prescribed_by
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co', 179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  'e7c1ac45-6443-4132-987b-ca8754c99f21',
+  '2026-08-01', 'scheduled', 'trainer'
+);
+```
+
+Call reset:
+
+```bash
+curl -s -X DELETE "http://localhost:3000/api/clients/179/scheduled-sessions/trainer/day?date=2026-08-01" \
+  -H "Cookie: trainer-session=<get-from-browser>"
+```
+
+Verify the row is gone:
+
+```sql
+SELECT COUNT(*) FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date = '2026-08-01';
+```
+
+Expected: `0`.
+
+- [ ] **Step 5: Manual verification — reset never touches client-only rows**
+
+Setup: synthetic client-only activity row on a future date:
+
+```sql
+INSERT INTO scheduled_sessions(
+  tenant_host, client_id, trainer_id, session_id,
+  scheduled_date, status, prescribed_by
+) VALUES (
+  'ydqhndnvrkvycnkaghro.supabase.co', 179,
+  'f35d7800-6181-4bd3-8b5c-2c9cc364220a',
+  'e7c1ac45-6443-4132-987b-ca8754c99f21',
+  '2026-08-02', 'scheduled', 'client'
+);
+```
+
+Call reset:
+
+```bash
+curl -s -X DELETE "http://localhost:3000/api/clients/179/scheduled-sessions/trainer/day?date=2026-08-02" \
+  -H "Cookie: trainer-session=<get-from-browser>"
+```
+
+Verify the client row is untouched:
+
+```sql
+SELECT id, prescribed_by FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date = '2026-08-02';
+```
+
+Expected: row still exists, `prescribed_by='client'`.
+
+Clean up:
+
+```sql
+DELETE FROM scheduled_sessions
+WHERE client_id = 179 AND scheduled_date IN ('2026-08-01','2026-08-02');
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/api/clients/[clientId]/scheduled-sessions/trainer/day/route.ts
+git commit -m "fix(microcycle): trainer day reset handles multi-row + NOT NULL session_id
+
+The old resetDay helper used .maybeSingle() on (client, date) and
+UPDATE'd session_id=null when logs existed. Both break after migration
+113 (multi-row possible, session_id NOT NULL). New flow:
+
+- Find all prescribed_by='trainer' rows for the date.
+- Pins with logs → demote to prescribed_by='client' (preserve activity).
+- Pins without logs → delete (cascades clear overrides).
+- prescribed_by='client' rows never touched.
 
 Co-Authored-By: RuFlo <ruv@ruv.net>"
 ```
