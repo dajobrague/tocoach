@@ -171,86 +171,101 @@ async function resetDay(
     }
   }
 
-  const { data: ss } = await supabase
+  // Find ALL trainer-pinned rows for (client, date). The new model
+  // allows multiple ss rows per date (one per session_id), so we walk
+  // them all. prescribed_by='client' rows (pure client activity) are
+  // never touched by reset — those belong to the client, not the trainer.
+  const { data: pins, error: pinsError } = await supabase
     .from("scheduled_sessions")
     .select("id")
     .eq("client_id", clientId)
     .eq("scheduled_date", date)
-    .maybeSingle();
+    .eq("prescribed_by", "trainer");
 
-  if (!ss) {
+  if (pinsError) {
+    console.error(`${LOG_PREFIX} resetDay fetch pins:`, {
+      correlationId,
+      error: pinsError.message,
+    });
+
+    return NextResponse.json(
+      { success: false, error: "Error leyendo prescripciones del día" },
+      { status: 500 }
+    );
+  }
+
+  if (!pins || pins.length === 0) {
+    // Nothing to reset — already at template.
     return NextResponse.json({ success: true });
   }
 
-  const { count: logsCount } = await supabase
+  // Determine which pins have logs vs no logs in one batch query.
+  const pinIds = pins.map((p) => p.id);
+  const { data: pinsWithLogs, error: logsError } = await supabase
     .from("exercise_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("scheduled_session_id", ss.id);
+    .select("scheduled_session_id")
+    .in("scheduled_session_id", pinIds);
 
-  if ((logsCount ?? 0) > 0) {
-    const { error: delExError } = await supabase
-      .from("scheduled_session_exercises")
-      .delete()
-      .eq("scheduled_session_id", ss.id);
+  if (logsError) {
+    console.error(`${LOG_PREFIX} resetDay logs probe:`, {
+      correlationId,
+      error: logsError.message,
+    });
 
-    if (delExError) {
-      console.error(`${LOG_PREFIX} delete overrides only:`, {
-        correlationId,
-        error: delExError.message,
-      });
+    return NextResponse.json(
+      { success: false, error: "Error verificando logs" },
+      { status: 500 }
+    );
+  }
 
-      return NextResponse.json(
-        { success: false, error: "Error reseteando override" },
-        { status: 500 }
-      );
-    }
+  const idsWithLogs = new Set(
+    (pinsWithLogs ?? []).map((r) => r.scheduled_session_id)
+  );
+  const toDemote = pinIds.filter((id) => idsWithLogs.has(id));
+  const toDelete = pinIds.filter((id) => !idsWithLogs.has(id));
 
-    // CRÍTICO: limpia session_id stale. Antes el reset borraba solo los
-    // overrides pero dejaba scheduled_sessions.session_id apuntando a la
-    // última sesión que el trainer había elegido. La próxima lectura
-    // entraba por la rama "session" con esa sesión vieja en vez de caer
-    // al template del microciclo — "Restaurar al template" mentía.
-    //
-    // También marcamos prescribed_by='trainer': el trainer acaba de
-    // hacer una acción explícita sobre el día. Si la fila había sido
-    // creada por un log del cliente (prescribed_by='client'), pasarla
-    // a 'trainer' refleja que la intención más reciente del trainer
-    // manda (consistente con el comportamiento de
-    // replace_scheduled_session_overrides en migration 110).
-    const { error: clearSessionError } = await supabase
+  // Demote pins with logs to 'client' — preserves activity but drops
+  // their role as prescription anchor. Their scheduled_session_exercises
+  // (overrides) stay as a historic snapshot of what was prescribed when
+  // the client trained.
+  if (toDemote.length > 0) {
+    const { error: demoteError } = await supabase
       .from("scheduled_sessions")
       .update({
-        session_id: null,
+        prescribed_by: "client",
         status: "scheduled",
-        prescribed_by: "trainer",
       })
-      .eq("id", ss.id);
+      .in("id", toDemote);
 
-    if (clearSessionError) {
-      console.error(`${LOG_PREFIX} clear session_id on reset:`, {
+    if (demoteError) {
+      console.error(`${LOG_PREFIX} resetDay demote:`, {
         correlationId,
-        error: clearSessionError.message,
+        error: demoteError.message,
       });
 
       return NextResponse.json(
-        { success: false, error: "Error reseteando sesión asignada" },
+        { success: false, error: "Error degradando prescripciones" },
         { status: 500 }
       );
     }
-  } else {
-    const { error: delSsError } = await supabase
+  }
+
+  // Delete pins with no logs (cascades through scheduled_session_exercises
+  // and scheduled_session_exercise_sets via existing ON DELETE CASCADE).
+  if (toDelete.length > 0) {
+    const { error: deleteError } = await supabase
       .from("scheduled_sessions")
       .delete()
-      .eq("id", ss.id);
+      .in("id", toDelete);
 
-    if (delSsError) {
-      console.error(`${LOG_PREFIX} delete scheduled_session:`, {
+    if (deleteError) {
+      console.error(`${LOG_PREFIX} resetDay delete:`, {
         correlationId,
-        error: delSsError.message,
+        error: deleteError.message,
       });
 
       return NextResponse.json(
-        { success: false, error: "Error eliminando sesión programada" },
+        { success: false, error: "Error borrando prescripciones" },
         { status: 500 }
       );
     }
