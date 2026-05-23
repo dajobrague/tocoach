@@ -106,6 +106,38 @@ async function cleanTestRange(supabase: Supabase) {
   }
 }
 
+/**
+ * Safety check: refuse to run if anything in the test date range looks
+ * like real client activity (i.e. rows with attached exercise_logs).
+ * Synthetic test rows are created fresh each run and never have logs
+ * we didn't create, so any pre-existing logs here mean the test range
+ * has been polluted — bail rather than risk destroying real data.
+ */
+async function assertTestRangeIsSafe(supabase: Supabase): Promise<void> {
+  const { data: ssInRange } = await supabase
+    .from("scheduled_sessions")
+    .select("id")
+    .eq("client_id", CLIENT_ID)
+    .gte("scheduled_date", TEST_DATE_MIN)
+    .lte("scheduled_date", TEST_DATE_MAX);
+  const ids = (ssInRange ?? []).map((r) => r.id);
+
+  if (ids.length === 0) return;
+
+  const { count } = await supabase
+    .from("exercise_logs")
+    .select("id", { count: "exact", head: true })
+    .in("scheduled_session_id", ids);
+
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      `Refusing to run: test range ${TEST_DATE_MIN}..${TEST_DATE_MAX} ` +
+        `contains ${count} exercise_logs for client ${CLIENT_ID}. ` +
+        `Move the test range or investigate before re-running.`
+    );
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // CATEGORY 1 — LIFECYCLE (full flow read-only against real microcycle)
 // ────────────────────────────────────────────────────────────────────────────
@@ -460,8 +492,11 @@ async function testEdgeCases(supabase: Supabase, tenantHost: string) {
     `id=${id5}, overrides=${(overrides5 ?? []).length}`
   );
 
-  // 3.6 — Boundary: scheduled_date = today. Should accept.
-  const today = new Date().toISOString().slice(0, 10);
+  // 3.6 — Boundary: scheduled_date = end of test range. Should accept.
+  // (Originally used new Date() / "today" — that triggered a catastrophic
+  // collision with Pedro's real activity on 2026-05-23 and cascade-deleted
+  // 9 of his logs. NEVER use a date outside the explicit test range.)
+  const boundaryDate = ymdInRange(60);
   const { data: rows6, error: e6 } = await supabase.rpc(
     "upsert_scheduled_session",
     {
@@ -469,21 +504,18 @@ async function testEdgeCases(supabase: Supabase, tenantHost: string) {
       p_client_id: CLIENT_ID,
       p_trainer_id: TRAINER_ID,
       p_session_id: BICEPS_GLUTEO_H,
-      p_scheduled_date: today,
+      p_scheduled_date: boundaryDate,
       p_caller_role: "client",
     }
   );
 
   record(
     "edge",
-    "3.6 — upsert for today succeeds",
+    `3.6 — upsert for boundary date (${boundaryDate}) succeeds`,
     e6 === null && typeof rows6 === "string",
     `error=${e6?.message ?? "none"}`
   );
-  // Cleanup the today insert (it's not in test date range).
-  if (typeof rows6 === "string") {
-    await supabase.from("scheduled_sessions").delete().eq("id", rows6);
-  }
+  // Cleanup falls through to the section-end cleanTestRange below.
 
   // 3.7 — Trying to insert a row directly with a duplicate
   // (client_id, scheduled_date, session_id) → UNIQUE violation.
@@ -648,22 +680,6 @@ async function readAllPaginated<T>(
   }
 
   return out;
-}
-
-async function fkConstraintExists(
-  supabase: Supabase,
-  conname: string,
-  expectedDef: string
-): Promise<boolean> {
-  // We can't query pg_constraint via supabase-js. Workaround: trigger the
-  // constraint and observe whether the DB enforces it. Skip for now — we
-  // verify by row-level paginated sweep below instead.
-  // (Suppress lint warnings for unused params; helper kept for future use.)
-  void supabase;
-  void conname;
-  void expectedDef;
-
-  return true;
 }
 
 async function testInvariants(supabase: Supabase) {
@@ -1122,7 +1138,12 @@ async function main() {
 
   console.log(`\ntenant_host: ${tenantHost}\n`);
 
-  // Defensive cleanup at start.
+  // SAFETY: refuse to touch the DB if the test range contains logs
+  // (would mean we're about to destroy real activity).
+  await assertTestRangeIsSafe(supabase);
+
+  // Defensive cleanup at start — only touches rows in the test range
+  // that we already verified are log-free.
   await cleanTestRange(supabase);
 
   try {
