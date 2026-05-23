@@ -137,6 +137,40 @@ SET scheduled_session_id = l.survivor_id
 FROM losers l
 WHERE el.scheduled_session_id = l.loser_id;
 
+-- Preservar la "intención del trainer" del grupo: si CUALQUIER fila del
+-- grupo era prescribed_by='trainer', el survivor también lo es. Evita
+-- que un duplicado client+trainer (de los ~16 históricos) pierda la
+-- atribución de prescripción al haber sido elegido el survivor por
+-- log_count cuando el client row tenía logs y el trainer row no.
+UPDATE scheduled_sessions ss
+SET prescribed_by = 'trainer',
+    updated_at = NOW()
+FROM (
+  SELECT
+    client_id, scheduled_date, session_id, id,
+    ROW_NUMBER() OVER (
+      PARTITION BY client_id, scheduled_date, session_id
+      ORDER BY
+        (SELECT COUNT(*) FROM exercise_logs el
+           WHERE el.scheduled_session_id = scheduled_sessions.id) DESC,
+        created_at ASC,
+        id ASC
+    ) AS rn
+  FROM scheduled_sessions
+  WHERE session_id IS NOT NULL
+) s
+WHERE ss.id = s.id
+  AND s.rn = 1
+  AND ss.prescribed_by != 'trainer'
+  AND EXISTS (
+    SELECT 1 FROM scheduled_sessions other
+    WHERE other.client_id = s.client_id
+      AND other.scheduled_date = s.scheduled_date
+      AND other.session_id = s.session_id
+      AND other.id != s.id
+      AND other.prescribed_by = 'trainer'
+  );
+
 -- Borrar las filas loser (sus overrides + exercise_sets cascadean por FK
 -- a través de scheduled_session_exercises ON DELETE CASCADE).
 DELETE FROM scheduled_sessions ss
