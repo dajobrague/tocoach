@@ -33,6 +33,12 @@ interface Props {
   heading?: string;
   /** Session id that the trainer's microcycle/override prescribes for the visible date. */
   recommendedSessionId?: string | null;
+  /**
+   * Sessions el cliente ya logueó al menos un ejercicio para la fecha
+   * visible. Se renderizan grises + "Hecho" en vez de "Comenzar" — no
+   * se permite re-entrar a la misma sesión el mismo día.
+   */
+  loggedSessionIds?: ReadonlySet<string>;
 }
 
 interface Bucket {
@@ -62,6 +68,7 @@ export function AvailableSessionsList({
   onActivate,
   heading = "Escoge tu siguiente entrenamiento",
   recommendedSessionId = null,
+  loggedSessionIds,
 }: Props) {
   if (availableSessions.length === 0) return null;
 
@@ -81,6 +88,7 @@ export function AvailableSessionsList({
               {bucket.sessions.map((session) => (
                 <SessionRow
                   key={session.id}
+                  isDone={loggedSessionIds?.has(session.id) ?? false}
                   isRecommended={session.id === recommendedSessionId}
                   session={session}
                   onActivate={onActivate}
@@ -113,11 +121,38 @@ function SessionRow({
   session,
   onActivate,
   isRecommended,
+  isDone,
 }: {
   session: AvailableSession;
   onActivate: (sessionId: string) => void;
   isRecommended: boolean;
+  isDone: boolean;
 }) {
+  // Sesión ya logueada hoy: la card va gris y no es clickable. El cliente
+  // puede entrar a otra sesión, pero no a la misma de nuevo el mismo día —
+  // si quiere editar logs existentes lo hace desde "Tu entrenamiento del día".
+  if (isDone) {
+    return (
+      <div
+        aria-disabled="true"
+        className="opacity-60 pointer-events-none select-none"
+      >
+        <SessionCard
+          exerciseCount={session.exercise_count}
+          isRecommended={isRecommended}
+          name={session.name}
+          rightContent={
+            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-success-700">
+              <Icon icon="solar:check-circle-bold" width={14} />
+              <span className="text-xs font-semibold leading-none">Hecho</span>
+            </span>
+          }
+          sessionType={session.session_type}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="cursor-pointer"

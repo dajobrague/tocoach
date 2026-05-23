@@ -337,6 +337,9 @@ export function WorkoutsContent() {
                           ? "¿Qué hiciste ese día?"
                           : "Plan para ese día"
                   }
+                  loggedSessionIds={
+                    new Set(loggedSessions.map((s) => s.sessionId))
+                  }
                   recommendedSessionId={recommendedSessionId}
                   onActivate={handleActivateSession}
                 />
