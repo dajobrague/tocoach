@@ -17,6 +17,7 @@ export interface ExerciseLog {
     muscle_groups: string[] | null;
   };
   scheduled_date: string;
+  session_id?: string | null;
   completed_at: string;
   sets: ExerciseLogSet[];
   video_url: string | null;
