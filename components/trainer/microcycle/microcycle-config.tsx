@@ -7,8 +7,19 @@
 
 import type { Session } from "@/types/training";
 
-import { Button, Input, Skeleton, addToast } from "@heroui/react";
+import {
+  Button,
+  Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Skeleton,
+  addToast,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useRef, useState } from "react";
 
 import AvailableSessionsAside from "./available-sessions-aside";
 import { useMicrocycleEditor } from "./hooks/use-microcycle-editor";
@@ -28,7 +39,19 @@ export default function MicrocycleConfig({ clientId }: Props) {
 
   const editor = useMicrocycleEditor(data?.microcycle, isSuccess);
 
-  const handleSave = () => {
+  const loadedStartDateRef = useRef<string | null>(null);
+
+  if (
+    isSuccess &&
+    loadedStartDateRef.current === null &&
+    data?.microcycle?.start_date
+  ) {
+    loadedStartDateRef.current = data.microcycle.start_date;
+  }
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const performSave = () => {
     save.mutate(
       {
         duration_days: editor.durationDays,
@@ -37,12 +60,15 @@ export default function MicrocycleConfig({ clientId }: Props) {
       },
       {
         onSuccess: () => {
+          loadedStartDateRef.current = editor.startDate;
+          setConfirmOpen(false);
           addToast({
             title: "Microciclo guardado",
             description: "Tu cliente ya puede verlo como referencia en su app.",
           });
         },
         onError: (e) => {
+          setConfirmOpen(false);
           addToast({
             title: "Error al guardar",
             description:
@@ -53,6 +79,19 @@ export default function MicrocycleConfig({ clientId }: Props) {
         },
       }
     );
+  };
+
+  const handleSave = () => {
+    const previous = loadedStartDateRef.current;
+    const startDateChanged = previous !== null && previous !== editor.startDate;
+
+    if (startDateChanged) {
+      setConfirmOpen(true);
+
+      return;
+    }
+
+    performSave();
   };
 
   if (isLoading) {
@@ -198,6 +237,32 @@ export default function MicrocycleConfig({ clientId }: Props) {
           </aside>
         </div>
       )}
+
+      <Modal isOpen={confirmOpen} onOpenChange={setConfirmOpen}>
+        <ModalContent>
+          <ModalHeader>Cambiar fecha de inicio</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-700">
+              Esto borrará las prescripciones futuras pre-cargadas a partir del{" "}
+              <strong>{editor.startDate}</strong> y las recalculará con la nueva
+              alineación del microciclo. Las fechas en las que tu cliente ya
+              entrenó no se tocan.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setConfirmOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              color="primary"
+              isLoading={save.isPending}
+              onPress={performSave}
+            >
+              Confirmar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }
