@@ -227,3 +227,104 @@ export async function replaceSlots(
 
   return null;
 }
+
+/**
+ * Borra las filas scheduled_sessions del cliente desde `fromDate`
+ * inclusive que cumplan TODAS:
+ *   - prescribed_by='trainer' (no tocamos actividad del cliente).
+ *   - No tienen exercise_logs ligados (preservamos historia entrenada).
+ *   - session_id está en `scopedSessionIds` (las sesiones del microciclo
+ *     que cambió — unión de slots pre-save y post-save para limpiar
+ *     tanto pins de la alineación vieja como de la nueva).
+ *
+ * Use case: trainer cambia microcycle.start_date y quiere que las
+ * prescripciones futuras pre-cargadas se re-deriven con la nueva
+ * alineación, sin colateral en otros microciclos activos del cliente.
+ */
+export async function cleanFuturePrescribedRowsForReset(
+  supabase: Supabase,
+  clientId: string,
+  fromDate: string,
+  scopedSessionIds: string[],
+  correlationId: string
+): Promise<{ deletedCount: number; error: string | null }> {
+  if (scopedSessionIds.length === 0) {
+    // El microciclo cambiado no referencia sesiones (todo descanso) ni
+    // tenía sesiones antes. Nada que limpiar.
+    return { deletedCount: 0, error: null };
+  }
+
+  // 1. Buscar candidatos: trainer-pinned rows del cliente desde fromDate
+  //    cuyo session_id pertenezca al scope.
+  const { data: candidates, error: selectError } = await supabase
+    .from("scheduled_sessions")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("prescribed_by", "trainer")
+    .gte("scheduled_date", fromDate)
+    .in("session_id", scopedSessionIds);
+
+  if (selectError) {
+    console.error(`${LOG_PREFIX} clean reset select failed:`, {
+      correlationId,
+      clientId,
+      fromDate,
+      error: selectError.message,
+    });
+
+    return { deletedCount: 0, error: selectError.message };
+  }
+
+  const candidateIds = (candidates ?? []).map((r) => r.id);
+
+  if (candidateIds.length === 0) return { deletedCount: 0, error: null };
+
+  // 2. Filtrar a las que NO tengan exercise_logs ligados. Si tiene
+  //    logs, no la tocamos (preservar actividad del cliente).
+  const { data: withLogs, error: logsError } = await supabase
+    .from("exercise_logs")
+    .select("scheduled_session_id")
+    .in("scheduled_session_id", candidateIds);
+
+  if (logsError) {
+    console.error(`${LOG_PREFIX} clean reset logs probe failed:`, {
+      correlationId,
+      clientId,
+      error: logsError.message,
+    });
+
+    return { deletedCount: 0, error: logsError.message };
+  }
+
+  const withLogsSet = new Set(
+    (withLogs ?? []).map((l) => l.scheduled_session_id)
+  );
+  const toDelete = candidateIds.filter((id) => !withLogsSet.has(id));
+
+  if (toDelete.length === 0) return { deletedCount: 0, error: null };
+
+  const { error: deleteError } = await supabase
+    .from("scheduled_sessions")
+    .delete()
+    .in("id", toDelete);
+
+  if (deleteError) {
+    console.error(`${LOG_PREFIX} clean reset delete failed:`, {
+      correlationId,
+      clientId,
+      deletedCount: toDelete.length,
+      error: deleteError.message,
+    });
+
+    return { deletedCount: 0, error: deleteError.message };
+  }
+
+  console.log(`${LOG_PREFIX} clean reset deleted future trainer pins:`, {
+    correlationId,
+    clientId,
+    fromDate,
+    deletedCount: toDelete.length,
+  });
+
+  return { deletedCount: toDelete.length, error: null };
+}

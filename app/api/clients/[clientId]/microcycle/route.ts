@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
+  cleanFuturePrescribedRowsForReset,
   loadAllActiveOwnedPrograms,
   loadMicrocycleWithSlots,
   replaceSlots,
@@ -274,6 +275,23 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       }
     }
 
+    // Detect start_date change to trigger the future-rows cascade.
+    // Compare against the existing microcycle's start_date (if any).
+    // Also capture the OLD slot session_ids — needed to clear pins of
+    // sessions that get removed from the microcycle in this same save.
+    const existingMicrocycle = await loadMicrocycleWithSlots(
+      supabase,
+      primary.id,
+      correlationId
+    );
+    const previousStartDate = existingMicrocycle?.start_date ?? null;
+    const startDateChanged =
+      previousStartDate !== null &&
+      previousStartDate !== validation.value.start_date;
+    const previousSlotSessionIds = (existingMicrocycle?.slots ?? [])
+      .map((s) => s.session_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+
     const microcycleId = await upsertMicrocycle(
       supabase,
       primary,
@@ -301,6 +319,41 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         { success: false, error: replaceError },
         { status: 500 }
       );
+    }
+
+    if (startDateChanged) {
+      // Union of old + new slot session_ids. Old → para limpiar pins de
+      // sesiones que el trainer acaba de remover del microciclo en este
+      // mismo save (no quedan referenciadas pero igual tenían pins). New →
+      // para limpiar pins alineados a la versión vieja del cronograma.
+      // El cascade NO toca pins cuya session esté fuera de ambos sets
+      // (esos vienen de otro microciclo activo del cliente — fuera de
+      // scope).
+      const newSlotSessionIds = validation.value.slots
+        .map((s) => s.session_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      const scopedSessionIds = Array.from(
+        new Set([...previousSlotSessionIds, ...newSlotSessionIds])
+      );
+
+      const cleanup = await cleanFuturePrescribedRowsForReset(
+        supabase,
+        clientId,
+        validation.value.start_date,
+        scopedSessionIds,
+        correlationId
+      );
+
+      if (cleanup.error) {
+        // No fatal — el microciclo ya está guardado. Logueamos y
+        // seguimos. La UI puede mostrar un toast de advertencia.
+        console.warn(`${LOG_PREFIX} start_date cascade had errors:`, {
+          correlationId,
+          clientId,
+          microcycleId,
+          error: cleanup.error,
+        });
+      }
     }
 
     const microcycle = await loadMicrocycleWithSlots(
