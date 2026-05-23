@@ -107,7 +107,8 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   const todayYmd = getLocalYmd(new Date());
   const editable =
     !!selectedDay &&
-    (selectedDay.date >= todayYmd || selectedDay.logs.length === 0);
+    (selectedDay.date >= todayYmd ||
+      selectedDay.sessions.every((s) => s.logs.length === 0));
 
   const handleCommitted = useCallback(() => {
     invalidate(getLocalYmd(weekStart));
@@ -119,7 +120,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   // empty state instead of an empty strip of dashes.
   const weekIsCompletelyEmpty =
     !!data &&
-    data.days.every((d) => d.prescribed.length === 0) &&
+    data.days.every((d) => d.sessions.length === 0) &&
     data.orphansByDate.size === 0;
 
   return (

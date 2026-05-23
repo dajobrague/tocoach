@@ -110,13 +110,27 @@ export interface DayAdherence {
   carga: number;
 }
 
-export interface DayMetrics {
-  date: string;
-  scheduledSession: ScheduledSessionRow | null;
+export interface SessionEntry {
+  scheduledSession: ScheduledSessionRow;
   prescribed: PrescribedExercise[];
   logs: ExerciseLog[];
   adherence: DayAdherence;
   classification: DayClassification;
+}
+
+export interface DayMetrics {
+  date: string;
+  /**
+   * One entry per (date, session) the client or trainer touched. Empty
+   * when the day is rest both in template and activity.
+   */
+  sessions: SessionEntry[];
+  /**
+   * Sesión que el trainer recomienda para el día (microciclo o pin
+   * trainer). null = rest day. Se usa para anotar "Recomendado: X" en
+   * el header del día cuando no aparece en `sessions`.
+   */
+  recommendedSessionName: string | null;
   isToday: boolean;
   isFuture: boolean;
 }

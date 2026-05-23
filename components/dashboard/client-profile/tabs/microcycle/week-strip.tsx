@@ -79,16 +79,56 @@ export function WeekStrip({
         {days.map((day, idx) => {
           const isSelected = day.date === selectedDate;
           const dayNumber = parseInt(day.date.split("-")[2] ?? "0");
-          const sessionName = day.scheduledSession?.session?.name ?? "Descanso";
+          const isRest = day.sessions.length === 0;
+
+          // Derive a representative classification for the day card border/ring.
+          // If any session is complete → complete; if any partial → partial;
+          // if all future → future; else rest.
+          const dayClassification: DayClassification = isRest
+            ? day.isFuture
+              ? "future"
+              : "rest"
+            : day.sessions.some((s) => s.classification === "complete")
+              ? "complete"
+              : day.sessions.some((s) => s.classification === "partial")
+                ? "partial"
+                : day.sessions.some((s) => s.classification === "future")
+                  ? "future"
+                  : "pending";
+
+          // Session label: "Descanso" / single name / "N sesiones"
+          const sessionLabel = isRest
+            ? day.recommendedSessionName != null
+              ? `Descanso · ${day.recommendedSessionName}`
+              : "Descanso"
+            : day.sessions.length === 1
+              ? (day.sessions[0]!.scheduledSession.session?.name ?? "Sesión")
+              : `${day.sessions.length} sesiones`;
+
+          // Adherence % to show: aggregate across sessions when multiple.
           const showPercent =
-            day.classification !== "rest" && day.classification !== "future";
-          const ariaLabel = day.scheduledSession
-            ? `${DAY_LABELS[idx]} ${dayNumber}, ${sessionName}, ${
+            !isRest &&
+            dayClassification !== "future" &&
+            dayClassification !== "rest";
+
+          const totalPrescribed = day.sessions.reduce(
+            (acc, s) => acc + s.adherence.totalPrescribed,
+            0
+          );
+          const completedExercises = day.sessions.reduce(
+            (acc, s) => acc + s.adherence.completedExercises,
+            0
+          );
+          const agregateEjercicios =
+            totalPrescribed === 0 ? 0 : completedExercises / totalPrescribed;
+
+          const ariaLabel = isRest
+            ? `${DAY_LABELS[idx]} ${dayNumber}, día de descanso`
+            : `${DAY_LABELS[idx]} ${dayNumber}, ${sessionLabel}, ${
                 showPercent
-                  ? `${day.adherence.completedExercises} de ${day.adherence.totalPrescribed} ejercicios completados`
+                  ? `${completedExercises} de ${totalPrescribed} ejercicios completados`
                   : "sin actividad aún"
-              }`
-            : `${DAY_LABELS[idx]} ${dayNumber}, día de descanso`;
+              }`;
 
           return (
             <button
@@ -98,7 +138,7 @@ export function WeekStrip({
               aria-selected={isSelected}
               className={[
                 "relative flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors text-left",
-                borderClassFor(day.classification, isSelected),
+                borderClassFor(dayClassification, isSelected),
                 day.isFuture ? "opacity-70" : "",
               ].join(" ")}
               role="gridcell"
@@ -133,16 +173,30 @@ export function WeekStrip({
                 />
               ) : null}
               <span className="text-[10px] text-gray-500 leading-tight text-center min-h-[1rem] line-clamp-1">
-                {sessionName}
+                {sessionLabel}
               </span>
-              <span
-                aria-hidden="true"
-                className={`text-lg leading-none ${colorClassFor(day.classification)}`}
-              >
-                {symbolFor(day.classification)}
-              </span>
+              {/* When multiple sessions, show a small stack of symbols */}
+              {day.sessions.length > 1 ? (
+                <span aria-hidden="true" className="flex gap-0.5 leading-none">
+                  {day.sessions.map((s) => (
+                    <span
+                      key={s.scheduledSession.id}
+                      className={`text-sm leading-none ${colorClassFor(s.classification)}`}
+                    >
+                      {symbolFor(s.classification)}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={`text-lg leading-none ${colorClassFor(dayClassification)}`}
+                >
+                  {symbolFor(dayClassification)}
+                </span>
+              )}
               <span className="text-[10px] tabular-nums text-gray-500 min-h-[1rem]">
-                {showPercent ? formatPercent(day.adherence.ejercicios) : ""}
+                {showPercent ? formatPercent(agregateEjercicios) : ""}
               </span>
             </button>
           );

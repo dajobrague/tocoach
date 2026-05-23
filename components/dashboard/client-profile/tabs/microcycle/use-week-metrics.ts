@@ -5,6 +5,7 @@ import type {
   DayMetrics,
   PrescribedExercise,
   ScheduledSessionRow,
+  SessionEntry,
   WeekMetrics,
 } from "./types";
 
@@ -78,81 +79,32 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
     }));
 }
 
-/**
- * Cuando el cliente divergió del microciclo, la "sesión" declarada en
- * `scheduled_sessions` no representa fielmente lo que entrenó: el cliente
- * pudo haber elegido "Día 1" pero loggeado ejercicios de "Día 2", o haber
- * combinado ejercicios de varias sesiones. Construimos la prescripción
- * directamente desde los logs (cada ejercicio loggeado = una tarjeta) y
- * heredamos sets/reps/weight de cualquier `session_exercise` del propio
- * row.session que matchee por exercise_id. Si no matchea, queda sin
- * prescripción específica — el ejercicio se ve como "extra" pero dentro
- * del mismo listado, sin sección "fuera del plan".
- */
-function toPrescribedFromLogs(
-  row: ScheduledSessionRow,
-  dayLogs: ExerciseLog[]
-): PrescribedExercise[] {
-  // Index session_exercises por exercise_id para enriquecer logs.
-  const prescriptionByExId = new Map<
-    string,
-    { sets: number | null; reps: string | null; weight_kg: number | null }
-  >();
-
-  if (row.session) {
-    for (const se of row.session.session_exercises) {
-      prescriptionByExId.set(se.exercise.id, {
-        sets: se.sets,
-        reps: se.reps,
-        weight_kg: se.weight_kg,
-      });
-    }
-  }
-
-  // Ejercicio único por exercise_id, conservando orden del primer log
-  // (el cliente normalmente entrena secuencialmente).
-  const seen = new Set<string>();
-  const ordered: ExerciseLog[] = [];
-
-  for (const log of [...dayLogs].sort((a, b) =>
-    a.completed_at.localeCompare(b.completed_at)
-  )) {
-    if (!log.exercise_id || seen.has(log.exercise_id)) continue;
-    seen.add(log.exercise_id);
-    ordered.push(log);
-  }
-
-  return ordered.map((log) => {
-    const prescription = prescriptionByExId.get(log.exercise_id) ?? null;
-
-    return {
-      exerciseId: log.exercise_id,
-      name: log.exercises?.name ?? "Ejercicio",
-      category: log.exercises?.category ?? "strength",
-      prescribedSets: prescription?.sets ?? 0,
-      prescribedReps: prescription?.reps ?? null,
-      prescribedWeightKg: prescription?.weight_kg ?? null,
-      perSet: [],
-    };
-  });
-}
-
 function buildWeekMetrics(
   weekStart: Date,
   scheduled: ScheduledSessionRow[],
   logs: ExerciseLog[]
 ): WeekMetrics {
-  const scheduledByDate = new Map<string, ScheduledSessionRow>();
+  // Index scheduled rows por fecha (cada fecha tiene N filas, una por
+  // sesión tocada o template virtual).
+  const scheduledByDate = new Map<string, ScheduledSessionRow[]>();
 
-  for (const row of scheduled) scheduledByDate.set(row.scheduled_date, row);
+  for (const row of scheduled) {
+    const arr = scheduledByDate.get(row.scheduled_date) ?? [];
 
-  const logsByDate = new Map<string, ExerciseLog[]>();
+    arr.push(row);
+    scheduledByDate.set(row.scheduled_date, arr);
+  }
+
+  const logsByDateSession = new Map<string, ExerciseLog[]>();
 
   for (const log of logs) {
-    const arr = logsByDate.get(log.scheduled_date) ?? [];
+    // Logs llegan con scheduled_date y session_id (vía
+    // scheduled_sessions.session_id). Agrupamos por la composite key.
+    const key = `${log.scheduled_date}|${log.session_id ?? ""}`;
+    const arr = logsByDateSession.get(key) ?? [];
 
     arr.push(log);
-    logsByDate.set(log.scheduled_date, arr);
+    logsByDateSession.set(key, arr);
   }
 
   const todayYmd = getLocalYmd(new Date());
@@ -161,67 +113,53 @@ function buildWeekMetrics(
   for (let i = 0; i < 7; i++) {
     const date = addDays(weekStart, i);
     const ymd = getLocalYmd(date);
-    const scheduledSession = scheduledByDate.get(ymd) ?? null;
-    const dayLogs = logsByDate.get(ymd) ?? [];
-
-    // Cuando hay divergencia (cliente creó la fila y eligió una sesión
-    // distinta al template), derivar la prescripción visible de los logs:
-    // así el trainer ve EXACTAMENTE lo que el cliente entrenó como
-    // "prescripción del día" — sin sección "fuera del plan", sin huecos.
-    const isDivergent =
-      !!scheduledSession?.originally_prescribed_session && dayLogs.length > 0;
-    const prescribed = scheduledSession
-      ? isDivergent
-        ? toPrescribedFromLogs(scheduledSession, dayLogs)
-        : toPrescribed(scheduledSession)
-      : [];
-
-    const adherence = computeDayAdherence(prescribed, dayLogs);
+    const rows = scheduledByDate.get(ymd) ?? [];
     const isFuture = ymd > todayYmd;
-    const classification = classifyDay(
-      prescribed.length > 0,
-      adherence,
-      isFuture
-    );
+
+    // recommendedSessionName: la fila de template (los IDs virtuales
+    // del template arrancan con "template:") o el pin trainer si lo hay.
+    // Si no hay nada, null = rest.
+    const trainerPinRow =
+      rows.find((r) => r.prescribed_by === "trainer") ?? null;
+    const templateVirtualRow =
+      rows.find((r) => r.id.startsWith("template:")) ?? null;
+    const recommendedSessionName =
+      trainerPinRow?.session?.name ?? templateVirtualRow?.session?.name ?? null;
+
+    const sessions: SessionEntry[] = rows.map((row) => {
+      const sessionId = row.session?.id ?? "";
+      const sessionLogs = logsByDateSession.get(`${ymd}|${sessionId}`) ?? [];
+      const prescribed = toPrescribed(row);
+      const adherence = computeDayAdherence(prescribed, sessionLogs);
+      const classification = classifyDay(
+        prescribed.length > 0,
+        adherence,
+        isFuture
+      );
+
+      return {
+        scheduledSession: row,
+        prescribed,
+        logs: sessionLogs,
+        adherence,
+        classification,
+      };
+    });
 
     days.push({
       date: ymd,
-      scheduledSession,
-      prescribed,
-      logs: dayLogs,
-      adherence,
-      classification,
+      sessions,
+      recommendedSessionName,
       isToday: ymd === todayYmd,
       isFuture,
     });
   }
 
+  // Orphans (logs sin row scheduled correspondiente): después de la
+  // migración 113 estos deberían ser raros — un log siempre tiene su
+  // scheduled_session_id apuntando a una fila concreta. Mantenemos el
+  // accumulator vacío para no romper consumers.
   const orphansByDate = new Map<string, ExerciseLog[]>();
-
-  for (const [date, dayLogs] of logsByDate.entries()) {
-    const sched = scheduledByDate.get(date);
-
-    if (!sched) {
-      // No scheduled session at all → every log on this date is off-plan.
-      orphansByDate.set(date, dayLogs);
-      continue;
-    }
-
-    // En días divergentes la "prescripción visible" ya se derivó de los
-    // logs (cada ejercicio entrenado es una tarjeta), así que por definición
-    // no hay huérfanos — todo lo que entrenó ya aparece arriba.
-    if (sched.originally_prescribed_session) continue;
-
-    // Día no divergente: logs cuyo exercise_id no está en la prescripción
-    // son off-plan ("did something extra"). Antes se descartaban silenciosos.
-    const prescribed = toPrescribed(sched);
-    const prescribedIds = new Set(prescribed.map((p) => p.exerciseId));
-    const offPlan = dayLogs.filter(
-      (l) => l.exercise_id != null && !prescribedIds.has(l.exercise_id)
-    );
-
-    if (offPlan.length > 0) orphansByDate.set(date, offPlan);
-  }
 
   return { days, orphansByDate };
 }

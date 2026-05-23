@@ -1,7 +1,7 @@
 "use client";
 
 import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
-import type { DayMetrics, PrescribedExercise } from "./types";
+import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
@@ -336,6 +336,126 @@ function OrphanSection({ logs }: { logs: ExerciseLog[] }) {
   );
 }
 
+// ─── Single-session card ─────────────────────────────────────────────────────
+
+interface SessionCardProps {
+  clientId: string;
+  date: string;
+  entry: SessionEntry;
+  editable: boolean;
+  onCommitted: () => void;
+  onPlayVideo: ((url: string, name: string) => void) | undefined;
+}
+
+function SessionCard({
+  clientId,
+  date,
+  entry,
+  editable,
+  onCommitted,
+  onPlayVideo,
+}: SessionCardProps) {
+  const [mode, setMode] = useState<"read" | "edit">("read");
+
+  // Reset to read when the date changes (trainer navigated to another day).
+  useEffect(() => {
+    setMode("read");
+  }, [date]);
+
+  const hasExistingOverride =
+    (entry.scheduledSession.override_exercises?.length ?? 0) > 0;
+  const showFuture = entry.classification === "future";
+  const totalSetsLogged = entry.adherence.loggedSetsTotal;
+  const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
+
+  if (mode === "edit") {
+    return (
+      <DayEditor
+        key={`${date}-${entry.scheduledSession.id}`}
+        clientId={clientId}
+        hasExistingOverride={hasExistingOverride}
+        initialPrescribed={entry.prescribed}
+        initialSessionId={entry.scheduledSession.session?.id ?? null}
+        scheduledDate={date}
+        onClose={() => setMode("read")}
+        onCommitted={onCommitted}
+      />
+    );
+  }
+
+  return (
+    <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
+      <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-gray-900">
+            {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
+          </p>
+          <button
+            aria-label={`Editar sesión ${entry.scheduledSession.session?.name ?? date}`}
+            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            disabled={!editable}
+            title={editable ? "Editar día" : "Día con registros — solo lectura"}
+            type="button"
+            onClick={() => setMode("edit")}
+          >
+            <Icon icon="solar:pen-linear" width={16} />
+          </button>
+        </div>
+        {entry.scheduledSession.originally_prescribed_session ? (
+          <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
+            <Icon
+              className="mt-0.5 shrink-0"
+              icon="solar:info-circle-linear"
+              width={12}
+            />
+            <span>
+              Originalmente prescrito:{" "}
+              <span className="font-semibold">
+                {entry.scheduledSession.originally_prescribed_session.name}
+              </span>
+              . El cliente cambió de sesión.
+            </span>
+          </div>
+        ) : null}
+        {showFuture ? (
+          <p className="text-xs text-gray-500">
+            Día programado — aún por entrenarse.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <StatChip
+              accent={pctAccent(entry.adherence.ejercicios)}
+              hint={`${entry.adherence.completedExercises} de ${entry.adherence.totalPrescribed}`}
+              label="Ejercicios completados"
+              value={formatPercent(entry.adherence.ejercicios)}
+            />
+            <StatChip
+              accent={pctAccent(entry.adherence.series)}
+              hint={`${totalSetsLogged} de ${totalSetsPrescribed}`}
+              label="Series ejecutadas"
+              value={formatPercent(entry.adherence.series)}
+            />
+          </div>
+        )}
+      </header>
+
+      {entry.prescribed.length > 0 ? (
+        <ul className="divide-y divide-gray-100">
+          {entry.prescribed.map((p) => (
+            <PrescribedRow
+              key={p.exerciseId}
+              isFuture={showFuture}
+              logs={entry.logs}
+              prescribed={p}
+              onPlayVideo={onPlayVideo}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 // ─── DayDetail (main export) ─────────────────────────────────────────────────
 
 interface Props {
@@ -357,124 +477,52 @@ export function DayDetail({
   onCommitted,
   onPlayVideo,
 }: Props) {
-  const [mode, setMode] = useState<"read" | "edit">("read");
+  // Rest day: no sessions in either direction.
+  if (day.sessions.length === 0) {
+    const restLabel =
+      day.recommendedSessionName != null
+        ? `${formatDateLong(day.date)} — Descanso · recomendado: ${day.recommendedSessionName}`
+        : `${formatDateLong(day.date)} — día de descanso o sin sesión programada.`;
 
-  // Si el trainer salta a otro día con el editor abierto, salimos del
-  // modo edit para evitar mostrar el editor con `rows` del día anterior
-  // (useState no se reinicializa al cambiar `initialPrescribed`).
-  useEffect(() => {
-    setMode("read");
-  }, [day.date]);
-
-  // Whether an explicit per-date override exists today.
-  const hasExistingOverride =
-    (day.scheduledSession?.override_exercises?.length ?? 0) > 0;
-
-  if (day.classification === "rest") {
     return (
       <section className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 capitalize">
-        {formatDateLong(day.date)} — día de descanso o sin sesión programada.
+        {restLabel}
         {orphanLogs.length > 0 ? <OrphanSection logs={orphanLogs} /> : null}
       </section>
     );
   }
 
-  if (mode === "edit") {
-    return (
-      // `key={day.date}` fuerza remount cuando cambia el día, así
-      // useState(initialRows) re-inicializa desde la nueva prescripción
-      // y no quedan rows del día anterior en estado del hook.
-      <DayEditor
-        key={day.date}
-        clientId={clientId}
-        hasExistingOverride={hasExistingOverride}
-        initialPrescribed={day.prescribed}
-        initialSessionId={day.scheduledSession?.session?.id ?? null}
-        scheduledDate={day.date}
-        onClose={() => setMode("read")}
-        onCommitted={onCommitted}
-      />
-    );
-  }
-
-  const showFuture = day.classification === "future";
-  const totalSetsLogged = day.adherence.loggedSetsTotal;
-  const totalSetsPrescribed = day.adherence.prescribedSetsTotal;
-
   return (
-    <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
-      <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-gray-900 capitalize">
-            {formatDateLong(day.date)}
-            {day.scheduledSession?.session
-              ? ` · ${day.scheduledSession.session.name}`
-              : ""}
-          </p>
-          <button
-            aria-label={`Editar día ${day.date}`}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            disabled={!editable}
-            title={editable ? "Editar día" : "Día con registros — solo lectura"}
-            type="button"
-            onClick={() => setMode("edit")}
-          >
-            <Icon icon="solar:pen-linear" width={16} />
-          </button>
-        </div>
-        {day.scheduledSession?.originally_prescribed_session ? (
-          <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
-            <Icon
-              className="mt-0.5 shrink-0"
-              icon="solar:info-circle-linear"
-              width={12}
-            />
-            <span>
-              Originalmente prescrito:{" "}
-              <span className="font-semibold">
-                {day.scheduledSession.originally_prescribed_session.name}
-              </span>
-              . El cliente cambió de sesión.
-            </span>
-          </div>
+    <div className="flex flex-col gap-3">
+      {/* Day header — date + optional trainer recommendation */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-gray-900 capitalize">
+          {formatDateLong(day.date)}
+        </p>
+        {day.recommendedSessionName &&
+        !day.sessions.some(
+          (s) => s.scheduledSession.session?.name === day.recommendedSessionName
+        ) ? (
+          <span className="text-[11px] text-gray-500 bg-gray-100 border border-gray-200 rounded px-2 py-0.5 whitespace-nowrap">
+            Recomendado: {day.recommendedSessionName}
+          </span>
         ) : null}
-        {showFuture ? (
-          <p className="text-xs text-gray-500">
-            Día programado — aún por entrenarse.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <StatChip
-              accent={pctAccent(day.adherence.ejercicios)}
-              hint={`${day.adherence.completedExercises} de ${day.adherence.totalPrescribed}`}
-              label="Ejercicios completados"
-              value={formatPercent(day.adherence.ejercicios)}
-            />
-            <StatChip
-              accent={pctAccent(day.adherence.series)}
-              hint={`${totalSetsLogged} de ${totalSetsPrescribed}`}
-              label="Series ejecutadas"
-              value={formatPercent(day.adherence.series)}
-            />
-          </div>
-        )}
-      </header>
+      </div>
 
-      {day.prescribed.length > 0 ? (
-        <ul className="divide-y divide-gray-100">
-          {day.prescribed.map((p) => (
-            <PrescribedRow
-              key={p.exerciseId}
-              isFuture={showFuture}
-              logs={day.logs}
-              prescribed={p}
-              onPlayVideo={onPlayVideo}
-            />
-          ))}
-        </ul>
-      ) : null}
+      {/* One card per session entry */}
+      {day.sessions.map((entry) => (
+        <SessionCard
+          key={entry.scheduledSession.id}
+          clientId={clientId}
+          date={day.date}
+          editable={editable}
+          entry={entry}
+          onCommitted={onCommitted}
+          onPlayVideo={onPlayVideo}
+        />
+      ))}
 
       {orphanLogs.length > 0 ? <OrphanSection logs={orphanLogs} /> : null}
-    </section>
+    </div>
   );
 }
