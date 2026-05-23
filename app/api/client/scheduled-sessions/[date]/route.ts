@@ -124,12 +124,14 @@ export async function GET(
 
     const clientId = String(session.client_id);
 
-    // 1. Real scheduled_sessions row for this date (with override + template).
-    //    SELECT incluye prescribed_by + session_id sueltos: necesitamos
-    //    saber si la fila la creó el trainer o el cliente para distinguir
-    //    "esto es lo recomendado por el trainer" de "esto es lo que el
-    //    cliente eligió hacer".
-    const { data: ssRow } = await supabase
+    // 1. All real scheduled_sessions rows for this date. After
+    //    migration 113 there can be multiple — one per session the
+    //    client (or trainer-override) touched. We need:
+    //    - which one is the prescription anchor (trainer-pinned row if
+    //      any, else the microcycle slot),
+    //    - the row's own status/source/exercise overrides if that
+    //      session has a matching row.
+    const { data: ssRowsRaw } = await supabase
       .from("scheduled_sessions")
       .select(
         `id, prescribed_by, session_id,
@@ -150,8 +152,13 @@ export async function GET(
          )`
       )
       .eq("client_id", clientId)
-      .eq("scheduled_date", date)
-      .maybeSingle();
+      .eq("scheduled_date", date);
+
+    const ssRows = (ssRowsRaw ?? []) as any[];
+    // El "pin del trainer" para esta fecha es la fila con
+    // prescribed_by='trainer'. La UI ya gates "un override por fecha".
+    const trainerPin =
+      ssRows.find((r) => r.prescribed_by === "trainer") ?? null;
 
     // Cache las queries de programas/microciclo: el cómputo de
     // trainer_recommended_session_id puede necesitarlo, y el fallback
@@ -174,16 +181,12 @@ export async function GET(
     };
 
     // ── Compute trainer's recommendation for this date ────────────────
-    // Prioridad: override del trainer en la fila > template del microciclo.
-    // El cliente que sólo loguea no puede generar "recomendación" — esa
-    // es siempre intención del trainer (microciclo o per-date override).
+    // Trainer pin > microcycle slot. Filas creadas por el cliente
+    // NUNCA participan en esta decisión (son actividad, no prescripción).
     let trainerRecommendedSessionId: string | null = null;
 
-    if (
-      ssRow?.prescribed_by === "trainer" &&
-      typeof ssRow.session_id === "string"
-    ) {
-      trainerRecommendedSessionId = ssRow.session_id;
+    if (trainerPin && typeof trainerPin.session_id === "string") {
+      trainerRecommendedSessionId = trainerPin.session_id;
     } else {
       const programs = await loadPrograms();
       const slotMatch = await resolveMicrocycleSlot(
@@ -196,15 +199,21 @@ export async function GET(
       trainerRecommendedSessionId = slotMatch?.sessionId ?? null;
     }
 
-    // ── Compute current state (override / session / template / rest) ──
-    if (ssRow) {
-      const overrides = (ssRow.override_exercises ?? []) as any[];
+    // ── Compute current state for the PRESCRIBED session ──────────────
+    // Antes leíamos cualquier fila que existiera; ahora distinguimos:
+    //   - Si hay pin del trainer: la prescripción se construye desde
+    //     ese row (sus override_exercises ganan; si no hay overrides,
+    //     usamos los session_exercises del session referenciado).
+    //   - Si no hay pin pero el microciclo apunta a una sesión para
+    //     este día: cargamos esa sesión y la mostramos como prescripción.
+    if (trainerPin) {
+      const overrides = (trainerPin.override_exercises ?? []) as any[];
 
       if (overrides.length > 0) {
         const day = makeResolvedDay(
           date,
           "override",
-          ssRow.session as any,
+          trainerPin.session as any,
           overrides,
           trainerRecommendedSessionId
         );
@@ -215,14 +224,9 @@ export async function GET(
         });
       }
 
-      const sessionRow = ssRow.session as any;
+      const sessionRow = trainerPin.session as any;
       const sessExercises = (sessionRow?.session_exercises ?? []) as any[];
 
-      // Only return "session" when there's actually a session linked with
-      // exercises. An empty overrides array + no session_id on the row used
-      // to fall through here as an empty "session" payload — distinct from
-      // an intentional rest day. Fall through to template step instead so
-      // the trainer's microcycle template still applies.
       if (sessionRow && sessExercises.length > 0) {
         const day = makeResolvedDay(
           date,
