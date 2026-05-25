@@ -1,20 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
+export default function Error({ error }: { error: Error; reset: () => void }) {
   const [clearing, setClearing] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     /* eslint-disable no-console */
     console.error(error);
-  }, [error]);
+
+    fetch("/api/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: error.message,
+        stack: error.stack,
+        pathname,
+        tenantSlug: "global",
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+      }),
+    }).catch(() => {});
+  }, [error, pathname]);
 
   const handleRetry = useCallback(async () => {
     setClearing(true);
@@ -75,6 +84,15 @@ export default function Error({
         >
           {clearing ? "Limpiando caché..." : "Intentar de nuevo"}
         </button>
+        <p
+          style={{
+            fontSize: "0.7rem",
+            color: "#9ca3af",
+            marginTop: "1.5rem",
+          }}
+        >
+          {error.message}
+        </p>
       </div>
     </div>
   );
