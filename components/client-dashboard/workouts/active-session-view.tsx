@@ -63,9 +63,8 @@ interface ExerciseLike {
 
 interface ExerciseLogLike {
   exercise_id?: string;
+  training_date?: string;
   scheduled_date?: string;
-  // Cuándo el cliente tocó "Finalizado". null = log existe pero está
-  // en progreso (autosave en curso). No-null = ejercicio terminado.
   finalized_at?: string | null;
 }
 
@@ -121,19 +120,58 @@ export function ActiveSessionView({
       return findExercisesForSession(programs, session.id);
     }, [resolved, programs, session.id]);
 
-  const trackable = exercises.filter(
+  const logsForDate = exerciseLogs.filter(
+    (log) => (log.training_date ?? log.scheduled_date) === scheduledDate
+  );
+
+  // Exercises logged on this date that aren't in the session template —
+  // the client trained exercises from a different session. Append them
+  // so the view shows everything that was actually done.
+  const templateExerciseIds = new Set(
+    exercises
+      .map((e) => e.exercise_id)
+      .filter((id): id is string => Boolean(id))
+  );
+  const extraLoggedExercises = useMemo(() => {
+    const seen = new Set<string>();
+    const extras: Array<ExerciseLike & Record<string, unknown>> = [];
+
+    for (const log of logsForDate) {
+      const eid = log.exercise_id;
+
+      if (!eid || templateExerciseIds.has(eid) || seen.has(eid)) continue;
+      seen.add(eid);
+
+      const logAny = log as Record<string, unknown>;
+      const exercisesRel = logAny.exercises as
+        | { name?: string }
+        | null
+        | undefined;
+      const name =
+        exercisesRel?.name ?? (logAny.exercise_name as string) ?? eid;
+
+      extras.push({
+        order: 1000 + extras.length,
+        name,
+        exercise_id: eid,
+      } as ExerciseLike & Record<string, unknown>);
+    }
+
+    return extras;
+  }, [logsForDate, templateExerciseIds]);
+
+  const allExercises = useMemo(
+    () => [...exercises, ...extraLoggedExercises],
+    [exercises, extraLoggedExercises]
+  );
+
+  const trackable = allExercises.filter(
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
   );
 
-  // Solo cuenta como "hecho" un ejercicio FINALIZADO. Logs en progreso
-  // (autosave sin haber tocado Finalizado todavía) no suman al
-  // contador ni a la barra de progreso de la sesión.
   const finalizedIds = new Set(
-    exerciseLogs
-      .filter(
-        (log) =>
-          log.scheduled_date === scheduledDate && Boolean(log.finalized_at)
-      )
+    logsForDate
+      .filter((log) => Boolean(log.finalized_at))
       .map((log) => log.exercise_id)
       .filter((id): id is string => Boolean(id))
   );
@@ -217,20 +255,16 @@ export function ActiveSessionView({
             />
           ))}
         </ul>
-      ) : exercises.length === 0 ? (
+      ) : allExercises.length === 0 ? (
         <div className="rounded-md border border-default-200 bg-content1 p-3 text-sm text-default-500 font-body">
           Esta sesión no tiene ejercicios todavía.
         </div>
       ) : (
         <ul className="space-y-2">
-          {exercises.map((exercise) => {
+          {allExercises.map((exercise) => {
             const exerciseId = exercise.exercise_id ?? "";
             const existingLog = exerciseId
-              ? exerciseLogs.find(
-                  (log) =>
-                    log.exercise_id === exerciseId &&
-                    log.scheduled_date === scheduledDate
-                )
+              ? logsForDate.find((log) => log.exercise_id === exerciseId)
               : undefined;
             const status: ExerciseStatus = !existingLog
               ? "not_started"
@@ -239,7 +273,9 @@ export function ActiveSessionView({
                 : "in_progress";
 
             return (
-              <li key={`${session.id}-${exercise.order}`}>
+              <li
+                key={`${session.id}-${exercise.exercise_id ?? exercise.order}`}
+              >
                 <ExerciseRow
                   exercise={exercise}
                   status={status}

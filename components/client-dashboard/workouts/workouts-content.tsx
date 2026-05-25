@@ -172,17 +172,12 @@ export function WorkoutsContent() {
     const set = new Set<string>();
 
     for (const log of exerciseLogs as Array<{
+      training_date?: string;
       scheduled_date?: string;
-      completed_at?: string;
     }>) {
-      const actualDate =
-        typeof log.completed_at === "string"
-          ? log.completed_at.slice(0, 10)
-          : log.scheduled_date;
+      const d = log.training_date ?? log.scheduled_date;
 
-      if (typeof actualDate === "string") {
-        set.add(actualDate);
-      }
+      if (typeof d === "string") set.add(d);
     }
 
     return set;
@@ -195,8 +190,8 @@ export function WorkoutsContent() {
   const loggedSessions = useLoggedSessionsForDate(
     exerciseLogs as Array<{
       id: string;
+      training_date?: string;
       scheduled_date?: string;
-      completed_at?: string;
       session_id?: string;
       exercise_id?: string;
     }>,

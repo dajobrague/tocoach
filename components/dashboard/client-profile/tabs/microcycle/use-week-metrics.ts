@@ -102,14 +102,10 @@ function buildWeekMetrics(
   const logsByDateSession = new Map<string, ExerciseLog[]>();
 
   for (const log of logs) {
-    // Group by the date the client actually trained (completed_at),
-    // not the originally scheduled date. Clients who train on a
-    // different day than prescribed would otherwise have their logs
-    // invisible on the day they actually exercised.
-    const actualDate = log.completed_at
-      ? log.completed_at.slice(0, 10)
-      : log.scheduled_date;
-    const key = `${actualDate}|${log.session_id ?? ""}`;
+    const trainingDate =
+      (log as unknown as { training_date?: string }).training_date ??
+      log.scheduled_date;
+    const key = `${trainingDate}|${log.session_id ?? ""}`;
     const arr = logsByDateSession.get(key) ?? [];
 
     arr.push(log);

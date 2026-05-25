@@ -67,7 +67,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        "*, scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)"
+        "*, exercises(id, name, category), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)"
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: false });
@@ -259,6 +259,7 @@ export async function POST(
       trainer_id: sessionData.trainer_id,
       notes: notes || null,
       completed_at: new Date().toISOString(),
+      training_date: scheduledDate,
       video_url: videoUrl || null,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
