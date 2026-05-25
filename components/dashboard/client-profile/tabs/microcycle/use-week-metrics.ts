@@ -11,7 +11,11 @@ import type {
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { classifyDay, computeDayAdherence } from "./adherence";
+import {
+  classifyDay,
+  computeAdherenceFromLogs,
+  computeDayAdherence,
+} from "./adherence";
 
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 
@@ -98,9 +102,14 @@ function buildWeekMetrics(
   const logsByDateSession = new Map<string, ExerciseLog[]>();
 
   for (const log of logs) {
-    // Logs llegan con scheduled_date y session_id (vía
-    // scheduled_sessions.session_id). Agrupamos por la composite key.
-    const key = `${log.scheduled_date}|${log.session_id ?? ""}`;
+    // Group by the date the client actually trained (completed_at),
+    // not the originally scheduled date. Clients who train on a
+    // different day than prescribed would otherwise have their logs
+    // invisible on the day they actually exercised.
+    const actualDate = log.completed_at
+      ? log.completed_at.slice(0, 10)
+      : log.scheduled_date;
+    const key = `${actualDate}|${log.session_id ?? ""}`;
     const arr = logsByDateSession.get(key) ?? [];
 
     arr.push(log);
@@ -126,13 +135,27 @@ function buildWeekMetrics(
     const recommendedSessionName =
       trainerPinRow?.session?.name ?? templateVirtualRow?.session?.name ?? null;
 
+    // Build session entries from scheduled rows, matching logs.
+    const claimedLogKeys = new Set<string>();
     const sessions: SessionEntry[] = rows.map((row) => {
       const sessionId = row.session?.id ?? "";
-      const sessionLogs = logsByDateSession.get(`${ymd}|${sessionId}`) ?? [];
+      const logKey = `${ymd}|${sessionId}`;
+      const sessionLogs = logsByDateSession.get(logKey) ?? [];
+
+      if (sessionLogs.length > 0) claimedLogKeys.add(logKey);
+
       const prescribed = toPrescribed(row);
-      const adherence = computeDayAdherence(prescribed, sessionLogs);
+      // If the client logged exercises that don't match the prescription,
+      // compute adherence from what they actually did instead of showing 0%.
+      const prescriptionMatch = prescribed.some((p) =>
+        sessionLogs.some((l) => l.exercise_id === p.exerciseId)
+      );
+      const adherence =
+        sessionLogs.length > 0 && !prescriptionMatch
+          ? computeAdherenceFromLogs(sessionLogs)
+          : computeDayAdherence(prescribed, sessionLogs);
       const classification = classifyDay(
-        prescribed.length > 0,
+        prescribed.length > 0 || sessionLogs.length > 0,
         adherence,
         isFuture
       );
@@ -146,19 +169,62 @@ function buildWeekMetrics(
       };
     });
 
+    // Promote unclaimed logs into real session entries. These are logs
+    // completed on this day whose session_id doesn't match any scheduled
+    // row — the client trained a different session than prescribed.
+    for (const [logKey, keyLogs] of logsByDateSession) {
+      const [dateStr] = logKey.split("|");
+
+      if (dateStr !== ymd || claimedLogKeys.has(logKey)) continue;
+
+      const adherence = computeAdherenceFromLogs(keyLogs);
+      const sessionId = keyLogs[0]?.session_id ?? null;
+      const sessionName =
+        keyLogs[0]?.exercises?.name != null
+          ? undefined
+          : `Sesión ${sessions.length + 1}`;
+
+      sessions.push({
+        scheduledSession: {
+          id: `logged:${ymd}:${sessionId ?? "unknown"}`,
+          scheduled_date: ymd,
+          status: "completed",
+          completion_date: keyLogs[0]?.completed_at ?? null,
+          session: sessionId
+            ? {
+                id: sessionId,
+                name: sessionName ?? "Sesión registrada",
+                session_exercises: [],
+              }
+            : null,
+          override_exercises: [],
+          prescribed_by: "client",
+        },
+        prescribed: [],
+        logs: keyLogs,
+        adherence,
+        classification: classifyDay(true, adherence, isFuture),
+      });
+    }
+
+    // If the day has any session with actual work, hide sessions with
+    // zero logs — those are usually the client selecting the wrong
+    // session in the picker. The trainer only needs to see what was done.
+    const anyHasLogs = sessions.some((s) => s.logs.length > 0);
+    const visibleSessions =
+      anyHasLogs && !isFuture
+        ? sessions.filter((s) => s.logs.length > 0)
+        : sessions;
+
     days.push({
       date: ymd,
-      sessions,
+      sessions: visibleSessions,
       recommendedSessionName,
       isToday: ymd === todayYmd,
       isFuture,
     });
   }
 
-  // Orphans (logs sin row scheduled correspondiente): después de la
-  // migración 113 estos deberían ser raros — un log siempre tiene su
-  // scheduled_session_id apuntando a una fila concreta. Mantenemos el
-  // accumulator vacío para no romper consumers.
   const orphansByDate = new Map<string, ExerciseLog[]>();
 
   return { days, orphansByDate };

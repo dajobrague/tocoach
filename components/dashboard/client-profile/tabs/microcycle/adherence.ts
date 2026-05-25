@@ -132,18 +132,72 @@ export function computeDayAdherence(
   };
 }
 
+/**
+ * When a session has logs but they don't match the prescription (client did
+ * different exercises), compute adherence from the ACTUAL work done. The
+ * metrics reflect reality: how many distinct exercises, total sets, total load.
+ */
+export function computeAdherenceFromLogs(logs: ExerciseLog[]): DayAdherence {
+  if (logs.length === 0) return EMPTY_ADHERENCE;
+
+  const byExercise = new Map<string, ExerciseLog[]>();
+
+  for (const log of logs) {
+    if (!log.exercise_id) continue;
+    const arr = byExercise.get(log.exercise_id) ?? [];
+
+    arr.push(log);
+    byExercise.set(log.exercise_id, arr);
+  }
+
+  const totalExercises = byExercise.size;
+  let loggedSetsTotal = 0;
+  let loggedLoadTotal = 0;
+
+  for (const exerciseLogs of byExercise.values()) {
+    const sets = exerciseLogs.flatMap((l) => l.sets ?? []);
+
+    loggedSetsTotal += sets.length;
+
+    for (const s of sets) {
+      loggedLoadTotal += (s.reps ?? 0) * (s.weight_kg ?? 0);
+    }
+  }
+
+  return {
+    totalPrescribed: totalExercises,
+    completedExercises: totalExercises,
+    prescribedSetsTotal: loggedSetsTotal,
+    loggedSetsTotal,
+    prescribedLoadTotal: loggedLoadTotal,
+    loggedLoadTotal,
+    ejercicios: 1,
+    series: 1,
+    seriesRaw: 1,
+    hasOverage: false,
+    carga: 1,
+  };
+}
+
 export function classifyDay(
   hasPrescribed: boolean,
   adherence: DayAdherence,
   isFuture: boolean
 ): DayClassification {
-  if (!hasPrescribed) return "rest";
   if (isFuture) return "future";
-  if (adherence.completedExercises === 0) return "pending";
-  if (adherence.completedExercises === adherence.totalPrescribed)
-    return "complete";
+  if (adherence.loggedSetsTotal > 0) {
+    if (
+      adherence.totalPrescribed > 0 &&
+      adherence.completedExercises >= adherence.totalPrescribed
+    )
+      return "complete";
+    if (adherence.completedExercises > 0) return "partial";
 
-  return "partial";
+    return "complete";
+  }
+  if (!hasPrescribed) return "rest";
+
+  return "pending";
 }
 
 export function formatPercent(value: number): string {

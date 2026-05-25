@@ -303,37 +303,101 @@ function PrescribedRow({
   );
 }
 
-// ─── Orphan "También registró" sub-section ───────────────────────────────────
+// ─── Logged exercise row (renders actual work done as first-class) ──────────
 
-function OrphanSection({ logs }: { logs: ExerciseLog[] }) {
-  const byExercise = new Map<string, number>();
+function LoggedExerciseRow({
+  exerciseName,
+  logs,
+  onPlayVideo,
+}: {
+  exerciseName: string;
+  logs: ExerciseLog[];
+  onPlayVideo: ((url: string, name: string) => void) | undefined;
+}) {
+  const allSets = logs.flatMap((l) => l.sets ?? []);
+  const totalSets = allSets.length;
+  const notes = logs.find((l) => l.notes)?.notes ?? null;
 
-  for (const log of logs) {
-    if (!log.exercises) continue;
-    byExercise.set(
-      log.exercises.name,
-      (byExercise.get(log.exercises.name) ?? 0) + 1
-    );
-  }
+  const anyPerSetVideo = allSets.some((s) => Boolean(s.video_url));
+  const legacySessionVideo = anyPerSetVideo
+    ? null
+    : (logs.find((l) => l.video_url)?.video_url ?? null);
 
   return (
-    <div className="px-4 py-3 border-t border-gray-100 bg-amber-50/40">
-      <p className="text-[11px] font-semibold text-amber-700 mb-1 inline-flex items-center gap-1">
-        <Icon icon="solar:list-bold" width={12} />
-        También registró (fuera del plan)
-      </p>
-      <ul className="text-xs text-gray-700 space-y-0.5">
-        {Array.from(byExercise.entries()).map(([name, count]) => (
-          <li key={name} className="tabular-nums">
-            · {name}{" "}
-            <span className="text-gray-400">
-              ({count} {count === 1 ? "registro" : "registros"})
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <li className="px-3 py-3">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-base leading-none bg-green-100 text-green-700"
+        >
+          ●
+        </span>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
+            {totalSets}{" "}
+            {totalSets === 1 ? "serie ejecutada" : "series ejecutadas"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 ml-10 space-y-2">
+        {allSets.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {allSets.map((set) => (
+              <ExecutedSetRow
+                key={`${set.id ?? set.set_number}`}
+                exerciseName={exerciseName}
+                set={set}
+                onPlayVideo={onPlayVideo}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {legacySessionVideo && onPlayVideo ? (
+          <button
+            className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+            type="button"
+            onClick={() => onPlayVideo(legacySessionVideo, exerciseName)}
+          >
+            <Icon icon="solar:play-circle-bold" width={13} />
+            Video de la sesión completa
+          </button>
+        ) : null}
+
+        {notes ? (
+          <div className="text-[11px] text-gray-600 bg-amber-50 border-l-2 border-amber-300 px-2 py-1 rounded-r leading-snug">
+            <span className="font-medium text-amber-700">Notas · </span>
+            {notes}
+          </div>
+        ) : null}
+      </div>
+    </li>
   );
+}
+
+function groupLogsByExercise(
+  logs: ExerciseLog[]
+): Array<{ name: string; exerciseId: string; logs: ExerciseLog[] }> {
+  const map = new Map<string, { name: string; logs: ExerciseLog[] }>();
+
+  for (const log of logs) {
+    const id = log.exercise_id ?? "unknown";
+    const entry = map.get(id) ?? {
+      name: log.exercises?.name ?? "Ejercicio",
+      logs: [],
+    };
+
+    entry.logs.push(log);
+    map.set(id, entry);
+  }
+
+  return Array.from(map.entries()).map(([exerciseId, v]) => ({
+    exerciseId,
+    ...v,
+  }));
 }
 
 // ─── Single-session card ─────────────────────────────────────────────────────
@@ -367,6 +431,18 @@ function SessionCard({
   const showFuture = entry.classification === "future";
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
+
+  // Decide rendering mode: if the client logged exercises, check whether
+  // they match the prescription. If they don't, render logged exercises
+  // as the primary view instead of the prescription.
+  const hasLogs = entry.logs.length > 0;
+  const prescriptionMatch =
+    hasLogs &&
+    entry.prescribed.length > 0 &&
+    entry.prescribed.some((p) =>
+      entry.logs.some((l) => l.exercise_id === p.exerciseId)
+    );
+  const showLoggedView = hasLogs && !prescriptionMatch && !showFuture;
 
   if (mode === "edit") {
     return (
@@ -421,6 +497,21 @@ function SessionCard({
           <p className="text-xs text-gray-500">
             Día programado — aún por entrenarse.
           </p>
+        ) : showLoggedView ? (
+          <div className="grid grid-cols-2 gap-2">
+            <StatChip
+              accent="green"
+              hint={`${entry.adherence.completedExercises} ejercicios`}
+              label="Ejercicios realizados"
+              value={String(entry.adherence.completedExercises)}
+            />
+            <StatChip
+              accent="green"
+              hint="series totales"
+              label="Series ejecutadas"
+              value={String(totalSetsLogged)}
+            />
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <StatChip
@@ -439,7 +530,28 @@ function SessionCard({
         )}
       </header>
 
-      {entry.prescribed.length > 0 ? (
+      {showLoggedView ? (
+        <>
+          {entry.prescribed.length > 0 ? (
+            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/60">
+              <p className="text-[11px] text-gray-500 inline-flex items-center gap-1">
+                <Icon icon="solar:clipboard-list-linear" width={12} />
+                Prescrito: {entry.prescribed.map((p) => p.name).join(", ")}
+              </p>
+            </div>
+          ) : null}
+          <ul className="divide-y divide-gray-100">
+            {groupLogsByExercise(entry.logs).map((g) => (
+              <LoggedExerciseRow
+                key={g.exerciseId}
+                exerciseName={g.name}
+                logs={g.logs}
+                onPlayVideo={onPlayVideo}
+              />
+            ))}
+          </ul>
+        </>
+      ) : entry.prescribed.length > 0 ? (
         <ul className="divide-y divide-gray-100">
           {entry.prescribed.map((p) => (
             <PrescribedRow
@@ -447,6 +559,17 @@ function SessionCard({
               isFuture={showFuture}
               logs={entry.logs}
               prescribed={p}
+              onPlayVideo={onPlayVideo}
+            />
+          ))}
+        </ul>
+      ) : hasLogs ? (
+        <ul className="divide-y divide-gray-100">
+          {groupLogsByExercise(entry.logs).map((g) => (
+            <LoggedExerciseRow
+              key={g.exerciseId}
+              exerciseName={g.name}
+              logs={g.logs}
               onPlayVideo={onPlayVideo}
             />
           ))}
@@ -472,7 +595,7 @@ interface Props {
 export function DayDetail({
   clientId,
   day,
-  orphanLogs,
+  orphanLogs: _orphanLogs,
   editable,
   onCommitted,
   onPlayVideo,
@@ -487,7 +610,6 @@ export function DayDetail({
     return (
       <section className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 capitalize">
         {restLabel}
-        {orphanLogs.length > 0 ? <OrphanSection logs={orphanLogs} /> : null}
       </section>
     );
   }
@@ -521,8 +643,6 @@ export function DayDetail({
           onPlayVideo={onPlayVideo}
         />
       ))}
-
-      {orphanLogs.length > 0 ? <OrphanSection logs={orphanLogs} /> : null}
     </div>
   );
 }
