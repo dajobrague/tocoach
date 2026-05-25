@@ -30,9 +30,8 @@ export default function Error({
     } catch {
       // Proceed even if cache clearing fails
     }
-    setClearing(false);
-    reset();
-  }, [reset]);
+    window.location.reload();
+  }, []);
 
   return (
     <div
