@@ -217,8 +217,14 @@ export default async function RootLayout({
   }
 
   return (
-    <html suppressHydrationWarning lang="en">
+    <html
+      suppressHydrationWarning
+      className="notranslate"
+      lang="es"
+      translate="no"
+    >
       <head>
+        <meta content="notranslate" name="google" />
         <link href="https://fonts.googleapis.com" rel="preconnect" />
         <link
           crossOrigin="anonymous"
