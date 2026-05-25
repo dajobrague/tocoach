@@ -19,6 +19,7 @@ import { useMemo } from "react";
 interface ExerciseLog {
   id: string;
   scheduled_date?: string;
+  completed_at?: string;
   session_id?: string;
   exercise_id?: string;
 }
@@ -66,10 +67,13 @@ export function useLoggedSessionsForDate(
   scheduledDate: string
 ): LoggedSession[] {
   return useMemo(() => {
-    const logsByDate = exerciseLogs.filter(
-      (l) =>
-        l.scheduled_date === scheduledDate && typeof l.session_id === "string"
-    );
+    const logsByDate = exerciseLogs.filter((l) => {
+      const actualDate = l.completed_at
+        ? l.completed_at.slice(0, 10)
+        : l.scheduled_date;
+
+      return actualDate === scheduledDate && typeof l.session_id === "string";
+    });
 
     if (logsByDate.length === 0) return [];
 

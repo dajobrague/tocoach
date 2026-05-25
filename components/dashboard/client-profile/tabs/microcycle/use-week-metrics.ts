@@ -179,10 +179,13 @@ function buildWeekMetrics(
 
       const adherence = computeAdherenceFromLogs(keyLogs);
       const sessionId = keyLogs[0]?.session_id ?? null;
-      const sessionName =
-        keyLogs[0]?.exercises?.name != null
-          ? undefined
-          : `Sesión ${sessions.length + 1}`;
+
+      // Look up the real session name from any scheduled row that
+      // references this session_id (could be on a different date).
+      const knownRow = sessionId
+        ? scheduled.find((r) => r.session?.id === sessionId)
+        : null;
+      const resolvedName = knownRow?.session?.name ?? "Sesión registrada";
 
       sessions.push({
         scheduledSession: {
@@ -193,8 +196,8 @@ function buildWeekMetrics(
           session: sessionId
             ? {
                 id: sessionId,
-                name: sessionName ?? "Sesión registrada",
-                session_exercises: [],
+                name: resolvedName,
+                session_exercises: knownRow?.session?.session_exercises ?? [],
               }
             : null,
           override_exercises: [],

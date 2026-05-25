@@ -171,9 +171,17 @@ export function WorkoutsContent() {
   const datesWithActivity = useMemo(() => {
     const set = new Set<string>();
 
-    for (const log of exerciseLogs as Array<{ scheduled_date?: string }>) {
-      if (typeof log.scheduled_date === "string") {
-        set.add(log.scheduled_date);
+    for (const log of exerciseLogs as Array<{
+      scheduled_date?: string;
+      completed_at?: string;
+    }>) {
+      const actualDate =
+        typeof log.completed_at === "string"
+          ? log.completed_at.slice(0, 10)
+          : log.scheduled_date;
+
+      if (typeof actualDate === "string") {
+        set.add(actualDate);
       }
     }
 
@@ -188,6 +196,7 @@ export function WorkoutsContent() {
     exerciseLogs as Array<{
       id: string;
       scheduled_date?: string;
+      completed_at?: string;
       session_id?: string;
       exercise_id?: string;
     }>,
