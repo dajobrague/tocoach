@@ -1,0 +1,31 @@
+name: CI
+
+# Runs the DB-free checks on every PR and on pushes to main.
+#
+# Integration tests (npm run test:integration) need a running Supabase stack and
+# e2e tests (npm run test:e2e) need browsers, so both are intentionally left out
+# here. They are a deliberate follow-up to be wired up alongside staging setup.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - run: npm ci
+
+      - run: npm run type-check
+
+      - run: npm run lint:check
+
+      - run: npm run test
