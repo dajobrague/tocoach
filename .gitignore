@@ -118,3 +118,8 @@ skills-lock.json
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+supabase/local-data/
+
+# Local env backups (never commit — may contain prod secrets)
+*.prod-backup
+.env*.prod-backup
