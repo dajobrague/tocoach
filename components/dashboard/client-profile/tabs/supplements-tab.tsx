@@ -491,7 +491,10 @@ function InventoryPickerModal({
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <div className="bg-slate-100 p-2 rounded-lg">
-              <Icon className="text-slate-700 text-xl" icon="solar:box-linear" />
+              <Icon
+                className="text-slate-700 text-xl"
+                icon="solar:box-linear"
+              />
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-900">

@@ -151,7 +151,11 @@ export default function InventoryContent() {
             onValueChange={setSearchQuery}
           />
           <Button
-            className={includeArchived ? "font-medium bg-black text-white hover:bg-slate-800" : "font-medium"}
+            className={
+              includeArchived
+                ? "font-medium bg-black text-white hover:bg-slate-800"
+                : "font-medium"
+            }
             startContent={<Icon icon="solar:archive-linear" width={20} />}
             variant={includeArchived ? "solid" : "bordered"}
             onPress={() => setIncludeArchived(!includeArchived)}

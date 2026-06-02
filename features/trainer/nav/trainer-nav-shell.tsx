@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import React from "react";
 
-import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
-
 import { useActiveKey } from "./use-active-key";
 import { useShellMode } from "./use-shell-mode";
 import { SideShell } from "./shells/side-shell";
 import { TopShell } from "./shells/top-shell";
+
+import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface TrainerSession {
   trainer_id: string;
@@ -34,6 +34,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
 
   React.useEffect(() => {
     let cancelled = false;
+
     fetch("/api/auth/session", {
       credentials: "same-origin",
       cache: "no-store",
@@ -43,6 +44,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
         if (cancelled) return;
         if (!data.session) {
           router.push("/trainer/login");
+
           return;
         }
         setSession(data.session);
@@ -53,6 +55,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
@@ -63,6 +66,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
     if (session.onboarding_completed) return;
     if (typeof window === "undefined") return;
     const path = window.location.pathname;
+
     if (path.startsWith("/trainer/dashboard/setup")) return;
     router.push("/trainer/dashboard/setup");
   }, [session, router]);
@@ -70,6 +74,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
   React.useEffect(() => {
     if (!session) return;
     let cancelled = false;
+
     fetch("/api/trainer/profile")
       .then((res) => res.json())
       .then((data) => {
@@ -84,6 +89,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
         if (!cancelled && data.logo_url) setBrandLogo(data.logo_url);
       })
       .catch(() => {});
+
     return () => {
       cancelled = true;
     };

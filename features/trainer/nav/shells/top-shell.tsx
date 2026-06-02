@@ -248,6 +248,7 @@ export function TopShell({
       <NavbarMenu className="pt-6 gap-2">
         {FLAT_TOP_ITEMS.map((item) => {
           const active = isItemActive(item.key);
+
           return (
             <NavbarMenuItem key={item.key}>
               <Button
@@ -276,6 +277,7 @@ export function TopShell({
         </NavbarMenuItem>
         {templateChildren.map((child) => {
           const active = isItemActive(child.key);
+
           return (
             <NavbarMenuItem key={child.key}>
               <Button

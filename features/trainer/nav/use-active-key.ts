@@ -17,6 +17,7 @@ export function useActiveKey(sections?: TrainerNavSection[]): string {
 
   for (const item of leaves) {
     const href = item.href ?? "";
+
     if (
       href &&
       (pathname === href || pathname.startsWith(`${href}/`)) &&

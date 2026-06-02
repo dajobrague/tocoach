@@ -34,12 +34,15 @@ export default function TrainerDashboardRedirect() {
         /* ignore */
       }
       router.replace("/trainer/dashboard/metricas");
+
       return;
     }
 
     let target = "/trainer/dashboard/metricas";
+
     try {
       const stored = window.localStorage.getItem("activeSection");
+
       if (stored && SECTION_TO_PATH[stored]) {
         target = SECTION_TO_PATH[stored] ?? target;
       }

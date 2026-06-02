@@ -114,3 +114,7 @@ playwright/.cache/
 # Local AI agent state and skill lock files (per-machine, not shared)
 .agents/
 skills-lock.json
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
