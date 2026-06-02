@@ -1,5 +1,9 @@
 import type { TrainerSession } from "@/lib/auth/session";
 import type {
+  AddIngredientInput,
+  UpdateIngredientInput,
+} from "@/lib/nutrition/recipes/recipe-ingredient-service";
+import type {
   RecipeCreateInput,
   RecipeListFilter,
   RecipeStatus,
@@ -10,6 +14,7 @@ import { NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { pickNutrients } from "@/lib/nutrition/recipes/nutrient-snapshot";
 
 const RECIPE_STATUSES: readonly RecipeStatus[] = [
   "draft",
@@ -173,4 +178,87 @@ function asStringArray(value: unknown): string[] | undefined {
   }
 
   return (value as unknown[]).filter((v): v is string => typeof v === "string");
+}
+
+export function parseAddIngredientInput(
+  body: unknown
+): ParseResult<AddIngredientInput> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  const quantity = record["quantity"];
+
+  if (typeof quantity !== "number" || Number.isFinite(quantity) === false) {
+    return { ok: false, error: "La cantidad es obligatoria" };
+  }
+
+  const rawIngredientId = record["ingredient_id"];
+  const ingredientId =
+    typeof rawIngredientId === "string" && rawIngredientId.length > 0
+      ? rawIngredientId
+      : undefined;
+  const rawName = record["name"];
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+
+  if (ingredientId === undefined && name.length === 0) {
+    return { ok: false, error: "El nombre es obligatorio" };
+  }
+
+  const input: AddIngredientInput = { quantity };
+
+  if (ingredientId !== undefined) input.ingredientId = ingredientId;
+  if (name.length > 0) input.name = name;
+
+  applyIngredientShellFields(record, input);
+
+  return { ok: true, value: input };
+}
+
+export function parseUpdateIngredientInput(
+  body: unknown
+): ParseResult<UpdateIngredientInput> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  const quantity = record["quantity"];
+
+  if (
+    quantity !== undefined &&
+    (typeof quantity !== "number" || Number.isFinite(quantity) === false)
+  ) {
+    return { ok: false, error: "La cantidad es inválida" };
+  }
+
+  const input: UpdateIngredientInput = {};
+
+  if (typeof quantity === "number") input.quantity = quantity;
+
+  const rawName = record["name"];
+
+  if (typeof rawName === "string" && rawName.trim().length > 0) {
+    input.name = rawName.trim();
+  }
+
+  applyIngredientShellFields(record, input);
+
+  return { ok: true, value: input };
+}
+
+function applyIngredientShellFields(
+  record: Record<string, unknown>,
+  input: AddIngredientInput | UpdateIngredientInput
+): void {
+  const unit = record["unit"];
+  const sortOrder = record["sort_order"];
+  const nutrients = asRecord(record["nutrients_per_100g"]);
+
+  if (typeof unit === "string" && unit.length > 0) input.unit = unit;
+  if (typeof sortOrder === "number") input.sortOrder = sortOrder;
+  if (nutrients !== null) input.nutrientsPer100g = pickNutrients(nutrients);
 }
