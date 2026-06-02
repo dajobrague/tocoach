@@ -24,6 +24,7 @@ const compat = new FlatCompat({
 export default defineConfig([
   globalIgnores([
     ".now/*",
+    ".claude/**",
     "**/*.css",
     "**/.changeset",
     "**/dist",
