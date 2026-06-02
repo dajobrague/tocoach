@@ -4,8 +4,12 @@ import { getTrainerSession } from "@/lib/auth/session";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { RecipeForm } from "@/features/trainer/recipes/recipe-form";
 
-// Create flow. Same server-side flag gate as the library page.
-export default async function NewRecipePage() {
+// Edit flow. Same server-side flag gate as the library page.
+export default async function EditRecipePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const session = await getTrainerSession();
 
   if (session === null) {
@@ -18,5 +22,7 @@ export default async function NewRecipePage() {
     notFound();
   }
 
-  return <RecipeForm mode="create" />;
+  const { id } = await params;
+
+  return <RecipeForm mode="edit" recipeId={id} />;
 }

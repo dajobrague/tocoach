@@ -47,6 +47,29 @@ export class RecipeMediaService {
     this.recipes = new RecipeService(client);
   }
 
+  async list(
+    tenantHost: string,
+    recipeId: string
+  ): Promise<RecipeMediaRow[] | null> {
+    const owned = await this.recipes.getById(tenantHost, recipeId);
+
+    if (owned === null) {
+      return null;
+    }
+
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select("*")
+      .eq("recipe_id", recipeId)
+      .order("sort_order", { ascending: true });
+
+    if (error !== null) {
+      throw new Error(`RecipeMediaService.list failed: ${error.message}`);
+    }
+
+    return (data ?? []) as RecipeMediaRow[];
+  }
+
   async create(
     tenantHost: string,
     recipeId: string,

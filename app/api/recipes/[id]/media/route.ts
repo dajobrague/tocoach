@@ -38,6 +38,37 @@ const MAX_SIZE = 1024 * 1024 * 1024; // 1 GB raw (matches the training video sid
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+// GET /api/recipes/[id]/media — list a recipe's media (for the editor).
+export async function GET(request: NextRequest, { params }: RouteContext) {
+  const guard = await guardRecipeRequest();
+
+  if (guard.ok === false) {
+    return guard.response;
+  }
+
+  try {
+    const { id } = await params;
+    const service = new RecipeMediaService(createSupabaseClient());
+    const rows = await service.list(guard.session.tenant_host, id);
+
+    if (rows === null) {
+      return recipeNotFound();
+    }
+
+    return NextResponse.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(`${LOG_PREFIX} list error:`, {
+      correlationId: guard.correlationId,
+      error: errorMessage(error),
+    });
+
+    return NextResponse.json(
+      { success: false, error: "Error inesperado" },
+      { status: 500 }
+    );
+  }
+}
+
 function mediaTypeOf(mime: string): RecipeMediaType | null {
   if (IMAGE_TYPES.includes(mime)) return "image";
   if (VIDEO_TYPES.includes(mime)) return "video";

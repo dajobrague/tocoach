@@ -69,7 +69,12 @@ export function RecipeLibraryContent() {
         onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
       />
 
-      <RecipeList isError={isError} isLoading={isLoading} recipes={recipes} />
+      <RecipeList
+        isError={isError}
+        isLoading={isLoading}
+        recipes={recipes}
+        onOpen={(id) => router.push(`/trainer/dashboard/recipes/${id}/edit`)}
+      />
     </div>
   );
 }
