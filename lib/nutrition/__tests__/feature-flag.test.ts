@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isNutritionV2Enabled } from "../feature-flag";
 
@@ -15,7 +15,34 @@ function stubClient(result: { data: unknown; error: unknown }): SupabaseClient {
   return { from: () => builder } as unknown as SupabaseClient;
 }
 
-describe("isNutritionV2Enabled", () => {
+describe("isNutritionV2Enabled — non-production", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns true in development without querying", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+
+    // A client that throws if touched — proves no DB query happens.
+    const trap = {
+      from: () => {
+        throw new Error("should not query in development");
+      },
+    } as unknown as SupabaseClient;
+
+    expect(await isNutritionV2Enabled("acme.tenant", trap)).toBe(true);
+  });
+});
+
+describe("isNutritionV2Enabled — production path", () => {
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("returns true when the column is true", async () => {
     const client = stubClient({
       data: { nutrition_v2_enabled: true },

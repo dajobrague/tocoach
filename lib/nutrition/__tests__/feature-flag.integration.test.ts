@@ -1,4 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import {
@@ -23,6 +32,16 @@ async function setFlag(value: boolean): Promise<void> {
 describe("isNutritionV2Enabled (integration, local DB)", () => {
   beforeAll(async () => {
     await ensureTestTenant(client);
+  });
+
+  // These cases exercise the production DB path; force NODE_ENV so the
+  // dev/test always-on short-circuit doesn't bypass the query.
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   afterAll(async () => {

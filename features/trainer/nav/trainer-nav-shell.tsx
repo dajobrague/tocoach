@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import React from "react";
 
+import { filterTrainerNav, TRAINER_NAV } from "./nav-items";
 import { useActiveKey } from "./use-active-key";
+import { useNutritionV2Enabled } from "./use-nutrition-v2-flag";
 import { useShellMode } from "./use-shell-mode";
 import { SideShell } from "./shells/side-shell";
 import { TopShell } from "./shells/top-shell";
@@ -26,6 +28,11 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
   const router = useRouter();
   const mode = useShellMode();
   const activeKey = useActiveKey();
+  const nutritionV2Enabled = useNutritionV2Enabled();
+  const sections = React.useMemo(
+    () => filterTrainerNav(TRAINER_NAV, { nutritionV2: nutritionV2Enabled }),
+    [nutritionV2Enabled]
+  );
 
   const [session, setSession] = React.useState<TrainerSession | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -139,6 +146,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
       <SideShell
         activeKey={activeKey}
         brandLogo={brandLogo}
+        sections={sections}
         trainerId={session.trainer_id}
         trainerImage={trainerImage}
         trainerName={trainerName}
@@ -155,6 +163,7 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
       <TopShell
         activeKey={activeKey}
         brandLogo={brandLogo}
+        sections={sections}
         trainerId={session.trainer_id}
         trainerImage={trainerImage}
         trainerName={trainerName}

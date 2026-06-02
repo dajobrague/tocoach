@@ -27,6 +27,7 @@ import { TrainerNotificationsDropdown } from "@/components/trainer/notifications
 import {
   TRAINER_NAV,
   type TrainerNavItem,
+  type TrainerNavSection,
 } from "@/features/trainer/nav/nav-items";
 
 interface TopShellProps {
@@ -36,16 +37,9 @@ interface TopShellProps {
   trainerImage: string | undefined;
   brandLogo: string | undefined;
   unreadMessages: number;
+  sections?: TrainerNavSection[];
   onLogout: () => void;
 }
-
-const TEMPLATES_GROUP = TRAINER_NAV.find((s) => s.key === "plantillas")
-  ?.items[0];
-
-const FLAT_TOP_ITEMS: TrainerNavItem[] = [
-  ...(TRAINER_NAV.find((s) => s.key === "principal")?.items ?? []),
-  ...(TRAINER_NAV.find((s) => s.key === "bibliotecas")?.items ?? []),
-];
 
 export function TopShell({
   activeKey,
@@ -54,6 +48,7 @@ export function TopShell({
   trainerImage,
   brandLogo,
   unreadMessages,
+  sections = TRAINER_NAV,
   onLogout,
 }: TopShellProps) {
   const router = useRouter();
@@ -62,8 +57,14 @@ export function TopShell({
 
   React.useEffect(() => setLogoError(false), [brandLogo]);
 
+  const templatesGroup = sections.find((s) => s.key === "plantillas")?.items[0];
+  const flatTopItems: TrainerNavItem[] = [
+    ...(sections.find((s) => s.key === "principal")?.items ?? []),
+    ...(sections.find((s) => s.key === "bibliotecas")?.items ?? []),
+  ];
+
   const templatesActive = activeKey.startsWith("templates-");
-  const templateChildren = TEMPLATES_GROUP?.items ?? [];
+  const templateChildren = templatesGroup?.items ?? [];
 
   const isItemActive = (key: string) => activeKey === key;
 
@@ -120,7 +121,7 @@ export function TopShell({
       />
 
       <NavbarContent className="hidden sm:flex gap-1" justify="center">
-        {FLAT_TOP_ITEMS.map((item) => {
+        {flatTopItems.map((item) => {
           const active = isItemActive(item.key);
           const isMessaging = item.key === "messaging";
 
@@ -246,7 +247,7 @@ export function TopShell({
       </NavbarContent>
 
       <NavbarMenu className="pt-6 gap-2">
-        {FLAT_TOP_ITEMS.map((item) => {
+        {flatTopItems.map((item) => {
           const active = isItemActive(item.key);
 
           return (
