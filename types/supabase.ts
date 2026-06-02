@@ -2036,6 +2036,179 @@ export type Database = {
           },
         ];
       };
+      recipe_ingredients: {
+        Row: {
+          created_at: string;
+          id: string;
+          ingredient_id: string | null;
+          name_snapshot: string;
+          nutrient_snapshot: Json;
+          quantity: number;
+          recipe_id: string;
+          sort_order: number;
+          unit: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          name_snapshot: string;
+          nutrient_snapshot?: Json;
+          quantity: number;
+          recipe_id: string;
+          sort_order?: number;
+          unit?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          name_snapshot?: string;
+          nutrient_snapshot?: Json;
+          quantity?: number;
+          recipe_id?: string;
+          sort_order?: number;
+          unit?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey";
+            columns: ["ingredient_id"];
+            isOneToOne: false;
+            referencedRelation: "ingredients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey";
+            columns: ["recipe_id"];
+            isOneToOne: false;
+            referencedRelation: "recipes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      recipe_media: {
+        Row: {
+          created_at: string;
+          id: string;
+          orientation: string | null;
+          recipe_id: string;
+          sort_order: number;
+          type: string;
+          url: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          orientation?: string | null;
+          recipe_id: string;
+          sort_order?: number;
+          type: string;
+          url: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          orientation?: string | null;
+          recipe_id?: string;
+          sort_order?: number;
+          type?: string;
+          url?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "recipe_media_recipe_id_fkey";
+            columns: ["recipe_id"];
+            isOneToOne: false;
+            referencedRelation: "recipes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      recipes: {
+        Row: {
+          carbs_g: number;
+          cook_time_min: number | null;
+          created_at: string;
+          description: string | null;
+          fat_g: number;
+          fiber_g: number;
+          id: string;
+          instructions: string | null;
+          kcal: number;
+          meal_type_tags: string[];
+          name: string;
+          prep_time_min: number | null;
+          protein_g: number;
+          sat_fat_g: number;
+          sodium_mg: number;
+          status: string;
+          sugar_g: number;
+          tenant_host: string;
+          trainer_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          carbs_g?: number;
+          cook_time_min?: number | null;
+          created_at?: string;
+          description?: string | null;
+          fat_g?: number;
+          fiber_g?: number;
+          id?: string;
+          instructions?: string | null;
+          kcal?: number;
+          meal_type_tags?: string[];
+          name: string;
+          prep_time_min?: number | null;
+          protein_g?: number;
+          sat_fat_g?: number;
+          sodium_mg?: number;
+          status?: string;
+          sugar_g?: number;
+          tenant_host: string;
+          trainer_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          carbs_g?: number;
+          cook_time_min?: number | null;
+          created_at?: string;
+          description?: string | null;
+          fat_g?: number;
+          fiber_g?: number;
+          id?: string;
+          instructions?: string | null;
+          kcal?: number;
+          meal_type_tags?: string[];
+          name?: string;
+          prep_time_min?: number | null;
+          protein_g?: number;
+          sat_fat_g?: number;
+          sodium_mg?: number;
+          status?: string;
+          sugar_g?: number;
+          tenant_host?: string;
+          trainer_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "recipes_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+          {
+            foreignKeyName: "recipes_trainer_id_fkey";
+            columns: ["trainer_id"];
+            isOneToOne: false;
+            referencedRelation: "trainers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       scheduled_session_exercise_sets: {
         Row: {
           created_at: string | null;
