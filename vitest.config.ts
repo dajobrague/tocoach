@@ -22,7 +22,13 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules", ".next", "tests/e2e/**"],
+    // Integration tests need the local DB and run via vitest.integration.config.ts.
+    exclude: [
+      "node_modules",
+      ".next",
+      "tests/e2e/**",
+      "**/*.integration.test.ts",
+    ],
     coverage: {
       provider: "v8",
       reportsDirectory: "coverage",

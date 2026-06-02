@@ -1,0 +1,126 @@
+/**
+ * Test-tenant + cleanup helpers for nutrition-v2 integration tests.
+ *
+ * Safety model: every write here is scoped to a single dedicated, clearly-fake
+ * test tenant, and {@link cleanNutritionTestData} can only ever delete from a
+ * hard-coded allowlist of nutrition-v2 tables, only where
+ * `tenant_host = TEST_TENANT_HOST`. It can never touch another tenant's rows or
+ * any table outside the allowlist, and it never deletes the test tenant itself.
+ */
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { createSupabaseTestClient } from "./supabase-test-client";
+
+/** Dedicated, obviously-non-real tenant used only by integration tests. */
+export const TEST_TENANT_HOST = "nutrition-v2-test.local";
+
+/** Dedicated, fixed test trainer id (also the backing auth.users id). */
+export const TEST_TRAINER_ID = "00000000-0000-4000-a000-000000000001";
+
+/** Email for the dedicated test trainer / auth user. */
+const TEST_TRAINER_EMAIL = "trainer@nutrition-v2-test.local";
+
+/**
+ * Tables that {@link cleanNutritionTestData} is permitted to delete from.
+ * Hard-coded on purpose — grow it deliberately as nutrition-v2 tables land.
+ *
+ * Order matters: `recipes` is deleted before `ingredients` because
+ * recipe_ingredients.ingredient_id references ingredients(id) without a
+ * cascade. recipe_ingredients and recipe_media have no tenant_host and are
+ * cleaned automatically via ON DELETE CASCADE when test recipes are deleted —
+ * do NOT add them to the allowlist.
+ */
+const CLEANUP_ALLOWLIST = ["recipes", "ingredients"] as const;
+
+/**
+ * Idempotently upsert the one test tenant row so FK constraints
+ * (`tenant_host -> tenants(host)`) are satisfied. Status is `inactive` so the
+ * middleware never serves it as a real public tenant.
+ */
+export async function ensureTestTenant(
+  client: SupabaseClient = createSupabaseTestClient()
+): Promise<void> {
+  const { error } = await client.from("tenants").upsert(
+    {
+      host: TEST_TENANT_HOST,
+      slug: TEST_TENANT_HOST,
+      theme_slug: "default",
+      status: "inactive",
+    },
+    { onConflict: "host" }
+  );
+
+  if (error !== null) {
+    throw new Error(`ensureTestTenant failed: ${error.message}`);
+  }
+}
+
+/**
+ * Idempotently ensure the dedicated test trainer exists. Because
+ * `trainers.id` is a FK to `auth.users(id)`, this first ensures a single
+ * backing auth user with the same fixed id, then upserts the trainer row tied
+ * to TEST_TENANT_HOST. All writes are scoped to that one dedicated id — it
+ * never touches any real trainer or user.
+ */
+export async function ensureTestTrainer(
+  client: SupabaseClient = createSupabaseTestClient()
+): Promise<void> {
+  const existing = await client.auth.admin.getUserById(TEST_TRAINER_ID);
+
+  if (existing.data.user === null) {
+    const created = await client.auth.admin.createUser({
+      id: TEST_TRAINER_ID,
+      email: TEST_TRAINER_EMAIL,
+      email_confirm: true,
+    });
+
+    // Tolerate a concurrent create: only fail if the user still isn't there.
+    if (created.error !== null) {
+      const recheck = await client.auth.admin.getUserById(TEST_TRAINER_ID);
+
+      if (recheck.data.user === null) {
+        throw new Error(
+          `ensureTestTrainer: createUser failed: ${created.error.message}`
+        );
+      }
+    }
+  }
+
+  const { error } = await client.from("trainers").upsert(
+    {
+      id: TEST_TRAINER_ID,
+      tenant_host: TEST_TENANT_HOST,
+      email: TEST_TRAINER_EMAIL,
+      full_name: "Nutrition V2 Test Trainer",
+      status: "active",
+    },
+    { onConflict: "id" }
+  );
+
+  if (error !== null) {
+    throw new Error(
+      `ensureTestTrainer: trainer upsert failed: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Delete all rows for the test tenant from the allowlisted tables. Never
+ * deletes the test tenant row itself and never touches any other tenant.
+ */
+export async function cleanNutritionTestData(
+  client: SupabaseClient = createSupabaseTestClient()
+): Promise<void> {
+  for (const table of CLEANUP_ALLOWLIST) {
+    const { error } = await client
+      .from(table)
+      .delete()
+      .eq("tenant_host", TEST_TENANT_HOST);
+
+    if (error !== null) {
+      throw new Error(
+        `cleanNutritionTestData failed for "${table}": ${error.message}`
+      );
+    }
+  }
+}
