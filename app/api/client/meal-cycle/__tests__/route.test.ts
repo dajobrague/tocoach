@@ -1,6 +1,7 @@
 import type { ClientSession } from "@/lib/auth/client-session";
 import type { MealCycleTree } from "@/lib/nutrition/cycles/meal-cycle-service";
 
+import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/client-session", () => ({ getClientSession: vi.fn() }));
@@ -14,18 +15,24 @@ vi.mock("@/lib/clients/supabase-api", () => ({
 vi.mock("@/lib/nutrition/cycles/client-cycle-reader", () => ({
   getActiveCycleTreeForClient: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
+  getClientSelections: vi.fn(),
+}));
 
 import { GET } from "../route";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
+import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { loadTenantContext } from "@/lib/tenant/loader";
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 
 const mockedSession = vi.mocked(getClientSession);
 const mockedFlag = vi.mocked(isNutritionV2Enabled);
 const mockedTenant = vi.mocked(loadTenantContext);
 const mockedRead = vi.mocked(getActiveCycleTreeForClient);
+const mockedSelections = vi.mocked(getClientSelections);
 
 const CLIENT_SESSION: ClientSession = {
   client_id: "999000001",
@@ -34,6 +41,12 @@ const CLIENT_SESSION: ClientSession = {
   iat: 0,
   exp: 0,
 };
+
+function mealCycleReq(tz?: string): NextRequest {
+  const qs = tz === undefined ? "" : `?tz=${encodeURIComponent(tz)}`;
+
+  return new NextRequest(`http://localhost/api/client/meal-cycle${qs}`);
+}
 
 function tree(): MealCycleTree {
   return {
@@ -60,13 +73,14 @@ beforeEach(() => {
     slug: "acme",
   } as never);
   mockedRead.mockResolvedValue(null);
+  mockedSelections.mockResolvedValue([]);
 });
 
 describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
   it("returns 401 when unauthenticated", async () => {
     mockedSession.mockResolvedValue(null);
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
 
     expect(res.status).toBe(401);
     expect(mockedRead).not.toHaveBeenCalled();
@@ -82,7 +96,7 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
       exp: 0,
     } as unknown as ClientSession);
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
 
     expect(res.status).toBe(401);
     expect(mockedRead).not.toHaveBeenCalled();
@@ -94,7 +108,7 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
       client_id: "not-a-number",
     });
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
 
     expect(res.status).toBe(401);
     expect(mockedRead).not.toHaveBeenCalled();
@@ -103,7 +117,7 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
   it("returns 404 when the nutrition-v2 flag is off (hides existence)", async () => {
     mockedFlag.mockResolvedValue(false);
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
 
     expect(res.status).toBe(404);
     expect(mockedRead).not.toHaveBeenCalled();
@@ -112,7 +126,7 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
   it("scopes strictly to the authed client's own id (never request-supplied)", async () => {
     mockedRead.mockResolvedValue(tree());
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -127,7 +141,7 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
   it("returns a clean empty result (200) when there is no active cycle", async () => {
     mockedRead.mockResolvedValue(null);
 
-    const res = await GET();
+    const res = await GET(mealCycleReq());
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -136,5 +150,23 @@ describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {
     expect(body.data.position).toBeNull();
     expect(body.data.days).toEqual([]);
     expect(typeof body.data.today).toBe("string");
+  });
+
+  it("computes 'today' in the tz from the ?tz= query param", async () => {
+    const res = await GET(mealCycleReq("Pacific/Auckland"));
+    const body = await res.json();
+
+    // The route resolves "today" in the requested tz (same instant the test
+    // observes), proving the param is read and threaded — not hard-coded UTC.
+    expect(body.data.today).toBe(
+      toYmdInTimezone(new Date(), "Pacific/Auckland")
+    );
+  });
+
+  it("defaults 'today' to UTC when no tz is supplied", async () => {
+    const res = await GET(mealCycleReq());
+    const body = await res.json();
+
+    expect(body.data.today).toBe(toYmdInTimezone(new Date(), "UTC"));
   });
 });

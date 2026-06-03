@@ -113,8 +113,22 @@ async function fetchNutritionPlan() {
   return data.data && data.data.length > 0 ? data.data : null;
 }
 
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // Very old browsers without Intl — fall back to UTC (charts convention).
+    return "UTC";
+  }
+}
+
 async function fetchMealCycle(): Promise<ClientCycleView | null> {
-  const response = await clientFetch("/api/client/meal-cycle");
+  // Pass the client's IANA tz so "today" is computed in their local day,
+  // exactly how the charts API receives it.
+  const tz = browserTimeZone();
+  const response = await clientFetch(
+    `/api/client/meal-cycle?tz=${encodeURIComponent(tz)}`
+  );
 
   // Flag off (or route hidden) → 404. Treat as "no plan available", a clean
   // empty result, not an error — the view renders its empty state.
@@ -213,6 +227,61 @@ export function useClientMealCycle() {
   return useQuery({
     queryKey: ["client", "meal-cycle"],
     queryFn: fetchMealCycle,
+  });
+}
+
+const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
+
+async function postMealCycleSelection(input: {
+  slotId: string;
+  optionId: string;
+}): Promise<void> {
+  const response = await clientFetch("/api/client/meal-cycle/selection", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error ?? `request_failed (${response.status})`);
+  }
+}
+
+/**
+ * Persist the client's option choice for a meal slot, optimistically marking it
+ * in the cached meal-cycle view so the UI updates instantly. Rolls back on
+ * error and re-syncs from the server on settle.
+ */
+export function useSetMealCycleSelection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: postMealCycleSelection,
+    onMutate: async ({ slotId, optionId }) => {
+      await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_KEY });
+
+      const previous = queryClient.getQueryData<ClientCycleView | null>(
+        MEAL_CYCLE_KEY
+      );
+
+      if (previous) {
+        queryClient.setQueryData<ClientCycleView | null>(MEAL_CYCLE_KEY, {
+          ...previous,
+          selections: { ...previous.selections, [slotId]: optionId },
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(MEAL_CYCLE_KEY, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+    },
   });
 }
 

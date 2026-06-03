@@ -1,4 +1,4 @@
-import type { OptionSnapshot } from "./option-snapshot";
+import type { OptionSnapshot, SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { buildOptionSnapshot } from "./option-snapshot";
@@ -60,9 +60,9 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const [ingredients, images] = await Promise.all([
+    const [ingredients, media] = await Promise.all([
       this.readRecipeIngredients(recipeId),
-      this.readRecipeImages(recipeId),
+      this.readRecipeMedia(recipeId),
     ]);
 
     const snapshot = buildOptionSnapshot({
@@ -72,7 +72,7 @@ export class MealSlotOptionService {
         name: recipe.name,
         instructions: recipe.instructions,
         ingredients,
-        images,
+        media,
       },
     });
 
@@ -293,24 +293,32 @@ export class MealSlotOptionService {
     }));
   }
 
-  private async readRecipeImages(recipeId: string) {
+  private async readRecipeMedia(recipeId: string): Promise<SnapshotMedia[]> {
     const { data, error } = await this.client
       .from(RECIPE_MEDIA_TABLE)
-      .select("url, orientation")
+      .select("type, url, orientation")
       .eq("recipe_id", recipeId)
       .order("sort_order", { ascending: true });
 
     if (error !== null) {
       throw new Error(
-        `MealSlotOptionService.readRecipeImages failed: ${error.message}`
+        `MealSlotOptionService.readRecipeMedia failed: ${error.message}`
       );
     }
 
-    return (data ?? []).map((row) => ({
-      url: (row as { url: string }).url,
-      orientation: (row as { orientation: "vertical" | "horizontal" | null })
-        .orientation,
-    }));
+    return (data ?? []).map((row) => {
+      const media = row as {
+        type: "image" | "video";
+        url: string;
+        orientation: "vertical" | "horizontal" | null;
+      };
+
+      return {
+        type: media.type,
+        url: media.url,
+        orientation: media.orientation,
+      };
+    });
   }
 
   private async readIngredient(

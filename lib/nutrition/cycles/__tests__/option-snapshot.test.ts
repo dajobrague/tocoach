@@ -12,7 +12,9 @@ function recipe(over: Partial<RecipeSnapshotInput> = {}): RecipeSnapshotInput {
     id: "recipe-1",
     name: "Pollo con arroz",
     instructions: "Hervir el arroz.",
-    images: [{ url: "https://cdn/x.jpg", orientation: "horizontal" }],
+    media: [
+      { type: "image", url: "https://cdn/x.jpg", orientation: "horizontal" },
+    ],
     ingredients: [
       {
         name: "Arroz",
@@ -51,6 +53,11 @@ describe("buildOptionSnapshot — recipe", () => {
     expect(snap.steps).toBe("Hervir el arroz.");
     expect(snap.images).toEqual([
       { url: "https://cdn/x.jpg", orientation: "horizontal" },
+    ]);
+    // `media` carries the same item, typed — the basis for self-contained
+    // photo + video rendering in the client recipe detail.
+    expect(snap.media).toEqual([
+      { type: "image", url: "https://cdn/x.jpg", orientation: "horizontal" },
     ]);
     expect(snap.ingredients).toEqual([
       {
@@ -96,6 +103,40 @@ describe("buildOptionSnapshot — recipe", () => {
     });
   });
 
+  it("freezes vertical video alongside images so the snapshot is self-contained", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        media: [
+          {
+            type: "image",
+            url: "https://cdn/photo.jpg",
+            orientation: "horizontal",
+          },
+          {
+            type: "video",
+            url: "https://cdn/reel.mp4",
+            orientation: "vertical",
+          },
+        ],
+      }),
+    });
+
+    // All media is frozen, in order, with its type — no library join needed.
+    expect(snap.media).toEqual([
+      {
+        type: "image",
+        url: "https://cdn/photo.jpg",
+        orientation: "horizontal",
+      },
+      { type: "video", url: "https://cdn/reel.mp4", orientation: "vertical" },
+    ]);
+    // `images` stays the image-only convenience subset.
+    expect(snap.images).toEqual([
+      { url: "https://cdn/photo.jpg", orientation: "horizontal" },
+    ]);
+  });
+
   it("maps null/empty instructions to null steps", () => {
     expect(
       buildOptionSnapshot({
@@ -114,7 +155,7 @@ describe("buildOptionSnapshot — recipe", () => {
   it("handles a recipe with no ingredients (zero totals)", () => {
     const snap = buildOptionSnapshot({
       type: "recipe",
-      recipe: recipe({ ingredients: [], images: [] }),
+      recipe: recipe({ ingredients: [], media: [] }),
     });
 
     expect(snap.ingredients).toEqual([]);
@@ -140,6 +181,7 @@ describe("buildOptionSnapshot — food", () => {
     expect(snap.name).toBe("Plátano");
     expect(snap.steps).toBeNull();
     expect(snap.images).toEqual([]);
+    expect(snap.media).toEqual([]);
     expect(snap.ingredients).toEqual([
       {
         name: "Plátano",
@@ -173,6 +215,7 @@ describe("buildOptionSnapshot — determinism", () => {
       "name",
       "steps",
       "images",
+      "media",
       "ingredients",
       "totals",
     ]);

@@ -4,6 +4,8 @@ export type {
   RecipeSnapshotInput,
   SnapshotImage,
   SnapshotIngredient,
+  SnapshotMedia,
+  SnapshotMediaType,
   SnapshotSource,
 } from "./option-snapshot";
 export { buildOptionSnapshot } from "./option-snapshot";

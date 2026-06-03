@@ -1312,6 +1312,65 @@ export type Database = {
           },
         ];
       };
+      meal_slot_option_selections: {
+        Row: {
+          client_id: number;
+          created_at: string;
+          id: string;
+          option_id: string;
+          slot_id: string;
+          tenant_host: string;
+          updated_at: string;
+        };
+        Insert: {
+          client_id: number;
+          created_at?: string;
+          id?: string;
+          option_id: string;
+          slot_id: string;
+          tenant_host: string;
+          updated_at?: string;
+        };
+        Update: {
+          client_id?: number;
+          created_at?: string;
+          id?: string;
+          option_id?: string;
+          slot_id?: string;
+          tenant_host?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_slot_option_selections_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_slot_option_selections_option_id_fkey";
+            columns: ["option_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slot_options";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_slot_option_selections_slot_id_fkey";
+            columns: ["slot_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slots";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_slot_option_selections_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+        ];
+      };
       meal_slot_options: {
         Row: {
           created_at: string;

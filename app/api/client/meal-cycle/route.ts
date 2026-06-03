@@ -1,11 +1,12 @@
 import type { ClientSession } from "@/lib/auth/client-session";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
 import { buildClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
@@ -22,8 +23,11 @@ const LOG_PREFIX = "[Client MealCycle API]";
  * numeric `client_id`) is rejected with 401. Behind the nutrition-v2 flag: when
  * off the route 404s to hide its existence. No active cycle is a clean empty
  * result, not an error.
+ *
+ * "Today" is computed in the client's IANA timezone, passed as `?tz=` from the
+ * browser (same convention as the charts API); defaults to "UTC" when absent.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const session = await getClientSession();
   const clientId = parseClientId(session);
@@ -48,11 +52,14 @@ export async function GET() {
       );
     }
 
-    const tree = await getActiveCycleTreeForClient(
-      createSupabaseClient(),
-      clientId
-    );
-    const view = buildClientCycleView(tree, new Date());
+    // Client timezone from the browser (charts convention); UTC when absent.
+    const timeZone = new URL(request.url).searchParams.get("tz") || "UTC";
+    const supabase = createSupabaseClient();
+    const [tree, selections] = await Promise.all([
+      getActiveCycleTreeForClient(supabase, clientId),
+      getClientSelections(supabase, clientId),
+    ]);
+    const view = buildClientCycleView(tree, new Date(), timeZone, selections);
 
     return NextResponse.json({ success: true, data: view });
   } catch (error) {

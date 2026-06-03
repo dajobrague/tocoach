@@ -77,7 +77,7 @@ describe("currentCycleDayIndex", () => {
     });
   });
 
-  it("ignores time-of-day / timezone by comparing calendar days only", () => {
+  it("defaults to UTC calendar days when no timezone is given", () => {
     expect(
       currentCycleDayIndex(
         new Date("2026-06-01T23:30:00Z"),
@@ -85,6 +85,46 @@ describe("currentCycleDayIndex", () => {
         new Date("2026-06-03T00:15:00Z")
       )
     ).toEqual({ started: true, dayIndex: 2 });
+  });
+});
+
+describe("currentCycleDayIndex — timezone", () => {
+  // One instant; "today" is a different calendar day depending on the client's
+  // timezone, so the cycle day must differ too. At 2026-06-02T12:30:00Z it is
+  // already 2026-06-03 in Auckland (UTC+12) but still 2026-06-02 in LA (UTC-7).
+  const instant = new Date("2026-06-02T12:30:00Z");
+
+  it("resolves a later cycle day for a client just past midnight in Auckland", () => {
+    expect(
+      currentCycleDayIndex("2026-06-01", 5, instant, "Pacific/Auckland")
+    ).toEqual({ started: true, dayIndex: 2 });
+  });
+
+  it("resolves an earlier cycle day for the same instant in Los Angeles", () => {
+    expect(
+      currentCycleDayIndex("2026-06-01", 5, instant, "America/Los_Angeles")
+    ).toEqual({ started: true, dayIndex: 1 });
+  });
+
+  it("defaults to UTC (same instant → the UTC calendar day)", () => {
+    expect(currentCycleDayIndex("2026-06-01", 5, instant)).toEqual({
+      started: true,
+      dayIndex: 1,
+    });
+  });
+
+  it("treats not-started in the client's own timezone", () => {
+    // 2026-06-01T06:00Z is still 2026-05-31 in Los Angeles → before a cycle
+    // that starts 2026-06-01, even though it is already June 1 in UTC.
+    const earlyJune1 = new Date("2026-06-01T06:00:00Z");
+
+    expect(
+      currentCycleDayIndex("2026-06-01", 5, earlyJune1, "America/Los_Angeles")
+    ).toEqual({ started: false, dayIndex: null });
+    expect(currentCycleDayIndex("2026-06-01", 5, earlyJune1, "UTC")).toEqual({
+      started: true,
+      dayIndex: 0,
+    });
   });
 });
 
@@ -148,7 +188,20 @@ describe("buildClientCycleView", () => {
       today: "2026-06-03",
       position: null,
       days: [],
+      selections: {},
     });
+  });
+
+  it("folds the client's selections into a slot → option map", () => {
+    const view = buildClientCycleView(tree, "2026-06-03", "UTC", [
+      { slot_id: "slot-0-0", option_id: "opt-x" },
+    ]);
+
+    expect(view.selections).toEqual({ "slot-0-0": "opt-x" });
+  });
+
+  it("defaults selections to an empty map when none are given", () => {
+    expect(buildClientCycleView(tree, "2026-06-03").selections).toEqual({});
   });
 
   it("projects the cycle, today, position and grouped days", () => {

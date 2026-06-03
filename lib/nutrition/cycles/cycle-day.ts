@@ -3,14 +3,20 @@ import type {
   MealCycleTree,
   MealSlotWithOptions,
 } from "./meal-cycle-service";
+import type { ClientSelection } from "./option-selection";
+
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 
 /**
  * Pure cycle-day math + projection for the client's "today" view (P4).
  *
- * Everything here is deterministic and timezone-safe: dates are compared by
- * calendar day in UTC, never by wall-clock, so a client and the server agree on
- * "which day of the rotation is today" regardless of local time. No DB access —
- * the route hands these helpers the already-fetched (snapshot-backed) tree.
+ * Deterministic and timezone-correct: "today" is resolved to a calendar day in
+ * the client's IANA timezone (via the shared `toYmdInTimezone`), then compared
+ * to the cycle's `start_date` (a tz-less DATE) as calendar days. So a client
+ * just past midnight in Pacific/Auckland and one still on the previous day in
+ * America/Los_Angeles see different cycle days for the same instant. Defaults to
+ * "UTC" when no timezone is supplied. No DB access — the route hands these
+ * helpers the already-fetched (snapshot-backed) tree.
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -44,46 +50,49 @@ export interface ClientCycleView {
   position: CycleDayPosition | null;
   /** Slots grouped by rotation day; `[]` when there is no active cycle. */
   days: CycleDay[];
+  /** The client's standing choice per slot (slotId → optionId). */
+  selections: Record<string, string>;
 }
 
-/** Calendar-day count (UTC) for a DATE string ("YYYY-MM-DD") or a Date. */
-function toUtcMidnightMs(value: string | Date): number {
-  if (value instanceof Date) {
-    return Date.UTC(
-      value.getUTCFullYear(),
-      value.getUTCMonth(),
-      value.getUTCDate()
-    );
-  }
-
-  const [year, month, day] = value.slice(0, 10).split("-");
+/** Anchor a "YYYY-MM-DD" calendar date at UTC midnight (for whole-day diffs). */
+function ymdToMs(ymd: string): number {
+  const [year, month, day] = ymd.split("-");
 
   return Date.UTC(Number(year), Number(month) - 1, Number(day));
 }
 
-function toIsoDate(value: string | Date): string {
+/**
+ * The calendar day ("YYYY-MM-DD") that `value` represents in `timeZone`. A Date
+ * (an instant) is resolved to its wall-clock day in the zone; a string is
+ * already a tz-less calendar date and is taken as-is.
+ */
+function toCalendarYmd(value: string | Date, timeZone: string): string {
   return value instanceof Date
-    ? value.toISOString().slice(0, 10)
+    ? toYmdInTimezone(value, timeZone)
     : value.slice(0, 10);
 }
 
 /**
- * The 0-based day of the rotation that `today` falls on.
+ * The 0-based day of the rotation that `today` falls on, in `timeZone`.
  *
- * `dayIndex = floor((today - startDate) in whole days) mod durationDays`. Before
- * the start date the cycle has not begun, so `started` is false and `dayIndex`
- * is null. Comparison is by calendar day in UTC, so time-of-day and timezone
- * never shift the result.
+ * `dayIndex = floor((today - startDate) in whole calendar days) mod durationDays`.
+ * Both dates are resolved to calendar days in `timeZone` first, so the same
+ * instant can land on different cycle days for clients in different zones.
+ * Before the start date the cycle has not begun: `started` false, `dayIndex`
+ * null. Defaults to "UTC".
  */
 export function currentCycleDayIndex(
   startDate: string | Date,
   durationDays: number,
-  today: string | Date
+  today: string | Date,
+  timeZone = "UTC"
 ): CycleDayPosition {
   const span =
     Number.isInteger(durationDays) && durationDays > 0 ? durationDays : 1;
   const diffDays = Math.floor(
-    (toUtcMidnightMs(today) - toUtcMidnightMs(startDate)) / MS_PER_DAY
+    (ymdToMs(toCalendarYmd(today, timeZone)) -
+      ymdToMs(toCalendarYmd(startDate, timeZone))) /
+      MS_PER_DAY
   );
 
   if (diffDays < 0) {
@@ -127,12 +136,25 @@ export function groupSlotsByDay(
  */
 export function buildClientCycleView(
   tree: MealCycleTree | null,
-  today: string | Date
+  today: string | Date,
+  timeZone = "UTC",
+  selections: ClientSelection[] = []
 ): ClientCycleView {
-  const todayIso = toIsoDate(today);
+  const todayIso = toCalendarYmd(today, timeZone);
+  const selectionMap: Record<string, string> = {};
+
+  for (const selection of selections) {
+    selectionMap[selection.slot_id] = selection.option_id;
+  }
 
   if (tree === null) {
-    return { cycle: null, today: todayIso, position: null, days: [] };
+    return {
+      cycle: null,
+      today: todayIso,
+      position: null,
+      days: [],
+      selections: selectionMap,
+    };
   }
 
   return {
@@ -147,8 +169,10 @@ export function buildClientCycleView(
     position: currentCycleDayIndex(
       tree.start_date,
       tree.duration_days,
-      todayIso
+      today,
+      timeZone
     ),
     days: groupSlotsByDay(tree.duration_days, tree.slots),
+    selections: selectionMap,
   };
 }

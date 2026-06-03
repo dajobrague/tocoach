@@ -61,6 +61,26 @@ async function seedIngredient(name: string, kcal: number): Promise<string> {
   return (data as { id: string }).id;
 }
 
+async function seedRecipeMedia(
+  recipeId: string,
+  type: "image" | "video",
+  url: string,
+  orientation: "vertical" | "horizontal",
+  sortOrder: number
+): Promise<void> {
+  const { error } = await client.from("recipe_media").insert({
+    recipe_id: recipeId,
+    type,
+    url,
+    orientation,
+    sort_order: sortOrder,
+  });
+
+  if (error !== null) {
+    throw new Error(`seedRecipeMedia failed: ${error.message}`);
+  }
+}
+
 async function newCycleSlot(): Promise<string> {
   const cycle = await cycles.create(TEST_TENANT_HOST, {
     trainerId: TEST_TRAINER_ID,
@@ -115,6 +135,55 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
       .eq("tenant_host", TEST_TENANT_HOST);
 
     expect(data ?? []).toHaveLength(0);
+  });
+
+  it("freezes recipe media (image + vertical video) so the snapshot is self-contained", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Bowl de proteína",
+      status: "active",
+    });
+
+    await seedRecipeMedia(
+      recipe.id,
+      "image",
+      "https://cdn/bowl.jpg",
+      "horizontal",
+      0
+    );
+    await seedRecipeMedia(
+      recipe.id,
+      "video",
+      "https://cdn/bowl-reel.mp4",
+      "vertical",
+      1
+    );
+
+    const slotId = await newCycleSlot();
+    const option = await options.addRecipeOption(
+      TEST_TENANT_HOST,
+      slotId,
+      recipe.id
+    );
+
+    const frozen = await readSnapshot(option!.id);
+
+    // The frozen snapshot carries the vertical video itself — the client
+    // detail renders from it with no join back to recipe_media.
+    expect(frozen.media).toEqual([
+      { type: "image", url: "https://cdn/bowl.jpg", orientation: "horizontal" },
+      {
+        type: "video",
+        url: "https://cdn/bowl-reel.mp4",
+        orientation: "vertical",
+      },
+    ]);
+    expect(frozen.images).toEqual([
+      { url: "https://cdn/bowl.jpg", orientation: "horizontal" },
+    ]);
+
+    // Deleting the library media leaves the snapshot untouched (self-contained).
+    await client.from("recipe_media").delete().eq("recipe_id", recipe.id);
+    expect(await readSnapshot(option!.id)).toEqual(frozen);
   });
 
   it("freezes a recipe option that a later library edit cannot mutate", async () => {

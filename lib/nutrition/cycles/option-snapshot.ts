@@ -22,6 +22,15 @@ export interface SnapshotImage {
   orientation: "vertical" | "horizontal" | null;
 }
 
+export type SnapshotMediaType = "image" | "video";
+
+/** A frozen recipe media item — image or (vertical) video — for the snapshot. */
+export interface SnapshotMedia {
+  type: SnapshotMediaType;
+  url: string;
+  orientation: "vertical" | "horizontal" | null;
+}
+
 export interface SnapshotIngredient {
   name: string;
   /** Grams of this line in the option. */
@@ -36,7 +45,10 @@ export interface OptionSnapshot {
   sourceRefId: string;
   name: string;
   steps: string | null;
+  /** Image-only convenience subset of {@link media} (back-compat). */
   images: SnapshotImage[];
+  /** All recipe media (images + vertical video), in display order, with type. */
+  media: SnapshotMedia[];
   ingredients: SnapshotIngredient[];
   totals: NutrientTotals;
 }
@@ -52,7 +64,8 @@ export interface RecipeSnapshotInput {
     unit: string | null;
     nutrientSnapshot: Record<string, unknown> | null;
   }>;
-  images: SnapshotImage[];
+  /** All recipe media (image + video) in display order — the freeze source. */
+  media: SnapshotMedia[];
 }
 
 /** A raw food (ingredients-cache row) assigned at a chosen quantity in grams. */
@@ -82,15 +95,21 @@ function buildRecipeSnapshot(recipe: RecipeSnapshotInput): OptionSnapshot {
     nutrientsPer100g: pickNutrients(line.nutrientSnapshot ?? {}),
   }));
 
+  const media: SnapshotMedia[] = recipe.media.map((item) => ({
+    type: item.type,
+    url: item.url,
+    orientation: item.orientation,
+  }));
+
   return {
     sourceType: "recipe",
     sourceRefId: recipe.id,
     name: recipe.name,
     steps: nonEmptyOrNull(recipe.instructions),
-    images: recipe.images.map((image) => ({
-      url: image.url,
-      orientation: image.orientation,
-    })),
+    images: media
+      .filter((item) => item.type === "image")
+      .map((item) => ({ url: item.url, orientation: item.orientation })),
+    media,
     ingredients,
     totals: totalsFrom(ingredients),
   };
@@ -110,6 +129,7 @@ function buildFoodSnapshot(food: FoodSnapshotInput): OptionSnapshot {
     name: food.name,
     steps: null,
     images: [],
+    media: [],
     ingredients: [ingredient],
     totals: totalsFrom([ingredient]),
   };

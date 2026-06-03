@@ -9,6 +9,7 @@ const EMPTY: ClientCycleView = {
   today: "2026-06-03",
   position: null,
   days: [],
+  selections: {},
 };
 
 function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
@@ -27,6 +28,7 @@ function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
       { dayIndex: 1, slots: [] },
       { dayIndex: 2, slots: [] },
     ],
+    selections: {},
     ...overrides,
   };
 }

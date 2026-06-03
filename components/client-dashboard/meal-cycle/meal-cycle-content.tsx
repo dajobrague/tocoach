@@ -11,7 +11,12 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { resolveMealCycleViewState } from "@/components/client-dashboard/meal-cycle/meal-cycle-view-state";
-import { useClientMealCycle } from "@/lib/hooks/use-client-queries";
+import { normalizeOptionSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
+import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
+import {
+  useClientMealCycle,
+  useSetMealCycleSelection,
+} from "@/lib/hooks/use-client-queries";
 import { shouldShowMacrosToClient } from "@/lib/nutrition/cycles/macro-visibility";
 
 /** Page chrome shared by every branch (header + bottom nav). */
@@ -67,7 +72,7 @@ function CenteredState({
 }
 
 function macroLine(option: MealSlotOptionRow): string {
-  const t = option.item_snapshot.totals;
+  const t = normalizeOptionSnapshot(option.item_snapshot).totals;
 
   return [
     `${Math.round(t.kcal)} kcal`,
@@ -81,36 +86,84 @@ function OptionCard({
   option,
   index,
   showMacros,
+  selectable,
+  isSelected,
+  onOpen,
+  onSelect,
 }: {
   option: MealSlotOptionRow;
   index: number;
   showMacros: boolean;
+  /** True when the slot has >1 option, so the client chooses one. */
+  selectable: boolean;
+  isSelected: boolean;
+  onOpen: (option: MealSlotOptionRow) => void;
+  onSelect: (option: MealSlotOptionRow) => void;
 }) {
-  const snapshot = option.item_snapshot;
+  const snapshot = normalizeOptionSnapshot(option.item_snapshot);
 
   return (
-    <div className="rounded-xl border border-default-200 bg-content1 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-default-400">
-            Opción {index + 1}
-          </p>
-          <p className="truncate text-sm font-semibold text-foreground">
-            {snapshot.name}
-          </p>
-        </div>
-        <Chip
+    <div
+      className={`flex items-center gap-2 rounded-xl border bg-content1 p-3 transition-colors ${
+        isSelected ? "border-primary ring-1 ring-primary" : "border-default-200"
+      }`}
+      data-selected={isSelected}
+      data-testid="option-card"
+    >
+      {selectable ? (
+        <button
+          aria-label="Elegir esta opción"
+          aria-pressed={isSelected}
           className="shrink-0"
-          color={snapshot.sourceType === "recipe" ? "primary" : "default"}
-          size="sm"
-          variant="flat"
+          data-testid="option-select"
+          type="button"
+          onClick={() => onSelect(option)}
         >
-          {snapshot.sourceType === "recipe" ? "Receta" : "Alimento"}
-        </Chip>
-      </div>
-      {showMacros ? (
-        <p className="mt-2 text-xs text-default-500">{macroLine(option)}</p>
+          <Icon
+            className={isSelected ? "text-primary" : "text-default-300"}
+            icon={
+              isSelected
+                ? "solar:check-circle-bold"
+                : "solar:record-circle-linear"
+            }
+            width={24}
+          />
+        </button>
       ) : null}
+      <button
+        className="min-w-0 flex-1 text-left"
+        data-testid="option-open"
+        type="button"
+        onClick={() => onOpen(option)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-default-400">
+              Opción {index + 1}
+            </p>
+            <p className="truncate text-sm font-semibold text-foreground">
+              {snapshot.name}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Chip
+              color={snapshot.sourceType === "recipe" ? "primary" : "default"}
+              size="sm"
+              variant="flat"
+            >
+              {snapshot.sourceType === "recipe" ? "Receta" : "Alimento"}
+            </Chip>
+            <Icon
+              className="text-default-300"
+              icon="solar:alt-arrow-right-linear"
+              width={18}
+            />
+          </div>
+        </div>
+        {showMacros ? (
+          <p className="mt-2 text-xs text-default-500">{macroLine(option)}</p>
+        ) : null}
+      </button>
     </div>
   );
 }
@@ -119,11 +172,19 @@ function SlotBlock({
   label,
   options,
   showMacros,
+  selectedOptionId,
+  onOpenOption,
+  onSelectOption,
 }: {
   label: string;
   options: MealSlotOptionRow[];
   showMacros: boolean;
+  selectedOptionId: string | null;
+  onOpenOption: (option: MealSlotOptionRow) => void;
+  onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
+  const selectable = options.length > 1;
+
   return (
     <Card>
       <CardBody className="gap-3">
@@ -137,8 +198,12 @@ function SlotBlock({
             <OptionCard
               key={option.id}
               index={index}
+              isSelected={selectable && selectedOptionId === option.id}
               option={option}
+              selectable={selectable}
               showMacros={showMacros}
+              onOpen={onOpenOption}
+              onSelect={onSelectOption}
             />
           ))
         )}
@@ -167,11 +232,14 @@ function DaySelector({
         return (
           <button
             key={day.dayIndex}
+            aria-current={isSelected}
             className={`flex shrink-0 flex-col items-center rounded-xl border px-4 py-2 text-sm transition-colors ${
               isSelected
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-default-200 bg-content1 text-default-600"
             }`}
+            data-testid="cycle-day"
+            data-today={isToday}
             type="button"
             onClick={() => onSelect(day.dayIndex)}
           >
@@ -198,12 +266,16 @@ function DaySelector({
  * Lands on the current cycle-day (highlighted "Hoy"), with the day's meals in
  * order and each meal's options rendered from the frozen snapshot — name +
  * macros, no recipe-library join. Macro numbers are gated by
- * {@link shouldShowMacrosToClient}. Vertical-video / photo detail is the next
- * slice; this one shows the day's meals and options only.
+ * {@link shouldShowMacrosToClient}. Tapping an option opens the full recipe
+ * detail (photos, vertical video, ingredients, steps) — see RecipeOptionDetail.
  */
 export function MealCycleContent() {
   const { data, isPending, isError } = useClientMealCycle();
+  const selectMutation = useSetMealCycleSelection();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [detailOption, setDetailOption] = useState<MealSlotOptionRow | null>(
+    null
+  );
 
   // Default the selected day to today once the cycle resolves. Re-syncs if the
   // cycle (and thus today's index) changes underneath us.
@@ -305,12 +377,25 @@ export function MealCycleContent() {
                 key={slot.id}
                 label={slot.label}
                 options={slot.options}
+                selectedOptionId={data.selections[slot.id] ?? null}
                 showMacros={showMacros}
+                onOpenOption={setDetailOption}
+                onSelectOption={(option) =>
+                  selectMutation.mutate({
+                    slotId: slot.id,
+                    optionId: option.id,
+                  })
+                }
               />
             ))}
           </div>
         )}
       </div>
+
+      <RecipeOptionDetail
+        option={detailOption}
+        onClose={() => setDetailOption(null)}
+      />
     </MealCycleShell>
   );
 }

@@ -35,17 +35,19 @@ const TEST_CLIENT_EMAIL = "client@nutrition-v2-test.local";
  *
  * Order matters (children before parents, since deletes are independent
  * per-table, scoped to tenant_host):
- *   * `meal_slot_options` → `meal_slots` → `meal_cycles` (the cycle tree).
+ *   * `meal_slot_option_selections` → `meal_slot_options` → `meal_slots` →
+ *     `meal_cycles` (the cycle tree; selections reference slots + options).
  *   * `recipes` before `ingredients` because recipe_ingredients.ingredient_id
  *     references ingredients(id) without a cascade.
  *
  * recipe_ingredients/recipe_media (no tenant_host) are cleaned via ON DELETE
- * CASCADE when test recipes are deleted; likewise meal_slots/meal_slot_options
- * cascade from meal_cycles — they are listed only to scope the delete by
- * tenant_host directly. meal_slot_options.source_ref_id is NOT an FK, so the
- * cycle tables and the recipe tables are independent.
+ * CASCADE when test recipes are deleted; likewise meal_slots/meal_slot_options/
+ * meal_slot_option_selections cascade from meal_cycles — they are listed only to
+ * scope the delete by tenant_host directly. meal_slot_options.source_ref_id is
+ * NOT an FK, so the cycle tables and the recipe tables are independent.
  */
 const CLEANUP_ALLOWLIST = [
+  "meal_slot_option_selections",
   "meal_slot_options",
   "meal_slots",
   "meal_cycles",
