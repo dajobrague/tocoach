@@ -1,0 +1,168 @@
+{
+  "nodes": [
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_doc",
+      "label": "Client Login Loop SameSite=Lax Fix Design",
+      "file_type": "document",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_login_loop_bug",
+      "label": "Client Login Loop Bug",
+      "file_type": "concept",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_samesite_lax_remediation",
+      "label": "SameSite=Lax Cookie Remediation",
+      "file_type": "rationale",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_samesite_none_thirdparty",
+      "label": "SameSite=None Third-Party Cookie Dropping",
+      "file_type": "concept",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_client_session_cookie",
+      "label": "client-session Cookie",
+      "file_type": "concept",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_bearer_fallback",
+      "label": "Bearer Token / localStorage Fallback",
+      "file_type": "concept",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_design_loop_telemetry",
+      "label": "Loop-Detection Telemetry",
+      "file_type": "concept",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_doc",
+      "target": "2026_05_04_client_cookie_loop_fix_design_login_loop_bug",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_samesite_none_thirdparty",
+      "target": "2026_05_04_client_cookie_loop_fix_design_login_loop_bug",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_samesite_lax_remediation",
+      "target": "2026_05_04_client_cookie_loop_fix_design_login_loop_bug",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_samesite_lax_remediation",
+      "target": "2026_05_04_client_cookie_loop_fix_design_client_session_cookie",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_client_session_cookie",
+      "target": "2026_05_04_client_cookie_loop_fix_design_samesite_none_thirdparty",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_bearer_fallback",
+      "target": "2026_05_04_client_cookie_loop_fix_design_login_loop_bug",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_design_doc",
+      "target": "2026_05_04_client_cookie_loop_fix_design_loop_telemetry",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "client_cookie_loop_fix_three_changes",
+      "label": "Cookie Loop Fix: Bug Fix + Telemetry + Repro",
+      "nodes": [
+        "2026_05_04_client_cookie_loop_fix_design_samesite_lax_remediation",
+        "2026_05_04_client_cookie_loop_fix_design_loop_telemetry",
+        "2026_05_04_client_cookie_loop_fix_design_client_session_cookie"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-design.md"
+    }
+  ]
+}

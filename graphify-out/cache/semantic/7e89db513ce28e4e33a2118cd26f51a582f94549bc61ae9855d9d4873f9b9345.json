@@ -1,0 +1,38 @@
+{
+  "nodes": [
+    {
+      "id": "2026_05_04_client_cookie_loop_fix_plan_doc",
+      "label": "Client Cookie Loop Fix Implementation Plan",
+      "file_type": "document",
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-05-04",
+      "author": "David Bracho",
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_plan_doc",
+      "target": "2026_05_04_client_cookie_loop_fix_design_doc",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "2026_05_04_client_cookie_loop_fix_plan_doc",
+      "target": "2026_05_04_client_cookie_loop_fix_design_samesite_lax_remediation",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/2026-05-04-client-cookie-loop-fix-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

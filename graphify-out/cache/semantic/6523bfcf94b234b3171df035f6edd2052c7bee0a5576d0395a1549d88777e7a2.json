@@ -1,0 +1,94 @@
+{
+  "nodes": [
+    {
+      "id": "default_banner_image",
+      "label": "Default Brand Banner (TopCoach)",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_brand_topcoach",
+      "label": "TopCoach Brand Identity",
+      "file_type": "concept",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_gradient",
+      "label": "Blue Diagonal Gradient Background",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": "lines 4-10",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_logo_icon",
+      "label": "White Circular Logo Icon (Checkmark/Arrow)",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": "lines 20-22",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_title",
+      "label": "Title Text 'TopCoach'",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": "line 25",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_subtitle",
+      "label": "Subtitle 'Professional Personal Training Platform'",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": "lines 28-30",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_decorations",
+      "label": "Decorative Translucent Circles and Wave",
+      "file_type": "image",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": "lines 13-15, 34",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "default_banner_fallback_role",
+      "label": "Tenant Fallback Brand Asset",
+      "file_type": "concept",
+      "source_file": "public/brands/default/banner.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [],
+  "hyperedges": []
+}

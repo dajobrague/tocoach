@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "specs_2026_05_07_trainer_nav_redesign_design",
+      "label": "Trainer Navigation Redesign Design",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-05-07-trainer-nav-redesign-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_05_07_trainer_nav_redesign_design_iframe_primary_signal",
+      "label": "Iframe as Primary Shell Detection Signal",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-05-07-trainer-nav-redesign-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "specs_2026_05_07_trainer_nav_redesign_design",
+      "target": "specs_2026_05_07_trainer_nav_redesign_design_iframe_primary_signal",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-07-trainer-nav-redesign-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_05_07_trainer_nav_redesign_design",
+      "target": "plans_2026_05_07_trainer_nav_redesign_plan_trainer_nav_config",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-07-trainer-nav-redesign-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_07_trainer_nav_redesign_plan_shell_detection_cascade",
+      "target": "specs_2026_05_07_trainer_nav_redesign_design_iframe_primary_signal",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/specs/2026-05-07-trainer-nav-redesign-design.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

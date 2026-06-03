@@ -1,0 +1,142 @@
+{
+  "nodes": [
+    {
+      "id": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "label": "PWA Tenant Icon Personalization Plan",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "label": "Dynamic Per-Tenant Icon Endpoint",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_19_pwa_tenant_icons_plan_icon_url_helper",
+      "label": "icon-url Helper (iconVersion/tenantIconUrl)",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_19_pwa_tenant_icons_plan_sharp",
+      "label": "sharp Image Composition Dependency",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_19_pwa_tenant_icons_plan_version_hash",
+      "label": "Content-Versioned Icon URL Hash",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "target": "specs_2026_05_19_pwa_tenant_icons_design",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_icon_url_helper",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_sharp",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_version_hash",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_sharp",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_icon_url_helper",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan_icon_url_helper",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_version_hash",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-19-pwa-tenant-icons-plan.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

@@ -1,0 +1,178 @@
+{
+  "nodes": [
+    {
+      "id": "nutrition_v2_backlog_doc",
+      "label": "Nutrition v2 Phased Backlog",
+      "file_type": "document",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_backlog_phase_p0",
+      "label": "P0 Foundations & Test Harness",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_backlog_phase_p1",
+      "label": "P1 Recipe Library",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_backlog_phase_p3",
+      "label": "P3 Cycle Builder & Assignment",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_backlog_vitest",
+      "label": "Vitest Test Harness",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_backlog_playwright",
+      "label": "Playwright E2E Harness",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "nutrition_v2_backlog_doc",
+      "target": "nutrition_architecture_and_plan_doc",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_doc",
+      "target": "nutrition_v2_coding_rules_doc",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p0",
+      "target": "nutrition_v2_backlog_vitest",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p0",
+      "target": "nutrition_v2_backlog_playwright",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p0",
+      "target": "nutrition_architecture_and_plan_foodsource_adapter",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p1",
+      "target": "nutrition_architecture_and_plan_recipes_table",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p3",
+      "target": "nutrition_architecture_and_plan_meal_cycles_table",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_phase_p1",
+      "target": "nutrition_v2_backlog_phase_p0",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_backlog_doc",
+      "target": "nutrition_v2_coding_rules_merge_gate",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "nutrition_v2_doc_set",
+      "label": "Nutrition v2 Planning Document Set",
+      "nodes": [
+        "nutrition_architecture_and_plan_doc",
+        "nutrition_redesign_brainstorm_doc",
+        "nutrition_v2_backlog_doc",
+        "nutrition_v2_coding_rules_doc"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-backlog.md"
+    }
+  ]
+}

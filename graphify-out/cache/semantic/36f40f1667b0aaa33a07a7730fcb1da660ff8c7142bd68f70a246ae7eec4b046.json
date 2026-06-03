@@ -1,0 +1,122 @@
+{
+  "nodes": [
+    {
+      "id": "architecture_security_baseline",
+      "label": "Security Baseline",
+      "file_type": "document",
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "architecture_security_baseline_csp",
+      "label": "Content Security Policy",
+      "file_type": "concept",
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "architecture_security_baseline_rate_limiting",
+      "label": "Rate limiting policy",
+      "file_type": "concept",
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "architecture_security_baseline_password_policy",
+      "label": "Password policy + Argon2id storage",
+      "file_type": "concept",
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "architecture_security_baseline_account_lockout",
+      "label": "Account lockout (exponential backoff)",
+      "file_type": "concept",
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "architecture_security_baseline",
+      "target": "architecture_security_baseline_csp",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "architecture_security_baseline",
+      "target": "architecture_security_baseline_rate_limiting",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "architecture_security_baseline",
+      "target": "architecture_security_baseline_password_policy",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "architecture_security_baseline",
+      "target": "architecture_security_baseline_account_lockout",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "architecture_security_baseline_password_policy",
+      "target": "architecture_auth_adr_v1_argon2_hashing",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "architecture_security_baseline_account_lockout",
+      "target": "architecture_auth_adr_v1_argon2_hashing",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "docs/architecture/security-baseline.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

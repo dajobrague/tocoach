@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "id": "propuestas_propuesta_crm_josecarlos_doc",
+      "label": "CRM de Seguimiento de Alumnos Proposal",
+      "file_type": "document",
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-04-13",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "propuestas_propuesta_crm_josecarlos_gohighlevel_api",
+      "label": "GoHighLevel API Integration",
+      "file_type": "concept",
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-04-13",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "propuestas_propuesta_crm_josecarlos_private_integration_token",
+      "label": "Private Integration Token (GHL)",
+      "file_type": "concept",
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-04-13",
+      "author": "David Bracho",
+      "contributor": null
+    },
+    {
+      "id": "propuestas_propuesta_crm_josecarlos_alumno_management",
+      "label": "Alumno CRUD & Ficha Individual",
+      "file_type": "concept",
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-04-13",
+      "author": "David Bracho",
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "propuestas_propuesta_crm_josecarlos_doc",
+      "target": "propuestas_propuesta_crm_josecarlos_gohighlevel_api",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "propuestas_propuesta_crm_josecarlos_gohighlevel_api",
+      "target": "propuestas_propuesta_crm_josecarlos_private_integration_token",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "propuestas_propuesta_crm_josecarlos_doc",
+      "target": "propuestas_propuesta_crm_josecarlos_alumno_management",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "propuestas_propuesta_crm_josecarlos_alumno_management",
+      "target": "propuestas_propuesta_crm_josecarlos_private_integration_token",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Propuestas/Propuesta_CRM_JoseCarlos.pdf",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

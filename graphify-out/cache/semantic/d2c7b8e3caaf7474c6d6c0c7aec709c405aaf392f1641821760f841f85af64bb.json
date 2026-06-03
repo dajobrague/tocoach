@@ -1,0 +1,216 @@
+{
+  "nodes": [
+    {
+      "id": "bloque_1_spec_spec",
+      "label": "Bloque 1 Spec \u2014 flujo de entrenamiento",
+      "file_type": "document",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_microcycle_concept",
+      "label": "Microciclo (secuencia ordenada de N d\u00edas)",
+      "file_type": "concept",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_microcycles_table",
+      "label": "Tabla microcycles",
+      "file_type": "code",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_microcycle_slots_table",
+      "label": "Tabla microcycle_slots",
+      "file_type": "code",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_modularization_rule",
+      "label": "Regla de modularizaci\u00f3n (\u2264300 l\u00edneas)",
+      "file_type": "rationale",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_permissive_rls",
+      "label": "RLS permisiva con auth en capa API",
+      "file_type": "rationale",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_table_duality",
+      "label": "Dualidad de tablas cliente/trainer (legacy BIGINT vs UUID profiles)",
+      "file_type": "rationale",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_exercise_history",
+      "label": "Hist\u00f3rico de ejercicio + PR al vuelo",
+      "file_type": "concept",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bloque_1_spec_calendar_real_data",
+      "label": "Calendario con datos reales (elimina mock)",
+      "file_type": "concept",
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_microcycle_concept",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_microcycle_concept",
+      "target": "bloque_1_spec_microcycles_table",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_microcycle_concept",
+      "target": "bloque_1_spec_microcycle_slots_table",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_microcycle_slots_table",
+      "target": "bloque_1_spec_microcycles_table",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_modularization_rule",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_permissive_rls",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_table_duality",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_exercise_history",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_spec",
+      "target": "bloque_1_spec_calendar_real_data",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_permissive_rls",
+      "target": "claudemd_rls_tenant_isolation",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "bloque_1_spec_table_duality",
+      "target": "architecture_auth_adr_v2_client_profiles",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "bloque-1-spec.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

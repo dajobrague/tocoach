@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "specs_2026_05_19_pwa_tenant_icons_design",
+      "label": "PWA Tenant Icon Personalization Design",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-05-19-pwa-tenant-icons-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": "Brainstorming session",
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_05_19_pwa_tenant_icons_design_safe_zone",
+      "label": "70% Maskable Safe Zone",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-05-19-pwa-tenant-icons-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "specs_2026_05_19_pwa_tenant_icons_design",
+      "target": "specs_2026_05_19_pwa_tenant_icons_design_safe_zone",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-19-pwa-tenant-icons-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_05_19_pwa_tenant_icons_design",
+      "target": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-19-pwa-tenant-icons-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_19_pwa_tenant_icons_plan_dynamic_icon_endpoint",
+      "target": "specs_2026_05_19_pwa_tenant_icons_design_safe_zone",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/specs/2026-05-19-pwa-tenant-icons-design.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

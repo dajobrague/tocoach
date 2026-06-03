@@ -1,0 +1,251 @@
+{
+  "nodes": [
+    {
+      "id": "plan_fix_performance_nutrition_plan",
+      "label": "Plan fix performance nutricional",
+      "file_type": "document",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_phase1_instrumentation",
+      "label": "Fase 1 \u2014 Instrumentaci\u00f3n + fixes de seguridad",
+      "file_type": "concept",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_phase2_read_refactor",
+      "label": "Fase 2 \u2014 Refactor lectura (N+1 \u2192 1 query)",
+      "file_type": "concept",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_phase3_clone_refactor",
+      "label": "Fase 3 \u2014 Refactor clonaci\u00f3n de plantilla (batch insert)",
+      "file_type": "concept",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_phase4_optimistic_updates",
+      "label": "Fase 4 \u2014 Optimistic updates en editor",
+      "file_type": "concept",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_perf_logger",
+      "label": "perf-logger.ts (startPerfTimer / logPartialLoad)",
+      "file_type": "code",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_postgrest_embed",
+      "label": "PostgREST embedded resources query",
+      "file_type": "concept",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_migration_078",
+      "label": "Migraci\u00f3n 078 \u00edndices de orden nutrici\u00f3n",
+      "file_type": "code",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_fix_performance_nutrition_git_revert_rollback",
+      "label": "Rollback por git revert sin feature flags",
+      "file_type": "rationale",
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "plan_fix_performance_nutrition_plan",
+      "target": "diagnostico_feedback_diagnostico",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_plan",
+      "target": "plan_fix_performance_nutrition_phase1_instrumentation",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_plan",
+      "target": "plan_fix_performance_nutrition_phase2_read_refactor",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_plan",
+      "target": "plan_fix_performance_nutrition_phase3_clone_refactor",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_plan",
+      "target": "plan_fix_performance_nutrition_phase4_optimistic_updates",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase1_instrumentation",
+      "target": "plan_fix_performance_nutrition_perf_logger",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase1_instrumentation",
+      "target": "plan_fix_performance_nutrition_migration_078",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase1_instrumentation",
+      "target": "diagnostico_feedback_silent_catch_bug",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase2_read_refactor",
+      "target": "plan_fix_performance_nutrition_postgrest_embed",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase2_read_refactor",
+      "target": "diagnostico_feedback_n_plus_one_perf",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase3_clone_refactor",
+      "target": "diagnostico_feedback_n_plus_one_perf",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_phase4_optimistic_updates",
+      "target": "diagnostico_feedback_ingredient_order_bug",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plan_fix_performance_nutrition_git_revert_rollback",
+      "target": "plan_fix_performance_nutrition_plan",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "nutrition_perf_fix_phases",
+      "label": "Plan de fix de performance nutricional (5 fases)",
+      "nodes": [
+        "plan_fix_performance_nutrition_phase1_instrumentation",
+        "plan_fix_performance_nutrition_phase2_read_refactor",
+        "plan_fix_performance_nutrition_phase3_clone_refactor",
+        "plan_fix_performance_nutrition_phase4_optimistic_updates"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PLAN_FIX_PERFORMANCE_NUTRITION.md"
+    }
+  ]
+}

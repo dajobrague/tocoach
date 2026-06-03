@@ -1,0 +1,164 @@
+{
+  "nodes": [
+    {
+      "id": "specs_2026_04_30_custom_charts_design",
+      "label": "Custom Charting System Design",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": "brainstorm session",
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_data_source_ref",
+      "label": "DataSourceRef (catalog | form_question)",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_chart_config",
+      "label": "ChartConfig JSONB Shape",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_adapter_registry",
+      "label": "Data Source Adapter Registry",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_trainer_template_override",
+      "label": "Trainer Template + Per-Client Override Model",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_apply_to_all_delete",
+      "label": "Apply-to-all via DELETE (preserve inheritance)",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_04_30_custom_charts_design_orphan_state",
+      "label": "Orphan Chart Source Empty-State",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_data_source_ref",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_chart_config",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_adapter_registry",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_trainer_template_override",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_apply_to_all_delete",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design",
+      "target": "specs_2026_04_30_custom_charts_design_orphan_state",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design_chart_config",
+      "target": "specs_2026_04_30_custom_charts_design_data_source_ref",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_04_30_custom_charts_design_data_source_ref",
+      "target": "specs_2026_04_30_custom_charts_design_adapter_registry",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-04-30-custom-charts-design.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

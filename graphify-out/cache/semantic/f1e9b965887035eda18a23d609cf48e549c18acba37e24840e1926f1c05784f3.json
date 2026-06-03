@@ -1,0 +1,52 @@
+{
+  "nodes": [
+    {
+      "id": "claude_code_prompt_bloque_1_prompt",
+      "label": "Prompt Claude Code \u2014 Bloque 1",
+      "file_type": "document",
+      "source_file": "claude-code-prompt-bloque-1.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "claude_code_prompt_bloque_1_prompt",
+      "target": "bloque_1_spec_spec",
+      "relation": "cites",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "claude-code-prompt-bloque-1.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "claude_code_prompt_bloque_1_prompt",
+      "target": "claudemd_topcoach_architecture",
+      "relation": "cites",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "claude-code-prompt-bloque-1.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "bloque1_workflow_docs",
+      "label": "Bloque 1 spec, prompt y convenciones del proyecto",
+      "nodes": [
+        "bloque_1_spec_spec",
+        "claude_code_prompt_bloque_1_prompt",
+        "claudemd_topcoach_architecture"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "claude-code-prompt-bloque-1.md"
+    }
+  ]
+}

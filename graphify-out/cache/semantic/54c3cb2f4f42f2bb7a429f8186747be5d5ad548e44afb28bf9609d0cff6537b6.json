@@ -1,0 +1,121 @@
+{
+  "nodes": [
+    {
+      "id": "plans_2026_05_11_weight_chart_form_question_source",
+      "label": "Weight Chart from Custom Form Questions Plan",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_11_weight_chart_form_question_source_adapter_id",
+      "label": "form_q:<form_type>:<question_id> Adapter Id",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_11_weight_chart_form_question_source_remove_catalog_weight",
+      "label": "Remove Catalog weight Adapter; route via form_question",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plans_2026_05_11_weight_chart_form_question_source_starter_seed",
+      "label": "Starter Weight Chart Seed (body_weight check-in)",
+      "file_type": "concept",
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source",
+      "target": "plans_2026_05_11_weight_chart_form_question_source_adapter_id",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source",
+      "target": "plans_2026_05_11_weight_chart_form_question_source_remove_catalog_weight",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source",
+      "target": "plans_2026_05_11_weight_chart_form_question_source_starter_seed",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source",
+      "target": "specs_2026_04_30_custom_charts_design",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source_adapter_id",
+      "target": "specs_2026_04_30_custom_charts_design_data_source_ref",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source_remove_catalog_weight",
+      "target": "specs_2026_04_30_custom_charts_design_adapter_registry",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_11_weight_chart_form_question_source_remove_catalog_weight",
+      "target": "specs_2026_04_30_custom_charts_design_orphan_state",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/plans/2026-05-11-weight-chart-form-question-source.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

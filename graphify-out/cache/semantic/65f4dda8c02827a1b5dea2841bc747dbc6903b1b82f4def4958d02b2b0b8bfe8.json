@@ -1,0 +1,70 @@
+{
+  "nodes": [
+    {
+      "id": "development_add_new_brand_guide_doc",
+      "label": "Add a New Brand in 15 Minutes Guide",
+      "file_type": "document",
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "development_add_new_brand_guide_theme_json",
+      "label": "Brand theme.json",
+      "file_type": "concept",
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "development_add_new_brand_guide_theme_loader",
+      "label": "lib/theme/loader.ts AVAILABLE_BRANDS",
+      "file_type": "concept",
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "development_add_new_brand_guide_doc",
+      "target": "development_add_new_brand_guide_theme_json",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "development_add_new_brand_guide_doc",
+      "target": "development_add_new_brand_guide_theme_loader",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "development_add_new_brand_guide_theme_loader",
+      "target": "development_add_new_brand_guide_theme_json",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/development/add-new-brand-guide.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

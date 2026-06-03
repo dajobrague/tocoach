@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "specs_2026_05_23_microcycle_multi_session_and_start_date_design",
+      "label": "Microciclo Multi-Session + start_date Design",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": "David Bracho + Claude",
+      "contributor": null
+    },
+    {
+      "id": "specs_2026_05_23_microcycle_multi_session_and_start_date_design_session_anchor_bug",
+      "label": "session_id-as-prescription-anchor Bug Root Cause",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "specs_2026_05_23_microcycle_multi_session_and_start_date_design",
+      "target": "specs_2026_05_23_microcycle_multi_session_and_start_date_design_session_anchor_bug",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "specs_2026_05_23_microcycle_multi_session_and_start_date_design",
+      "target": "plans_2026_05_23_microcycle_multi_session_and_start_date_plan_per_session_uniqueness",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "plans_2026_05_23_microcycle_multi_session_and_start_date_plan_activity_ledger",
+      "target": "specs_2026_05_23_microcycle_multi_session_and_start_date_design_session_anchor_bug",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/specs/2026-05-23-microcycle-multi-session-and-start-date-design.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

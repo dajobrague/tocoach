@@ -1,0 +1,102 @@
+{
+  "nodes": [
+    {
+      "id": "nutrition_v2_coding_rules_doc",
+      "label": "Nutrition v2 Coding Rules",
+      "file_type": "document",
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_coding_rules_500_line_cap",
+      "label": "500-Line File Cap",
+      "file_type": "rationale",
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_coding_rules_invariants",
+      "label": "Six Must-Test Invariants",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_coding_rules_merge_gate",
+      "label": "Definition of Done Merge Gate",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "nutrition_v2_coding_rules_nutrition_tab",
+      "label": "5618-Line nutrition-tab.tsx",
+      "file_type": "concept",
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "nutrition_v2_coding_rules_doc",
+      "target": "development_conventions_doc",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_coding_rules_500_line_cap",
+      "target": "nutrition_v2_coding_rules_nutrition_tab",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_coding_rules_merge_gate",
+      "target": "nutrition_v2_coding_rules_invariants",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "nutrition_v2_coding_rules_invariants",
+      "target": "nutrition_architecture_and_plan_snapshot_at_assignment",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/nutrition-v2-coding-rules.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": []
+}

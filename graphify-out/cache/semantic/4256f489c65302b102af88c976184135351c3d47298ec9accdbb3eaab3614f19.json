@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "topcoach_mark_image",
+      "label": "TopCoach Brand Mark",
+      "file_type": "image",
+      "source_file": "public/brands/topcoach/mark.webp",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "topcoach_mark_glyph",
+      "label": "Mirrored Angular X Glyph",
+      "file_type": "concept",
+      "source_file": "public/brands/topcoach/mark.webp",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "topcoach_mark_palette",
+      "label": "Monochrome Black-and-White Palette",
+      "file_type": "concept",
+      "source_file": "public/brands/topcoach/mark.webp",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "topcoach_mark_identity",
+      "label": "TopCoach Tenant Brand Identity Asset",
+      "file_type": "concept",
+      "source_file": "public/brands/topcoach/mark.webp",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [],
+  "hyperedges": []
+}
