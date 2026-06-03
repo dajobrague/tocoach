@@ -106,6 +106,7 @@ export function MealLogControl({
               ref={fileInputRef}
               accept="image/*"
               className="hidden"
+              data-testid="log-photo-input"
               type="file"
               onChange={(e) => onPickFile(e.target.files?.[0])}
             />

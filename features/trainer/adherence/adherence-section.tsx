@@ -56,7 +56,12 @@ function MetricCard({
             {metric.label}
           </p>
         </div>
-        <p className={`text-4xl font-bold ${styles.text}`}>{value}%</p>
+        <p
+          className={`text-4xl font-bold ${styles.text}`}
+          data-testid={`metric-${metric.key}`}
+        >
+          {value}%
+        </p>
         <p className="text-xs font-medium text-default-500">
           {metric.sublabel}
         </p>
@@ -105,7 +110,10 @@ function WeekBars({
 
 function LoggedMeal({ log }: { log: MealLogRow }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-default-200 bg-content1 p-3">
+    <div
+      className="flex items-start gap-3 rounded-xl border border-default-200 bg-content1 p-3"
+      data-testid="logged-meal"
+    >
       {log.photo_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
