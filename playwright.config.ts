@@ -1,4 +1,11 @@
+import { config as loadEnv } from "dotenv";
 import { defineConfig, devices } from "@playwright/test";
+
+// Load the local Supabase service-role env (.env.test) so the test-runner's
+// nutrition harness (ensureTestTenant/Trainer, cleanup) talks to the local
+// stack. The auth helper separately loads JWT_SECRET from .env.local. The
+// already-running dev server keeps its own env (reuseExistingServer below).
+loadEnv({ path: ".env.test" });
 
 const baseURL = "http://localhost:3000";
 

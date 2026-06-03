@@ -66,7 +66,10 @@ export function ManualIngredientForm({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-medium border border-gray-200 p-3">
+    <div
+      className="flex flex-col gap-3 rounded-medium border border-gray-200 p-3"
+      data-testid="manual-ingredient-form"
+    >
       <div className="flex flex-col gap-3 sm:flex-row">
         <Input
           isRequired

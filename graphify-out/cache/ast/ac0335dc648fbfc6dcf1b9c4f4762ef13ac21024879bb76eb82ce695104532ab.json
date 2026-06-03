@@ -1,0 +1,195 @@
+{
+  "nodes": [
+    {
+      "id": "users_davidbracho_top_coach_commitlintrc_json",
+      "label": ".commitlintrc.json",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L1"
+    },
+    {
+      "id": "top_coach_commitlintrc_extends",
+      "label": "extends",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L2"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules",
+      "label": "rules",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L3"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules_type_enum",
+      "label": "type-enum",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L4"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules_subject_case",
+      "label": "subject-case",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L21"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules_subject_empty",
+      "label": "subject-empty",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L26"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules_subject_full_stop",
+      "label": "subject-full-stop",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L27"
+    },
+    {
+      "id": "top_coach_commitlintrc_rules_header_max_length",
+      "label": "header-max-length",
+      "file_type": "code",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L28"
+    }
+  ],
+  "edges": [
+    {
+      "source": "users_davidbracho_top_coach_commitlintrc_json",
+      "target": "top_coach_commitlintrc_extends",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_extends",
+      "target": "ref_commitlint_config_conventional",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "users_davidbracho_top_coach_commitlintrc_json",
+      "target": "top_coach_commitlintrc_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules",
+      "target": "top_coach_commitlintrc_rules_type_enum",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_type_enum",
+      "target": "ref_always",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L4",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "top_coach_commitlintrc_rules",
+      "target": "top_coach_commitlintrc_rules_subject_case",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_subject_case",
+      "target": "ref_never",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L21",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "top_coach_commitlintrc_rules",
+      "target": "top_coach_commitlintrc_rules_subject_empty",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_subject_empty",
+      "target": "ref_never",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L26",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "top_coach_commitlintrc_rules",
+      "target": "top_coach_commitlintrc_rules_subject_full_stop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_subject_full_stop",
+      "target": "ref_never",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L27",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_subject_full_stop",
+      "target": "ref",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L27",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "top_coach_commitlintrc_rules",
+      "target": "top_coach_commitlintrc_rules_header_max_length",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "top_coach_commitlintrc_rules_header_max_length",
+      "target": "ref_always",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/davidbracho/top_coach/.commitlintrc.json",
+      "source_location": "L28",
+      "weight": 1.0,
+      "context": "import"
+    }
+  ]
+}
