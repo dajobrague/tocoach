@@ -24,13 +24,25 @@ const TEST_TRAINER_EMAIL = "trainer@nutrition-v2-test.local";
  * Tables that {@link cleanNutritionTestData} is permitted to delete from.
  * Hard-coded on purpose — grow it deliberately as nutrition-v2 tables land.
  *
- * Order matters: `recipes` is deleted before `ingredients` because
- * recipe_ingredients.ingredient_id references ingredients(id) without a
- * cascade. recipe_ingredients and recipe_media have no tenant_host and are
- * cleaned automatically via ON DELETE CASCADE when test recipes are deleted —
- * do NOT add them to the allowlist.
+ * Order matters (children before parents, since deletes are independent
+ * per-table, scoped to tenant_host):
+ *   * `meal_slot_options` → `meal_slots` → `meal_cycles` (the cycle tree).
+ *   * `recipes` before `ingredients` because recipe_ingredients.ingredient_id
+ *     references ingredients(id) without a cascade.
+ *
+ * recipe_ingredients/recipe_media (no tenant_host) are cleaned via ON DELETE
+ * CASCADE when test recipes are deleted; likewise meal_slots/meal_slot_options
+ * cascade from meal_cycles — they are listed only to scope the delete by
+ * tenant_host directly. meal_slot_options.source_ref_id is NOT an FK, so the
+ * cycle tables and the recipe tables are independent.
  */
-const CLEANUP_ALLOWLIST = ["recipes", "ingredients"] as const;
+const CLEANUP_ALLOWLIST = [
+  "meal_slot_options",
+  "meal_slots",
+  "meal_cycles",
+  "recipes",
+  "ingredients",
+] as const;
 
 /**
  * Idempotently upsert the one test tenant row so FK constraints

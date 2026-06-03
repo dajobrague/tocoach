@@ -56,8 +56,9 @@ _Goal: turn old diet content into new library recipes, on screen, with approval.
 - **P2-T2 — Import API:** `GET /api/recipes/import/preview` (candidates), `POST /api/recipes/import/approve` (creates library recipes) + auth + tests.
 - **P2-T3 — UI: review & approve screen** — candidates listed, approve per item, recipes appear as they're created (the visible-effort moment).
 - **P2-T4 — e2e:** import journey (preview → approve → recipes in library).
+- **P2-T5 — (DEFERRED) Carry legacy photos on import.** Old `nutrition_meals.image_url` is currently dropped; imported recipes fall back to the placeholder. Cheap fix: insert a `recipe_media` row referencing the existing legacy image URL on approve (no re-upload, no new bucket) + thread `imageUrl` through the candidate. Do before P8 cutover so trainers don't lose recipe photos.
 
-**Exit:** a trainer imports their old recipes interactively and watches the library populate.
+**Exit:** a trainer imports their old recipes interactively and watches the library populate. _(Photos deferred — P2-T5.)_
 
 ---
 

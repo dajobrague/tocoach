@@ -1251,6 +1251,166 @@ export type Database = {
         };
         Relationships: [];
       };
+      meal_cycles: {
+        Row: {
+          client_id: number;
+          created_at: string;
+          duration_days: number;
+          id: string;
+          name: string;
+          start_date: string;
+          status: string;
+          tenant_host: string;
+          trainer_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          client_id: number;
+          created_at?: string;
+          duration_days: number;
+          id?: string;
+          name: string;
+          start_date?: string;
+          status?: string;
+          tenant_host: string;
+          trainer_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          client_id?: number;
+          created_at?: string;
+          duration_days?: number;
+          id?: string;
+          name?: string;
+          start_date?: string;
+          status?: string;
+          tenant_host?: string;
+          trainer_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_cycles_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_cycles_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+          {
+            foreignKeyName: "meal_cycles_trainer_id_fkey";
+            columns: ["trainer_id"];
+            isOneToOne: false;
+            referencedRelation: "trainers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meal_slot_options: {
+        Row: {
+          created_at: string;
+          id: string;
+          item_snapshot: Json;
+          position: number;
+          slot_id: string;
+          source_ref_id: string;
+          source_type: string;
+          tenant_host: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          item_snapshot?: Json;
+          position?: number;
+          slot_id: string;
+          source_ref_id: string;
+          source_type: string;
+          tenant_host: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          item_snapshot?: Json;
+          position?: number;
+          slot_id?: string;
+          source_ref_id?: string;
+          source_type?: string;
+          tenant_host?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_slot_options_slot_id_fkey";
+            columns: ["slot_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slots";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_slot_options_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+        ];
+      };
+      meal_slots: {
+        Row: {
+          created_at: string;
+          cycle_id: string;
+          day_index: number;
+          id: string;
+          label: string;
+          position: number;
+          tenant_host: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          cycle_id: string;
+          day_index: number;
+          id?: string;
+          label?: string;
+          position?: number;
+          tenant_host: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          cycle_id?: string;
+          day_index?: number;
+          id?: string;
+          label?: string;
+          position?: number;
+          tenant_host?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_slots_cycle_id_fkey";
+            columns: ["cycle_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_cycles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_slots_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+        ];
+      };
       messages: {
         Row: {
           client_id: number;
