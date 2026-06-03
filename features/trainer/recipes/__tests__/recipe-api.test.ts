@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAddFromFoodPayload,
+  buildAddManualPayload,
   buildMediaFormData,
   buildRecipePayload,
   buildUpdateIngredientPayload,
@@ -76,6 +77,60 @@ describe("buildAddFromFoodPayload", () => {
     });
 
     expect(payload.unit).toBe("unit");
+  });
+});
+
+describe("buildAddManualPayload", () => {
+  it("trims name, forces unit g, and coerces the 8 nutrients", () => {
+    const payload = buildAddManualPayload({
+      name: "  Homemade sauce  ",
+      quantity: 30,
+      nutrients: {
+        kcal: "120",
+        protein_g: 4,
+        carbs_g: "10.5",
+        fat_g: 6,
+        sugar_g: "2",
+        fiber_g: 1,
+        sat_fat_g: "1.2",
+        sodium_mg: 300,
+      },
+    });
+
+    expect(payload).toEqual({
+      name: "Homemade sauce",
+      quantity: 30,
+      unit: "g",
+      nutrients_per_100g: {
+        kcal: 120,
+        protein_g: 4,
+        carbs_g: 10.5,
+        fat_g: 6,
+        sugar_g: 2,
+        fiber_g: 1,
+        sat_fat_g: 1.2,
+        sodium_mg: 300,
+      },
+    });
+  });
+
+  it("defaults missing / NaN / garbage nutrients to 0", () => {
+    const payload = buildAddManualPayload({
+      name: "Water",
+      quantity: 250,
+      nutrients: { kcal: "abc", protein_g: NaN },
+    });
+
+    expect(payload.nutrients_per_100g).toEqual({
+      kcal: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      sugar_g: 0,
+      fiber_g: 0,
+      sat_fat_g: 0,
+      sodium_mg: 0,
+    });
   });
 });
 

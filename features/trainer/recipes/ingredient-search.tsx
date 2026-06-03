@@ -1,21 +1,28 @@
 "use client";
 
-import type { FoodSearchResult } from "./recipe-api";
+import type { FoodSearchResult, ManualIngredientInput } from "./recipe-api";
 
 import { Button, Card, CardBody, Input, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { ManualIngredientForm } from "./manual-ingredient-form";
 import { formatKcal } from "./recipe-format";
 import { useFoodSearch } from "./use-recipe";
 
 interface IngredientSearchProps {
   busy: boolean;
   onAdd: (food: FoodSearchResult, quantity: number) => void;
+  onAddManual: (input: ManualIngredientInput) => void;
 }
 
-export function IngredientSearch({ busy, onAdd }: IngredientSearchProps) {
+export function IngredientSearch({
+  busy,
+  onAdd,
+  onAddManual,
+}: IngredientSearchProps) {
   const [query, setQuery] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
   const { data, isFetching } = useFoodSearch(query);
   const results = data ?? [];
 
@@ -56,16 +63,30 @@ export function IngredientSearch({ busy, onAdd }: IngredientSearchProps) {
         ))}
       </div>
 
-      {/* Manual entry lands in P1-T10. */}
       <Button
-        isDisabled
         className="self-start"
         size="sm"
-        startContent={<Icon icon="solar:add-square-linear" width={18} />}
+        startContent={
+          <Icon
+            icon={
+              manualOpen
+                ? "solar:minus-square-linear"
+                : "solar:add-square-linear"
+            }
+            width={18}
+          />
+        }
         variant="flat"
+        onPress={() => setManualOpen((open) => open === false)}
       >
-        ¿No lo encuentras? Agrégalo manualmente (próximamente)
+        {manualOpen
+          ? "Cerrar entrada manual"
+          : "¿No lo encuentras? Agrégalo manualmente"}
       </Button>
+
+      {manualOpen && (
+        <ManualIngredientForm busy={busy} onSubmit={onAddManual} />
+      )}
     </div>
   );
 }

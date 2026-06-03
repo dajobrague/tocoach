@@ -1,12 +1,17 @@
 "use client";
 
 import type { QueryClient } from "@tanstack/react-query";
-import type { AddFromFoodArgs, RecipeFormValues } from "./recipe-api";
+import type {
+  AddFromFoodArgs,
+  ManualIngredientInput,
+  RecipeFormValues,
+} from "./recipe-api";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
   addIngredientFromFood,
+  addIngredientManual,
   createRecipe,
   removeIngredient,
   removeMedia,
@@ -14,6 +19,11 @@ import {
   updateRecipe,
   uploadMedia,
 } from "./recipe-api";
+
+/** A search-result add or a manual free-text add — both via the same mutation. */
+export type AddIngredientArgs =
+  | { kind: "food"; food: AddFromFoodArgs["food"]; quantity: number }
+  | { kind: "manual"; input: ManualIngredientInput };
 
 /** Invalidate everything that depends on a recipe's content. */
 function invalidateRecipe(client: QueryClient, recipeId: string): void {
@@ -47,8 +57,13 @@ export function useAddIngredient(recipeId: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (args: AddFromFoodArgs) =>
-      addIngredientFromFood(recipeId, args),
+    mutationFn: (args: AddIngredientArgs) =>
+      args.kind === "food"
+        ? addIngredientFromFood(recipeId, {
+            food: args.food,
+            quantity: args.quantity,
+          })
+        : addIngredientManual(recipeId, args.input),
     onSuccess: () => invalidateRecipe(client, recipeId),
   });
 }

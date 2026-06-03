@@ -182,7 +182,12 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
           <h3 className="text-sm font-semibold text-gray-900">Ingredientes</h3>
           <IngredientSearch
             busy={addIngredient.isPending}
-            onAdd={(food, quantity) => addIngredient.mutate({ food, quantity })}
+            onAdd={(food, quantity) =>
+              addIngredient.mutate({ kind: "food", food, quantity })
+            }
+            onAddManual={(input) =>
+              addIngredient.mutate({ kind: "manual", input })
+            }
           />
           {ingredients.length > 0 && (
             <div className="flex flex-col">

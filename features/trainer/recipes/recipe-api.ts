@@ -96,6 +96,50 @@ export function buildAddFromFoodPayload(
   };
 }
 
+const MANUAL_NUTRIENT_KEYS = [
+  "kcal",
+  "protein_g",
+  "carbs_g",
+  "fat_g",
+  "sugar_g",
+  "fiber_g",
+  "sat_fat_g",
+  "sodium_mg",
+] as const;
+
+export interface ManualIngredientInput {
+  name: string;
+  /** Quantity in grams. */
+  quantity: number;
+  /** Raw per-100g values keyed by nutrient (strings from inputs are coerced). */
+  nutrients: Record<string, unknown>;
+}
+
+/**
+ * Add-ingredient body for a manual entry. Reuses the free-text path: trimmed
+ * name, unit 'g', and the 8 per-100g nutrients coerced to finite numbers
+ * (missing/NaN → 0). For now manual entries attach to the recipe as a frozen
+ * free-text line (caching for cross-recipe reuse is a fast-follow).
+ */
+export function buildAddManualPayload(
+  input: ManualIngredientInput
+): Record<string, unknown> {
+  const nutrients: Record<string, number> = {};
+
+  for (const key of MANUAL_NUTRIENT_KEYS) {
+    const value = Number(input.nutrients[key]);
+
+    nutrients[key] = Number.isFinite(value) ? value : 0;
+  }
+
+  return {
+    name: input.name.trim(),
+    quantity: input.quantity,
+    unit: "g",
+    nutrients_per_100g: nutrients,
+  };
+}
+
 export function buildUpdateIngredientPayload(patch: {
   quantity?: number;
   unit?: string;
@@ -208,6 +252,17 @@ export function addIngredientFromFood(
     `/api/recipes/${recipeId}/ingredients`,
     "POST",
     buildAddFromFoodPayload(args)
+  );
+}
+
+export function addIngredientManual(
+  recipeId: string,
+  input: ManualIngredientInput
+): Promise<RecipeIngredientItem> {
+  return sendJson<RecipeIngredientItem>(
+    `/api/recipes/${recipeId}/ingredients`,
+    "POST",
+    buildAddManualPayload(input)
   );
 }
 
