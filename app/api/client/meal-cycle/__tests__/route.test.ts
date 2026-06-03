@@ -18,6 +18,9 @@ vi.mock("@/lib/nutrition/cycles/client-cycle-reader", () => ({
 vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
   getClientSelections: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/logs/meal-log-service", () => ({
+  getMealLogs: vi.fn(),
+}));
 
 import { GET } from "../route";
 
@@ -25,6 +28,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { getMealLogs } from "@/lib/nutrition/logs/meal-log-service";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 
@@ -33,6 +37,7 @@ const mockedFlag = vi.mocked(isNutritionV2Enabled);
 const mockedTenant = vi.mocked(loadTenantContext);
 const mockedRead = vi.mocked(getActiveCycleTreeForClient);
 const mockedSelections = vi.mocked(getClientSelections);
+const mockedLogs = vi.mocked(getMealLogs);
 
 const CLIENT_SESSION: ClientSession = {
   client_id: "999000001",
@@ -74,6 +79,7 @@ beforeEach(() => {
   } as never);
   mockedRead.mockResolvedValue(null);
   mockedSelections.mockResolvedValue([]);
+  mockedLogs.mockResolvedValue([]);
 });
 
 describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {

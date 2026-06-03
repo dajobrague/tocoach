@@ -42,20 +42,23 @@ function getReq(qs = "?from=2026-06-01&to=2026-06-07"): NextRequest {
   );
 }
 
-const REPORT = {
-  from: "2026-06-01",
-  to: "2026-06-07",
-  totals: { planned: 7, logged: 3, engagementPct: 43, adherencePct: 29 },
-  statusBreakdown: { eaten_planned: 2, eaten_other: 1, skipped: 0 },
-  days: [],
-  weeks: [],
+const RESULT = {
+  report: {
+    from: "2026-06-01",
+    to: "2026-06-07",
+    totals: { planned: 7, logged: 3, engagementPct: 43, adherencePct: 29 },
+    statusBreakdown: { eaten_planned: 2, eaten_other: 1, skipped: 0 },
+    days: [],
+    weeks: [],
+  },
+  logs: [],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockedSession.mockResolvedValue(SESSION);
   mockedFlag.mockResolvedValue(true);
-  mockedAdherence.mockResolvedValue(REPORT);
+  mockedAdherence.mockResolvedValue(RESULT as never);
 });
 
 describe("GET /api/clients/[clientId]/adherence — trainer ownership boundary", () => {
@@ -103,7 +106,8 @@ describe("GET /api/clients/[clientId]/adherence — trainer ownership boundary",
       from: "2026-06-01",
       to: "2026-06-07",
     });
-    expect(body.data.totals.engagementPct).toBe(43);
-    expect(body.data.totals.adherencePct).toBe(29);
+    expect(body.data.report.totals.engagementPct).toBe(43);
+    expect(body.data.report.totals.adherencePct).toBe(29);
+    expect(Array.isArray(body.data.logs)).toBe(true);
   });
 });

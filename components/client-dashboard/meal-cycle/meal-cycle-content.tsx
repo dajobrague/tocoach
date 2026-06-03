@@ -1,6 +1,6 @@
 "use client";
 
-import type { CycleDay } from "@/lib/nutrition/cycles/cycle-day";
+import type { ClientMealLog, CycleDay } from "@/lib/nutrition/cycles/cycle-day";
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
 import { Card, CardBody, Chip, Divider, Spinner } from "@heroui/react";
@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { MealLogControl } from "@/components/client-dashboard/meal-cycle/meal-log-control";
 import { resolveMealCycleViewState } from "@/components/client-dashboard/meal-cycle/meal-cycle-view-state";
 import { normalizeOptionSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
@@ -169,21 +170,34 @@ function OptionCard({
 }
 
 function SlotBlock({
+  slotId,
   label,
   options,
   showMacros,
   selectedOptionId,
+  isToday,
+  logDate,
+  log,
   onOpenOption,
   onSelectOption,
 }: {
+  slotId: string;
   label: string;
   options: MealSlotOptionRow[];
   showMacros: boolean;
   selectedOptionId: string | null;
+  /** Only today's meals get a log control. */
+  isToday: boolean;
+  logDate: string;
+  log: ClientMealLog | undefined;
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
   const selectable = options.length > 1;
+  // Attach the chosen option for eaten_planned: the selection, or the only one.
+  const logOptionId =
+    selectedOptionId ??
+    (options.length === 1 ? (options[0]?.id ?? null) : null);
 
   return (
     <Card>
@@ -207,6 +221,14 @@ function SlotBlock({
             />
           ))
         )}
+        {isToday ? (
+          <MealLogControl
+            log={log}
+            logDate={logDate}
+            optionId={logOptionId}
+            slotId={slotId}
+          />
+        ) : null}
       </CardBody>
     </Card>
   );
@@ -375,10 +397,14 @@ export function MealCycleContent() {
             {visibleDay.slots.map((slot) => (
               <SlotBlock
                 key={slot.id}
+                isToday={activeIndex === state.activeDayIndex}
                 label={slot.label}
+                log={data.logs[slot.id]}
+                logDate={data.today}
                 options={slot.options}
                 selectedOptionId={data.selections[slot.id] ?? null}
                 showMacros={showMacros}
+                slotId={slot.id}
                 onOpenOption={setDetailOption}
                 onSelectOption={(option) =>
                   selectMutation.mutate({

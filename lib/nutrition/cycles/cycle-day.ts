@@ -4,6 +4,10 @@ import type {
   MealSlotWithOptions,
 } from "./meal-cycle-service";
 import type { ClientSelection } from "./option-selection";
+import type {
+  MealLogRow,
+  MealLogStatus,
+} from "@/lib/nutrition/logs/meal-log-service";
 
 import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 
@@ -52,6 +56,16 @@ export interface ClientCycleView {
   days: CycleDay[];
   /** The client's standing choice per slot (slotId → optionId). */
   selections: Record<string, string>;
+  /** The client's log for each slot, for TODAY only (slotId → log). */
+  logs: Record<string, ClientMealLog>;
+}
+
+/** A client's meal log as the today view consumes it (camelCase, today only). */
+export interface ClientMealLog {
+  status: MealLogStatus;
+  optionId: string | null;
+  comment: string | null;
+  photoUrl: string | null;
 }
 
 /** Anchor a "YYYY-MM-DD" calendar date at UTC midnight (for whole-day diffs). */
@@ -138,13 +152,25 @@ export function buildClientCycleView(
   tree: MealCycleTree | null,
   today: string | Date,
   timeZone = "UTC",
-  selections: ClientSelection[] = []
+  selections: ClientSelection[] = [],
+  logs: MealLogRow[] = []
 ): ClientCycleView {
   const todayIso = toCalendarYmd(today, timeZone);
   const selectionMap: Record<string, string> = {};
 
   for (const selection of selections) {
     selectionMap[selection.slot_id] = selection.option_id;
+  }
+
+  const logMap: Record<string, ClientMealLog> = {};
+
+  for (const log of logs) {
+    logMap[log.slot_id] = {
+      status: log.status,
+      optionId: log.option_id,
+      comment: log.comment,
+      photoUrl: log.photo_url,
+    };
   }
 
   if (tree === null) {
@@ -154,6 +180,7 @@ export function buildClientCycleView(
       position: null,
       days: [],
       selections: selectionMap,
+      logs: logMap,
     };
   }
 
@@ -174,5 +201,6 @@ export function buildClientCycleView(
     ),
     days: groupSlotsByDay(tree.duration_days, tree.slots),
     selections: selectionMap,
+    logs: logMap,
   };
 }

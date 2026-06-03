@@ -8,6 +8,8 @@ import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle
 import { buildClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { getMealLogs } from "@/lib/nutrition/logs/meal-log-service";
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
 const LOG_PREFIX = "[Client MealCycle API]";
@@ -54,12 +56,21 @@ export async function GET(request: NextRequest) {
 
     // Client timezone from the browser (charts convention); UTC when absent.
     const timeZone = new URL(request.url).searchParams.get("tz") || "UTC";
+    const todayIso = toYmdInTimezone(new Date(), timeZone);
     const supabase = createSupabaseClient();
-    const [tree, selections] = await Promise.all([
+    const [tree, selections, logs] = await Promise.all([
       getActiveCycleTreeForClient(supabase, clientId),
       getClientSelections(supabase, clientId),
+      // Today's logs only — the today view lets the client log today's meals.
+      getMealLogs(supabase, clientId, todayIso, todayIso),
     ]);
-    const view = buildClientCycleView(tree, new Date(), timeZone, selections);
+    const view = buildClientCycleView(
+      tree,
+      new Date(),
+      timeZone,
+      selections,
+      logs
+    );
 
     return NextResponse.json({ success: true, data: view });
   } catch (error) {

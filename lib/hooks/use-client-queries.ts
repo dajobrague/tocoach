@@ -230,7 +230,7 @@ export function useClientMealCycle() {
   });
 }
 
-const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
+export const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
 
 async function postMealCycleSelection(input: {
   slotId: string;

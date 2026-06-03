@@ -189,6 +189,7 @@ describe("buildClientCycleView", () => {
       position: null,
       days: [],
       selections: {},
+      logs: {},
     });
   });
 
@@ -202,6 +203,43 @@ describe("buildClientCycleView", () => {
 
   it("defaults selections to an empty map when none are given", () => {
     expect(buildClientCycleView(tree, "2026-06-03").selections).toEqual({});
+  });
+
+  it("folds the client's logs into a slot → log map", () => {
+    const view = buildClientCycleView(
+      tree,
+      "2026-06-03",
+      "UTC",
+      [],
+      [
+        {
+          id: "l1",
+          tenant_host: "t.local",
+          client_id: 42,
+          slot_id: "slot-0-0",
+          option_id: "opt-x",
+          log_date: "2026-06-03",
+          status: "eaten_planned",
+          comment: "rico",
+          photo_url: "https://cdn/m.jpg",
+          created_at: "2026-06-03T00:00:00Z",
+          updated_at: "2026-06-03T00:00:00Z",
+        },
+      ]
+    );
+
+    expect(view.logs).toEqual({
+      "slot-0-0": {
+        status: "eaten_planned",
+        optionId: "opt-x",
+        comment: "rico",
+        photoUrl: "https://cdn/m.jpg",
+      },
+    });
+  });
+
+  it("defaults logs to an empty map when none are given", () => {
+    expect(buildClientCycleView(tree, "2026-06-03").logs).toEqual({});
   });
 
   it("projects the cycle, today, position and grouped days", () => {

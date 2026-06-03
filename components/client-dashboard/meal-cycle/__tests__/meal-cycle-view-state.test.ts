@@ -10,6 +10,7 @@ const EMPTY: ClientCycleView = {
   position: null,
   days: [],
   selections: {},
+  logs: {},
 };
 
 function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
@@ -29,6 +30,7 @@ function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
       { dayIndex: 2, slots: [] },
     ],
     selections: {},
+    logs: {},
     ...overrides,
   };
 }
