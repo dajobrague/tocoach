@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { optionBelongsToSlot, resolveClientActiveSlot } from "./slot-ownership";
+
 const SELECTIONS_TABLE = "meal_slot_option_selections";
-const SLOTS_TABLE = "meal_slots";
-const OPTIONS_TABLE = "meal_slot_options";
-const CYCLES_TABLE = "meal_cycles";
 
 /** A row of `meal_slot_option_selections` (see migration 20260603092532). */
 export interface OptionSelectionRow {
@@ -39,60 +38,14 @@ export async function setClientSelection(
   slotId: string,
   optionId: string
 ): Promise<OptionSelectionRow | null> {
-  const { data: slot, error: slotError } = await client
-    .from(SLOTS_TABLE)
-    .select("id, cycle_id, tenant_host")
-    .eq("id", slotId)
-    .maybeSingle();
+  const owned = await resolveClientActiveSlot(client, clientId, slotId);
 
-  if (slotError !== null) {
-    throw new Error(`setClientSelection slot lookup: ${slotError.message}`);
-  }
-
-  if (slot === null) {
-    return null;
-  }
-
-  const typedSlot = slot as {
-    id: string;
-    cycle_id: string;
-    tenant_host: string;
-  };
-
-  // The slot's cycle must be the caller's own AND active.
-  const { data: cycle, error: cycleError } = await client
-    .from(CYCLES_TABLE)
-    .select("client_id, status")
-    .eq("id", typedSlot.cycle_id)
-    .maybeSingle();
-
-  if (cycleError !== null) {
-    throw new Error(`setClientSelection cycle lookup: ${cycleError.message}`);
-  }
-
-  const typedCycle = cycle as { client_id: number; status: string } | null;
-
-  if (
-    typedCycle === null ||
-    typedCycle.client_id !== clientId ||
-    typedCycle.status !== "active"
-  ) {
+  if (owned === null) {
     return null;
   }
 
   // The option must belong to this slot.
-  const { data: option, error: optionError } = await client
-    .from(OPTIONS_TABLE)
-    .select("id")
-    .eq("id", optionId)
-    .eq("slot_id", slotId)
-    .maybeSingle();
-
-  if (optionError !== null) {
-    throw new Error(`setClientSelection option lookup: ${optionError.message}`);
-  }
-
-  if (option === null) {
+  if ((await optionBelongsToSlot(client, slotId, optionId)) === false) {
     return null;
   }
 
@@ -100,7 +53,7 @@ export async function setClientSelection(
     .from(SELECTIONS_TABLE)
     .upsert(
       {
-        tenant_host: typedSlot.tenant_host,
+        tenant_host: owned.tenantHost,
         client_id: clientId,
         slot_id: slotId,
         option_id: optionId,

@@ -1312,6 +1312,77 @@ export type Database = {
           },
         ];
       };
+      meal_logs: {
+        Row: {
+          client_id: number;
+          comment: string | null;
+          created_at: string;
+          id: string;
+          log_date: string;
+          option_id: string | null;
+          photo_url: string | null;
+          slot_id: string;
+          status: string;
+          tenant_host: string;
+          updated_at: string;
+        };
+        Insert: {
+          client_id: number;
+          comment?: string | null;
+          created_at?: string;
+          id?: string;
+          log_date: string;
+          option_id?: string | null;
+          photo_url?: string | null;
+          slot_id: string;
+          status: string;
+          tenant_host: string;
+          updated_at?: string;
+        };
+        Update: {
+          client_id?: number;
+          comment?: string | null;
+          created_at?: string;
+          id?: string;
+          log_date?: string;
+          option_id?: string | null;
+          photo_url?: string | null;
+          slot_id?: string;
+          status?: string;
+          tenant_host?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_logs_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_logs_option_id_fkey";
+            columns: ["option_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slot_options";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_logs_slot_id_fkey";
+            columns: ["slot_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slots";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_logs_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+        ];
+      };
       meal_slot_option_selections: {
         Row: {
           client_id: number;
