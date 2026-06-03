@@ -16,6 +16,7 @@ import { distinctMealTypes } from "./recipe-query";
 import { useRecipes } from "./use-recipes";
 
 const NEW_RECIPE_PATH = "/trainer/dashboard/recipes/new";
+const IMPORT_PATH = "/trainer/dashboard/recipes/import";
 
 export function RecipeLibraryContent() {
   const router = useRouter();
@@ -50,13 +51,24 @@ export function RecipeLibraryContent() {
             Biblioteca de recetas de tu equipo.
           </p>
         </div>
-        <Button
-          color="primary"
-          startContent={<Icon icon="solar:add-circle-bold" width={20} />}
-          onPress={() => router.push(NEW_RECIPE_PATH)}
-        >
-          Nueva receta
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            startContent={
+              <Icon icon="solar:download-minimalistic-linear" width={20} />
+            }
+            variant="bordered"
+            onPress={() => router.push(IMPORT_PATH)}
+          >
+            Importar de planes antiguos
+          </Button>
+          <Button
+            color="primary"
+            startContent={<Icon icon="solar:add-circle-bold" width={20} />}
+            onPress={() => router.push(NEW_RECIPE_PATH)}
+          >
+            Nueva receta
+          </Button>
+        </div>
       </div>
 
       <RecipeFilters

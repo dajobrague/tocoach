@@ -90,10 +90,10 @@ export function toRecipeCandidate(
     candidate.steps = steps;
   }
 
-  const totals = resolveTotals(option);
+  const statedMacros = resolveStatedMacros(option);
 
-  if (totals !== undefined) {
-    candidate.legacyTotals = totals;
+  if (statedMacros !== undefined) {
+    candidate.legacyStatedMacros = statedMacros;
   }
 
   return candidate;
@@ -133,17 +133,17 @@ function resolveSteps(
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
-function resolveTotals(
+function resolveStatedMacros(
   option: LegacyMealOptionInput["option"]
-): RecipeCandidate["legacyTotals"] | undefined {
-  const totals: NonNullable<RecipeCandidate["legacyTotals"]> = {};
+): RecipeCandidate["legacyStatedMacros"] | undefined {
+  const macros: NonNullable<RecipeCandidate["legacyStatedMacros"]> = {};
 
-  assignFinite(totals, "kcal", option.calories);
-  assignFinite(totals, "protein_g", option.protein);
-  assignFinite(totals, "carbs_g", option.carbs);
-  assignFinite(totals, "fat_g", option.fats);
+  assignFinite(macros, "kcal", option.calories);
+  assignFinite(macros, "protein_g", option.protein);
+  assignFinite(macros, "carbs_g", option.carbs);
+  assignFinite(macros, "fat_g", option.fats);
 
-  return Object.keys(totals).length > 0 ? totals : undefined;
+  return Object.keys(macros).length > 0 ? macros : undefined;
 }
 
 function toCandidateIngredient(

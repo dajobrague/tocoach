@@ -80,7 +80,7 @@ describe("LegacyNutritionScanService (integration, local DB)", () => {
     expect(good?.steps).toBe(
       "Hervir el arroz y cocinar el pollo.\n\nServir caliente."
     );
-    expect(good?.legacyTotals).toEqual({
+    expect(good?.legacyStatedMacros).toEqual({
       kcal: 1050,
       protein_g: 75,
       carbs_g: 160,

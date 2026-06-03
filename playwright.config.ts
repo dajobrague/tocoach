@@ -14,6 +14,11 @@ const baseURL = "http://localhost:3000";
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
+  // Serialize across spec files: the nutrition e2e harness shares one fixed test
+  // tenant (TEST_TENANT_HOST) + trainer, and each spec's setup/cleanup mutates
+  // it. Running spec files in parallel workers would let one spec's cleanup wipe
+  // another's seeded rows mid-test. One worker keeps the shared tenant coherent.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",

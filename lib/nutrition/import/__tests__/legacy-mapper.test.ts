@@ -183,19 +183,23 @@ describe("toRecipeCandidate", () => {
     expect(candidate?.ingredients[0]?.nutrients).toBeUndefined();
   });
 
-  it("carries option-level totals when present", () => {
+  it("carries the legacy stated macros when present", () => {
     const candidate = toRecipeCandidate(
       input({
         option: option({ protein: 46, carbs: 92, fats: 16, calories: 687 }),
       })
     );
 
-    expect(candidate?.legacyTotals).toEqual({
+    expect(candidate?.legacyStatedMacros).toEqual({
       protein_g: 46,
       carbs_g: 92,
       fat_g: 16,
       kcal: 687,
     });
+  });
+
+  it("omits legacy stated macros when the option has none", () => {
+    expect(toRecipeCandidate(input())?.legacyStatedMacros).toBeUndefined();
   });
 
   it("enriches a generic option name with the parent meal label", () => {

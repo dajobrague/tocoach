@@ -79,6 +79,16 @@ export interface ImportResult {
   skipped: ImportSkippedCandidate[];
 }
 
+/**
+ * The macro totals the trainer originally stated on the legacy meal option,
+ * read verbatim from `nutrition_meal_options`. Display-only: it documents what
+ * the old plan claimed and is NEVER used to set the imported recipe's computed
+ * macros (those come from the ingredient snapshots via recompute).
+ */
+export type LegacyStatedMacros = Partial<
+  Pick<NutrientsPer100g, "kcal" | "protein_g" | "carbs_g" | "fat_g">
+>;
+
 /** A best-effort recipe ready for trainer review before import. */
 export interface RecipeCandidate {
   /** Source `nutrition_meal_options.id` — traceability + idempotency key. */
@@ -87,8 +97,6 @@ export interface RecipeCandidate {
   ingredients: CandidateIngredient[];
   /** Combined instructions + recipe notes, when present. */
   steps?: string;
-  /** Option-level macro totals (informational; not used to set recipe totals). */
-  legacyTotals?: Partial<
-    Pick<NutrientsPer100g, "kcal" | "protein_g" | "carbs_g" | "fat_g">
-  >;
+  /** What the old plan stated for this option (display-only — see type docs). */
+  legacyStatedMacros?: LegacyStatedMacros;
 }

@@ -3,6 +3,7 @@ export type {
   ImportCreatedRecipe,
   ImportResult,
   ImportSkippedCandidate,
+  LegacyStatedMacros,
   LegacyIngredientRow,
   LegacyMealOptionInput,
   LegacyMealOptionRow,
