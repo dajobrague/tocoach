@@ -151,6 +151,75 @@ export class MealSlotOptionService {
     return (data ?? []) as MealSlotOptionRow[];
   }
 
+  /** Reorder an option (tenant-scoped). Returns null when not found. */
+  async updateOption(
+    tenantHost: string,
+    optionId: string,
+    patch: { position?: number }
+  ): Promise<MealSlotOptionRow | null> {
+    if (patch.position === undefined) {
+      return this.getOption(tenantHost, optionId);
+    }
+
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .update({ position: patch.position })
+      .eq("tenant_host", tenantHost)
+      .eq("id", optionId)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.updateOption failed: ${error.message}`
+      );
+    }
+
+    return (data as MealSlotOptionRow | null) ?? null;
+  }
+
+  /** Delete an option (tenant-scoped). Returns null when not found. */
+  async deleteOption(
+    tenantHost: string,
+    optionId: string
+  ): Promise<MealSlotOptionRow | null> {
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .delete()
+      .eq("tenant_host", tenantHost)
+      .eq("id", optionId)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.deleteOption failed: ${error.message}`
+      );
+    }
+
+    return (data as MealSlotOptionRow | null) ?? null;
+  }
+
+  private async getOption(
+    tenantHost: string,
+    optionId: string
+  ): Promise<MealSlotOptionRow | null> {
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("id", optionId)
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.getOption failed: ${error.message}`
+      );
+    }
+
+    return (data as MealSlotOptionRow | null) ?? null;
+  }
+
   private async insertOption(
     tenantHost: string,
     slotId: string,

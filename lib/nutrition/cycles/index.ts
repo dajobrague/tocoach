@@ -11,11 +11,17 @@ export { buildOptionSnapshot } from "./option-snapshot";
 export type {
   AddSlotInput,
   CreateCycleInput,
+  CycleListFilter,
   CycleStatus,
   MealCycleRow,
+  MealCycleTree,
   MealSlotRow,
+  MealSlotWithOptions,
+  UpdateCycleInput,
+  UpdateSlotInput,
 } from "./meal-cycle-service";
 export {
+  ActiveCycleConflictError,
   MealCycleService,
   MealCycleValidationError,
 } from "./meal-cycle-service";
