@@ -30,3 +30,21 @@ export function useNutritionV2Enabled(): boolean {
 
   return data === true;
 }
+
+/**
+ * Like {@link useNutritionV2Enabled} but also exposes whether the flag is still
+ * resolving, so callers can render a loading state instead of briefly showing
+ * the flagged-off UI. Shares the same query (and cache key) — no extra fetch.
+ */
+export function useNutritionV2FlagStatus(): {
+  enabled: boolean;
+  isLoading: boolean;
+} {
+  const { data, isPending } = useQuery({
+    queryKey: ["nutrition-v2-flag"],
+    queryFn: fetchNutritionV2Flag,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return { enabled: data === true, isLoading: isPending };
+}

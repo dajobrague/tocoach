@@ -54,6 +54,7 @@ export interface ManualIngredientInput {
 /** Map a cached row back to the source-agnostic FoodResult shape. */
 export function rowToFoodResult(row: IngredientRow): FoodResult {
   const result: FoodResult = {
+    id: row.id,
     source: row.source,
     sourceRef: row.source_ref,
     name: row.name,

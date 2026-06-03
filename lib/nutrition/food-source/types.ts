@@ -20,6 +20,12 @@ export interface NutrientsPer100g {
 
 /** A single resolved food item from any source. */
 export interface FoodResult {
+  /**
+   * Ingredients-cache row id, present only for cache-backed results. Absent for
+   * fresh source (OFF) hits that have not been persisted. Required to attach the
+   * food as a meal_slot_option (the option freeze reads the cache row by id).
+   */
+  id?: string;
   /** Which source produced this result. */
   source: "off" | "manual";
   /** Stable, source-scoped identifier; null for ad-hoc manual entries. */

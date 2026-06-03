@@ -28,3 +28,14 @@ export {
 
 export type { MealSlotOptionRow } from "./meal-slot-option-service";
 export { MealSlotOptionService } from "./meal-slot-option-service";
+
+export type { ClientCycleView, CycleDay, CycleDayPosition } from "./cycle-day";
+export {
+  buildClientCycleView,
+  currentCycleDayIndex,
+  groupSlotsByDay,
+} from "./cycle-day";
+
+export { getActiveCycleTreeForClient } from "./client-cycle-reader";
+
+export { shouldShowMacrosToClient } from "./macro-visibility";

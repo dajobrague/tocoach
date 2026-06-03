@@ -1,3 +1,5 @@
+import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
@@ -111,6 +113,24 @@ async function fetchNutritionPlan() {
   return data.data && data.data.length > 0 ? data.data : null;
 }
 
+async function fetchMealCycle(): Promise<ClientCycleView | null> {
+  const response = await clientFetch("/api/client/meal-cycle");
+
+  // Flag off (or route hidden) → 404. Treat as "no plan available", a clean
+  // empty result, not an error — the view renders its empty state.
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientCycleView;
+}
+
 async function fetchSupplements() {
   const response = await clientFetch("/api/client/supplements");
   const data = await response.json();
@@ -182,6 +202,17 @@ export function useNutritionPlan() {
   return useQuery({
     queryKey: ["client", "nutrition"],
     queryFn: fetchNutritionPlan,
+  });
+}
+
+/**
+ * The client's active meal cycle (nutrition-v2). Returns `null` when there is
+ * no active cycle or the feature is off (404) — both render as an empty state.
+ */
+export function useClientMealCycle() {
+  return useQuery({
+    queryKey: ["client", "meal-cycle"],
+    queryFn: fetchMealCycle,
   });
 }
 
