@@ -21,6 +21,12 @@ vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
 vi.mock("@/lib/nutrition/logs/meal-log-service", () => ({
   getMealLogs: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/cycles/override-service", () => ({
+  // No overrides in these tests — listForCycle returns []. (P7 adds the fold.)
+  OverrideService: vi.fn(function () {
+    return { listForCycle: vi.fn(async () => []) };
+  }),
+}));
 
 import { GET } from "../route";
 

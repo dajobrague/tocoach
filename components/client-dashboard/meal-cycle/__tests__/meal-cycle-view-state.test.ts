@@ -11,6 +11,7 @@ const EMPTY: ClientCycleView = {
   days: [],
   selections: {},
   logs: {},
+  notes: [],
 };
 
 function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
@@ -31,6 +32,7 @@ function activeView(overrides: Partial<ClientCycleView> = {}): ClientCycleView {
     ],
     selections: {},
     logs: {},
+    notes: [],
     ...overrides,
   };
 }

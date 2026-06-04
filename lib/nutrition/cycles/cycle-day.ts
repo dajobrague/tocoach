@@ -58,6 +58,16 @@ export interface ClientCycleView {
   selections: Record<string, string>;
   /** The client's log for each slot, for TODAY only (slotId → log). */
   logs: Record<string, ClientMealLog>;
+  /** Trainer notes that apply to TODAY (date-level + slot-level), P7. */
+  notes: ClientDayNote[];
+}
+
+/** A trainer override note surfaced on the client's day. */
+export interface ClientDayNote {
+  id: string;
+  /** The slot it attaches to, or `null` for a whole-day note. */
+  slotId: string | null;
+  text: string;
 }
 
 /** A client's meal log as the today view consumes it (camelCase, today only). */
@@ -181,6 +191,7 @@ export function buildClientCycleView(
       days: [],
       selections: selectionMap,
       logs: logMap,
+      notes: [],
     };
   }
 
@@ -202,5 +213,6 @@ export function buildClientCycleView(
     days: groupSlotsByDay(tree.duration_days, tree.slots),
     selections: selectionMap,
     logs: logMap,
+    notes: [],
   };
 }

@@ -1,6 +1,10 @@
 "use client";
 
-import type { ClientMealLog, CycleDay } from "@/lib/nutrition/cycles/cycle-day";
+import type {
+  ClientDayNote,
+  ClientMealLog,
+  CycleDay,
+} from "@/lib/nutrition/cycles/cycle-day";
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
 import { Card, CardBody, Chip, Divider, Spinner } from "@heroui/react";
@@ -235,6 +239,36 @@ function SlotBlock({
   );
 }
 
+/** Trainer notes for today — a clearly highlighted banner above the meals. */
+function DayNotesBanner({ notes }: { notes: ClientDayNote[] }) {
+  if (notes.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="rounded-xl border border-warning-200 bg-warning-50 p-3"
+      data-testid="day-notes"
+    >
+      <div className="flex items-center gap-2">
+        <Icon
+          className="text-warning-600"
+          icon="solar:notebook-bold"
+          width={18}
+        />
+        <p className="text-sm font-semibold text-warning-700">
+          Notas de tu entrenador
+        </p>
+      </div>
+      <ul className="mt-1 flex flex-col gap-1 pl-1 text-sm text-foreground">
+        {notes.map((note) => (
+          <li key={note.id}>{note.text}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DaySelector({
   days,
   todayIndex,
@@ -387,6 +421,10 @@ export function MealCycleContent() {
         />
 
         <Divider />
+
+        {activeIndex === state.activeDayIndex ? (
+          <DayNotesBanner notes={data.notes} />
+        ) : null}
 
         {visibleDay === null || visibleDay.slots.length === 0 ? (
           <CenteredState

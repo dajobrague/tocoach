@@ -85,7 +85,7 @@ export function resolveOverridesForDate(
         []);
 
   const applicable = overrides.filter((override) =>
-    appliesToDate(override, dateYmd, dayIndex)
+    overrideAppliesToDate(override, dateYmd, dayIndex)
   );
 
   return {
@@ -97,7 +97,7 @@ export function resolveOverridesForDate(
 }
 
 /** True when `override`'s scope reaches `dateYmd` (given the rotation index). */
-function appliesToDate(
+export function overrideAppliesToDate(
   override: OverrideRow,
   dateYmd: string,
   dayIndex: number | null

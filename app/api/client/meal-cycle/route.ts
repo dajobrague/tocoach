@@ -6,6 +6,8 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
 import { buildClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import { applyOverridesToClientView } from "@/lib/nutrition/cycles/override-client-view";
+import { OverrideService } from "@/lib/nutrition/cycles/override-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { getMealLogs } from "@/lib/nutrition/logs/meal-log-service";
@@ -64,15 +66,29 @@ export async function GET(request: NextRequest) {
       // Today's logs only — the today view lets the client log today's meals.
       getMealLogs(supabase, clientId, todayIso, todayIso),
     ]);
-    const view = buildClientCycleView(
-      tree,
-      new Date(),
-      timeZone,
-      selections,
-      logs
-    );
+    const now = new Date();
+    const view = buildClientCycleView(tree, now, timeZone, selections, logs);
 
-    return NextResponse.json({ success: true, data: view });
+    // Fold trainer overrides (P7) into today's view: swaps replace their slot's
+    // options (from the frozen snapshot), and the date's notes are attached.
+    let resolved = view;
+
+    if (tree !== null) {
+      const overrides = await new OverrideService(supabase).listForCycle(
+        tree.tenant_host,
+        tree.id
+      );
+
+      resolved = applyOverridesToClientView(
+        view,
+        tree,
+        overrides,
+        now,
+        timeZone
+      );
+    }
+
+    return NextResponse.json({ success: true, data: resolved });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
       correlationId,

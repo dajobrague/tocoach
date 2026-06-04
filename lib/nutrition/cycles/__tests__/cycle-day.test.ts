@@ -190,6 +190,7 @@ describe("buildClientCycleView", () => {
       days: [],
       selections: {},
       logs: {},
+      notes: [],
     });
   });
 
