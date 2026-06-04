@@ -42,6 +42,8 @@ Thumbs.db
 
 # Logs
 logs/
+# but DO track the nutrition source dir that happens to be named "logs"
+!lib/nutrition/logs/
 *.log
 
 # Coverage
