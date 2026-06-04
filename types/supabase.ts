@@ -1312,6 +1312,89 @@ export type Database = {
           },
         ];
       };
+      meal_cycle_overrides: {
+        Row: {
+          anchor_date: string;
+          client_id: number;
+          created_at: string;
+          cycle_id: string;
+          day_index: number | null;
+          id: string;
+          note_text: string | null;
+          override_type: string;
+          scope: string;
+          slot_id: string | null;
+          swap_snapshot: Json | null;
+          swap_source_ref_id: string | null;
+          swap_source_type: string | null;
+          tenant_host: string;
+          updated_at: string;
+        };
+        Insert: {
+          anchor_date: string;
+          client_id: number;
+          created_at?: string;
+          cycle_id: string;
+          day_index?: number | null;
+          id?: string;
+          note_text?: string | null;
+          override_type: string;
+          scope: string;
+          slot_id?: string | null;
+          swap_snapshot?: Json | null;
+          swap_source_ref_id?: string | null;
+          swap_source_type?: string | null;
+          tenant_host: string;
+          updated_at?: string;
+        };
+        Update: {
+          anchor_date?: string;
+          client_id?: number;
+          created_at?: string;
+          cycle_id?: string;
+          day_index?: number | null;
+          id?: string;
+          note_text?: string | null;
+          override_type?: string;
+          scope?: string;
+          slot_id?: string | null;
+          swap_snapshot?: Json | null;
+          swap_source_ref_id?: string | null;
+          swap_source_type?: string | null;
+          tenant_host?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meal_cycle_overrides_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_cycle_overrides_cycle_id_fkey";
+            columns: ["cycle_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_cycles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_cycle_overrides_slot_id_fkey";
+            columns: ["slot_id"];
+            isOneToOne: false;
+            referencedRelation: "meal_slots";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meal_cycle_overrides_tenant_host_fkey";
+            columns: ["tenant_host"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["host"];
+          },
+        ];
+      };
       meal_logs: {
         Row: {
           client_id: number;

@@ -48,6 +48,7 @@ const TEST_CLIENT_EMAIL = "client@nutrition-v2-test.local";
  */
 const CLEANUP_ALLOWLIST = [
   "meal_logs",
+  "meal_cycle_overrides",
   "meal_slot_option_selections",
   "meal_slot_options",
   "meal_slots",

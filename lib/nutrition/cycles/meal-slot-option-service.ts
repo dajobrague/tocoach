@@ -54,27 +54,11 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const recipe = await this.recipes.getById(tenantHost, recipeId);
+    const snapshot = await this.freezeSource(tenantHost, "recipe", recipeId);
 
-    if (recipe === null) {
+    if (snapshot === null) {
       return null;
     }
-
-    const [ingredients, media] = await Promise.all([
-      this.readRecipeIngredients(recipeId),
-      this.readRecipeMedia(recipeId),
-    ]);
-
-    const snapshot = buildOptionSnapshot({
-      type: "recipe",
-      recipe: {
-        id: recipe.id,
-        name: recipe.name,
-        instructions: recipe.instructions,
-        ingredients,
-        media,
-      },
-    });
 
     return this.insertOption(
       tenantHost,
@@ -84,6 +68,60 @@ export class MealSlotOptionService {
       snapshot,
       position
     );
+  }
+
+  /**
+   * Freeze a self-contained {@link OptionSnapshot} from a tenant-scoped recipe
+   * or food (§4.1) — the same freeze `addRecipeOption`/`addFoodOption` write.
+   * Reused by the overrides layer so a swap freezes identically. Returns `null`
+   * when the source is not found for the tenant. `quantity` (grams) applies to
+   * a food source only.
+   */
+  async freezeSource(
+    tenantHost: string,
+    sourceType: "recipe" | "food",
+    sourceRefId: string,
+    quantity = 0
+  ): Promise<OptionSnapshot | null> {
+    if (sourceType === "recipe") {
+      const recipe = await this.recipes.getById(tenantHost, sourceRefId);
+
+      if (recipe === null) {
+        return null;
+      }
+
+      const [ingredients, media] = await Promise.all([
+        this.readRecipeIngredients(sourceRefId),
+        this.readRecipeMedia(sourceRefId),
+      ]);
+
+      return buildOptionSnapshot({
+        type: "recipe",
+        recipe: {
+          id: recipe.id,
+          name: recipe.name,
+          instructions: recipe.instructions,
+          ingredients,
+          media,
+        },
+      });
+    }
+
+    const food = await this.readIngredient(tenantHost, sourceRefId);
+
+    if (food === null) {
+      return null;
+    }
+
+    return buildOptionSnapshot({
+      type: "food",
+      food: {
+        id: sourceRefId,
+        name: typeof food.name === "string" ? food.name : "",
+        quantity,
+        nutrientsPer100g: food,
+      },
+    });
   }
 
   async addFoodOption(
@@ -99,21 +137,16 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const food = await this.readIngredient(tenantHost, ingredientId);
+    const snapshot = await this.freezeSource(
+      tenantHost,
+      "food",
+      ingredientId,
+      quantity
+    );
 
-    if (food === null) {
+    if (snapshot === null) {
       return null;
     }
-
-    const snapshot = buildOptionSnapshot({
-      type: "food",
-      food: {
-        id: ingredientId,
-        name: typeof food.name === "string" ? food.name : "",
-        quantity,
-        nutrientsPer100g: food,
-      },
-    });
 
     return this.insertOption(
       tenantHost,
