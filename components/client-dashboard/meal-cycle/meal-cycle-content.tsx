@@ -2,7 +2,7 @@
 
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
-import { Card, CardBody, Spinner } from "@heroui/react";
+import { Button, Card, CardBody, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -15,7 +15,7 @@ import {
   mondayOf,
 } from "@/components/client-dashboard/meal-cycle/meal-cycle-week-helpers";
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
-import { ShoppingListSection } from "@/components/client-dashboard/shopping-list/shopping-list-section";
+import { ShoppingWizard } from "@/components/client-dashboard/shopping-list/shopping-wizard";
 import { WeekDateSelector } from "@/components/client-dashboard/workouts/week-date-selector";
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
@@ -102,6 +102,7 @@ export function MealCycleContent() {
   const [detailOption, setDetailOption] = useState<MealSlotOptionRow | null>(
     null
   );
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const weekStart = mondayOf(selectedDate);
   const { data, isPending, isError } = useClientMealCycleWeek(
@@ -196,9 +197,26 @@ export function MealCycleContent() {
           />
         )}
 
-        {/* Merged shopping list — same nav spot the legacy section holds. */}
-        <ShoppingListSection />
+        {/* The shopping list is now an explicit week wizard (the client picks
+            which meals they'll make), replacing the old auto-derived list. */}
+        <Button
+          className="self-start"
+          data-testid="open-shopping-wizard"
+          startContent={<Icon icon="solar:cart-large-2-bold" width={18} />}
+          variant="flat"
+          onPress={() => setWizardOpen(true)}
+        >
+          Lista de compras
+        </Button>
       </div>
+
+      <ShoppingWizard
+        days={data.days}
+        isOpen={wizardOpen}
+        selections={data.selections}
+        weekStart={data.weekStart}
+        onClose={() => setWizardOpen(false)}
+      />
 
       <RecipeOptionDetail
         option={detailOption}

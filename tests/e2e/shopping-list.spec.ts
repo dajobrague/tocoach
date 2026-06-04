@@ -28,14 +28,15 @@ const CYCLE_NAME = "E2E Lista de compras";
 const PLAN_PATH = `/${TEST_TENANT_SLUG}/plan-de-comidas`;
 
 // Per-day ingredient lines. The same name appears in BOTH g and ml — those must
-// stay separate after merging. A 1-day cycle means every date in "this week"
-// (7 days) lands on day 0, so each per-day quantity is multiplied by 7.
+// stay separate after merging. A 1-day cycle means every date in the week lands
+// on day 0, so each picked day contributes the same per-day quantities; picking
+// 2 days doubles the summable lines.
 const PER_DAY = {
-  oatsG: 50, // → 350 g over the week
-  milkMl: 200, // → 1400 ml over the week
-  milkG: 100, // → 700 g over the week
+  oatsG: 50,
+  milkMl: 200,
+  milkG: 100,
 };
-const DAYS_IN_WEEK = 7;
+const PICKED_DAYS = 2;
 
 /** Start the cycle safely in the past so any 7-day window is fully on/after it. */
 function startDateInPast(): string {
@@ -127,14 +128,15 @@ test.afterAll(async () => {
   expect(recipesLeft.data ?? []).toHaveLength(0);
 });
 
-test("client opens the shopping list and sees correct merged totals", async ({
+test("client picks meals in the wizard and sees the merged list", async ({
   page,
   context,
 }) => {
-  // Expected merged totals: per-day qty × 7 days; the two Leche lines stay split.
-  const expectedOats = PER_DAY.oatsG * DAYS_IN_WEEK; // 350 g
-  const expectedMilkMl = PER_DAY.milkMl * DAYS_IN_WEEK; // 1400 ml
-  const expectedMilkG = PER_DAY.milkG * DAYS_IN_WEEK; // 700 g
+  // The list comes ONLY from the picked meals: 2 picked days × per-day qty;
+  // the two Leche lines (g and ml) stay split.
+  const expectedOats = PER_DAY.oatsG * PICKED_DAYS; // 100 g
+  const expectedMilkMl = PER_DAY.milkMl * PICKED_DAYS; // 400 ml
+  const expectedMilkG = PER_DAY.milkG * PICKED_DAYS; // 200 g
 
   console.log("[e2e] step 1 — client logs in (mint client-session cookie)");
   await addClientAuthCookie(context);
@@ -143,17 +145,28 @@ test("client opens the shopping list and sees correct merged totals", async ({
   await page.goto(PLAN_PATH);
   await expect(page.getByRole("heading", { name: CYCLE_NAME })).toBeVisible();
 
-  console.log("[e2e] step 3 — the shopping list renders the merged totals");
+  console.log("[e2e] step 3 — open the shopping wizard");
+  await page.getByTestId("open-shopping-wizard").click();
+  await expect(page.getByTestId("wizard-picker")).toBeVisible();
+
+  console.log("[e2e] step 4 — pick the meal on two different days");
+  const toggles = page.getByTestId("wizard-meal-toggle");
+
+  await toggles.nth(0).click();
+  await toggles.nth(1).click();
+  await expect(toggles.nth(0)).toHaveAttribute("data-picked", "true");
+  await page.getByTestId("wizard-generate").click();
+
+  console.log("[e2e] step 5 — the list merges ONLY the picked meals");
   const list = page.getByTestId("shopping-list");
 
   await expect(list).toBeVisible();
-  // Three merged lines: Avena (g) and Leche split into its g and ml lines.
   await expect(list.getByTestId("shopping-item")).toHaveCount(3);
   await expect(list.getByText(`Avena · ${expectedOats} g`)).toBeVisible();
   await expect(list.getByText(`Leche · ${expectedMilkG} g`)).toBeVisible();
   await expect(list.getByText(`Leche · ${expectedMilkMl} ml`)).toBeVisible();
 
-  console.log("[e2e] step 4 — checking an item off de-emphasizes it");
+  console.log("[e2e] step 6 — checking an item off de-emphasizes it");
   const oats = list
     .getByTestId("shopping-item")
     .filter({ hasText: `Avena · ${expectedOats} g` });
@@ -162,5 +175,5 @@ test("client opens the shopping list and sees correct merged totals", async ({
   await oats.click();
   await expect(oats).toHaveAttribute("data-checked", "true");
 
-  console.log("[e2e] journey complete — merged totals correct, units separate");
+  console.log("[e2e] journey complete — list built from picks, units separate");
 });
