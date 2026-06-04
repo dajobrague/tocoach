@@ -14,6 +14,7 @@ import { MealLogControl } from "@/components/client-dashboard/meal-cycle/meal-lo
 import { resolveMealCycleViewState } from "@/components/client-dashboard/meal-cycle/meal-cycle-view-state";
 import { normalizeOptionSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
+import { ShoppingListSection } from "@/components/client-dashboard/shopping-list/shopping-list-section";
 import {
   useClientMealCycle,
   useSetMealCycleSelection,
@@ -416,6 +417,10 @@ export function MealCycleContent() {
             ))}
           </div>
         )}
+
+        {/* Merged shopping list for the active cycle — same nav spot the legacy
+            "Lista de Compras Semanal" section holds in the old nutrition view. */}
+        <ShoppingListSection />
       </div>
 
       <RecipeOptionDetail

@@ -1,4 +1,5 @@
 import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -231,6 +232,49 @@ export function useClientMealCycle() {
 }
 
 export const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
+
+/** The merged shopping list for a `[from, to]` range, as the API returns it. */
+export interface ClientShoppingList {
+  from: string;
+  to: string;
+  items: ShoppingListItem[];
+}
+
+async function fetchShoppingList(
+  from: string,
+  to: string
+): Promise<ClientShoppingList | null> {
+  const response = await clientFetch(
+    `/api/client/shopping-list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+  );
+
+  // Flag off (or route hidden) → 404. Treat as "no list available", a clean
+  // empty result, not an error — same convention as the meal-cycle fetch.
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientShoppingList;
+}
+
+/**
+ * The merged shopping list for the authed client's active cycle over a
+ * `[from, to]` range. Returns `null` when the feature is off (404) — rendered
+ * as the empty state. Disabled until both bounds are set.
+ */
+export function useClientShoppingList(from: string, to: string) {
+  return useQuery({
+    queryKey: ["client", "shopping-list", from, to],
+    queryFn: () => fetchShoppingList(from, to),
+    enabled: from.length > 0 && to.length > 0,
+  });
+}
 
 async function postMealCycleSelection(input: {
   slotId: string;
