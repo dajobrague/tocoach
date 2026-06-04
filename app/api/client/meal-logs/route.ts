@@ -9,10 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isWithinLogWindow, isYmd } from "@/lib/nutrition/logs/log-window";
 import {
   MEAL_LOG_STATUSES,
   setMealLog,
 } from "@/lib/nutrition/logs/meal-log-service";
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
 const LOG_PREFIX = "[Client MealLogs API]";
@@ -57,6 +59,26 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: "slot_id, log_date y un status válido son obligatorios",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Server-side log-window lock (UI also gates): the date must be a real
+    // calendar day, today-or-earlier and ≤30 days back, in the client's tz.
+    // tz is read from the query, same convention as /api/client/meal-cycle.
+    const timeZone = new URL(request.url).searchParams.get("tz") || "UTC";
+    const todayIso = toYmdInTimezone(new Date(), timeZone);
+
+    if (
+      isYmd(parsed.logDate) === false ||
+      isWithinLogWindow(parsed.logDate, todayIso) === false
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "log_date debe ser hoy o hasta 30 días atrás (no fechas futuras)",
         },
         { status: 400 }
       );

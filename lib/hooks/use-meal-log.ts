@@ -1,11 +1,15 @@
 "use client";
 
 import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import { MEAL_CYCLE_KEY } from "@/lib/hooks/use-client-queries";
+import {
+  MEAL_CYCLE_KEY,
+  MEAL_CYCLE_WEEK_KEY,
+} from "@/lib/hooks/use-client-queries";
 
 export interface LogMealInput {
   slotId: string;
@@ -71,6 +75,14 @@ export function useLogMeal() {
     mutationFn: postMealLog,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_KEY });
+      await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
+
+      const log = {
+        status: input.status,
+        optionId: input.optionId ?? null,
+        comment: input.comment ?? null,
+        photoUrl: input.photoUrl ?? null,
+      };
 
       const previous = queryClient.getQueryData<ClientCycleView | null>(
         MEAL_CYCLE_KEY
@@ -79,27 +91,42 @@ export function useLogMeal() {
       if (previous) {
         queryClient.setQueryData<ClientCycleView | null>(MEAL_CYCLE_KEY, {
           ...previous,
-          logs: {
-            ...previous.logs,
-            [input.slotId]: {
-              status: input.status,
-              optionId: input.optionId ?? null,
-              comment: input.comment ?? null,
-              photoUrl: input.photoUrl ?? null,
-            },
-          },
+          logs: { ...previous.logs, [input.slotId]: log },
         });
       }
 
-      return { previous };
+      // Mirror into the cached week(s): set the log on the matching date's day
+      // so the week view's log control reflects the new status instantly.
+      const previousWeeks = queryClient.getQueriesData<ClientWeek | null>({
+        queryKey: MEAL_CYCLE_WEEK_KEY,
+      });
+
+      for (const [key, week] of previousWeeks) {
+        if (week) {
+          queryClient.setQueryData<ClientWeek | null>(key, {
+            ...week,
+            days: week.days.map((day) =>
+              day.date === input.logDate
+                ? { ...day, logs: { ...day.logs, [input.slotId]: log } }
+                : day
+            ),
+          });
+        }
+      }
+
+      return { previous, previousWeeks };
     },
     onError: (_error, _input, context) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(MEAL_CYCLE_KEY, context.previous);
       }
+      for (const [key, week] of context?.previousWeeks ?? []) {
+        queryClient.setQueryData(key, week);
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
     },
   });
 }

@@ -132,14 +132,13 @@ test("client opens their plan, views a recipe, and picks an option that persists
   await page.goto(PLAN_PATH);
 
   console.log(
-    "[e2e] step 3 — today's cycle-day is highlighted and meals render"
+    "[e2e] step 3 — the week selector lands on today and meals render"
   );
   await expect(page.getByRole("heading", { name: CYCLE_NAME })).toBeVisible();
-  const todayTab = page.getByTestId("cycle-day").filter({ hasText: "Hoy" });
-
-  await expect(todayTab).toBeVisible();
-  await expect(todayTab).toHaveText(/Día 1/);
-  await expect(todayTab).toHaveAttribute("aria-current", "true");
+  // The week selector defaults to today (its "Hoy" subtitle), and the selected
+  // day's meals render in the day panel.
+  await expect(page.getByText("Hoy", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("day-panel")).toBeVisible();
   await expect(page.getByText(SLOT_LABEL)).toBeVisible();
   await expect(page.getByTestId("option-card")).toHaveCount(2);
 

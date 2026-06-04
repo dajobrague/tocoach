@@ -23,8 +23,10 @@ import { POST } from "../route";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { shiftYmd } from "@/lib/nutrition/logs/log-window";
 import { setMealLog } from "@/lib/nutrition/logs/meal-log-service";
 import { loadTenantContext } from "@/lib/tenant/loader";
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
 
 const mockedSession = vi.mocked(getClientSession);
 const mockedFlag = vi.mocked(isNutritionV2Enabled);
@@ -208,5 +210,62 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
         )
       ).status
     ).toBe(201);
+  });
+});
+
+describe("POST /api/client/meal-logs — log-window guard", () => {
+  const TZ = "UTC";
+  const today = toYmdInTimezone(new Date(), TZ);
+
+  function postWithTz(body: unknown, tz: string): NextRequest {
+    return new NextRequest(
+      `http://localhost/api/client/meal-logs?tz=${encodeURIComponent(tz)}`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+      }
+    );
+  }
+
+  function log(logDate: string) {
+    return { slot_id: SLOT_ID, log_date: logDate, status: "skipped" as const };
+  }
+
+  it("rejects a future log_date (400, no write)", async () => {
+    const res = await POST(postReq(log(shiftYmd(today, 1))));
+
+    expect(res.status).toBe(400);
+    expect(mockedSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects a log_date more than 30 days back (400, no write)", async () => {
+    const res = await POST(postReq(log(shiftYmd(today, -31))));
+
+    expect(res.status).toBe(400);
+    expect(mockedSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed log_date (400, no write)", async () => {
+    const res = await POST(postReq(log("2026-13-40")));
+
+    expect(res.status).toBe(400);
+    expect(mockedSet).not.toHaveBeenCalled();
+  });
+
+  it("accepts today and yesterday (201)", async () => {
+    expect((await POST(postReq(log(today)))).status).toBe(201);
+    expect((await POST(postReq(log(shiftYmd(today, -1))))).status).toBe(201);
+    expect((await POST(postReq(log(shiftYmd(today, -30))))).status).toBe(201);
+  });
+
+  it("threads tz: a date that is 'today' in the request tz is accepted", async () => {
+    const tz = "Pacific/Auckland";
+    const todayThere = toYmdInTimezone(new Date(), tz);
+
+    const res = await POST(postWithTz(log(todayThere), tz));
+
+    expect(res.status).toBe(201);
+    expect(mockedSet).toHaveBeenCalled();
   });
 });

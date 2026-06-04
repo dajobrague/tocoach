@@ -1,4 +1,5 @@
 import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
 import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -232,6 +233,43 @@ export function useClientMealCycle() {
 }
 
 export const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
+export const MEAL_CYCLE_WEEK_KEY = ["client", "meal-cycle-week"] as const;
+
+async function fetchMealCycleWeek(
+  weekStart: string,
+  tz: string
+): Promise<ClientWeek | null> {
+  const response = await clientFetch(
+    `/api/client/meal-cycle/week?weekStart=${encodeURIComponent(weekStart)}&tz=${encodeURIComponent(tz)}`
+  );
+
+  // Flag off (or route hidden) → 404 → clean empty result (same as the
+  // single-date fetch).
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientWeek;
+}
+
+/**
+ * The client's active cycle laid out over the week containing `weekStart`
+ * (Monday), each day resolved (swaps + notes) with a `canLog` flag. `null` when
+ * there is no active cycle or the feature is off (404).
+ */
+export function useClientMealCycleWeek(weekStart: string, tz: string) {
+  return useQuery({
+    queryKey: [...MEAL_CYCLE_WEEK_KEY, weekStart, tz],
+    queryFn: () => fetchMealCycleWeek(weekStart, tz),
+    enabled: weekStart.length > 0,
+  });
+}
 
 /** The merged shopping list for a `[from, to]` range, as the API returns it. */
 export interface ClientShoppingList {
@@ -304,6 +342,7 @@ export function useSetMealCycleSelection() {
     mutationFn: postMealCycleSelection,
     onMutate: async ({ slotId, optionId }) => {
       await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_KEY });
+      await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
 
       const previous = queryClient.getQueryData<ClientCycleView | null>(
         MEAL_CYCLE_KEY
@@ -316,15 +355,34 @@ export function useSetMealCycleSelection() {
         });
       }
 
-      return { previous };
+      // Mirror the choice into every cached week so the week view updates
+      // instantly too (it carries a week-global selections map).
+      const previousWeeks = queryClient.getQueriesData<ClientWeek | null>({
+        queryKey: MEAL_CYCLE_WEEK_KEY,
+      });
+
+      for (const [key, week] of previousWeeks) {
+        if (week) {
+          queryClient.setQueryData<ClientWeek | null>(key, {
+            ...week,
+            selections: { ...week.selections, [slotId]: optionId },
+          });
+        }
+      }
+
+      return { previous, previousWeeks };
     },
     onError: (_error, _input, context) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(MEAL_CYCLE_KEY, context.previous);
       }
+      for (const [key, week] of context?.previousWeeks ?? []) {
+        queryClient.setQueryData(key, week);
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
     },
   });
 }
