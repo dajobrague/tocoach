@@ -1684,51 +1684,6 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                 </p>
               </div>
 
-              {/* Información Básica */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-slate-700"
-                    icon="solar:running-bold"
-                    width={18}
-                  />
-                  Información del Ejercicio
-                </h4>
-                <div className="space-y-4">
-                  <Select
-                    isRequired
-                    label="Tipo de Actividad"
-                    placeholder="Selecciona el tipo"
-                    selectedKeys={exerciseForm.type ? [exerciseForm.type] : []}
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:heart-pulse-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setExerciseForm({ ...exerciseForm, type: value });
-                    }}
-                  >
-                    <SelectItem key="Running">Running (Correr)</SelectItem>
-                    <SelectItem key="Cycling">Cycling (Ciclismo)</SelectItem>
-                    <SelectItem key="Swimming">Swimming (Natación)</SelectItem>
-                    <SelectItem key="Walking">Walking (Caminar)</SelectItem>
-                    <SelectItem key="Rowing">Rowing (Remo)</SelectItem>
-                    <SelectItem key="HIIT">HIIT</SelectItem>
-                    <SelectItem key="Elliptical">
-                      Elliptical (Elíptica)
-                    </SelectItem>
-                    <SelectItem key="Stairmaster">
-                      Stairmaster (Escaladora)
-                    </SelectItem>
-                  </Select>
-                </div>
-              </div>
-
               {/* Duración y Distancia */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -2034,50 +1989,6 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                   Selecciona un ejercicio de tu biblioteca para auto-completar
                   los campos.
                 </p>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-slate-700"
-                    icon="solar:running-bold"
-                    width={18}
-                  />
-                  Información del Ejercicio
-                </h4>
-                <div className="space-y-4">
-                  <Select
-                    isRequired
-                    label="Tipo de Actividad"
-                    placeholder="Selecciona el tipo"
-                    selectedKeys={exerciseForm.type ? [exerciseForm.type] : []}
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:heart-pulse-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setExerciseForm({ ...exerciseForm, type: value });
-                    }}
-                  >
-                    <SelectItem key="Running">Running (Correr)</SelectItem>
-                    <SelectItem key="Cycling">Cycling (Ciclismo)</SelectItem>
-                    <SelectItem key="Swimming">Swimming (Natación)</SelectItem>
-                    <SelectItem key="Walking">Walking (Caminar)</SelectItem>
-                    <SelectItem key="Rowing">Rowing (Remo)</SelectItem>
-                    <SelectItem key="HIIT">HIIT</SelectItem>
-                    <SelectItem key="Elliptical">
-                      Elliptical (Elíptica)
-                    </SelectItem>
-                    <SelectItem key="Stairmaster">
-                      Stairmaster (Escaladora)
-                    </SelectItem>
-                  </Select>
-                </div>
               </div>
 
               <div>

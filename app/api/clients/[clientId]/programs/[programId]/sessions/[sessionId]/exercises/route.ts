@@ -40,7 +40,6 @@ export async function POST(
       intensity,
       minHeartRate,
       maxHeartRate,
-      type,
       notes,
     } = body;
 
@@ -92,7 +91,7 @@ export async function POST(
     // Validate ownership + category match against this session's type.
     const { data: libraryExercise, error: libraryError } = await supabase
       .from("exercises")
-      .select("id, category")
+      .select("id, category, metadata")
       .eq("id", libraryExerciseId)
       .eq("trainer_id", session.trainer_id)
       .maybeSingle();
@@ -152,7 +151,12 @@ export async function POST(
       const metadata: any = {};
 
       if (intensity) metadata.intensity = intensity;
-      if (type) metadata.cardio_type = type;
+      // cardio_type is intrinsic to the library exercise — source it from
+      // there, never from the request body.
+      const libCardioType =
+        (libraryExercise as any).metadata?.cardio_type ?? null;
+
+      if (libCardioType) metadata.cardio_type = libCardioType;
       if (minHeartRate) metadata.heart_rate_min = parseInt(minHeartRate);
       if (maxHeartRate) metadata.heart_rate_max = parseInt(maxHeartRate);
 
@@ -252,7 +256,6 @@ export async function PUT(
       intensity,
       minHeartRate,
       maxHeartRate,
-      type,
       notes,
     } = body;
 
@@ -309,7 +312,7 @@ export async function PUT(
 
         const { data: libraryExercise, error: libraryError } = await supabase
           .from("exercises")
-          .select("id, category")
+          .select("id, category, metadata")
           .eq("id", rawLibraryExerciseId)
           .eq("trainer_id", session.trainer_id)
           .maybeSingle();
@@ -356,7 +359,18 @@ export async function PUT(
       const metadata: any = {};
 
       if (intensity) metadata.intensity = intensity;
-      if (type) metadata.cardio_type = type;
+      // cardio_type is intrinsic to the library exercise — source it from
+      // there, never from the request body. Use the slot's effective library
+      // exercise (the swapped one if swapping, else the current exercise_id).
+      const effectiveExerciseId = nextExerciseId ?? sessionExercise.exercise_id;
+      const { data: curLib } = await supabase
+        .from("exercises")
+        .select("metadata")
+        .eq("id", effectiveExerciseId)
+        .maybeSingle();
+      const libCardioType = (curLib as any)?.metadata?.cardio_type ?? null;
+
+      if (libCardioType) metadata.cardio_type = libCardioType;
       if (minHeartRate) metadata.heart_rate_min = parseInt(minHeartRate);
       if (maxHeartRate) metadata.heart_rate_max = parseInt(maxHeartRate);
 
