@@ -24,8 +24,6 @@ interface UseWeekMetrics {
   loading: boolean;
   error: string | null;
   refetch: () => void;
-  /** Drop a cached week (or all if omitted) and refetch the current week. */
-  invalidate: (weekStartYmd?: string) => void;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -193,7 +191,7 @@ function buildWeekMetrics(
 
 // Bounded LRU on top of Map insertion order. Browsing many weeks during a
 // single trainer session used to grow this cache unboundedly (each entry
-// holds the week's logs + override rows + prescription tree).
+// holds the week's logs + prescription tree).
 const MAX_CACHED_WEEKS = 12;
 
 function setLru(
@@ -397,17 +395,5 @@ export function useWeekMetrics(
       .catch(() => setError("Error de conexión."));
   }, [weekStart, fetchAndCache]);
 
-  const invalidate = useCallback(
-    (weekStartYmdToFlush?: string) => {
-      if (weekStartYmdToFlush) {
-        cacheRef.current.delete(weekStartYmdToFlush);
-      } else {
-        cacheRef.current.clear();
-      }
-      refetch();
-    },
-    [refetch]
-  );
-
-  return { data, loading, error, refetch, invalidate };
+  return { data, loading, error, refetch };
 }

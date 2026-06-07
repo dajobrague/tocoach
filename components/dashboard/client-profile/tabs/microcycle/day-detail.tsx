@@ -386,18 +386,11 @@ function groupLogsByExercise(
 // ─── Single-session card ─────────────────────────────────────────────────────
 
 interface SessionCardProps {
-  clientId: string;
-  date: string;
   entry: SessionEntry;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
 
-function SessionCard({
-  clientId: _clientId,
-  date: _date,
-  entry,
-  onPlayVideo,
-}: SessionCardProps) {
+function SessionCard({ entry, onPlayVideo }: SessionCardProps) {
   const showFuture = entry.classification === "future";
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
@@ -534,7 +527,7 @@ interface Props {
 }
 
 export function DayDetail({
-  clientId,
+  clientId: _clientId,
   day,
   orphanLogs: _orphanLogs,
   onPlayVideo,
@@ -574,8 +567,6 @@ export function DayDetail({
       {day.sessions.map((entry) => (
         <SessionCard
           key={entry.scheduledSession.id}
-          clientId={clientId}
-          date={day.date}
           entry={entry}
           onPlayVideo={onPlayVideo}
         />

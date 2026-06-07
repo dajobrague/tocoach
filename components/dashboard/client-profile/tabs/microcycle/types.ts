@@ -84,9 +84,9 @@ export interface DayMetrics {
    */
   sessions: SessionEntry[];
   /**
-   * Sesión que el trainer recomienda para el día (microciclo o pin
-   * trainer). null = rest day. Se usa para anotar "Recomendado: X" en
-   * el header del día cuando no aparece en `sessions`.
+   * Sesión que el trainer recomienda para el día (microciclo). null =
+   * rest day. Se usa para anotar "Recomendado: X" en el header del día
+   * cuando no aparece en `sessions`.
    */
   recommendedSessionName: string | null;
   isToday: boolean;
