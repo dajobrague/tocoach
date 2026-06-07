@@ -1726,6 +1726,14 @@ export default function WorkoutsTab({
                   Selecciona un ejercicio de tu biblioteca para auto-completar
                   los campos.
                 </p>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
                 {exerciseForm.videoUrl ? (
                   <p className="text-xs text-gray-500 mt-1 break-all">
                     Video: {exerciseForm.videoUrl}
@@ -2012,6 +2020,14 @@ export default function WorkoutsTab({
                     </AutocompleteItem>
                   )}
                 </Autocomplete>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
                 {exerciseForm.videoUrl ? (
                   <p className="text-xs text-gray-500 break-all">
                     Video: {exerciseForm.videoUrl}

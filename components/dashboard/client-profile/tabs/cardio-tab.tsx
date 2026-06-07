@@ -1682,6 +1682,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                   Selecciona un ejercicio de tu biblioteca para auto-completar
                   los campos.
                 </p>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
               </div>
 
               {/* Duración y Distancia */}
@@ -1989,6 +1997,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                   Selecciona un ejercicio de tu biblioteca para auto-completar
                   los campos.
                 </p>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
               </div>
 
               <div>
