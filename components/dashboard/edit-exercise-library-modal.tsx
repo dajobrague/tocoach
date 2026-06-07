@@ -79,7 +79,7 @@ export default function EditExerciseLibraryModal({
         tips: exercise.tips || [],
         cardio_type:
           (exercise as any).metadata?.cardio_type ??
-          exercise.default_training_system ??
+          (exercise as any).default_training_system ??
           "",
       });
       setImagePreview(exercise.image_url || null);

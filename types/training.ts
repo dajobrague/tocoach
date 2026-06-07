@@ -96,12 +96,6 @@ export interface Exercise {
   instructions?: string[];
   tips?: string[];
   is_public: boolean;
-  // Default training parameters (auto-fill when adding to sessions)
-  default_sets?: number;
-  default_reps?: string;
-  default_tempo?: string;
-  default_rest_seconds?: number;
-  default_training_system?: string;
   metadata: {
     [key: string]: any;
   };
@@ -294,12 +288,7 @@ export interface CreateExerciseLibraryRequest {
   image_url?: string;
   instructions?: string[];
   tips?: string[];
-  // Default training parameters
-  default_sets?: number;
-  default_reps?: string;
-  default_tempo?: string;
-  default_rest_seconds?: number;
-  default_training_system?: string;
+  cardio_type?: string;
 }
 
 export interface UpdateExerciseLibraryRequest {
@@ -323,12 +312,7 @@ export interface UpdateExerciseLibraryRequest {
   image_url?: string;
   instructions?: string[];
   tips?: string[];
-  // Default training parameters
-  default_sets?: number;
-  default_reps?: string;
-  default_tempo?: string;
-  default_rest_seconds?: number;
-  default_training_system?: string;
+  cardio_type?: string;
 }
 
 export interface ExerciseLibraryResponse {
