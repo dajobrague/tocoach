@@ -29,13 +29,11 @@ export async function POST(
     const { sessionId } = await params;
     const body = await request.json();
     const {
-      name,
       sets,
       reps,
       tempo,
       rest,
       trainingSystem,
-      videoUrl,
       // Cardio-specific fields
       duration,
       distance,
@@ -72,63 +70,54 @@ export async function POST(
       );
     }
 
-    // First, create or find the exercise in the exercise library
-    let exerciseId: string;
+    // Library-only: the slot must reference an existing library exercise.
+    // The client sends the chosen library exercise id in the body. We never
+    // create or rename library rows from here (that happens in the Exercise
+    // Library screen).
+    const libraryExerciseId: unknown = body.exerciseId;
 
-    // Check if an exercise with this name already exists for this trainer
-    const { data: existingExercise } = await supabase
+    if (
+      typeof libraryExerciseId !== "string" ||
+      libraryExerciseId.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Debes seleccionar un ejercicio de tu biblioteca",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate ownership + category match against this session's type.
+    const { data: libraryExercise, error: libraryError } = await supabase
       .from("exercises")
-      .select("id")
-      .eq("name", name)
+      .select("id, category")
+      .eq("id", libraryExerciseId)
       .eq("trainer_id", session.trainer_id)
       .maybeSingle();
 
-    if (existingExercise) {
-      exerciseId = existingExercise.id;
-      console.log("[Exercises API] Using existing exercise:", exerciseId);
-
-      // If a videoUrl was provided, update the library exercise so the
-      // video is available everywhere this exercise is referenced.
-      if (videoUrl) {
-        await supabase
-          .from("exercises")
-          .update({ video_url: videoUrl })
-          .eq("id", exerciseId);
-      }
-    } else {
-      // Determine exercise category based on session type
-      const exerciseCategory =
-        sessionData.session_type === "cardio" ? "cardio" : "strength";
-
-      // Create a new exercise in the library
-      const { data: newExercise, error: exerciseError } = await supabase
-        .from("exercises")
-        .insert({
-          tenant_host: sessionData.tenant_host,
-          trainer_id: session.trainer_id,
-          name,
-          category: exerciseCategory,
-          video_url: videoUrl || null,
-          is_public: false,
-        })
-        .select()
-        .single();
-
-      if (exerciseError || !newExercise) {
-        console.error(
-          "[Exercises API] Error creating exercise:",
-          exerciseError
-        );
-
-        return NextResponse.json(
-          { success: false, error: "Error al crear ejercicio" },
-          { status: 500 }
-        );
-      }
-
-      exerciseId = newExercise.id;
-      console.log("[Exercises API] Created new exercise:", exerciseId);
+    if (libraryError || !libraryExercise) {
+      return NextResponse.json(
+        { success: false, error: "Ejercicio de biblioteca no encontrado" },
+        { status: 404 }
+      );
     }
+
+    const expectedCategory =
+      sessionData.session_type === "cardio" ? "cardio" : "strength";
+
+    if (libraryExercise.category !== expectedCategory) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `El ejercicio seleccionado no es de tipo ${expectedCategory}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const exerciseId: string = libraryExercise.id;
 
     // Get the current max exercise_order for this session
     const { data: existingExercises } = await supabase
@@ -241,9 +230,9 @@ export async function PUT(
     }
 
     const { searchParams } = new URL(request.url);
-    const exerciseId = searchParams.get("exerciseId");
+    const sessionExerciseRowId = searchParams.get("exerciseId"); // session_exercises.id
 
-    if (!exerciseId) {
+    if (!sessionExerciseRowId) {
       return NextResponse.json(
         { success: false, error: "Exercise ID requerido" },
         { status: 400 }
@@ -252,13 +241,11 @@ export async function PUT(
 
     const body = await request.json();
     const {
-      name,
       sets,
       reps,
       tempo,
       rest,
       trainingSystem,
-      videoUrl,
       // Cardio-specific fields
       duration,
       distance,
@@ -269,13 +256,17 @@ export async function PUT(
       notes,
     } = body;
 
-    console.log("[Exercises API] Updating exercise:", exerciseId, body);
+    console.log(
+      "[Exercises API] Updating exercise:",
+      sessionExerciseRowId,
+      body
+    );
 
     // Get the session_exercise to find the exercise_id and session info
     const { data: sessionExercise, error: seError } = await supabase
       .from("session_exercises")
       .select("exercise_id, tenant_host, session_id, sessions(session_type)")
-      .eq("id", exerciseId)
+      .eq("id", sessionExerciseRowId)
       .single();
 
     if (seError || !sessionExercise) {
@@ -287,19 +278,45 @@ export async function PUT(
       );
     }
 
-    // Update the exercise in the library
-    const { error: exerciseError } = await supabase
-      .from("exercises")
-      .update({
-        name,
-        video_url: videoUrl || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sessionExercise.exercise_id)
-      .eq("trainer_id", session.trainer_id);
+    // Library-only swap: if the body names a (different) library exercise,
+    // repoint the slot's exercise_id to it. We never rename/edit the library
+    // row from here. Existing logs keep their old exercise_id (history split,
+    // surfaced to the trainer in the UI warning).
+    const libraryExerciseId: unknown = body.exerciseId;
+    let nextExerciseId: string | undefined;
 
-    if (exerciseError) {
-      console.error("[Exercises API] Error updating exercise:", exerciseError);
+    if (typeof libraryExerciseId === "string" && libraryExerciseId.length > 0) {
+      if (libraryExerciseId !== sessionExercise.exercise_id) {
+        const sessionType = (sessionExercise as any).sessions?.session_type;
+        const expectedCategory =
+          sessionType === "cardio" ? "cardio" : "strength";
+
+        const { data: libraryExercise, error: libraryError } = await supabase
+          .from("exercises")
+          .select("id, category")
+          .eq("id", libraryExerciseId)
+          .eq("trainer_id", session.trainer_id)
+          .maybeSingle();
+
+        if (libraryError || !libraryExercise) {
+          return NextResponse.json(
+            { success: false, error: "Ejercicio de biblioteca no encontrado" },
+            { status: 404 }
+          );
+        }
+
+        if (libraryExercise.category !== expectedCategory) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `El ejercicio seleccionado no es de tipo ${expectedCategory}`,
+            },
+            { status: 400 }
+          );
+        }
+
+        nextExerciseId = libraryExercise.id;
+      }
     }
 
     // Determine if this is a cardio exercise
@@ -311,6 +328,10 @@ export async function PUT(
       notes: notes || null,
       updated_at: new Date().toISOString(),
     };
+
+    if (nextExerciseId) {
+      updateData.exercise_id = nextExerciseId;
+    }
 
     if (isCardio) {
       // Cardio exercise fields
@@ -340,7 +361,7 @@ export async function PUT(
     const { data: updatedSessionExercise, error: updateError } = await supabase
       .from("session_exercises")
       .update(updateData)
-      .eq("id", exerciseId)
+      .eq("id", sessionExerciseRowId)
       .select()
       .single();
 
@@ -356,7 +377,7 @@ export async function PUT(
       );
     }
 
-    console.log("[Exercises API] Exercise updated:", exerciseId);
+    console.log("[Exercises API] Exercise updated:", sessionExerciseRowId);
 
     return NextResponse.json({
       success: true,
