@@ -247,22 +247,22 @@ export interface CreateSessionRequest {
 }
 
 export interface CreateExerciseRequest {
-  name: string;
+  /** Library exercise to reference (add) or swap to (edit). Required now. */
+  exerciseId: string;
   // Strength training fields
   sets?: string;
   reps?: string;
   tempo?: string;
   rest?: string;
   trainingSystem?: string;
-  videoUrl?: string;
   // Cardio-specific fields
-  duration?: string; // Duration in minutes
-  distance?: string; // Distance in km
-  intensity?: string; // Low, Moderate, High, Interval
-  minHeartRate?: string; // Minimum target heart rate
-  maxHeartRate?: string; // Maximum target heart rate
-  type?: string; // Cardio type: Running, Cycling, etc.
-  notes?: string; // Exercise notes
+  duration?: string;
+  distance?: string;
+  intensity?: string;
+  minHeartRate?: string;
+  maxHeartRate?: string;
+  type?: string;
+  notes?: string;
 }
 
 export interface ProgramsApiResponse {
