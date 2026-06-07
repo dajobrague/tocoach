@@ -146,7 +146,7 @@ export async function PUT(
 
     // Cardio activity type lives in metadata.cardio_type — merge without
     // clobbering other metadata keys.
-    if (body.cardio_type !== undefined) {
+    if (body.category === "cardio" && body.cardio_type !== undefined) {
       const { data: existingExercise } = await supabase
         .from("exercises")
         .select("metadata")
