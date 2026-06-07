@@ -4,10 +4,8 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
 
 import { formatPercent } from "./adherence";
-import { DayEditor } from "./day-editor";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -221,28 +219,13 @@ function PrescribedRow({
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900">{prescribed.name}</p>
-          {prescribed.perSet && prescribed.perSet.length > 0 ? (
-            <div className="text-[11px] text-gray-500 mt-0.5 tabular-nums space-y-0.5">
-              <p className="text-gray-600 font-medium">Prescrito por serie</p>
-              {prescribed.perSet.map((s) => (
-                <p key={s.setNumber}>
-                  <span className="text-gray-400">Set {s.setNumber}:</span>{" "}
-                  <span className="text-gray-700">
-                    {s.reps ?? "—"} reps
-                    {s.weightKg != null ? ` × ${s.weightKg} kg` : ""}
-                  </span>
-                </p>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-              Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
-              {prescribed.prescribedReps ?? "—"}
-              {prescribed.prescribedWeightKg != null
-                ? ` @ ${prescribed.prescribedWeightKg} kg`
-                : ""}
-            </p>
-          )}
+          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
+            Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
+            {prescribed.prescribedReps ?? "—"}
+            {prescribed.prescribedWeightKg != null
+              ? ` @ ${prescribed.prescribedWeightKg} kg`
+              : ""}
+          </p>
 
           {!isFuture && prescribedSets > 0 ? (
             <div className="mt-1.5">
@@ -406,28 +389,15 @@ interface SessionCardProps {
   clientId: string;
   date: string;
   entry: SessionEntry;
-  editable: boolean;
-  onCommitted: () => void;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
 
 function SessionCard({
-  clientId,
-  date,
+  clientId: _clientId,
+  date: _date,
   entry,
-  editable,
-  onCommitted,
   onPlayVideo,
 }: SessionCardProps) {
-  const [mode, setMode] = useState<"read" | "edit">("read");
-
-  // Reset to read when the date changes (trainer navigated to another day).
-  useEffect(() => {
-    setMode("read");
-  }, [date]);
-
-  const hasExistingOverride =
-    (entry.scheduledSession.override_exercises?.length ?? 0) > 0;
   const showFuture = entry.classification === "future";
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
@@ -444,38 +414,13 @@ function SessionCard({
     );
   const showLoggedView = hasLogs && !prescriptionMatch && !showFuture;
 
-  if (mode === "edit") {
-    return (
-      <DayEditor
-        key={`${date}-${entry.scheduledSession.id}`}
-        clientId={clientId}
-        hasExistingOverride={hasExistingOverride}
-        initialPrescribed={entry.prescribed}
-        initialSessionId={entry.scheduledSession.session?.id ?? null}
-        scheduledDate={date}
-        onClose={() => setMode("read")}
-        onCommitted={onCommitted}
-      />
-    );
-  }
-
   return (
     <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
       <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-gray-900">
             {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
           </p>
-          <button
-            aria-label={`Editar sesión ${entry.scheduledSession.session?.name ?? date}`}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            disabled={!editable}
-            title={editable ? "Editar día" : "Día con registros — solo lectura"}
-            type="button"
-            onClick={() => setMode("edit")}
-          >
-            <Icon icon="solar:pen-linear" width={16} />
-          </button>
         </div>
         {entry.scheduledSession.originally_prescribed_session ? (
           <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
@@ -585,10 +530,6 @@ interface Props {
   clientId: string;
   day: DayMetrics;
   orphanLogs: ExerciseLog[];
-  /** True when editor entry is allowed (today/future or past with no logs). */
-  editable: boolean;
-  /** Called after a successful save / reset so MetricsSection can refetch. */
-  onCommitted: () => void;
   onPlayVideo?: ((url: string, name: string) => void) | undefined;
 }
 
@@ -596,8 +537,6 @@ export function DayDetail({
   clientId,
   day,
   orphanLogs: _orphanLogs,
-  editable,
-  onCommitted,
   onPlayVideo,
 }: Props) {
   // Rest day: no sessions in either direction.
@@ -637,9 +576,7 @@ export function DayDetail({
           key={entry.scheduledSession.id}
           clientId={clientId}
           date={day.date}
-          editable={editable}
           entry={entry}
-          onCommitted={onCommitted}
           onPlayVideo={onPlayVideo}
         />
       ))}

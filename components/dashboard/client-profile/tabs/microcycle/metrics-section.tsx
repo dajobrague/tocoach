@@ -47,10 +47,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     getLocalYmd(new Date())
   );
-  const { data, loading, error, refetch, invalidate } = useWeekMetrics(
-    clientId,
-    weekStart
-  );
+  const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
 
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
   const openVideo = useCallback(
@@ -99,20 +96,6 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     () => data?.days.find((d) => d.date === selectedDate) ?? null,
     [data, selectedDate]
   );
-
-  // Recalculado cada render para que el flag `editable` no quede stale
-  // cuando la pestaña permanece abierta cruzando medianoche. El costo es
-  // negligible (un format de Date local). Si llega a ser caliente, usar un
-  // interval que invalide a las 00:00 local.
-  const todayYmd = getLocalYmd(new Date());
-  const editable =
-    !!selectedDay &&
-    (selectedDay.date >= todayYmd ||
-      selectedDay.sessions.every((s) => s.logs.length === 0));
-
-  const handleCommitted = useCallback(() => {
-    invalidate(getLocalYmd(weekStart));
-  }, [invalidate, weekStart]);
 
   // "No prescription anywhere this week" is the trigger for the empty-state
   // banner. We don't try to detect a missing client_program globally — if the
@@ -167,9 +150,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
             <DayDetail
               clientId={clientId}
               day={selectedDay}
-              editable={editable}
               orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
-              onCommitted={handleCommitted}
               onPlayVideo={openVideo}
             />
           ) : null}

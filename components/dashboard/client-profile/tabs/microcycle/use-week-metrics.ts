@@ -37,37 +37,6 @@ function addDays(date: Date, n: number): Date {
 }
 
 function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
-  // Override wins when present.
-  if (row.override_exercises && row.override_exercises.length > 0) {
-    return [...row.override_exercises]
-      .sort((a, b) => a.exercise_order - b.exercise_order)
-      .map((oe) => {
-        // Paridad con el endpoint cliente (/api/client/scheduled-sessions/[date]):
-        // un per-set con reps/weight NULL hereda los valores uniform del
-        // padre. Antes el trainer-side mostraba `—` mientras el cliente
-        // veía valores — las dos vistas divergían.
-        const perSet = (oe.prescribed_sets ?? [])
-          .slice()
-          .sort((a, b) => a.set_number - b.set_number)
-          .map((s) => ({
-            setNumber: s.set_number,
-            reps: s.reps ?? oe.reps,
-            weightKg: s.weight_kg ?? oe.weight_kg,
-          }));
-
-        return {
-          exerciseId: oe.exercise.id,
-          name: oe.exercise.name,
-          category: oe.exercise.category,
-          // When perSet is present, prescribedSets reflects the count.
-          prescribedSets: perSet.length > 0 ? perSet.length : (oe.sets ?? 0),
-          prescribedReps: oe.reps,
-          prescribedWeightKg: oe.weight_kg,
-          perSet,
-        };
-      });
-  }
-
   if (!row.session) return [];
 
   return [...row.session.session_exercises]
@@ -79,7 +48,6 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
       prescribedSets: se.sets ?? 0,
       prescribedReps: se.reps,
       prescribedWeightKg: se.weight_kg,
-      perSet: [],
     }));
 }
 
@@ -122,14 +90,10 @@ function buildWeekMetrics(
     const isFuture = ymd > todayYmd;
 
     // recommendedSessionName: la fila de template (los IDs virtuales
-    // del template arrancan con "template:") o el pin trainer si lo hay.
-    // Si no hay nada, null = rest.
-    const trainerPinRow =
-      rows.find((r) => r.prescribed_by === "trainer") ?? null;
+    // del template arrancan con "template:"). Si no hay nada, null = rest.
     const templateVirtualRow =
       rows.find((r) => r.id.startsWith("template:")) ?? null;
-    const recommendedSessionName =
-      trainerPinRow?.session?.name ?? templateVirtualRow?.session?.name ?? null;
+    const recommendedSessionName = templateVirtualRow?.session?.name ?? null;
 
     // Build session entries from scheduled rows, matching logs.
     const claimedLogKeys = new Set<string>();
@@ -196,8 +160,6 @@ function buildWeekMetrics(
                 session_exercises: knownRow?.session?.session_exercises ?? [],
               }
             : null,
-          override_exercises: [],
-          prescribed_by: "client",
         },
         prescribed: [],
         logs: keyLogs,
