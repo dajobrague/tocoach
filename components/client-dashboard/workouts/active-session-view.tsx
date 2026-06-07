@@ -31,17 +31,8 @@ interface ExerciseLike {
   rest?: string;
   tempo?: string;
   trainingSystem?: string;
-  /** Uniform prescribed weight in kg. Set when the trainer overrides the day. */
+  /** Uniform prescribed weight in kg (from the session template). */
   weightKg?: number | null;
-  /**
-   * Per-set prescription (Phase 3.5 override). When present it overrides the
-   * uniform sets/reps/weightKg combo: each entry is one prescribed set.
-   */
-  prescribedSets?: Array<{
-    setNumber: number;
-    reps: string | null;
-    weightKg: number | null;
-  }>;
   /**
    * Pesos del último log finalizado del cliente para este ejercicio
    * (indexados por set position). Se usan como fallback para prellenar
@@ -103,10 +94,11 @@ export function ActiveSessionView({
       // (session_id, exercise_id) pairs.
       //
       // When the ids match, resolved is authoritative because it carries
-      // any trainer overrides (sets/reps/weight, per-set values, cardio
-      // and coaching meta). When they don't, fall back to the program
-      // template for the picked session — that template is the truth
-      // for sessions the trainer didn't override for this date.
+      // the template-resolved session for the date (sets/reps/weight,
+      // cardio and coaching meta, last-used-weights pre-fill). When they
+      // don't match, fall back to the raw program template for the picked
+      // session — that template is the truth for sessions whose resolved
+      // slot differs from what the client tapped.
       if (
         resolved &&
         resolved.exercises.length > 0 &&
@@ -423,43 +415,28 @@ function formatExerciseStats(
     if (parts.length === 0 && exercise.cardioType)
       parts.push(exercise.cardioType);
   } else {
-    // Per-set override (Phase 3.5) wins. Render a compact summary like
-    // "8×60kg · 8×60kg · 6×65kg" so the client sees each set immediately.
-    if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
-      const summary = exercise.prescribedSets
-        .map((s) => {
-          const r = s.reps ?? "—";
-          const w = s.weightKg != null ? `×${s.weightKg}kg` : "";
+    const sets = exercise.sets;
+    const reps = exercise.reps?.toString().trim();
 
-          return `${r}${w}`;
-        })
-        .join(" · ");
+    // Convención per-set codificada en uniform reps: "12 | 12 | 10 | 8"
+    // → render legible "12 · 12 · 10 · 8" (sin el "4 ×" delante que
+    // duplica info, y mejor que mostrar la pipe cruda en la card).
+    if (reps && reps.includes("|")) {
+      const perSet = reps
+        .split("|")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
 
-      parts.push(summary);
-    } else {
-      const sets = exercise.sets;
-      const reps = exercise.reps?.toString().trim();
-
-      // Convención per-set codificada en uniform reps: "12 | 12 | 10 | 8"
-      // → render legible "12 · 12 · 10 · 8" (sin el "4 ×" delante que
-      // duplica info, y mejor que mostrar la pipe cruda en la card).
-      if (reps && reps.includes("|")) {
-        const perSet = reps
-          .split("|")
-          .map((p) => p.trim())
-          .filter((p) => p.length > 0);
-
-        if (perSet.length > 0) parts.push(perSet.join(" · "));
-      } else if (sets && reps) {
-        parts.push(`${sets} × ${reps}`);
-      } else if (sets) {
-        parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
-      } else if (reps) {
-        parts.push(`${reps} reps`);
-      }
-      if (exercise.weightKg != null) {
-        parts.push(`${exercise.weightKg} kg`);
-      }
+      if (perSet.length > 0) parts.push(perSet.join(" · "));
+    } else if (sets && reps) {
+      parts.push(`${sets} × ${reps}`);
+    } else if (sets) {
+      parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
+    } else if (reps) {
+      parts.push(`${reps} reps`);
+    }
+    if (exercise.weightKg != null) {
+      parts.push(`${exercise.weightKg} kg`);
     }
     const rest = exercise.rest?.toString().trim();
 
@@ -491,15 +468,6 @@ function findExercisesForSession(
 }
 
 function toExerciseLike(r: ResolvedExercise): ExerciseLike {
-  const perSet =
-    r.prescribed_sets && r.prescribed_sets.length > 0
-      ? r.prescribed_sets.map((s) => ({
-          setNumber: s.set_number,
-          reps: s.reps,
-          weightKg: s.weight_kg,
-        }))
-      : undefined;
-
   const out: ExerciseLike = {
     order: r.exercise_order,
     name: r.name,
@@ -530,7 +498,6 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.tempo) out.tempo = r.tempo;
   if (r.training_system) out.trainingSystem = r.training_system;
   if (r.rest_seconds != null) out.rest = `${Math.round(r.rest_seconds)}s`;
-  if (perSet) out.prescribedSets = perSet;
   if (r.last_used_weights && r.last_used_weights.length > 0) {
     out.lastUsedWeights = r.last_used_weights;
   }

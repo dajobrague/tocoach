@@ -16,14 +16,8 @@ export interface ExerciseShape {
   tempo?: string;
   rest?: string;
   trainingSystem?: string;
-  /** Uniform prescribed weight (Phase 3 override). */
+  /** Uniform prescribed weight (from the session template). */
   weightKg?: number | null;
-  /** Per-set prescription (Phase 3.5 override). Wins over uniform when present. */
-  prescribedSets?: Array<{
-    setNumber: number;
-    reps: string | null;
-    weightKg: number | null;
-  }>;
   /**
    * Pesos del último log finalizado del cliente para este ejercicio
    * (indexados por set position). El form los usa para prellenar inputs
@@ -136,12 +130,6 @@ export function buildBaseFormData(
       if (m) reps = m[0];
     }
     sets = Array.from({ length: count }, () => ({ reps, weight: "" }));
-  } else if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
-    // Per-set trainer override: prefill each row with its prescribed values.
-    sets = exercise.prescribedSets.map((s) => ({
-      reps: s.reps != null ? String(s.reps) : "",
-      weight: s.weightKg != null ? String(s.weightKg) : "",
-    }));
   } else {
     // Uniform prescription: build N empty rows, prefilled with the trainer's
     // uniform reps/weight when present (Phase 3 override). Cuando reps lleva

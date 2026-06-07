@@ -4,12 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
-export interface ResolvedSet {
-  set_number: number;
-  reps: string | null;
-  weight_kg: number | null;
-}
-
 export interface ResolvedExercise {
   exercise_id: string;
   name: string;
@@ -32,7 +26,6 @@ export interface ResolvedExercise {
   /** Strength coaching meta (tempo, sistema de entrenamiento). */
   tempo: string | null;
   training_system: string | null;
-  prescribed_sets: ResolvedSet[];
   /**
    * Pesos del último log finalizado del mismo ejercicio (indexados por
    * posición de set, 0..N-1). El form de log usa estos valores para
@@ -44,7 +37,7 @@ export interface ResolvedExercise {
 
 export interface ResolvedDay {
   date: string;
-  source: "override" | "session" | "template" | "rest";
+  source: "session" | "template" | "rest";
   session: { id: string; name: string } | null;
   exercises: ResolvedExercise[];
   /**
@@ -83,9 +76,9 @@ async function fetchResolvedDay(date: string): Promise<ResolvedDay> {
 
 /**
  * Fetches the resolved prescription for a date from
- * GET /api/client/scheduled-sessions/[date]. Used to surface trainer
- * overrides (sets, reps, weight, per-set values) to the active session
- * view without disturbing the template-cache flow when no override exists.
+ * GET /api/client/scheduled-sessions/[date]. Used to surface the
+ * template-resolved session (sets, reps, weight, coaching meta) to the
+ * active session view for the date.
  *
  * Backed por React Query con cache compartido por `date`. Antes el hook
  * usaba useState/useEffect aislado por instancia, así que workouts-content
