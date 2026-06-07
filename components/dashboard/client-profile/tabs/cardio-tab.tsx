@@ -526,12 +526,11 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Auto-fill form with exercise data
-      // For cardio exercises, default_reps might be duration, default_tempo might be type, etc.
+      // Prefill identity + activity type; per-session metrics are entered manually.
       setExerciseForm({
         name: exercise.name,
         type: exercise.metadata?.cardio_type || exercise.category || "",
-        duration: exercise.default_reps || "", // Could repurpose for duration
+        duration: "",
         distance: "",
         intensity: exercise.metadata?.intensity || "",
         minHeartRate: "",

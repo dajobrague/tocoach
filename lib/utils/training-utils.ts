@@ -26,13 +26,10 @@ function resolveStrengthCoachingFields(
 
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-  const tempo = str(meta.tempo) || str(se.exercise?.default_tempo) || "";
+  const tempo = str(meta.tempo) || "";
 
   const trainingSystem =
-    str(meta.training_system) ||
-    str(meta.trainingSystem) ||
-    str(se.exercise?.default_training_system) ||
-    "";
+    str(meta.training_system) || str(meta.trainingSystem) || "";
 
   let rest = str(meta.rest_description) || str(meta.restDescription) || "";
 
@@ -41,14 +38,6 @@ function resolveStrengthCoachingFields(
 
     if (typeof rs === "number" && rs > 0) {
       rest = formatRestTime(rs);
-    }
-  }
-
-  if (!rest) {
-    const def = se.exercise?.default_rest_seconds;
-
-    if (typeof def === "number" && def > 0) {
-      rest = formatRestTime(def);
     }
   }
 

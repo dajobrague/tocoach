@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
-import { formatRestTime, getCategoryLabel } from "@/lib/utils/exercise-utils";
+import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 const PAGE_SIZE = 50;
 
@@ -435,60 +435,18 @@ export default function ExerciseLibraryContent() {
                     </p>
                   )}
 
-                  {/* Default Parameters */}
-                  {(exercise.default_sets ||
-                    exercise.default_reps ||
-                    exercise.default_tempo ||
-                    exercise.default_rest_seconds ||
-                    exercise.default_training_system) && (
-                    <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                        Valores por Defecto
-                      </p>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {exercise.default_sets && (
-                          <div>
-                            <span className="text-gray-500">Series: </span>
-                            <span className="font-semibold text-gray-900">
-                              {exercise.default_sets}
-                            </span>
-                          </div>
-                        )}
-                        {exercise.default_reps && (
-                          <div>
-                            <span className="text-gray-500">Reps: </span>
-                            <span className="font-semibold text-gray-900">
-                              {exercise.default_reps}
-                            </span>
-                          </div>
-                        )}
-                        {exercise.default_tempo && (
-                          <div className="col-span-2">
-                            <span className="text-gray-500">Tempo: </span>
-                            <span className="font-semibold text-gray-900">
-                              {exercise.default_tempo}
-                            </span>
-                          </div>
-                        )}
-                        {exercise.default_rest_seconds && (
-                          <div>
-                            <span className="text-gray-500">Descanso: </span>
-                            <span className="font-semibold text-gray-900">
-                              {formatRestTime(exercise.default_rest_seconds)}
-                            </span>
-                          </div>
-                        )}
-                        {exercise.default_training_system && (
-                          <div className="col-span-2">
-                            <span className="text-gray-500">Sistema: </span>
-                            <span className="font-semibold text-gray-900">
-                              {exercise.default_training_system}
-                            </span>
-                          </div>
-                        )}
+                  {/* Cardio activity type */}
+                  {exercise.category === "cardio" &&
+                    exercise.metadata?.cardio_type && (
+                      <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                        <p className="text-xs">
+                          <span className="text-gray-500">Tipo: </span>
+                          <span className="font-semibold text-gray-900">
+                            {exercise.metadata.cardio_type}
+                          </span>
+                        </p>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Muscle Groups & Equipment */}
                   <div className="space-y-2 mb-4">
@@ -661,16 +619,12 @@ export default function ExerciseLibraryContent() {
                       </td>
                       <td className="px-6 py-4">
                         {exercise.category === "strength" ? (
-                          <div className="text-sm text-gray-600">
-                            {exercise.default_sets && exercise.default_reps
-                              ? `${exercise.default_sets} × ${exercise.default_reps}`
-                              : "Sin parámetros"}
-                          </div>
+                          <div className="text-sm text-gray-600">—</div>
                         ) : (
                           <div className="text-sm text-gray-600">
-                            {exercise.default_reps
-                              ? `${exercise.default_reps} min`
-                              : "Sin duración"}
+                            {exercise.metadata?.cardio_type
+                              ? exercise.metadata.cardio_type
+                              : "Cardio"}
                           </div>
                         )}
                       </td>
@@ -919,131 +873,20 @@ export default function ExerciseLibraryContent() {
                   </div>
                 )}
 
-                {/* Default Parameters */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                    Parámetros por Defecto
-                  </h4>
-                  {viewingExercise.default_sets ||
-                  viewingExercise.default_reps ||
-                  viewingExercise.default_tempo ||
-                  viewingExercise.default_rest_seconds ||
-                  viewingExercise.default_training_system ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {viewingExercise.category === "strength" ? (
-                        <>
-                          {viewingExercise.default_sets && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Series
-                              </p>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {viewingExercise.default_sets}
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_reps && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Repeticiones
-                              </p>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {viewingExercise.default_reps}
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_tempo && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Tempo
-                              </p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {viewingExercise.default_tempo}
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_rest_seconds && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Descanso
-                              </p>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {formatRestTime(
-                                  viewingExercise.default_rest_seconds
-                                )}
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_training_system && (
-                            <div className="bg-gray-50 p-3 rounded-lg col-span-2">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Sistema de Entrenamiento
-                              </p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {viewingExercise.default_training_system}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {viewingExercise.default_reps && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Duración
-                              </p>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {viewingExercise.default_reps} min
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_sets && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Distancia
-                              </p>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {viewingExercise.default_sets} km
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_tempo && (
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Intensidad
-                              </p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {viewingExercise.default_tempo}
-                              </p>
-                            </div>
-                          )}
-                          {viewingExercise.default_training_system && (
-                            <div className="bg-gray-50 p-3 rounded-lg col-span-2">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Tipo de Actividad
-                              </p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {viewingExercise.default_training_system}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <Icon
-                        className="text-gray-300 mx-auto mb-2"
-                        icon="solar:settings-linear"
-                        width={48}
-                      />
-                      <p className="text-sm text-gray-500">
-                        No se han definido parámetros por defecto para este
-                        ejercicio
-                      </p>
+                {/* Cardio Activity Type */}
+                {viewingExercise.category === "cardio" &&
+                  viewingExercise.metadata?.cardio_type && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                        Tipo de Actividad
+                      </h4>
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {viewingExercise.metadata.cardio_type}
+                        </p>
+                      </div>
                     </div>
                   )}
-                </div>
 
                 {/* Muscle Groups & Equipment */}
                 {viewingExercise.category === "strength" && (

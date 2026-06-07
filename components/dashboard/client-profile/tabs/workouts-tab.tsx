@@ -545,16 +545,14 @@ export default function WorkoutsTab({
       librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Auto-fill form with exercise defaults
+      // Prefill only identity fields; the trainer enters programming per-session.
       setExerciseForm({
         name: exercise.name,
-        sets: exercise.default_sets?.toString() || "",
-        reps: exercise.default_reps || "",
-        tempo: exercise.default_tempo || "",
-        rest: exercise.default_rest_seconds
-          ? `${exercise.default_rest_seconds}s`
-          : "",
-        trainingSystem: exercise.default_training_system || "",
+        sets: "",
+        reps: "",
+        tempo: "",
+        rest: "",
+        trainingSystem: "",
         videoUrl: exercise.video_url || "",
         exerciseId: exercise.id,
         notes: "",
@@ -1712,12 +1710,6 @@ export default function WorkoutsTab({
                         <span className="text-sm font-semibold">
                           {exercise.name}
                         </span>
-                        {exercise.default_sets && exercise.default_reps && (
-                          <span className="text-xs text-gray-500">
-                            {exercise.default_sets} series ×{" "}
-                            {exercise.default_reps} reps
-                          </span>
-                        )}
                       </div>
                     </AutocompleteItem>
                   )}
@@ -2010,12 +2002,6 @@ export default function WorkoutsTab({
                         <span className="text-sm font-semibold">
                           {exercise.name}
                         </span>
-                        {exercise.default_sets && exercise.default_reps && (
-                          <span className="text-xs text-gray-500">
-                            {exercise.default_sets} series ×{" "}
-                            {exercise.default_reps} reps
-                          </span>
-                        )}
                       </div>
                     </AutocompleteItem>
                   )}

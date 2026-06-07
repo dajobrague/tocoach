@@ -297,11 +297,6 @@ export default function TemplateDetailModal({
       video_url?: string;
       image_url?: string;
       description?: string;
-      default_sets?: number;
-      default_reps?: string;
-      default_rest_seconds?: number;
-      default_tempo?: string;
-      default_training_system?: string;
     }>
   >([]);
   const [exerciseCategoryFilter, setExerciseCategoryFilter] =
@@ -393,9 +388,9 @@ export default function TemplateDetailModal({
       setNewExerciseForm({
         exercise_id: createdExercise.id,
         name: createdExercise.name,
-        sets: createdExercise.default_sets?.toString() || "",
-        reps: createdExercise.default_reps || "",
-        rest_seconds: createdExercise.default_rest_seconds?.toString() || "",
+        sets: "",
+        reps: "",
+        rest_seconds: "",
         notes: createdExercise.description || "",
       });
     }
@@ -2484,15 +2479,9 @@ export default function TemplateDetailModal({
                                                         exercise_id:
                                                           selectedExercise.id,
                                                         name: selectedExercise.name,
-                                                        sets:
-                                                          selectedExercise.default_sets?.toString() ||
-                                                          "",
-                                                        reps:
-                                                          selectedExercise.default_reps ||
-                                                          "",
-                                                        rest_seconds:
-                                                          selectedExercise.default_rest_seconds?.toString() ||
-                                                          "",
+                                                        sets: "",
+                                                        reps: "",
+                                                        rest_seconds: "",
                                                         notes:
                                                           selectedExercise.description ||
                                                           "",
