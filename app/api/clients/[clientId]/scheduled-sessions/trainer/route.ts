@@ -36,28 +36,6 @@ interface SessionWithExercises {
   session_exercises: SessionExercise[];
 }
 
-interface PrescribedSet {
-  id: string;
-  set_number: number;
-  reps: string | null;
-  weight_kg: number | null;
-  notes: string | null;
-}
-
-interface OverrideExercise {
-  id: string;
-  exercise_order: number;
-  sets: number | null;
-  reps: string | null;
-  weight_kg: number | null;
-  duration_seconds: number | null;
-  distance_meters: number | null;
-  rest_seconds: number | null;
-  notes: string | null;
-  exercise: { id: string; name: string; category: string };
-  prescribed_sets: PrescribedSet[];
-}
-
 interface ScheduledSessionResponse {
   id: string;
   scheduled_date: string;
@@ -71,7 +49,6 @@ interface ScheduledSessionResponse {
    * alineados con la sesión efectivamente ejecutada.
    */
   session: SessionWithExercises | null;
-  override_exercises: OverrideExercise[];
   /**
    * Sesión que el microciclo originalmente recomendaba para esta fecha,
    * presente solo cuando el cliente divergió. La UI la usa para mostrar un
@@ -80,12 +57,6 @@ interface ScheduledSessionResponse {
    * `null` cuando no hay divergencia.
    */
   originally_prescribed_session: SessionWithExercises | null;
-  /**
-   * Marca quién creó la fila `scheduled_sessions` que respalda esta fecha.
-   * 'trainer' = override explícito o template vacío; 'client' = el cliente
-   * loggeó y no había override previo. La UI lo usa para tagging.
-   */
-  prescribed_by: "trainer" | "client" | null;
 }
 
 function diffDays(fromYmd: string, toYmd: string): number {
@@ -149,32 +120,18 @@ export async function GET(
     }
 
     // 1. Real scheduled_sessions rows for the range (status, completion_date,
-    //    prescribed_by, y la sesión vinculada con sus ejercicios prescritos).
-    //
-    // Traemos TODAS las filas (trainer y client), porque el merge en (3)
-    // necesita distinguir tres escenarios:
-    //   - prescribed_by='trainer': la prescripción es del trainer. Tal cual.
-    //   - prescribed_by='client' + session matches template: el cliente entrenó
-    //     lo recomendado. Mostrar status/completion_date como completado.
-    //   - prescribed_by='client' + session diverge del template: split view —
-    //     prescripción del template + badge "cliente entrenó X".
+    //    y la sesión vinculada con sus ejercicios). Cada fila es actividad
+    //    del cliente; el merge en (3) la compara contra el template para
+    //    detectar divergencia (entrenó algo distinto a lo recomendado).
     let realQuery = supabase
       .from("scheduled_sessions")
       .select(
-        `id, scheduled_date, status, completion_date, prescribed_by,
+        `id, scheduled_date, status, completion_date,
          session:sessions(
            id, name,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              exercise:exercises(id, name, category)
-           )
-         ),
-         override_exercises:scheduled_session_exercises(
-           id, exercise_order, sets, reps, weight_kg,
-           duration_seconds, distance_meters, rest_seconds, notes,
-           exercise:exercises(id, name, category),
-           prescribed_sets:scheduled_session_exercise_sets(
-             id, set_number, reps, weight_kg, notes
            )
          )`
       )
@@ -232,16 +189,15 @@ export async function GET(
     }
 
     // 3. Merge. Política por fecha:
-    //    - Cada fila real (real, real, ...) se incluye tal cual; las
-    //      prescribed_by='client' aparecen como actividad off-plan
-    //      cuando su session_id diverge del template, o como sesión
-    //      recomendada cuando coincide.
-    //    - Si para la fecha existe slot de template y NO hay ninguna
-    //      fila real con ese mismo session_id, agregamos la fila virtual
-    //      del template (la prescripción pendiente).
-    //    - Cuando hay divergencia entre fila real (cliente) y template,
-    //      el real lleva `originally_prescribed_session` con la sesión
-    //      del template para que la UI muestre el chip "Recomendado: X".
+    //    - La sesión recomendada para la fecha es la del slot del
+    //      template (el microciclo). No hay pin del trainer.
+    //    - Cada fila real se incluye tal cual; cuando su session_id
+    //      diverge del template, lleva `originally_prescribed_session`
+    //      con la sesión del template para que la UI muestre el chip
+    //      "Recomendado: X".
+    //    - Si el template recomienda una sesión y ninguna fila real la
+    //      cubre, agregamos la fila virtual del template (la prescripción
+    //      pendiente, sin actividad).
 
     const merged: ScheduledSessionResponse[] = [];
     const allDates = new Set<string>();
@@ -255,27 +211,19 @@ export async function GET(
         (r) => r.scheduled_date === date
       );
 
-      // Determinar la "sesión recomendada" para la fecha: el pin del
-      // trainer (real con prescribed_by='trainer') si existe; si no, el
-      // session_id del template.
-      const trainerPin =
-        realsForDate.find((r) => r.prescribed_by === "trainer") ?? null;
-      const recommendedSessionId = trainerPin
-        ? (trainerPin.session?.id ?? null)
-        : (template?.session?.id ?? null);
+      // La "sesión recomendada" para la fecha es la del template.
+      const recommendedSessionId = template?.session?.id ?? null;
 
       // Emitir cada fila real con anotación de divergencia.
       for (const row of realsForDate) {
         if (
-          row.prescribed_by === "client" &&
           recommendedSessionId != null &&
           row.session?.id !== recommendedSessionId
         ) {
           // Cliente entrenó algo distinto a lo recomendado: anotar la
-          // sesión recomendada como "originalmente prescrito" para que
+          // sesión del template como "originalmente prescrito" para que
           // la UI le ponga el chip.
-          row.originally_prescribed_session =
-            trainerPin?.session ?? template?.session ?? null;
+          row.originally_prescribed_session = template?.session ?? null;
         }
         merged.push(row);
       }
@@ -288,11 +236,7 @@ export async function GET(
         recommendedSessionId != null &&
         !realsForDate.some((r) => r.session?.id === recommendedSessionId)
       ) {
-        // Si hay trainerPin con un session_id distinto al template, no
-        // emitimos el template — el pin ya manda. Esto solo dispara
-        // cuando no hay pin y el template recomienda una sesión que el
-        // cliente no ha tocado todavía.
-        if (!trainerPin) merged.push(template);
+        merged.push(template);
       }
     }
 
@@ -301,10 +245,10 @@ export async function GET(
         return a.scheduled_date.localeCompare(b.scheduled_date);
       }
 
-      // Estable dentro del día: trainer pin/prescripción primero,
-      // actividad del cliente después.
-      const aRank = a.prescribed_by === "trainer" ? 0 : 1;
-      const bRank = b.prescribed_by === "trainer" ? 0 : 1;
+      // Estable dentro del día: la fila virtual del template (prescripción
+      // pendiente) primero, actividad real del cliente después.
+      const aRank = a.id.startsWith("template:") ? 0 : 1;
+      const bRank = b.id.startsWith("template:") ? 0 : 1;
 
       return aRank - bRank;
     });
@@ -414,9 +358,7 @@ async function materializeTemplate(
         status: "scheduled",
         completion_date: null,
         session: sessionDetail,
-        override_exercises: [],
         originally_prescribed_session: null,
-        prescribed_by: null,
       });
     }
   }

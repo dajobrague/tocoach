@@ -1,8 +1,8 @@
 // GET /api/client/scheduled-sessions/[date]
-// Returns the resolved prescription for one date applying the override
-// precedence: scheduled_session_exercises → session.session_exercises →
-// microcycle template. Used by the client app when opening a workout for
-// a specific date.
+// Returns the resolved prescription for one date: the row's own session
+// (template) → microcycle template → rest. Used by the client app when
+// opening a workout for a specific date. Divergence tracking and
+// last-used-weight prefill are preserved.
 
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
@@ -15,12 +15,6 @@ import {
 } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
-
-interface ResolvedSet {
-  set_number: number;
-  reps: string | null;
-  weight_kg: number | null;
-}
 
 interface ResolvedExercise {
   exercise_id: string;
@@ -51,8 +45,6 @@ interface ResolvedExercise {
   /** Strength coaching meta (tempo, sistema de entrenamiento). */
   tempo: string | null;
   training_system: string | null;
-  /** Per-set values when the override has them (Phase 3.5). Empty = uniform. */
-  prescribed_sets: ResolvedSet[];
   /**
    * Pesos del último log finalizado del mismo cliente+ejercicio, indexados
    * por posición de set (0..N-1). El form usa estos valores para prellenar
@@ -65,22 +57,17 @@ interface ResolvedExercise {
 
 interface ResolvedDay {
   date: string;
-  source: "override" | "session" | "template" | "rest";
+  source: "session" | "template" | "rest";
   session: { id: string; name: string } | null;
   exercises: ResolvedExercise[];
   /**
-   * Sesión que el trainer recomendó para este día (microciclo o
-   * override por-fecha del trainer). Independiente de `session`, que
-   * refleja el estado actual del día (puede haber sido sobrescrito
-   * por una elección del cliente al loguear).
+   * Sesión que el microciclo recomienda para este día. Independiente de
+   * `session`, que refleja el estado actual del día (puede haber sido
+   * sobrescrito por una elección del cliente al loguear).
    *
    * Reglas:
-   *   - Si scheduled_sessions existe con prescribed_by='trainer' y
-   *     session_id no nulo → usar ese session_id (el trainer hizo
-   *     un override explícito que tiene prioridad sobre el template).
-   *   - Si no, calcular desde el slot del microciclo para esa fecha.
-   *   - null = el trainer no recomendó nada (rest day o sin
-   *     microciclo/programa).
+   *   - Se calcula desde el slot del microciclo para esa fecha.
+   *   - null = no hay recomendación (rest day o sin microciclo/programa).
    */
   trainer_recommended_session_id: string | null;
 }
@@ -126,28 +113,17 @@ export async function GET(
 
     // 1. All real scheduled_sessions rows for this date. After
     //    migration 113 there can be multiple — one per session the
-    //    client (or trainer-override) touched. We need:
-    //    - which one is the prescription anchor (trainer-pinned row if
-    //      any, else the microcycle slot),
-    //    - the row's own status/source/exercise overrides if that
-    //      session has a matching row.
+    //    client touched. Each row carries its own session (template
+    //    data) used to render what the client actually trained.
     const { data: ssRowsRaw } = await supabase
       .from("scheduled_sessions")
       .select(
-        `id, prescribed_by, session_id,
+        `id, session_id,
          session:sessions(id, name,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
              exercise:exercises(id, name, category, image_url, video_url)
-           )
-         ),
-         override_exercises:scheduled_session_exercises(
-           id, exercise_order, sets, reps, weight_kg,
-           duration_seconds, distance_meters, rest_seconds, notes,
-           exercise:exercises(id, name, category, image_url, video_url),
-           prescribed_sets:scheduled_session_exercise_sets(
-             id, set_number, reps, weight_kg, notes
            )
          )`
       )
@@ -155,10 +131,6 @@ export async function GET(
       .eq("scheduled_date", date);
 
     const ssRows = (ssRowsRaw ?? []) as any[];
-    // El "pin del trainer" para esta fecha es la fila con
-    // prescribed_by='trainer'. La UI ya gates "un override por fecha".
-    const trainerPin =
-      ssRows.find((r) => r.prescribed_by === "trainer") ?? null;
 
     // Cache las queries de programas/microciclo: el cómputo de
     // trainer_recommended_session_id puede necesitarlo, y el fallback
@@ -180,67 +152,46 @@ export async function GET(
       return programsCache;
     };
 
-    // ── Compute trainer's recommendation for this date ────────────────
-    // Trainer pin > microcycle slot. Filas creadas por el cliente
-    // NUNCA participan en esta decisión (son actividad, no prescripción).
-    let trainerRecommendedSessionId: string | null = null;
-
-    if (trainerPin && typeof trainerPin.session_id === "string") {
-      trainerRecommendedSessionId = trainerPin.session_id;
-    } else {
-      const programs = await loadPrograms();
-      const slotMatch = await resolveMicrocycleSlot(
-        supabase,
-        programs,
-        date,
-        correlationId
-      );
-
-      trainerRecommendedSessionId = slotMatch?.sessionId ?? null;
-    }
+    // ── Compute the microcycle's recommendation for this date ─────────
+    // Siempre desde el slot del microciclo. Las filas reales son
+    // actividad del cliente, no prescripción.
+    const recPrograms = await loadPrograms();
+    const recSlotMatch = await resolveMicrocycleSlot(
+      supabase,
+      recPrograms,
+      date,
+      correlationId
+    );
+    const trainerRecommendedSessionId: string | null =
+      recSlotMatch?.sessionId ?? null;
 
     // ── Compute current state for the PRESCRIBED session ──────────────
-    // Antes leíamos cualquier fila que existiera; ahora distinguimos:
-    //   - Si hay pin del trainer: la prescripción se construye desde
-    //     ese row (sus override_exercises ganan; si no hay overrides,
-    //     usamos los session_exercises del session referenciado).
-    //   - Si no hay pin pero el microciclo apunta a una sesión para
-    //     este día: cargamos esa sesión y la mostramos como prescripción.
-    if (trainerPin) {
-      const overrides = (trainerPin.override_exercises ?? []) as any[];
+    // Si existe una fila real para esta fecha con su propia sesión,
+    // construimos el día desde los session_exercises de esa sesión
+    // (template data). Esto preserva el render de divergencia: el
+    // cliente ve lo que efectivamente entrenó.
+    const realRow = ssRows.find(
+      (r) =>
+        r.session &&
+        Array.isArray(r.session.session_exercises) &&
+        r.session.session_exercises.length > 0
+    );
 
-      if (overrides.length > 0) {
-        const day = makeResolvedDay(
-          date,
-          "override",
-          trainerPin.session as any,
-          overrides,
-          trainerRecommendedSessionId
-        );
+    if (realRow) {
+      const sessionRow = realRow.session as any;
+      const sessExercises = (sessionRow.session_exercises ?? []) as any[];
+      const day = makeResolvedDay(
+        date,
+        "session",
+        sessionRow,
+        sessExercises,
+        trainerRecommendedSessionId
+      );
 
-        return NextResponse.json({
-          success: true,
-          day: await enrichWithLastUsedWeights(supabase, clientId, day),
-        });
-      }
-
-      const sessionRow = trainerPin.session as any;
-      const sessExercises = (sessionRow?.session_exercises ?? []) as any[];
-
-      if (sessionRow && sessExercises.length > 0) {
-        const day = makeResolvedDay(
-          date,
-          "session",
-          sessionRow,
-          sessExercises,
-          trainerRecommendedSessionId
-        );
-
-        return NextResponse.json({
-          success: true,
-          day: await enrichWithLastUsedWeights(supabase, clientId, day),
-        });
-      }
+      return NextResponse.json({
+        success: true,
+        day: await enrichWithLastUsedWeights(supabase, clientId, day),
+      });
     }
 
     // 2. No real row — derive from microcycle template.
@@ -361,30 +312,12 @@ function makeResolvedDay(
       image_url: string | null;
       video_url: string | null;
     };
-    prescribed_sets?: Array<{
-      set_number: number;
-      reps: string | null;
-      weight_kg: number | null;
-    }> | null;
   }>,
   trainerRecommendedSessionId: string | null
 ): ResolvedDay {
   const exercises = [...raws]
     .sort((a, b) => a.exercise_order - b.exercise_order)
     .map((r) => {
-      // Per-set NULL fall-through. If a per-set row has reps/weight NULL,
-      // coalesce to the parent's uniform prescription so the documented
-      // precedence (per-set > uniform > template) is respected per field
-      // rather than per row.
-      const sets = (r.prescribed_sets ?? [])
-        .slice()
-        .sort((a, b) => a.set_number - b.set_number)
-        .map((s) => ({
-          set_number: s.set_number,
-          reps: s.reps ?? r.reps,
-          weight_kg: s.weight_kg ?? r.weight_kg,
-        }));
-
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
       const readStr = (k: string): string | null => {
         const v = meta[k];
@@ -417,7 +350,6 @@ function makeResolvedDay(
         heart_rate_max: readNum("heart_rate_max"),
         tempo: readStr("tempo"),
         training_system: readStr("training_system"),
-        prescribed_sets: sets,
         // Se completa después con enrichWithLastUsedWeights — la query
         // necesita el supabase client y el clientId, que viven en el GET
         // handler, así que makeResolvedDay deja el array vacío como

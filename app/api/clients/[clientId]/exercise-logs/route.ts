@@ -209,16 +209,14 @@ export async function POST(
 
     // Atomic upsert via RPC con advisory lock por (client_id, date).
     // Antes el patrón SELECT-then-INSERT acá creaba duplicados bajo
-    // concurrencia + cuando el trainer cambiaba session_id vía override
-    // (el SELECT filtraba por session_id viejo y no encontraba).
+    // concurrencia + cuando cambiaba el session_id (el SELECT filtraba
+    // por session_id viejo y no encontraba).
     // F4.5 migration 104, p_caller_role agregado en migration 109.
     //
-    // p_caller_role='client': si la fila no existe, scheduled_sessions
-    // se crea con prescribed_by='client', así el resolver sabe que esto
-    // es la elección del cliente (no recomendación del trainer) cuando
-    // calcula el badge "Recomendado". Si la fila ya existía
-    // (por override del trainer), el RPC no toca prescribed_by y la
-    // autoría del trainer se preserva.
+    // p_caller_role='client': toda fila de scheduled_sessions es ahora
+    // actividad del cliente (la prescripción del trainer por-fecha fue
+    // eliminada). La columna `prescribed_by` queda en la DB pero ya no
+    // se lee en el código: cada fila representa que el cliente entrenó.
     const { data: scheduledSessionId, error: upsertError } = await supabase.rpc(
       "upsert_scheduled_session",
       {
