@@ -278,23 +278,39 @@ export async function PUT(
       );
     }
 
+    const sessionType = (sessionExercise as any).sessions?.session_type as
+      | string
+      | undefined;
+
     // Library-only swap: if the body names a (different) library exercise,
     // repoint the slot's exercise_id to it. We never rename/edit the library
     // row from here. Existing logs keep their old exercise_id (history split,
     // surfaced to the trainer in the UI warning).
-    const libraryExerciseId: unknown = body.exerciseId;
+    const rawLibraryExerciseId: unknown = body.exerciseId;
     let nextExerciseId: string | undefined;
 
-    if (typeof libraryExerciseId === "string" && libraryExerciseId.length > 0) {
-      if (libraryExerciseId !== sessionExercise.exercise_id) {
-        const sessionType = (sessionExercise as any).sessions?.session_type;
+    if (rawLibraryExerciseId !== undefined && rawLibraryExerciseId !== null) {
+      if (
+        typeof rawLibraryExerciseId !== "string" ||
+        rawLibraryExerciseId.length === 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Debes seleccionar un ejercicio de tu biblioteca",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (rawLibraryExerciseId !== sessionExercise.exercise_id) {
         const expectedCategory =
           sessionType === "cardio" ? "cardio" : "strength";
 
         const { data: libraryExercise, error: libraryError } = await supabase
           .from("exercises")
           .select("id, category")
-          .eq("id", libraryExerciseId)
+          .eq("id", rawLibraryExerciseId)
           .eq("trainer_id", session.trainer_id)
           .maybeSingle();
 
@@ -320,8 +336,7 @@ export async function PUT(
     }
 
     // Determine if this is a cardio exercise
-    const isCardio =
-      (sessionExercise as any).sessions?.session_type === "cardio";
+    const isCardio = sessionType === "cardio";
 
     // Build update data based on exercise type
     const updateData: any = {
