@@ -160,17 +160,12 @@ export async function GET(
       );
     }
 
-    // Key real rows on (date, session_id). Multiple rows per date are
-    // now first-class — one per session the client/trainer touched.
-    const realByKey = new Map<string, ScheduledSessionResponse>();
     const realRowsTyped = (realRows ??
       []) as unknown as ScheduledSessionResponse[];
 
+    // Reset divergence annotation before the merge re-computes it per row.
     for (const row of realRowsTyped) {
       row.originally_prescribed_session = null;
-      const key = `${row.scheduled_date}|${row.session?.id ?? ""}`;
-
-      realByKey.set(key, row);
     }
 
     // 2. Materialize from the microcycle template — unchanged from

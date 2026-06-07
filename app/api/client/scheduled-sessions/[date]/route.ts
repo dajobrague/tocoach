@@ -34,9 +34,9 @@ interface ResolvedExercise {
   notes: string | null;
   /**
    * Cardio coaching meta (intensidad subjetiva, tipo cardio, zona FC).
-   * Antes el SELECT no incluía `metadata` y los overrides de cardio
-   * llegaban al cliente sin estos campos, así que isExerciseCardio()
-   * fallaba y la sesión se renderizaba en modo strength.
+   * El SELECT debe incluir `metadata` de los session_exercises de cardio
+   * para que estos campos lleguen al cliente; sin ellos isExerciseCardio()
+   * falla y la sesión se renderiza en modo strength.
    */
   intensity: string | null;
   cardio_type: string | null;
@@ -133,9 +133,8 @@ export async function GET(
     const ssRows = (ssRowsRaw ?? []) as any[];
 
     // Cache las queries de programas/microciclo: el cómputo de
-    // trainer_recommended_session_id puede necesitarlo, y el fallback
-    // template también. Cargamos a demanda para no pagar el costo si la
-    // ssRow ya satisface ambos lados.
+    // trainer_recommended_session_id las necesita. Cargamos a demanda
+    // (una sola vez) y reusamos el resultado del slot en el fallback.
     let programsCache: Awaited<
       ReturnType<typeof loadAllActiveOwnedPrograms>
     > | null = null;
@@ -170,6 +169,8 @@ export async function GET(
     // construimos el día desde los session_exercises de esa sesión
     // (template data). Esto preserva el render de divergencia: el
     // cliente ve lo que efectivamente entrenó.
+    // First scheduled_sessions row with exercises wins; additional
+    // same-date sessions are not rendered here.
     const realRow = ssRows.find(
       (r) =>
         r.session &&
@@ -194,14 +195,10 @@ export async function GET(
       });
     }
 
-    // 2. No real row — derive from microcycle template.
-    const programs = await loadPrograms();
-    const slotMatch = await resolveMicrocycleSlot(
-      supabase,
-      programs,
-      date,
-      correlationId
-    );
+    // 2. No real row — derive from microcycle template. Reuse the slot
+    //    already resolved above (same supabase/programs/date → identical
+    //    result) instead of re-querying.
+    const slotMatch = recSlotMatch;
 
     if (slotMatch) {
       const { data: sessionDetail } = await supabase
