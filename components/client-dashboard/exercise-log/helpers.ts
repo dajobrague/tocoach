@@ -131,8 +131,8 @@ export function buildBaseFormData(
     }
     sets = Array.from({ length: count }, () => ({ reps, weight: "" }));
   } else {
-    // Uniform prescription: build N empty rows, prefilled with the trainer's
-    // uniform reps/weight when present (Phase 3 override). Cuando reps lleva
+    // Uniform prescription: build N empty rows, prefilled with the uniform
+    // reps/weight from the session template when present. Cuando reps lleva
     // formato pipe-separated ("12 | 12 | 10 | 8") cada set toma su valor
     // individual; sin pipe, los N sets comparten el mismo reps.
     const count = exercise.sets || 1;
