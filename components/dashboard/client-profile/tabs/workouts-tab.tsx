@@ -211,6 +211,13 @@ export default function WorkoutsTab({
   });
   const [libraryExercises, setLibraryExercises] = useState<any[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  // Controlled input text for the library Autocomplete. We own the input
+  // value instead of letting React Aria auto-sync it from `selectedKey` —
+  // otherwise pre-selecting an exercise on edit makes the combobox sync its
+  // input to the item label, fire onInputChange, flip `items` away from the
+  // selected item, and loop ("Maximum update depth exceeded"). Controlling
+  // inputValue is the HeroUI/React-Aria controlled-combobox pattern.
+  const [libraryInputValue, setLibraryInputValue] = useState("");
   // Server-side search state. The initial fetch caps at 500 entries so the
   // Autocomplete can render an instant "browse" list, but trainers with
   // bigger libraries (Pablo Carboneras, Isaac Català, Raúl Herrera) were
@@ -524,6 +531,8 @@ export default function WorkoutsTab({
   const handleOpenAddExercise = async (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setIsAddExerciseModalOpen(true);
+    setLibraryInputValue("");
+    setLibrarySearchTerm("");
 
     await loadLibraryExercises();
   };
@@ -550,12 +559,16 @@ export default function WorkoutsTab({
         exerciseId: exercise.id,
         notes: "",
       });
+      // Keep the controlled input text in sync with the picked exercise.
+      setLibraryInputValue(exercise.name);
     }
   };
 
   const handleCloseAddExercise = () => {
     setIsAddExerciseModalOpen(false);
     setSelectedSessionId(null);
+    setLibraryInputValue("");
+    setLibrarySearchTerm("");
     setExerciseForm({
       name: "",
       sets: "",
@@ -980,6 +993,9 @@ export default function WorkoutsTab({
     setSelectedSessionId(sessionId);
     setSelectedProgramId(program.programId);
     setLibrarySearchTerm("");
+    // Show the current exercise's name in the controlled input; the
+    // Autocomplete renders the pre-selected entry without re-syncing.
+    setLibraryInputValue(exercise.name ?? "");
     setIsEditExerciseModalOpen(true);
 
     // Load the browse list so the pre-selected entry has an item to render.
@@ -993,6 +1009,7 @@ export default function WorkoutsTab({
     setSelectedProgramId(null);
     setEditOriginalExerciseId("");
     setLibrarySearchTerm("");
+    setLibraryInputValue("");
     setExerciseForm({
       name: "",
       sets: "",
@@ -1623,7 +1640,7 @@ export default function WorkoutsTab({
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
-                  Biblioteca de Ejercicios (Opcional)
+                  Biblioteca de Ejercicios
                 </h4>
                 <Autocomplete
                   classNames={{
@@ -1638,6 +1655,7 @@ export default function WorkoutsTab({
                   // and live server-search results (non-empty input). HeroUI
                   // skips its built-in client-side filter when `items` is
                   // controlled, so we own filtering via the API.
+                  inputValue={libraryInputValue}
                   isLoading={isLoadingLibrary || isSearchingLibrary}
                   items={
                     librarySearchTerm.trim().length > 0
@@ -1654,7 +1672,13 @@ export default function WorkoutsTab({
                       width={20}
                     />
                   }
-                  onInputChange={setLibrarySearchTerm}
+                  onInputChange={(value) => {
+                    // We own the input text (controlled). Only genuine user
+                    // typing reaches here now — never the selectedKey→label
+                    // auto-sync — so updating the search term can't loop.
+                    setLibraryInputValue(value);
+                    setLibrarySearchTerm(value);
+                  }}
                   onSelectionChange={(key) => {
                     if (key) {
                       handleSelectLibraryExercise(key as string);
@@ -1921,6 +1945,7 @@ export default function WorkoutsTab({
                   // and live server-search results (non-empty input). HeroUI
                   // skips its built-in client-side filter when `items` is
                   // controlled, so we own filtering via the API.
+                  inputValue={libraryInputValue}
                   isLoading={isLoadingLibrary || isSearchingLibrary}
                   items={
                     librarySearchTerm.trim().length > 0
@@ -1937,7 +1962,13 @@ export default function WorkoutsTab({
                       width={20}
                     />
                   }
-                  onInputChange={setLibrarySearchTerm}
+                  onInputChange={(value) => {
+                    // We own the input text (controlled). Only genuine user
+                    // typing reaches here now — never the selectedKey→label
+                    // auto-sync — so updating the search term can't loop.
+                    setLibraryInputValue(value);
+                    setLibrarySearchTerm(value);
+                  }}
                   onSelectionChange={(key) => {
                     if (key) {
                       handleSelectLibraryExercise(key as string);
