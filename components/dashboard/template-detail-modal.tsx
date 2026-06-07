@@ -275,6 +275,14 @@ export default function TemplateDetailModal({
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
+  // Controlled state for the EDIT-row library Autocomplete. Only one exercise
+  // row is editable at a time (editingExerciseId is a single id), so single
+  // vars suffice. inputValue MUST be controlled because the picker opens
+  // pre-selected (selectedKey = the slot's exercise_id); leaving inputValue
+  // uncontrolled makes React Aria auto-sync it from the label, fire
+  // onInputChange, and loop ("Maximum update depth exceeded").
+  const [editLibraryInputValue, setEditLibraryInputValue] = useState("");
+  const [editSelectedExerciseId, setEditSelectedExerciseId] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState("");
 
@@ -1334,7 +1342,8 @@ export default function TemplateDetailModal({
   };
 
   const handleAddExercise = async (sessionId: string) => {
-    if (!newExerciseForm.name.trim()) return;
+    // A library exercise must be selected — the ADD picker is library-only.
+    if (!newExerciseForm.exercise_id) return;
 
     const optimisticExercise = {
       id: `temp-${Date.now()}`,
@@ -1447,6 +1456,22 @@ export default function TemplateDetailModal({
     }
   };
 
+  // Enter edit mode for a session exercise. Seeds the controlled library
+  // picker with the slot's current display name + exercise_id so the
+  // Autocomplete opens pre-selected and loop-safe (inputValue is controlled).
+  const startEditExercise = (exercise: {
+    id: string;
+    exercise_id?: string;
+    custom_name?: string;
+    exercises?: { name: string };
+  }) => {
+    setEditSelectedExerciseId(exercise.exercise_id ?? "");
+    setEditLibraryInputValue(
+      exercise.custom_name || exercise.exercises?.name || ""
+    );
+    setEditingExerciseId(exercise.id);
+  };
+
   const handleEditExercise = async (exerciseId: string, data: any) => {
     // Store old exercise for rollback and find the session it belongs to
     let oldExercise: any = null;
@@ -1477,10 +1502,28 @@ export default function TemplateDetailModal({
             if (e.id === exerciseId) {
               oldExercise = e;
 
+              // The name now comes from the library exercise. On a swap we
+              // strip custom_name (via destructuring, since
+              // exactOptionalPropertyTypes forbids setting it to undefined)
+              // and refresh the joined exercises.name from the picked entry.
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { custom_name: _droppedCustomName, ...rest } = e;
+              const pickedLibraryExercise =
+                data.exerciseId !== undefined
+                  ? exerciseLibrary.find((ex) => ex.id === data.exerciseId)
+                  : undefined;
+
+              const base = data.exerciseId !== undefined ? rest : e;
+
               const updatedExercise = {
-                ...e,
-                ...(data.name !== undefined && {
-                  custom_name: data.name || null,
+                ...base,
+                ...(data.exerciseId !== undefined && {
+                  exercise_id: data.exerciseId,
+                  exercises: {
+                    ...e.exercises,
+                    name:
+                      pickedLibraryExercise?.name || e.exercises?.name || "",
+                  },
                 }),
                 ...(data.sets !== undefined && { sets: parseInt(data.sets) }),
                 ...(data.reps !== undefined && { reps: data.reps }),
@@ -1498,6 +1541,8 @@ export default function TemplateDetailModal({
       }))
     );
     setEditingExerciseId(null);
+    setEditSelectedExerciseId("");
+    setEditLibraryInputValue("");
 
     try {
       const response = await fetch(
@@ -1507,7 +1552,7 @@ export default function TemplateDetailModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionExerciseId: exerciseId,
-            name: data.name,
+            exerciseId: data.exerciseId,
             sets: data.sets,
             reps: data.reps,
             rest_seconds: data.rest_seconds,
@@ -2663,18 +2708,109 @@ export default function TemplateDetailModal({
                                                     exercise.id ? (
                                                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                                                         <div className="grid grid-cols-2 gap-2 mb-2">
-                                                          <Input
+                                                          <Autocomplete
                                                             className="col-span-2"
-                                                            defaultValue={
-                                                              exercise.custom_name ||
-                                                              exercise.exercises
-                                                                ?.name ||
-                                                              ""
+                                                            inputValue={
+                                                              editLibraryInputValue
                                                             }
-                                                            id={`name-${exercise.id}`}
-                                                            label="Nombre"
+                                                            items={
+                                                              filteredExercises
+                                                            }
+                                                            label="Ejercicio"
+                                                            listboxProps={{
+                                                              className:
+                                                                "shadow-lg border border-gray-200 rounded-xl",
+                                                            }}
+                                                            placeholder="Buscar en tu biblioteca..."
+                                                            popoverProps={{
+                                                              className:
+                                                                "shadow-xl",
+                                                              placement:
+                                                                "bottom",
+                                                            }}
+                                                            selectedKey={
+                                                              editSelectedExerciseId ||
+                                                              null
+                                                            }
                                                             size="sm"
-                                                          />
+                                                            onInputChange={(
+                                                              value
+                                                            ) =>
+                                                              setEditLibraryInputValue(
+                                                                value
+                                                              )
+                                                            }
+                                                            onSelectionChange={(
+                                                              key
+                                                            ) => {
+                                                              if (key) {
+                                                                const picked =
+                                                                  exerciseLibrary.find(
+                                                                    (ex) =>
+                                                                      ex.id ===
+                                                                      key
+                                                                  );
+
+                                                                if (picked) {
+                                                                  setEditSelectedExerciseId(
+                                                                    picked.id
+                                                                  );
+                                                                  setEditLibraryInputValue(
+                                                                    picked.name
+                                                                  );
+                                                                }
+                                                              }
+                                                            }}
+                                                          >
+                                                            {(
+                                                              libraryExercise
+                                                            ) => (
+                                                              <AutocompleteItem
+                                                                key={
+                                                                  libraryExercise.id
+                                                                }
+                                                                className="py-2 data-[hover=true]:bg-slate-100"
+                                                                startContent={
+                                                                  libraryExercise.image_url ? (
+                                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                                    <img
+                                                                      alt={
+                                                                        libraryExercise.name
+                                                                      }
+                                                                      className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                                                                      src={
+                                                                        libraryExercise.image_url
+                                                                      }
+                                                                    />
+                                                                  ) : (
+                                                                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                                      <Icon
+                                                                        className="text-slate-500"
+                                                                        icon={
+                                                                          libraryExercise.category ===
+                                                                          "cardio"
+                                                                            ? "solar:running-bold"
+                                                                            : "solar:dumbbell-bold"
+                                                                        }
+                                                                        width={
+                                                                          22
+                                                                        }
+                                                                      />
+                                                                    </div>
+                                                                  )
+                                                                }
+                                                                textValue={
+                                                                  libraryExercise.name
+                                                                }
+                                                              >
+                                                                <span className="text-sm font-semibold">
+                                                                  {
+                                                                    libraryExercise.name
+                                                                  }
+                                                                </span>
+                                                              </AutocompleteItem>
+                                                            )}
+                                                          </Autocomplete>
                                                           <Input
                                                             defaultValue={
                                                               exercise.sets?.toString() ||
@@ -2723,11 +2859,19 @@ export default function TemplateDetailModal({
                                                             size="sm"
                                                             variant="flat"
                                                             onPress={() => {
-                                                              const name = (
-                                                                document.getElementById(
-                                                                  `name-${exercise.id}`
-                                                                ) as HTMLInputElement
-                                                              )?.value;
+                                                              // An exercise from
+                                                              // the library must
+                                                              // be selected.
+                                                              if (
+                                                                !editSelectedExerciseId
+                                                              ) {
+                                                                alert(
+                                                                  "Selecciona un ejercicio de tu biblioteca"
+                                                                );
+
+                                                                return;
+                                                              }
+
                                                               const sets = (
                                                                 document.getElementById(
                                                                   `sets-${exercise.id}`
@@ -2753,7 +2897,8 @@ export default function TemplateDetailModal({
                                                               handleEditExercise(
                                                                 exercise.id,
                                                                 {
-                                                                  name,
+                                                                  exerciseId:
+                                                                    editSelectedExerciseId,
                                                                   sets,
                                                                   reps,
                                                                   rest_seconds,
@@ -2771,11 +2916,17 @@ export default function TemplateDetailModal({
                                                             isIconOnly
                                                             size="sm"
                                                             variant="flat"
-                                                            onPress={() =>
+                                                            onPress={() => {
                                                               setEditingExerciseId(
                                                                 null
-                                                              )
-                                                            }
+                                                              );
+                                                              setEditSelectedExerciseId(
+                                                                ""
+                                                              );
+                                                              setEditLibraryInputValue(
+                                                                ""
+                                                              );
+                                                            }}
                                                           >
                                                             <Icon
                                                               icon="solar:close-circle-bold"
@@ -2836,8 +2987,8 @@ export default function TemplateDetailModal({
                                                         <div
                                                           className="flex-1"
                                                           onClick={() =>
-                                                            setEditingExerciseId(
-                                                              exercise.id
+                                                            startEditExercise(
+                                                              exercise
                                                             )
                                                           }
                                                         >
