@@ -11,8 +11,6 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Select,
-  SelectItem,
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -50,11 +48,7 @@ export default function AddExerciseLibraryModal({
     image_url: "",
     instructions: [] as string[],
     tips: [] as string[],
-    default_sets: "",
-    default_reps: "",
-    default_tempo: "",
-    default_rest_seconds: "",
-    default_training_system: "",
+    cardio_type: "",
   });
   const [muscleGroupInput, setMuscleGroupInput] = useState("");
   const [equipmentInput, setEquipmentInput] = useState("");
@@ -270,11 +264,7 @@ export default function AddExerciseLibraryModal({
       image_url: "",
       instructions: [],
       tips: [],
-      default_sets: "",
-      default_reps: "",
-      default_tempo: "",
-      default_rest_seconds: "",
-      default_training_system: "",
+      cardio_type: "",
     });
     setImagePreview(null);
     if (videoPreview) URL.revokeObjectURL(videoPreview);
@@ -497,6 +487,23 @@ export default function AddExerciseLibraryModal({
                       setFormData({ ...formData, movement_pattern: value })
                     }
                   />
+                  {formData.category === "cardio" && (
+                    <Input
+                      label="Tipo de Actividad"
+                      placeholder="Ej: Carrera, Ciclismo"
+                      startContent={
+                        <Icon
+                          className="text-gray-400"
+                          icon="solar:running-linear"
+                          width={18}
+                        />
+                      }
+                      value={formData.cardio_type}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, cardio_type: value })
+                      }
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -683,202 +690,6 @@ export default function AddExerciseLibraryModal({
                     value={formData.video_url}
                     onValueChange={(value) =>
                       setFormData({ ...formData, video_url: value })
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Default Training Parameters - Show based on category */}
-            {formData.category === "strength" && (
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-slate-700"
-                    icon="solar:settings-bold"
-                    width={18}
-                  />
-                  Programación del ejercicio por defecto
-                </h4>
-                <p className="text-xs text-gray-500 mb-3">
-                  Estos valores se autocompletarán, al añadir el ejercicio a un
-                  programa. Podrás modificarlos posteriormente según sea
-                  necesario.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Series"
-                    placeholder="Ej: 4"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:copy-linear"
-                        width={18}
-                      />
-                    }
-                    type="number"
-                    value={formData.default_sets}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_sets: value })
-                    }
-                  />
-                  <Input
-                    label="Repeticiones"
-                    placeholder="Ej: 10-12 o AMRAP"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:hashtag-linear"
-                        width={18}
-                      />
-                    }
-                    value={formData.default_reps}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_reps: value })
-                    }
-                  />
-                  <Input
-                    label="Tempo"
-                    placeholder="Ej: Explosivo, Normal"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:speedometer-linear"
-                        width={18}
-                      />
-                    }
-                    value={formData.default_tempo}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_tempo: value })
-                    }
-                  />
-                  <Input
-                    label="Descanso (segundos)"
-                    placeholder="Ej: 90"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clock-circle-linear"
-                        width={18}
-                      />
-                    }
-                    type="number"
-                    value={formData.default_rest_seconds}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_rest_seconds: value })
-                    }
-                  />
-                  <Input
-                    className="md:col-span-2"
-                    label="Sistema de Entrenamiento"
-                    placeholder="Ej: Series Rectas, Drop Sets"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:chart-linear"
-                        width={18}
-                      />
-                    }
-                    value={formData.default_training_system}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        default_training_system: value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {formData.category === "cardio" && (
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-red-600"
-                    icon="solar:settings-bold"
-                    width={18}
-                  />
-                  Programación del ejercicio por defecto
-                </h4>
-                <p className="text-xs text-gray-500 mb-3">
-                  Estos valores se autocompletarán, al añadir el ejercicio a un
-                  programa. Podrás modificarlos posteriormente según sea
-                  necesario.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Duración (minutos)"
-                    placeholder="Ej: 30"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clock-circle-linear"
-                        width={18}
-                      />
-                    }
-                    type="number"
-                    value={formData.default_reps}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_reps: value })
-                    }
-                  />
-                  <Input
-                    label="Distancia (km)"
-                    placeholder="Ej: 5"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:routing-linear"
-                        width={18}
-                      />
-                    }
-                    type="number"
-                    value={formData.default_sets}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, default_sets: value })
-                    }
-                  />
-                  <Select
-                    label="Intensidad"
-                    placeholder="Selecciona intensidad"
-                    selectedKeys={
-                      formData.default_tempo ? [formData.default_tempo] : []
-                    }
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:speedometer-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setFormData({ ...formData, default_tempo: value });
-                    }}
-                  >
-                    <SelectItem key="Baja">Baja</SelectItem>
-                    <SelectItem key="Moderada">Moderada</SelectItem>
-                    <SelectItem key="Alta">Alta</SelectItem>
-                    <SelectItem key="Intervalos">Intervalos</SelectItem>
-                  </Select>
-                  <Input
-                    label="Tipo de Actividad"
-                    placeholder="Ej: Carrera, Ciclismo"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:running-linear"
-                        width={18}
-                      />
-                    }
-                    value={formData.default_training_system}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        default_training_system: value,
-                      })
                     }
                   />
                 </div>

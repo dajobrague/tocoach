@@ -136,11 +136,7 @@ export async function POST(request: NextRequest) {
       image_url,
       instructions,
       tips,
-      default_sets,
-      default_reps,
-      default_tempo,
-      default_rest_seconds,
-      default_training_system,
+      cardio_type,
     } = body;
 
     console.log("[Exercise Library API] Creating exercise:", body);
@@ -185,15 +181,7 @@ export async function POST(request: NextRequest) {
         instructions: instructions || [],
         tips: tips || [],
         is_public: false,
-        // Default training parameters
-        default_sets: default_sets ? parseInt(default_sets, 10) : null,
-        default_reps: default_reps || null,
-        default_tempo: default_tempo || null,
-        default_rest_seconds: default_rest_seconds
-          ? parseInt(default_rest_seconds, 10)
-          : null,
-        default_training_system: default_training_system || null,
-        metadata: {},
+        metadata: category === "cardio" && cardio_type ? { cardio_type } : {},
       })
       .select()
       .single();

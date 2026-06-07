@@ -144,21 +144,24 @@ export async function PUT(
       updateData.instructions = body.instructions || [];
     if (body.tips !== undefined) updateData.tips = body.tips || [];
 
-    // Default training parameters
-    if (body.default_sets !== undefined)
-      updateData.default_sets = body.default_sets
-        ? parseInt(body.default_sets, 10)
-        : null;
-    if (body.default_reps !== undefined)
-      updateData.default_reps = body.default_reps || null;
-    if (body.default_tempo !== undefined)
-      updateData.default_tempo = body.default_tempo || null;
-    if (body.default_rest_seconds !== undefined)
-      updateData.default_rest_seconds = body.default_rest_seconds
-        ? parseInt(body.default_rest_seconds, 10)
-        : null;
-    if (body.default_training_system !== undefined)
-      updateData.default_training_system = body.default_training_system || null;
+    // Cardio activity type lives in metadata.cardio_type — merge without
+    // clobbering other metadata keys.
+    if (body.cardio_type !== undefined) {
+      const { data: existingExercise } = await supabase
+        .from("exercises")
+        .select("metadata")
+        .eq("id", exerciseId)
+        .eq("tenant_host", tenant.host)
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      const currentMeta = (existingExercise as any)?.metadata ?? {};
+
+      updateData.metadata = {
+        ...currentMeta,
+        cardio_type: body.cardio_type || null,
+      };
+    }
 
     updateData.updated_at = new Date().toISOString();
 
