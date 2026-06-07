@@ -189,6 +189,11 @@ export default function WorkoutsTab({
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(
     null
   );
+  // Remembers the library exercise the Edit modal opened with, so we can
+  // detect a swap (new exerciseId !== original) and warn when the client
+  // already logged the original exercise.
+  const [editOriginalExerciseId, setEditOriginalExerciseId] =
+    useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set()
@@ -484,24 +489,23 @@ export default function WorkoutsTab({
     });
   };
 
-  const handleOpenAddExercise = async (sessionId: string) => {
-    setSelectedSessionId(sessionId);
-    setIsAddExerciseModalOpen(true);
-
-    // Fetch library exercises.
-    //
-    // Historically this fetch hard-coded `category=strength&limit=100`.
-    // That caused two real-world bugs reported by trainers:
-    //   1. Exercises saved with any category other than `strength` (or with
-    //      an empty/legacy category) were invisible in this modal even
-    //      though the trainer had created them — see e.g. tickets from
-    //      Pablo Carboneras, Isaac Català and Raúl Herrera (Apr 23–26).
-    //   2. Trainers with >100 entries in the library only saw the most
-    //      recent 100 because the Autocomplete filters client-side over
-    //      `defaultItems` and never re-queries the server.
-    // We now drop the category filter (the trainer is the right person to
-    // decide which library entry fits a workout slot) and bump the limit
-    // to 500 — comfortably above any current library size we've seen.
+  // Fetch library exercises.
+  //
+  // Historically this fetch hard-coded `category=strength&limit=100`.
+  // That caused two real-world bugs reported by trainers:
+  //   1. Exercises saved with any category other than `strength` (or with
+  //      an empty/legacy category) were invisible in this modal even
+  //      though the trainer had created them — see e.g. tickets from
+  //      Pablo Carboneras, Isaac Català and Raúl Herrera (Apr 23–26).
+  //   2. Trainers with >100 entries in the library only saw the most
+  //      recent 100 because the Autocomplete filters client-side over
+  //      `defaultItems` and never re-queries the server.
+  // We now drop the category filter (the trainer is the right person to
+  // decide which library entry fits a workout slot) and bump the limit
+  // to 500 — comfortably above any current library size we've seen.
+  // Shared by both the Add and Edit modals so each has items to render
+  // (the Edit modal needs them to display its pre-selected entry).
+  const loadLibraryExercises = async () => {
     setIsLoadingLibrary(true);
     try {
       const response = await fetch("/api/exercises?limit=500");
@@ -515,6 +519,13 @@ export default function WorkoutsTab({
     } finally {
       setIsLoadingLibrary(false);
     }
+  };
+
+  const handleOpenAddExercise = async (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setIsAddExerciseModalOpen(true);
+
+    await loadLibraryExercises();
   };
 
   const handleSelectLibraryExercise = (exerciseId: string) => {
@@ -561,6 +572,13 @@ export default function WorkoutsTab({
 
   const handleSaveExercise = async () => {
     if (!selectedSessionId || !selectedProgramId) return;
+
+    // The API now requires a library exercise to anchor the slot.
+    if (!exerciseForm.exerciseId) {
+      alert("Selecciona un ejercicio de tu biblioteca");
+
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -936,7 +954,7 @@ export default function WorkoutsTab({
     }
   };
 
-  const handleEditExercise = (sessionId: string, exercise: any) => {
+  const handleEditExercise = async (sessionId: string, exercise: any) => {
     // Find the program that contains this session
     const program = activePrograms.find((p: any) =>
       p.sessions.some((s: any) => s.id === sessionId)
@@ -944,7 +962,8 @@ export default function WorkoutsTab({
 
     if (!program) return;
 
-    // Populate form with exercise data
+    // Populate form with exercise data. Pre-select the slot's current
+    // library exercise so the Edit modal's Autocomplete opens on it.
     setExerciseForm({
       name: exercise.name,
       sets: exercise.sets.toString(),
@@ -953,13 +972,18 @@ export default function WorkoutsTab({
       rest: exercise.rest,
       trainingSystem: exercise.trainingSystem,
       videoUrl: exercise.videoUrl || "",
-      exerciseId: "",
+      exerciseId: exercise.exercise_id ?? "",
       notes: exercise.notes || "",
     });
+    setEditOriginalExerciseId(exercise.exercise_id ?? "");
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
     setSelectedProgramId(program.programId);
+    setLibrarySearchTerm("");
     setIsEditExerciseModalOpen(true);
+
+    // Load the browse list so the pre-selected entry has an item to render.
+    await loadLibraryExercises();
   };
 
   const handleCloseEditExercise = () => {
@@ -967,6 +991,8 @@ export default function WorkoutsTab({
     setSelectedExerciseId(null);
     setSelectedSessionId(null);
     setSelectedProgramId(null);
+    setEditOriginalExerciseId("");
+    setLibrarySearchTerm("");
     setExerciseForm({
       name: "",
       sets: "",
@@ -982,6 +1008,32 @@ export default function WorkoutsTab({
 
   const handleSaveEditExercise = async () => {
     if (!selectedExerciseId || !selectedSessionId || !selectedProgramId) return;
+
+    // The edit now swaps the slot's library exercise. Require an explicit
+    // pick so we never PUT an empty exerciseId.
+    if (!exerciseForm.exerciseId) {
+      alert("Selecciona un ejercicio de tu biblioteca");
+
+      return;
+    }
+
+    // Warn before a swap that orphans existing logs. The client's logs are
+    // already loaded at tab scope (useClientExerciseLogs); a non-empty result
+    // for the original exercise means switching will leave those logs tied to
+    // the previous exercise.
+    if (
+      exerciseForm.exerciseId !== editOriginalExerciseId &&
+      editOriginalExerciseId &&
+      getLogsForExercise(editOriginalExerciseId).length > 0
+    ) {
+      const proceed = window.confirm(
+        "Este cliente ya registró entrenamientos del ejercicio anterior. Esos registros quedarán ligados al ejercicio anterior; los nuevos serán del ejercicio nuevo. ¿Continuar?"
+      );
+
+      if (!proceed) {
+        return;
+      }
+    }
 
     setIsSaving(true);
     try {
@@ -1648,53 +1700,13 @@ export default function WorkoutsTab({
                 </Autocomplete>
                 <p className="text-xs text-gray-500 mt-2">
                   Selecciona un ejercicio de tu biblioteca para auto-completar
-                  los campos, o completa manualmente para crear uno nuevo.
+                  los campos.
                 </p>
-              </div>
-
-              {/* Información Básica */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-slate-700"
-                    icon="solar:dumbbell-bold"
-                    width={18}
-                  />
-                  Información del Ejercicio
-                </h4>
-                <div className="space-y-4">
-                  <Input
-                    isRequired
-                    label="Nombre del Ejercicio"
-                    placeholder="Ej: Sentadilla Hack"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clipboard-text-linear"
-                        width={18}
-                      />
-                    }
-                    value={exerciseForm.name}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, name: value })
-                    }
-                  />
-                  <Input
-                    label="URL Video Tutorial (Opcional)"
-                    placeholder="https://example.com/video"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:video-library-linear"
-                        width={18}
-                      />
-                    }
-                    value={exerciseForm.videoUrl}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, videoUrl: value })
-                    }
-                  />
-                </div>
+                {exerciseForm.videoUrl ? (
+                  <p className="text-xs text-gray-500 mt-1 break-all">
+                    Video: {exerciseForm.videoUrl}
+                  </p>
+                ) : null}
               </div>
 
               {/* Parámetros de Entrenamiento */}
@@ -1886,49 +1898,94 @@ export default function WorkoutsTab({
           </ModalHeader>
           <ModalBody>
             <div className="flex flex-col gap-6">
-              {/* Información Básica */}
+              {/* Exercise Library Selection */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
                     className="text-slate-700"
-                    icon="solar:clipboard-list-bold"
+                    icon="solar:folder-with-files-linear"
                     width={18}
                   />
-                  Información Básica
+                  Biblioteca de Ejercicios
                 </h4>
-                <div className="space-y-4">
-                  <Input
-                    isRequired
-                    label="Nombre del Ejercicio"
-                    placeholder="Ej: Sentadilla Hack"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clipboard-text-linear"
-                        width={18}
-                      />
+                <Autocomplete
+                  classNames={{
+                    base: "w-full",
+                  }}
+                  inputProps={{
+                    classNames: {
+                      inputWrapper: "h-12",
+                    },
+                  }}
+                  // Switch between the initial browse list (empty input)
+                  // and live server-search results (non-empty input). HeroUI
+                  // skips its built-in client-side filter when `items` is
+                  // controlled, so we own filtering via the API.
+                  isLoading={isLoadingLibrary || isSearchingLibrary}
+                  items={
+                    librarySearchTerm.trim().length > 0
+                      ? librarySearchResults
+                      : libraryExercises
+                  }
+                  label="Buscar ejercicio en tu biblioteca"
+                  placeholder="Escribe para buscar..."
+                  selectedKey={exerciseForm.exerciseId || null}
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:book-linear"
+                      width={20}
+                    />
+                  }
+                  onInputChange={setLibrarySearchTerm}
+                  onSelectionChange={(key) => {
+                    if (key) {
+                      handleSelectLibraryExercise(key as string);
                     }
-                    value={exerciseForm.name}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, name: value })
-                    }
-                  />
-                  <Input
-                    label="URL Video Tutorial (Opcional)"
-                    placeholder="https://example.com/video"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:video-library-linear"
-                        width={18}
-                      />
-                    }
-                    value={exerciseForm.videoUrl}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, videoUrl: value })
-                    }
-                  />
-                </div>
+                  }}
+                >
+                  {(exercise: any) => (
+                    <AutocompleteItem
+                      key={exercise.id}
+                      startContent={
+                        exercise.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            alt={exercise.name}
+                            className="w-10 h-10 rounded-md object-cover"
+                            src={exercise.image_url}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-slate-200 flex items-center justify-center">
+                            <Icon
+                              className="text-slate-700"
+                              icon="solar:dumbbell-bold"
+                              width={20}
+                            />
+                          </div>
+                        )
+                      }
+                      textValue={exercise.name}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold">
+                          {exercise.name}
+                        </span>
+                        {exercise.default_sets && exercise.default_reps && (
+                          <span className="text-xs text-gray-500">
+                            {exercise.default_sets} series ×{" "}
+                            {exercise.default_reps} reps
+                          </span>
+                        )}
+                      </div>
+                    </AutocompleteItem>
+                  )}
+                </Autocomplete>
+                {exerciseForm.videoUrl ? (
+                  <p className="text-xs text-gray-500 break-all">
+                    Video: {exerciseForm.videoUrl}
+                  </p>
+                ) : null}
               </div>
 
               {/* Configuración */}
