@@ -20,6 +20,8 @@ import {
 } from "./hooks/use-resolved-day-prescription";
 import { getSessionTypeStyle } from "./session-type-style";
 
+import { logMatchesSlot } from "@/lib/training/log-attribution";
+
 interface ExerciseLike {
   order: number;
   name: string;
@@ -465,39 +467,6 @@ function formatExerciseStats(
 //      mismo exercise_id de librería Y acotado a esta sesión (session_id
 //      ausente o igual al sessionId renderizado) para no contar logs de
 //      otra sesión del mismo día.
-function logMatchesSlot(
-  log: ExerciseLogLike,
-  plannedExercise: ExerciseLike,
-  sessionId: string
-): boolean {
-  const slotId = plannedExercise.session_exercise_id;
-
-  // Off-plan extra (no slot conocido): conserva el match por exercise_id puro.
-  // Estas filas se derivan de logs de este día que no están en el template.
-  if (typeof slotId !== "string" || slotId.length === 0) {
-    return (
-      Boolean(log.exercise_id) &&
-      log.exercise_id === plannedExercise.exercise_id
-    );
-  }
-
-  const logSlotId = log.session_exercise_id;
-
-  // Match preciso por slot (logs nuevos/backfilled).
-  if (typeof logSlotId === "string" && logSlotId.length > 0) {
-    return logSlotId === slotId;
-  }
-
-  // Fallback legacy (log sin slot): mismo exercise_id de librería, acotado a
-  // esta sesión (session_id ausente o igual) para no contar logs de otra
-  // sesión del mismo día.
-  if (!log.exercise_id || log.exercise_id !== plannedExercise.exercise_id) {
-    return false;
-  }
-
-  return log.session_id == null || log.session_id === sessionId;
-}
-
 function findExercisesForSession(
   programs: WorkoutProgram[],
   sessionId: string
