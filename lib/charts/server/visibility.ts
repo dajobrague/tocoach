@@ -23,6 +23,37 @@ import type { ChartConfig, ChartsDocument } from "../types";
 import { EMPTY_CHARTS_DOCUMENT } from "../types";
 
 /**
+ * Resolve the DISPLAY AUDIENCE for a client-facing charts route, decoupled
+ * from the authenticated actor.
+ *
+ * Both the snapshot and the per-client GET endpoint are hit by two callers:
+ *   - the CLIENT portal (charts-section.tsx via clientFetch), and
+ *   - the TRAINER's own preview/edit surface (lib/charts/hooks.ts).
+ * The `trainer-session` and `client-session` cookies coexist in one browser,
+ * so a trainer cookie can be attached to a client-portal request. If we keyed
+ * the audience off `auth.actor.kind` (which prioritises the trainer session),
+ * a trainer-cookied browser viewing the client portal would receive the
+ * UNFILTERED doc — leaking `trainer_only` charts into the client view.
+ *
+ * So the client-facing view defaults to the CLIENT audience. The unfiltered
+ * TRAINER view is served ONLY when the request is from a genuine trainer
+ * (`actorKind === "trainer"`, i.e. a valid trainer session that owns the
+ * client) AND explicitly opts in via `?as=trainer`. The client portal never
+ * sends that param, and a client session can never satisfy the actor check
+ * (its actorKind is "client"), so a client can't forge the trainer view.
+ */
+export function resolveAudience(
+  actorKind: "trainer" | "client",
+  searchParams: URLSearchParams
+): "trainer" | "client" {
+  if (actorKind === "trainer" && searchParams.get("as") === "trainer") {
+    return "trainer";
+  }
+
+  return "client";
+}
+
+/**
  * Whether the chart should be visible to the given audience. `undefined`
  * visibility is treated as `"shared"`.
  */

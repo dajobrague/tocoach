@@ -35,7 +35,10 @@ import {
   filterUnusableCharts,
   loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
-import { filterChartsForAudience } from "@/lib/charts/server/visibility";
+import {
+  filterChartsForAudience,
+  resolveAudience,
+} from "@/lib/charts/server/visibility";
 import { getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { buildFormQuestionAdapter } from "@/lib/charts/adapters/form-question";
@@ -468,13 +471,16 @@ export async function GET(
       { logContext: `client=${auth.clientIdBigint} snapshot` }
     );
 
-    // Drop trainer-only charts when serving a client session. We filter
-    // BEFORE computing buckets so no bucket payload leaks for a chart the
-    // client can't see.
-    const visibleCharts = filterChartsForAudience(
-      resolvableCharts,
-      auth.actor.kind
+    // Drop trainer-only charts unless this is the trainer's own preview
+    // (genuine trainer actor + explicit ?as=trainer). The client portal
+    // defaults to the client audience even if a trainer cookie is also
+    // present in the browser. We filter BEFORE computing buckets so no
+    // bucket payload leaks for a chart the client can't see.
+    const audience = resolveAudience(
+      auth.actor.kind,
+      new URL(request.url).searchParams
     );
+    const visibleCharts = filterChartsForAudience(resolvableCharts, audience);
 
     const buckets: Record<
       string,
