@@ -156,6 +156,7 @@ export async function POST(
     const {
       sessionId,
       exerciseId,
+      sessionExerciseId,
       scheduledDate: scheduledDateRaw,
       sets,
       videoUrl,
@@ -253,6 +254,7 @@ export async function POST(
       tenant_host: sessionData.tenant_host,
       scheduled_session_id: scheduledSessionId,
       exercise_id: exerciseId,
+      session_exercise_id: sessionExerciseId ?? null,
       client_id: parseInt(clientId),
       trainer_id: sessionData.trainer_id,
       notes: notes || null,
@@ -271,13 +273,27 @@ export async function POST(
       }
     }
 
-    const { data: existingExerciseLog } = await supabase
+    // Dedup lookup. Cuando el cliente manda sessionExerciseId (slot
+    // específico del plan), lo añadimos a la búsqueda: así (a) autosave +
+    // finalize del mismo slot actualizan la MISMA fila, y (b) dos slots con
+    // el mismo exercise_id en la sesión obtienen filas SEPARADAS (no
+    // colisión / "false done"). Clientes legacy sin sessionExerciseId
+    // conservan la búsqueda de 3 llaves.
+    let existingLookup = supabase
       .from("exercise_logs")
       .select("id, finalized_at")
       .eq("scheduled_session_id", scheduledSessionId)
       .eq("exercise_id", exerciseId)
-      .eq("client_id", parseInt(clientId))
-      .maybeSingle();
+      .eq("client_id", parseInt(clientId));
+
+    if (typeof sessionExerciseId === "string" && sessionExerciseId.length > 0) {
+      existingLookup = existingLookup.eq(
+        "session_exercise_id",
+        sessionExerciseId
+      );
+    }
+
+    const { data: existingExerciseLog } = await existingLookup.maybeSingle();
 
     // finalize=true: el cliente tocó "Finalizado" — el ejercicio queda
     // marcado como hecho. Si ya estaba finalizado preservamos el
@@ -614,7 +630,7 @@ async function maybeMarkScheduledCompleted(
       await Promise.all([
         supabase
           .from("exercise_logs")
-          .select("exercise_id")
+          .select("exercise_id, session_exercise_id")
           .eq("scheduled_session_id", scheduledSessionId)
           .eq("client_id", clientId)
           // Solo contamos logs FINALIZADOS — autosaves a medias no deben
@@ -622,7 +638,7 @@ async function maybeMarkScheduledCompleted(
           .not("finalized_at", "is", null),
         supabase
           .from("session_exercises")
-          .select("exercise_id")
+          .select("id, exercise_id")
           .eq("session_id", sessionId),
       ]);
 
@@ -635,10 +651,33 @@ async function maybeMarkScheduledCompleted(
       return;
     }
 
-    const required = new Set((tmpl ?? []).map((r) => r.exercise_id));
-    const logged = new Set((logs ?? []).map((r) => r.exercise_id));
+    // Atribución por slot: cada slot del template (session_exercises.id) se
+    // cubre por un log cuyo session_exercise_id apunta a ÉL. Con slots
+    // duplicados (mismo exercise_id en dos slots) esto evita marcar la sesión
+    // completa antes de tiempo. Para logs legacy (sin session_exercise_id)
+    // caemos al match por exercise_id de librería.
+    const loggedSlotIds = new Set(
+      (logs ?? [])
+        .map((r) => r.session_exercise_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    );
+    const legacyLoggedExerciseIds = new Set(
+      (logs ?? [])
+        .filter(
+          (r) =>
+            typeof r.session_exercise_id !== "string" ||
+            r.session_exercise_id.length === 0
+        )
+        .map((r) => r.exercise_id)
+    );
+    const requiredSlots = tmpl ?? [];
     const allCovered =
-      required.size > 0 && Array.from(required).every((id) => logged.has(id));
+      requiredSlots.length > 0 &&
+      requiredSlots.every(
+        (slot) =>
+          loggedSlotIds.has(slot.id) ||
+          legacyLoggedExerciseIds.has(slot.exercise_id)
+      );
 
     if (!allCovered) return;
 

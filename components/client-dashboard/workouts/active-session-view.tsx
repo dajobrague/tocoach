@@ -20,11 +20,15 @@ import {
 } from "./hooks/use-resolved-day-prescription";
 import { getSessionTypeStyle } from "./session-type-style";
 
+import { logMatchesSlot } from "@/lib/training/log-attribution";
+
 interface ExerciseLike {
   order: number;
   name: string;
   imageUrl?: string;
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) que se loguea. */
+  session_exercise_id?: string;
   // Strength
   sets?: number;
   reps?: string;
@@ -54,6 +58,10 @@ interface ExerciseLike {
 
 interface ExerciseLogLike {
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) al que pertenece el log. */
+  session_exercise_id?: string | null;
+  /** Sesión template a la que pertenece el log (matchea AvailableSession.id). */
+  session_id?: string | null;
   training_date?: string;
   scheduled_date?: string;
   finalized_at?: string | null;
@@ -161,15 +169,16 @@ export function ActiveSessionView({
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
   );
 
-  const finalizedIds = new Set(
-    logsForDate
-      .filter((log) => Boolean(log.finalized_at))
-      .map((log) => log.exercise_id)
-      .filter((id): id is string => Boolean(id))
-  );
-  const completed = trackable.filter((e) =>
-    finalizedIds.has(e.exercise_id as string)
-  ).length;
+  // Atribución por slot: un planned exercise se considera logueado por el
+  // log que apunta a SU slot (session_exercise_id), no por cualquier log
+  // que comparta el exercise_id de la librería. Sólo cuando el log es legacy
+  // (sin session_exercise_id) caemos al match por exercise_id, y además lo
+  // acotamos a esta sesión para evitar bleed entre sesiones del mismo día.
+  const completed = trackable.filter((e) => {
+    const log = logsForDate.find((l) => logMatchesSlot(l, e, session.id));
+
+    return Boolean(log?.finalized_at);
+  }).length;
   const total = trackable.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Conteo a mostrar en el banner. Preferimos `total` (alineado con la
@@ -255,8 +264,13 @@ export function ActiveSessionView({
         <ul className="space-y-2">
           {allExercises.map((exercise) => {
             const exerciseId = exercise.exercise_id ?? "";
+            // Find the log for THIS slot (finalized or not); the status is
+            // derived from its finalized_at below. Same attribution rule as
+            // the `completed` count so banner and rows stay consistent.
             const existingLog = exerciseId
-              ? logsForDate.find((log) => log.exercise_id === exerciseId)
+              ? logsForDate.find((log) =>
+                  logMatchesSlot(log, exercise, session.id)
+                )
               : undefined;
             const status: ExerciseStatus = !existingLog
               ? "not_started"
@@ -446,6 +460,13 @@ function formatExerciseStats(
   return parts.join(" · ");
 }
 
+// ¿El log `log` corresponde al planned exercise `plannedExercise`?
+//   1. Match preciso por slot: log.session_exercise_id === slot. Aplica a los
+//      logs nuevos/backfilled que ya cargan el slot.
+//   2. Fallback legacy (sólo cuando el log NO trae session_exercise_id):
+//      mismo exercise_id de librería Y acotado a esta sesión (session_id
+//      ausente o igual al sessionId renderizado) para no contar logs de
+//      otra sesión del mismo día.
 function findExercisesForSession(
   programs: WorkoutProgram[],
   sessionId: string
@@ -459,7 +480,18 @@ function findExercisesForSession(
       const sObj = s as { id?: string; exercises?: unknown[] };
 
       if (sObj.id === sessionId && Array.isArray(sObj.exercises)) {
-        return sObj.exercises as Array<ExerciseLike & Record<string, unknown>>;
+        // Normaliza cada ejercicio del template para que exponga
+        // session_exercise_id. En el template path el slot es
+        // WorkoutExercise.id (= session_exercises.id); el cliente lo manda
+        // de vuelta al loguear para atribuir el log al slot exacto.
+        return sObj.exercises.map((we) => {
+          const weObj = we as { id?: string } & Record<string, unknown>;
+
+          return {
+            ...weObj,
+            session_exercise_id: weObj.id,
+          };
+        }) as Array<ExerciseLike & Record<string, unknown>>;
       }
     }
   }
@@ -475,6 +507,7 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   };
 
   if (r.exercise_id) out.exercise_id = r.exercise_id;
+  if (r.session_exercise_id) out.session_exercise_id = r.session_exercise_id;
   if (r.sets != null) out.sets = r.sets;
   if (r.reps != null) out.reps = r.reps;
   if (r.weight_kg != null) out.weightKg = r.weight_kg;
