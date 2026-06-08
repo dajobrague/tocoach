@@ -630,7 +630,7 @@ async function maybeMarkScheduledCompleted(
       await Promise.all([
         supabase
           .from("exercise_logs")
-          .select("exercise_id")
+          .select("exercise_id, session_exercise_id")
           .eq("scheduled_session_id", scheduledSessionId)
           .eq("client_id", clientId)
           // Solo contamos logs FINALIZADOS — autosaves a medias no deben
@@ -638,7 +638,7 @@ async function maybeMarkScheduledCompleted(
           .not("finalized_at", "is", null),
         supabase
           .from("session_exercises")
-          .select("exercise_id")
+          .select("id, exercise_id")
           .eq("session_id", sessionId),
       ]);
 
@@ -651,10 +651,33 @@ async function maybeMarkScheduledCompleted(
       return;
     }
 
-    const required = new Set((tmpl ?? []).map((r) => r.exercise_id));
-    const logged = new Set((logs ?? []).map((r) => r.exercise_id));
+    // Atribución por slot: cada slot del template (session_exercises.id) se
+    // cubre por un log cuyo session_exercise_id apunta a ÉL. Con slots
+    // duplicados (mismo exercise_id en dos slots) esto evita marcar la sesión
+    // completa antes de tiempo. Para logs legacy (sin session_exercise_id)
+    // caemos al match por exercise_id de librería.
+    const loggedSlotIds = new Set(
+      (logs ?? [])
+        .map((r) => r.session_exercise_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    );
+    const legacyLoggedExerciseIds = new Set(
+      (logs ?? [])
+        .filter(
+          (r) =>
+            typeof r.session_exercise_id !== "string" ||
+            r.session_exercise_id.length === 0
+        )
+        .map((r) => r.exercise_id)
+    );
+    const requiredSlots = tmpl ?? [];
     const allCovered =
-      required.size > 0 && Array.from(required).every((id) => logged.has(id));
+      requiredSlots.length > 0 &&
+      requiredSlots.every(
+        (slot) =>
+          loggedSlotIds.has(slot.id) ||
+          legacyLoggedExerciseIds.has(slot.exercise_id)
+      );
 
     if (!allCovered) return;
 

@@ -56,6 +56,10 @@ interface ExerciseLike {
 
 interface ExerciseLogLike {
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) al que pertenece el log. */
+  session_exercise_id?: string | null;
+  /** Sesión template a la que pertenece el log (matchea AvailableSession.id). */
+  session_id?: string | null;
   training_date?: string;
   scheduled_date?: string;
   finalized_at?: string | null;
@@ -163,15 +167,16 @@ export function ActiveSessionView({
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
   );
 
-  const finalizedIds = new Set(
-    logsForDate
-      .filter((log) => Boolean(log.finalized_at))
-      .map((log) => log.exercise_id)
-      .filter((id): id is string => Boolean(id))
-  );
-  const completed = trackable.filter((e) =>
-    finalizedIds.has(e.exercise_id as string)
-  ).length;
+  // Atribución por slot: un planned exercise se considera logueado por el
+  // log que apunta a SU slot (session_exercise_id), no por cualquier log
+  // que comparta el exercise_id de la librería. Sólo cuando el log es legacy
+  // (sin session_exercise_id) caemos al match por exercise_id, y además lo
+  // acotamos a esta sesión para evitar bleed entre sesiones del mismo día.
+  const completed = trackable.filter((e) => {
+    const log = logsForDate.find((l) => logMatchesSlot(l, e, session.id));
+
+    return Boolean(log?.finalized_at);
+  }).length;
   const total = trackable.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Conteo a mostrar en el banner. Preferimos `total` (alineado con la
@@ -257,8 +262,13 @@ export function ActiveSessionView({
         <ul className="space-y-2">
           {allExercises.map((exercise) => {
             const exerciseId = exercise.exercise_id ?? "";
+            // Find the log for THIS slot (finalized or not); the status is
+            // derived from its finalized_at below. Same attribution rule as
+            // the `completed` count so banner and rows stay consistent.
             const existingLog = exerciseId
-              ? logsForDate.find((log) => log.exercise_id === exerciseId)
+              ? logsForDate.find((log) =>
+                  logMatchesSlot(log, exercise, session.id)
+                )
               : undefined;
             const status: ExerciseStatus = !existingLog
               ? "not_started"
@@ -446,6 +456,46 @@ function formatExerciseStats(
   }
 
   return parts.join(" · ");
+}
+
+// ¿El log `log` corresponde al planned exercise `plannedExercise`?
+//   1. Match preciso por slot: log.session_exercise_id === slot. Aplica a los
+//      logs nuevos/backfilled que ya cargan el slot.
+//   2. Fallback legacy (sólo cuando el log NO trae session_exercise_id):
+//      mismo exercise_id de librería Y acotado a esta sesión (session_id
+//      ausente o igual al sessionId renderizado) para no contar logs de
+//      otra sesión del mismo día.
+function logMatchesSlot(
+  log: ExerciseLogLike,
+  plannedExercise: ExerciseLike,
+  sessionId: string
+): boolean {
+  const slotId = plannedExercise.session_exercise_id;
+
+  // Off-plan extra (no slot conocido): conserva el match por exercise_id puro.
+  // Estas filas se derivan de logs de este día que no están en el template.
+  if (typeof slotId !== "string" || slotId.length === 0) {
+    return (
+      Boolean(log.exercise_id) &&
+      log.exercise_id === plannedExercise.exercise_id
+    );
+  }
+
+  const logSlotId = log.session_exercise_id;
+
+  // Match preciso por slot (logs nuevos/backfilled).
+  if (typeof logSlotId === "string" && logSlotId.length > 0) {
+    return logSlotId === slotId;
+  }
+
+  // Fallback legacy (log sin slot): mismo exercise_id de librería, acotado a
+  // esta sesión (session_id ausente o igual) para no contar logs de otra
+  // sesión del mismo día.
+  if (!log.exercise_id || log.exercise_id !== plannedExercise.exercise_id) {
+    return false;
+  }
+
+  return log.session_id == null || log.session_id === sessionId;
 }
 
 function findExercisesForSession(

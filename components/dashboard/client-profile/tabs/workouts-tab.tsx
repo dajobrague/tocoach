@@ -247,7 +247,7 @@ export default function WorkoutsTab({
 
   // Exercise progress integration: shared log fetching, video modal,
   // expansion state with first-of-session seeded defaults.
-  const { getLogsForExercise, getOrphanGroups } =
+  const { getLogsForExercise, getLogsForSlot, getOrphanGroups } =
     useClientExerciseLogs(clientId);
   const { isExpanded, toggle: toggleExerciseExpanded } =
     useExerciseExpandedState();
@@ -1529,7 +1529,8 @@ export default function WorkoutsTab({
                                                           )
                                                         : false
                                                     }
-                                                    logs={getLogsForExercise(
+                                                    logs={getLogsForSlot(
+                                                      exercise.id ?? null,
                                                       exercise.exercise_id ?? ""
                                                     )}
                                                     prescribed={exercise}
