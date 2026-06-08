@@ -63,6 +63,12 @@ export interface ExerciseLogModalProps {
   exercise: ExtendedExerciseShape | null;
   sessionId: string;
   exerciseId: string;
+  /**
+   * Slot específico del plan (session_exercises.id) que se está logueando.
+   * El writer lo persiste y dedupea por él, así que dos slots con el mismo
+   * exercise_id en la sesión obtienen filas separadas (no "false done").
+   */
+  sessionExerciseId?: string | null;
   scheduledDate: string;
   clientId: string;
   existingLog?: any;
@@ -75,6 +81,7 @@ export function ExerciseLogModal({
   exercise,
   sessionId,
   exerciseId,
+  sessionExerciseId,
   scheduledDate,
   clientId,
   existingLog,
@@ -188,6 +195,7 @@ export function ExerciseLogModal({
     const body: any = {
       sessionId,
       exerciseId,
+      sessionExerciseId,
       scheduledDate,
       notes: formData.notes,
       videoUrl: isCardio ? cardioVideo.videoUrl || null : null,
@@ -216,6 +224,7 @@ export function ExerciseLogModal({
   }, [
     sessionId,
     exerciseId,
+    sessionExerciseId,
     scheduledDate,
     formData,
     isCardio,

@@ -5,6 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
 export interface ResolvedExercise {
+  /**
+   * Slot específico del plan (session_exercises.id). El cliente lo manda
+   * de vuelta al loguear para que el log se atribuya al slot exacto y no
+   * a otro que comparta el mismo exercise_id en la misma sesión.
+   */
+  session_exercise_id: string | null;
   exercise_id: string;
   name: string;
   category: string;

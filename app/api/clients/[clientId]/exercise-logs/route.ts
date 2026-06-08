@@ -156,6 +156,7 @@ export async function POST(
     const {
       sessionId,
       exerciseId,
+      sessionExerciseId,
       scheduledDate: scheduledDateRaw,
       sets,
       videoUrl,
@@ -253,6 +254,7 @@ export async function POST(
       tenant_host: sessionData.tenant_host,
       scheduled_session_id: scheduledSessionId,
       exercise_id: exerciseId,
+      session_exercise_id: sessionExerciseId ?? null,
       client_id: parseInt(clientId),
       trainer_id: sessionData.trainer_id,
       notes: notes || null,
@@ -271,13 +273,27 @@ export async function POST(
       }
     }
 
-    const { data: existingExerciseLog } = await supabase
+    // Dedup lookup. Cuando el cliente manda sessionExerciseId (slot
+    // específico del plan), lo añadimos a la búsqueda: así (a) autosave +
+    // finalize del mismo slot actualizan la MISMA fila, y (b) dos slots con
+    // el mismo exercise_id en la sesión obtienen filas SEPARADAS (no
+    // colisión / "false done"). Clientes legacy sin sessionExerciseId
+    // conservan la búsqueda de 3 llaves.
+    let existingLookup = supabase
       .from("exercise_logs")
       .select("id, finalized_at")
       .eq("scheduled_session_id", scheduledSessionId)
       .eq("exercise_id", exerciseId)
-      .eq("client_id", parseInt(clientId))
-      .maybeSingle();
+      .eq("client_id", parseInt(clientId));
+
+    if (typeof sessionExerciseId === "string" && sessionExerciseId.length > 0) {
+      existingLookup = existingLookup.eq(
+        "session_exercise_id",
+        sessionExerciseId
+      );
+    }
+
+    const { data: existingExerciseLog } = await existingLookup.maybeSingle();
 
     // finalize=true: el cliente tocó "Finalizado" — el ejercicio queda
     // marcado como hecho. Si ya estaba finalizado preservamos el

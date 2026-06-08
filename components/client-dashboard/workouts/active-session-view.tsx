@@ -25,6 +25,8 @@ interface ExerciseLike {
   name: string;
   imageUrl?: string;
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) que se loguea. */
+  session_exercise_id?: string;
   // Strength
   sets?: number;
   reps?: string;
@@ -459,7 +461,18 @@ function findExercisesForSession(
       const sObj = s as { id?: string; exercises?: unknown[] };
 
       if (sObj.id === sessionId && Array.isArray(sObj.exercises)) {
-        return sObj.exercises as Array<ExerciseLike & Record<string, unknown>>;
+        // Normaliza cada ejercicio del template para que exponga
+        // session_exercise_id. En el template path el slot es
+        // WorkoutExercise.id (= session_exercises.id); el cliente lo manda
+        // de vuelta al loguear para atribuir el log al slot exacto.
+        return sObj.exercises.map((we) => {
+          const weObj = we as { id?: string } & Record<string, unknown>;
+
+          return {
+            ...weObj,
+            session_exercise_id: weObj.id,
+          };
+        }) as Array<ExerciseLike & Record<string, unknown>>;
       }
     }
   }
@@ -475,6 +488,7 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   };
 
   if (r.exercise_id) out.exercise_id = r.exercise_id;
+  if (r.session_exercise_id) out.session_exercise_id = r.session_exercise_id;
   if (r.sets != null) out.sets = r.sets;
   if (r.reps != null) out.reps = r.reps;
   if (r.weight_kg != null) out.weightKg = r.weight_kg;

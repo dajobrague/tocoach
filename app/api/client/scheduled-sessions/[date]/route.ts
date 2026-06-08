@@ -17,6 +17,7 @@ import {
 const LOG_PREFIX = "[Client Scheduled Session API]";
 
 interface ResolvedExercise {
+  session_exercise_id: string;
   exercise_id: string;
   name: string;
   category: string;
@@ -293,6 +294,7 @@ function makeResolvedDay(
   source: ResolvedDay["source"],
   session: { id: string; name: string } | null,
   raws: Array<{
+    id: string;
     exercise_order: number;
     sets: number | null;
     reps: string | null;
@@ -328,6 +330,7 @@ function makeResolvedDay(
       };
 
       return {
+        session_exercise_id: r.id,
         exercise_id: r.exercise.id,
         name: r.exercise.name,
         category: r.exercise.category,
