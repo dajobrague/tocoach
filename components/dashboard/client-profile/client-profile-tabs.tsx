@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import AccessTab from "./tabs/access-tab";
 import ChartsTab from "./tabs/charts-tab";
@@ -10,6 +10,7 @@ import NeatTab from "./tabs/neat-tab";
 import NutritionTab from "./tabs/nutrition-tab";
 import SupplementsTab from "./tabs/supplements-tab";
 import TrainingTabs from "./tabs/training-tabs";
+import { useUrlEnum } from "./use-url-state";
 
 const TAB_ITEMS = [
   { key: "training", label: "Entrenamientos", icon: "solar:dumbbell-bold" },
@@ -21,6 +22,16 @@ const TAB_ITEMS = [
   { key: "access", label: "Acceso", icon: "solar:key-bold" },
 ] as const;
 
+const TAB_KEYS = [
+  "training",
+  "charts",
+  "neat",
+  "nutrition",
+  "supplements",
+  "forms",
+  "access",
+] as const;
+
 interface ClientProfileTabsProps {
   clientId: string;
   clientName?: string;
@@ -30,10 +41,10 @@ export default function ClientProfileTabs({
   clientId,
   clientName,
 }: ClientProfileTabsProps) {
-  const [selectedTab, setSelectedTab] = useState("training");
+  const [selectedTab, setSelectedTab] = useUrlEnum("tab", TAB_KEYS, "training");
   const formsUnsavedRef = useRef(false);
 
-  const handleTabChange = (key: string) => {
+  const handleTabChange = (key: (typeof TAB_KEYS)[number]) => {
     if (selectedTab === "forms" && formsUnsavedRef.current && key !== "forms") {
       if (
         !window.confirm(
