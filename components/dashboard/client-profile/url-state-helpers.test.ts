@@ -49,12 +49,19 @@ describe("applyParams", () => {
 
 describe("patchWithChildrenCleared", () => {
   it("sets the key and nulls every child the key owns", () => {
-    const patch = patchWithChildrenCleared("tab", "charts");
-
-    expect(patch.tab).toBe("charts");
-    expect(patch.sub).toBeNull();
-    expect(patch.modal).toBeNull();
-    expect(patch.modalId).toBeNull();
+    expect(patchWithChildrenCleared("tab", "charts")).toEqual({
+      tab: "charts",
+      sub: null,
+      m: null,
+      nd: null,
+      ndv: null,
+      ft: null,
+      fv: null,
+      ex: null,
+      hd: null,
+      modal: null,
+      modalId: null,
+    });
   });
 
   it("returns just the key when it owns no children", () => {
@@ -103,5 +110,11 @@ describe("readStringParam", () => {
 
   it("returns the fallback (null) when missing", () => {
     expect(readStringParam(new URLSearchParams(""), "ex")).toBeNull();
+  });
+
+  it("returns a custom fallback when missing", () => {
+    expect(readStringParam(new URLSearchParams(""), "ex", "default")).toBe(
+      "default"
+    );
   });
 });
