@@ -27,7 +27,7 @@ export interface FoodResult {
    */
   id?: string;
   /** Which source produced this result. */
-  source: "off" | "manual";
+  source: "off" | "manual" | "seed";
   /** Stable, source-scoped identifier; null for ad-hoc manual entries. */
   sourceRef: string | null;
   name: string;

@@ -56,31 +56,46 @@ describe("FoodLookupService (integration, local DB)", () => {
     await cleanNutritionTestData(client);
   });
 
-  it("serves a repeated search from cache (invariant §4.5)", async () => {
+  it("repeated search never duplicates cache rows (invariant §4.5)", async () => {
     const source = new MockFoodSource({ searchResults: [offResult] });
-    const searchSpy = vi.spyOn(source, "search");
     const service = new FoodLookupService({ repo, source });
 
     const first = await service.search(TEST_TENANT_HOST, "oats");
 
     expect(first).toHaveLength(1);
     expect(first[0]?.name).toBe("Rolled Oats");
+    // Results are returned as cache rows, so they carry an id immediately.
+    expect(typeof first[0]?.id).toBe("string");
 
     const second = await service.search(TEST_TENANT_HOST, "oats");
 
     expect(second).toHaveLength(1);
     expect(second[0]?.name).toBe("Rolled Oats");
+    expect(second[0]?.id).toBe(first[0]?.id);
     expect(Number(second[0]?.nutrientsPer100g.kcal)).toBe(389);
 
-    // The source was hit on the miss only; the second call was a cache hit.
-    expect(searchSpy).toHaveBeenCalledTimes(1);
-
+    // The source may be re-consulted while local results are scarce, but the
+    // cache row is reused — never duplicated.
     const { data } = await client
       .from("ingredients")
       .select("id")
       .eq("tenant_host", TEST_TENANT_HOST);
 
     expect(data ?? []).toHaveLength(1);
+  });
+
+  it("keeps serving cached results when the source fails (resilience)", async () => {
+    const source = new MockFoodSource({ searchResults: [offResult] });
+    const service = new FoodLookupService({ repo, source });
+
+    await service.search(TEST_TENANT_HOST, "oats");
+
+    vi.spyOn(source, "search").mockRejectedValue(new Error("OFF 503"));
+
+    const results = await service.search(TEST_TENANT_HOST, "oats");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.name).toBe("Rolled Oats");
   });
 
   it("createManual persists a source='manual' row", async () => {

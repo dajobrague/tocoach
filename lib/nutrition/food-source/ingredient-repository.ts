@@ -7,7 +7,7 @@ const TABLE = "ingredients";
 export interface IngredientRow {
   id: string;
   tenant_host: string;
-  source: "off" | "manual";
+  source: "off" | "manual" | "seed";
   source_ref: string | null;
   name: string;
   brand: string | null;
@@ -29,7 +29,7 @@ export interface IngredientRow {
 /** Column shape written on insert (DB fills id/timestamps/nutrient_extra). */
 export interface IngredientInsert {
   tenant_host: string;
-  source: "off" | "manual";
+  source: "off" | "manual" | "seed";
   source_ref: string | null;
   name: string;
   brand?: string;
@@ -120,7 +120,15 @@ export interface IngredientRepository {
     source: IngredientRow["source"],
     sourceRef: string
   ): Promise<IngredientRow | null>;
-  insertResolved(tenantHost: string, results: FoodResult[]): Promise<void>;
+  /**
+   * Persist ref-identified results that are not yet cached. Returns the cache
+   * rows for EVERY ref-identified input (existing + newly inserted) so callers
+   * can surface row ids (required to attach foods as meal_slot_options).
+   */
+  insertResolved(
+    tenantHost: string,
+    results: FoodResult[]
+  ): Promise<IngredientRow[]>;
   insertManual(
     tenantHost: string,
     input: ManualIngredientInput
@@ -176,42 +184,64 @@ export class SupabaseIngredientRepository implements IngredientRepository {
   async insertResolved(
     tenantHost: string,
     results: FoodResult[]
-  ): Promise<void> {
-    const toInsert: IngredientInsert[] = [];
-    const seen = new Set<string>();
+  ): Promise<IngredientRow[]> {
+    // Only ref-identified results are cacheable; manual/null refs are skipped.
+    const cacheable = new Map<string, FoodResult>();
 
     for (const r of results) {
-      const ref = r.sourceRef;
+      if (r.sourceRef !== null) {
+        const key = `${r.source}::${r.sourceRef}`;
 
-      // Only ref-identified results are cacheable; manual/null refs are skipped.
-      if (ref === null) {
-        continue;
+        if (cacheable.has(key) === false) {
+          cacheable.set(key, r);
+        }
       }
+    }
 
-      const key = `${r.source}::${ref}`;
+    if (cacheable.size === 0) {
+      return [];
+    }
 
-      if (seen.has(key)) {
-        continue;
-      }
+    // One batched lookup for all refs instead of a round-trip per result.
+    const refs = [...cacheable.values()].map((r) => r.sourceRef as string);
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .in("source_ref", refs);
 
-      seen.add(key);
+    if (error !== null) {
+      throw new Error(`insertResolved lookup failed: ${error.message}`);
+    }
 
-      const existing = await this.findCachedByRef(tenantHost, r.source, ref);
+    const existing = ((data ?? []) as IngredientRow[]).filter((row) =>
+      cacheable.has(`${row.source}::${row.source_ref}`)
+    );
+    const existingKeys = new Set(
+      existing.map((row) => `${row.source}::${row.source_ref}`)
+    );
+    const toInsert: IngredientInsert[] = [];
 
-      if (existing === null) {
+    for (const [key, r] of cacheable) {
+      if (existingKeys.has(key) === false) {
         toInsert.push(foodResultToInsert(tenantHost, r));
       }
     }
 
     if (toInsert.length === 0) {
-      return;
+      return existing;
     }
 
-    const { error } = await this.client.from(TABLE).insert(toInsert);
+    const { data: inserted, error: insertError } = await this.client
+      .from(TABLE)
+      .insert(toInsert)
+      .select();
 
-    if (error !== null) {
-      throw new Error(`insertResolved failed: ${error.message}`);
+    if (insertError !== null) {
+      throw new Error(`insertResolved failed: ${insertError.message}`);
     }
+
+    return [...existing, ...((inserted ?? []) as IngredientRow[])];
   }
 
   async insertManual(

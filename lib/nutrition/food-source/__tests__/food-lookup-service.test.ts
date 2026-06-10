@@ -1,3 +1,4 @@
+import type { CommonFoodsRepository } from "../common-foods-repository";
 import type {
   IngredientRepository,
   IngredientRow,
@@ -64,17 +65,32 @@ function makeRepo(
   return {
     findCachedByQuery: vi.fn(async () => []),
     findCachedByRef: vi.fn(async () => null),
-    insertResolved: vi.fn(async () => {}),
+    insertResolved: vi.fn(async () => []),
     insertManual: vi.fn(async () => makeRow({ source: "manual" })),
     ...overrides,
   };
 }
 
+function makeCommonFoods(results: FoodResult[] = []): CommonFoodsRepository {
+  return { search: vi.fn(async () => results) };
+}
+
+/** Six distinct cached rows — enough to satisfy MIN_LOCAL_RESULTS. */
+function manyCachedRows(): IngredientRow[] {
+  return Array.from({ length: 6 }, (_, i) =>
+    makeRow({
+      id: `00000000-0000-0000-0000-00000000000${i + 1}`,
+      source_ref: `off:cached-${i + 1}`,
+      name: `Cached Oats ${i + 1}`,
+    })
+  );
+}
+
 describe("FoodLookupService.search", () => {
-  it("cache hit: returns cached rows WITHOUT calling the source", async () => {
-    const cachedRow = makeRow();
+  it("enough local results: returns cached rows WITHOUT calling the source", async () => {
+    const cachedRows = manyCachedRows();
     const repo = makeRepo({
-      findCachedByQuery: vi.fn(async () => [cachedRow]),
+      findCachedByQuery: vi.fn(async () => cachedRows),
     });
     const source = new MockFoodSource({ searchResults: [makeResult()] });
     const searchSpy = vi.spyOn(source, "search");
@@ -83,22 +99,129 @@ describe("FoodLookupService.search", () => {
     const results = await service.search(TENANT, "oats");
 
     expect(searchSpy).not.toHaveBeenCalled();
-    expect(repo.insertResolved).not.toHaveBeenCalled();
-    expect(results).toEqual([rowToFoodResult(cachedRow)]);
+    expect(results).toHaveLength(cachedRows.length);
+    expect(results.map((r) => r.id)).toEqual(
+      expect.arrayContaining(cachedRows.map((r) => r.id))
+    );
   });
 
-  it("cache miss: calls source.search once and persists the results", async () => {
-    const sourceResults = [makeResult()];
-    const repo = makeRepo({ findCachedByQuery: vi.fn(async () => []) });
-    const source = new MockFoodSource({ searchResults: sourceResults });
+  it("scarce local results: calls source.search once and persists the results", async () => {
+    const sourceResult = makeResult();
+    const insertedRow = makeRow({
+      id: "00000000-0000-0000-0000-0000000000ff",
+      source_ref: sourceResult.sourceRef,
+      name: sourceResult.name,
+      brand: null,
+    });
+    const insertResolved = vi.fn(async () => [insertedRow]);
+    const repo = makeRepo({ insertResolved });
+    const source = new MockFoodSource({ searchResults: [sourceResult] });
     const searchSpy = vi.spyOn(source, "search");
     const service = new FoodLookupService({ repo, source });
 
     const results = await service.search(TENANT, "oats", "en");
 
     expect(searchSpy).toHaveBeenCalledTimes(1);
-    expect(repo.insertResolved).toHaveBeenCalledWith(TENANT, sourceResults);
-    expect(results).toEqual(sourceResults);
+    expect(insertResolved).toHaveBeenCalledWith(TENANT, [sourceResult]);
+    // The persisted cache row (with id) is returned, not the raw source hit.
+    expect(results).toEqual([rowToFoodResult(insertedRow)]);
+  });
+
+  it("merges seed foods and persists the ones not yet cached", async () => {
+    const seedResult = makeResult({
+      source: "seed",
+      sourceRef: "seed-uuid-1",
+      name: "Manzana",
+    });
+    const insertedRow = makeRow({
+      id: "00000000-0000-0000-0000-0000000000aa",
+      source: "seed",
+      source_ref: "seed-uuid-1",
+      name: "Manzana",
+      brand: null,
+    });
+    const insertResolved = vi.fn(async () => [insertedRow]);
+    const repo = makeRepo({ insertResolved });
+    const source = new MockFoodSource({ searchResults: [] });
+    const commonFoods = makeCommonFoods([seedResult]);
+    const service = new FoodLookupService({ repo, source, commonFoods });
+
+    const results = await service.search(TENANT, "manzana");
+
+    expect(commonFoods.search).toHaveBeenCalledWith("manzana");
+    expect(insertResolved).toHaveBeenCalledWith(TENANT, [seedResult]);
+    expect(results).toEqual([rowToFoodResult(insertedRow)]);
+  });
+
+  it("does NOT re-persist seed foods already in the tenant cache", async () => {
+    const cachedSeedRow = makeRow({
+      source: "seed",
+      source_ref: "seed-uuid-1",
+      name: "Manzana",
+      brand: null,
+    });
+    const insertResolved = vi.fn(async () => []);
+    const repo = makeRepo({
+      findCachedByQuery: vi.fn(async () => [cachedSeedRow]),
+      insertResolved,
+    });
+    const source = new MockFoodSource({ searchResults: [] });
+    const commonFoods = makeCommonFoods([
+      makeResult({ source: "seed", sourceRef: "seed-uuid-1", name: "Manzana" }),
+    ]);
+    const service = new FoodLookupService({ repo, source, commonFoods });
+
+    const results = await service.search(TENANT, "manzana");
+
+    expect(insertResolved).toHaveBeenCalledWith(TENANT, []);
+    expect(results).toEqual([rowToFoodResult(cachedSeedRow)]);
+  });
+
+  it("external source failure degrades to local results, not an error", async () => {
+    const cachedRow = makeRow();
+    const repo = makeRepo({
+      findCachedByQuery: vi.fn(async () => [cachedRow]),
+    });
+    const source = new MockFoodSource();
+
+    vi.spyOn(source, "search").mockRejectedValue(new Error("OFF timeout"));
+
+    const service = new FoodLookupService({ repo, source });
+
+    const results = await service.search(TENANT, "oats");
+
+    expect(results).toEqual([rowToFoodResult(cachedRow)]);
+  });
+
+  it("ranks exact and prefix name matches before substring matches", async () => {
+    const rows = [
+      makeRow({
+        id: "00000000-0000-0000-0000-000000000001",
+        source_ref: "r1",
+        name: "Caldo de pollo",
+      }),
+      makeRow({
+        id: "00000000-0000-0000-0000-000000000002",
+        source_ref: "r2",
+        name: "Pollo asado",
+      }),
+      makeRow({
+        id: "00000000-0000-0000-0000-000000000003",
+        source_ref: "r3",
+        name: "Pollo",
+      }),
+    ];
+    const repo = makeRepo({ findCachedByQuery: vi.fn(async () => rows) });
+    const source = new MockFoodSource({ searchResults: [] });
+    const service = new FoodLookupService({ repo, source });
+
+    const results = await service.search(TENANT, "pollo");
+
+    expect(results.map((r) => r.name)).toEqual([
+      "Pollo",
+      "Pollo asado",
+      "Caldo de pollo",
+    ]);
   });
 });
 
@@ -117,9 +240,19 @@ describe("FoodLookupService.getByRef / getByBarcode", () => {
     expect(result).toEqual(rowToFoodResult(cachedRow));
   });
 
-  it("cache miss by ref: calls source, persists the one result, returns it", async () => {
+  it("cache miss by ref: calls source, persists, returns the cache row", async () => {
     const sourceResult = makeResult({ sourceRef: "123", name: "Fetched" });
-    const repo = makeRepo({ findCachedByRef: vi.fn(async () => null) });
+    const insertedRow = makeRow({
+      id: "00000000-0000-0000-0000-0000000000bb",
+      source_ref: "123",
+      name: "Fetched",
+      brand: null,
+    });
+    const insertResolved = vi.fn(async () => [insertedRow]);
+    const repo = makeRepo({
+      findCachedByRef: vi.fn(async () => null),
+      insertResolved,
+    });
     const source = new MockFoodSource({ byRef: { "123": sourceResult } });
     const getRefSpy = vi.spyOn(source, "getByRef");
     const service = new FoodLookupService({ repo, source });
@@ -127,8 +260,8 @@ describe("FoodLookupService.getByRef / getByBarcode", () => {
     const result = await service.getByRef(TENANT, "123");
 
     expect(getRefSpy).toHaveBeenCalledTimes(1);
-    expect(repo.insertResolved).toHaveBeenCalledWith(TENANT, [sourceResult]);
-    expect(result).toEqual(sourceResult);
+    expect(insertResolved).toHaveBeenCalledWith(TENANT, [sourceResult]);
+    expect(result).toEqual(rowToFoodResult(insertedRow));
   });
 
   it("cache miss by barcode with no source match: returns null, no persist", async () => {

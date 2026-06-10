@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { SupabaseCommonFoodsRepository } from "@/lib/nutrition/food-source/common-foods-repository";
 import { createFoodSource } from "@/lib/nutrition/food-source/create-food-source";
 import { FoodLookupService } from "@/lib/nutrition/food-source/food-lookup-service";
 import { SupabaseIngredientRepository } from "@/lib/nutrition/food-source/ingredient-repository";
@@ -41,9 +42,11 @@ export async function GET(request: NextRequest) {
         : undefined;
 
     const tenantHost = session.tenant_host;
+    const supabase = createSupabaseClient();
     const service = new FoodLookupService({
-      repo: new SupabaseIngredientRepository(createSupabaseClient()),
+      repo: new SupabaseIngredientRepository(supabase),
       source: createFoodSource(),
+      commonFoods: new SupabaseCommonFoodsRepository(supabase),
     });
 
     const results = await service.search(tenantHost, q, locale);

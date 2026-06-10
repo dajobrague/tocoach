@@ -17,6 +17,16 @@ export type {
   ManualIngredientInput,
 } from "./ingredient-repository";
 
+export {
+  SupabaseCommonFoodsRepository,
+  commonFoodToResult,
+  normalizeFoodQuery,
+} from "./common-foods-repository";
+export type {
+  CommonFoodsRepository,
+  CommonFoodRow,
+} from "./common-foods-repository";
+
 export { FoodLookupService } from "./food-lookup-service";
 export type { FoodLookupServiceDeps } from "./food-lookup-service";
 

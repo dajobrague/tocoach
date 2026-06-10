@@ -17,12 +17,13 @@ function stubFetch(payload: unknown, status = 200) {
   return { fetchFn, calls };
 }
 
+// Search-a-licious response: results under `hits`, brands as an array.
 const searchPayload = {
-  products: [
+  hits: [
     {
       code: "0123",
       product_name: "Greek Yogurt",
-      brands: "Fage",
+      brands: ["Fage"],
       nutriments: {
         "energy-kcal_100g": 97,
         proteins_100g: "10", // string value → coerced to number
@@ -38,9 +39,13 @@ const searchPayload = {
 };
 
 describe("OpenFoodFactsSource.search", () => {
-  it("maps OFF products to FoodResult with correct fields", async () => {
+  it("maps OFF hits to FoodResult with correct fields", async () => {
     const { fetchFn, calls } = stubFetch(searchPayload);
-    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
 
     const results = await source.search("yogurt");
 
@@ -62,8 +67,44 @@ describe("OpenFoodFactsSource.search", () => {
         sodium_mg: 50,
       },
     });
-    expect(calls[0] ?? "").toContain("/cgi/search.pl?search_terms=yogurt");
+    expect(calls[0] ?? "").toContain(
+      "https://search.stub.test/search?q=yogurt"
+    );
     expect(calls[0] ?? "").toContain("page_size=20");
+    expect(calls[0] ?? "").toContain("fields=");
+  });
+
+  it("defaults langs to es and honors an explicit locale", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogurt");
+    await source.search("yogurt", "fr");
+
+    expect(calls[0] ?? "").toContain("langs=es");
+    expect(calls[1] ?? "").toContain("langs=fr");
+  });
+
+  it("accepts brands as a comma-separated string (v2 product shape)", async () => {
+    const { fetchFn } = stubFetch({
+      hits: [
+        {
+          code: "1",
+          product_name: "Oats",
+          brands: "Quaker, PepsiCo",
+          nutriments: {},
+        },
+      ],
+    });
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    const results = await source.search("oats");
+
+    expect(results[0]?.brand).toBe("Quaker");
   });
 
   it("coerces a missing nutriment to 0", async () => {
@@ -93,16 +134,23 @@ describe("OpenFoodFactsSource.search", () => {
     expect(results[0]?.nutrientsPer100g.sodium_mg).toBe(50);
   });
 
-  it("returns an empty array when OFF returns no products", async () => {
-    const { fetchFn } = stubFetch({ products: [] });
+  it("returns an empty array when OFF returns no hits", async () => {
+    const { fetchFn } = stubFetch({ hits: [] });
     const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
 
     expect(await source.search("nothing")).toEqual([]);
   });
 
-  it("skips products without any usable name", async () => {
+  it("returns an empty array on a non-OK response", async () => {
+    const { fetchFn } = stubFetch({}, 503);
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    expect(await source.search("anything")).toEqual([]);
+  });
+
+  it("skips hits without any usable name", async () => {
     const { fetchFn } = stubFetch({
-      products: [{ code: "9", nutriments: {} }],
+      hits: [{ code: "9", nutriments: {} }],
     });
     const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
 

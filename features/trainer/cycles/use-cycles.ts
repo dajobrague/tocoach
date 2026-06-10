@@ -10,7 +10,12 @@ import type {
   FoodHit,
 } from "./cycle-api";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import {
   addOption,
@@ -25,6 +30,8 @@ import {
   updateCycle,
   updateSlot,
 } from "./cycle-api";
+
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 
 const cyclesKey = (clientId: number) => ["cycles", clientId] as const;
 const treeKey = (cycleId: string) => ["cycle-tree", cycleId] as const;
@@ -156,9 +163,15 @@ export function useRecipeSearch(query: string) {
 }
 
 export function useFoodSearch(query: string) {
+  // Debounce so a request fires per pause, not per keystroke (OFF rate-limits),
+  // and keep the previous results on screen while the next page loads.
+  const debounced = useDebouncedValue(query.trim(), 300);
+
   return useQuery<FoodHit[]>({
-    queryKey: ["cycle-food-search", query],
-    queryFn: () => searchFoods(query),
-    enabled: query.trim().length > 0,
+    queryKey: ["cycle-food-search", debounced],
+    queryFn: () => searchFoods(debounced),
+    enabled: debounced.length >= 2,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }

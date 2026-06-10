@@ -48,9 +48,12 @@ export function IngredientSearch({
         </div>
       )}
 
-      {!isFetching && query.trim().length >= 2 && results.length === 0 && (
-        <p className="text-sm text-default-500">Sin resultados.</p>
-      )}
+      {!isFetching &&
+        data !== undefined &&
+        query.trim().length >= 2 &&
+        results.length === 0 && (
+          <p className="text-sm text-default-500">Sin resultados.</p>
+        )}
 
       <div className="flex flex-col gap-2">
         {results.map((food) => (

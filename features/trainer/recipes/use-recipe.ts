@@ -7,7 +7,7 @@ import type {
   RecipeMediaItem,
 } from "./recipe-api";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import {
   fetchRecipe,
@@ -15,6 +15,8 @@ import {
   fetchRecipeMedia,
   searchFoods,
 } from "./recipe-api";
+
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 
 export function useRecipe(recipeId: string) {
   return useQuery<RecipeDetail>({
@@ -41,11 +43,15 @@ export function useRecipeMedia(recipeId: string) {
 }
 
 export function useFoodSearch(query: string) {
-  const trimmed = query.trim();
+  // Debounce so a request fires per pause, not per keystroke (OFF rate-limits),
+  // and keep the previous results on screen while the next page loads.
+  const debounced = useDebouncedValue(query.trim(), 300);
 
   return useQuery<FoodSearchResult[]>({
-    queryKey: ["food-search", trimmed],
-    queryFn: () => searchFoods(trimmed),
-    enabled: trimmed.length >= 2,
+    queryKey: ["food-search", debounced],
+    queryFn: () => searchFoods(debounced),
+    enabled: debounced.length >= 2,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }

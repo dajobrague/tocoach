@@ -1,55 +1,90 @@
+import type { CommonFoodsRepository } from "./common-foods-repository";
 import type {
   IngredientRepository,
   ManualIngredientInput,
 } from "./ingredient-repository";
 import type { FoodResult, FoodSource } from "./types";
 
+import { normalizeFoodQuery } from "./common-foods-repository";
 import { rowToFoodResult } from "./ingredient-repository";
+
+/**
+ * When the local layers (tenant cache + common-foods seed) already yield at
+ * least this many results, the external source is skipped entirely — local
+ * hits answer in one DB round-trip while OFF takes 1.5-4s.
+ */
+const MIN_LOCAL_RESULTS = 6;
 
 export interface FoodLookupServiceDeps {
   repo: IngredientRepository;
   source: FoodSource;
+  /** Optional global raw/common foods seed merged into every search. */
+  commonFoods?: CommonFoodsRepository;
 }
 
 /**
- * Cache-first food lookup. Reads the tenant's ingredient cache before touching
- * the external {@link FoodSource}, and persists source results so repeat
- * lookups are local hits (nutrition-v2 invariant §4.5: switching the food
- * source never mutates already-cached ingredients).
+ * Local-first food lookup. Searches the tenant ingredient cache and the
+ * global common-foods seed in parallel; the external {@link FoodSource} is
+ * only consulted when local results are scarce, and an external failure
+ * (OFF 503/timeout) degrades to local results instead of "no results"
+ * (nutrition-v2 invariant §4.5: switching the food source never mutates
+ * already-cached ingredients).
+ *
+ * Fresh source/seed hits are persisted to the tenant cache and returned AS
+ * cache rows, so every result carries a row id and is immediately attachable
+ * as a meal_slot_option.
  *
  * Every method takes `tenantHost` explicitly — tenant scoping is never implicit.
  */
 export class FoodLookupService {
   private readonly repo: IngredientRepository;
   private readonly source: FoodSource;
+  private readonly commonFoods: CommonFoodsRepository | null;
 
   constructor(deps: FoodLookupServiceDeps) {
     this.repo = deps.repo;
     this.source = deps.source;
+    this.commonFoods = deps.commonFoods ?? null;
   }
 
-  /**
-   * Cache-first search. If any cached ingredient matches the query for this
-   * tenant, those rows are mapped and returned WITHOUT calling the source. On a
-   * miss, the source is queried, its results are persisted, and returned.
-   * (A force-refresh path can be added later.)
-   */
   async search(
     tenantHost: string,
     query: string,
     locale?: string
   ): Promise<FoodResult[]> {
-    const cached = await this.repo.findCachedByQuery(tenantHost, query);
+    const [cachedRows, seedResults] = await Promise.all([
+      this.repo.findCachedByQuery(tenantHost, query),
+      this.searchCommonFoods(query),
+    ]);
 
-    if (cached.length > 0) {
-      return cached.map(rowToFoodResult);
+    const cachedKeys = new Set(
+      cachedRows.map((row) => `${row.source}::${row.source_ref}`)
+    );
+    // Seed foods this tenant has not cached yet.
+    const freshSeed = seedResults.filter(
+      (r) => cachedKeys.has(`seed::${r.sourceRef}`) === false
+    );
+
+    let freshSource: FoodResult[] = [];
+
+    if (cachedRows.length + freshSeed.length < MIN_LOCAL_RESULTS) {
+      freshSource = (await this.searchSource(query, locale)).filter(
+        (r) =>
+          r.sourceRef === null ||
+          cachedKeys.has(`${r.source}::${r.sourceRef}`) === false
+      );
     }
 
-    const results = await this.source.search(query, locale);
+    // Persist fresh hits and surface them as cache rows so they carry ids.
+    const insertedRows = await this.repo.insertResolved(tenantHost, [
+      ...freshSeed,
+      ...freshSource,
+    ]);
 
-    await this.repo.insertResolved(tenantHost, results);
-
-    return results;
+    return rankResults(query, [
+      ...cachedRows.map(rowToFoodResult),
+      ...insertedRows.map(rowToFoodResult),
+    ]);
   }
 
   /** Cache-first lookup by barcode (OFF product code). */
@@ -77,6 +112,39 @@ export class FoodLookupService {
     return rowToFoodResult(row);
   }
 
+  /** Seed lookup that tolerates an unapplied migration / read failure. */
+  private async searchCommonFoods(query: string): Promise<FoodResult[]> {
+    if (this.commonFoods === null) {
+      return [];
+    }
+
+    try {
+      return await this.commonFoods.search(query);
+    } catch (error) {
+      console.warn("[FoodLookupService] common_foods search failed:", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return [];
+    }
+  }
+
+  /** External search that degrades to [] on failure instead of erroring out. */
+  private async searchSource(
+    query: string,
+    locale?: string
+  ): Promise<FoodResult[]> {
+    try {
+      return await this.source.search(query, locale);
+    } catch (error) {
+      console.warn("[FoodLookupService] external food search failed:", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return [];
+    }
+  }
+
   private async lookupByRef(
     tenantHost: string,
     code: string,
@@ -95,8 +163,61 @@ export class FoodLookupService {
       return null;
     }
 
-    await this.repo.insertResolved(tenantHost, [result]);
+    const inserted = await this.repo.insertResolved(tenantHost, [result]);
+    const row = inserted[0];
 
-    return result;
+    // Prefer the cache row (it carries the id); fall back to the raw result.
+    return row !== undefined ? rowToFoodResult(row) : result;
   }
+}
+
+/**
+ * Order results by how well the name matches the query: exact > prefix >
+ * substring; ties prefer seed foods (raw staples) and shorter names. Also
+ * dedupes by cache row id.
+ */
+function rankResults(query: string, results: FoodResult[]): FoodResult[] {
+  const q = normalizeFoodQuery(query);
+  const seen = new Set<string>();
+  const deduped: FoodResult[] = [];
+
+  for (const r of results) {
+    const key = r.id ?? `${r.source}::${r.sourceRef}::${r.name}`;
+
+    if (seen.has(key) === false) {
+      seen.add(key);
+      deduped.push(r);
+    }
+  }
+
+  const tier = (r: FoodResult): number => {
+    const name = normalizeFoodQuery(r.name);
+
+    if (name === q) {
+      return 0;
+    }
+
+    if (name.startsWith(q)) {
+      return 1;
+    }
+
+    return 2;
+  };
+
+  return deduped.sort((a, b) => {
+    const byTier = tier(a) - tier(b);
+
+    if (byTier !== 0) {
+      return byTier;
+    }
+
+    const aSeed = a.source === "seed" ? 0 : 1;
+    const bSeed = b.source === "seed" ? 0 : 1;
+
+    if (aSeed !== bSeed) {
+      return aSeed - bSeed;
+    }
+
+    return a.name.length - b.name.length;
+  });
 }

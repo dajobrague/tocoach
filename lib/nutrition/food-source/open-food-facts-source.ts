@@ -1,10 +1,23 @@
 import type { FoodResult, FoodSource, NutrientsPer100g } from "./types";
 
 const DEFAULT_BASE_URL = "https://world.openfoodfacts.org";
+const DEFAULT_SEARCH_BASE_URL = "https://search.openfoodfacts.org";
 const SEARCH_PAGE_SIZE = 20;
+const DEFAULT_SEARCH_LANG = "es";
+/** Abort slow OFF calls so the UI never hangs behind the external API. */
+const REQUEST_TIMEOUT_MS = 8000;
+/** OFF asks API consumers to identify themselves. */
+const USER_AGENT = "TopCoach/1.0 (https://app.topcoach.io)";
+/** Trim the search payload to what mapProduct reads (~5KB vs ~700KB). */
+const SEARCH_FIELDS = "code,product_name,generic_name,brands,nutriments";
 
 /**
  * {@link FoodSource} backed by the Open Food Facts (OFF) public API.
+ *
+ * Search uses the modern Search-a-licious service (search.openfoodfacts.org)
+ * — the legacy `cgi/search.pl` endpoint is rate-limited to ~10 req/min and
+ * intermittently answers 503, which surfaced as phantom "no results" in the
+ * UI. Barcode/ref lookups stay on the v2 product API.
  *
  * The HTTP layer is injected (`fetchFn`) so tests never touch the network.
  * OFF responses are untrusted/loosely-typed JSON, so every field is read
@@ -14,26 +27,31 @@ const SEARCH_PAGE_SIZE = 20;
 export class OpenFoodFactsSource implements FoodSource {
   private readonly fetchFn: typeof fetch;
   private readonly baseUrl: string;
+  private readonly searchBaseUrl: string;
 
   constructor(
     fetchFn: typeof fetch = globalThis.fetch,
-    baseUrl: string = DEFAULT_BASE_URL
+    baseUrl: string = DEFAULT_BASE_URL,
+    searchBaseUrl: string = DEFAULT_SEARCH_BASE_URL
   ) {
     this.fetchFn = fetchFn;
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.searchBaseUrl = searchBaseUrl.replace(/\/+$/, "");
   }
 
   async search(query: string, locale?: string): Promise<FoodResult[]> {
-    const host = this.hostForLocale(locale);
+    const langs =
+      locale !== undefined && locale.length > 0 ? locale : DEFAULT_SEARCH_LANG;
     const url =
-      `${host}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
-      `&search_simple=1&action=process&json=1&page_size=${SEARCH_PAGE_SIZE}`;
+      `${this.searchBaseUrl}/search?q=${encodeURIComponent(query)}` +
+      `&langs=${encodeURIComponent(langs)}` +
+      `&page_size=${SEARCH_PAGE_SIZE}&fields=${SEARCH_FIELDS}`;
     const json = await this.fetchJson(url);
-    const products = asArray(asRecord(json)["products"]);
+    const hits = asArray(asRecord(json)["hits"]);
 
     const results: FoodResult[] = [];
 
-    for (const product of products) {
+    for (const product of hits) {
       const mapped = mapProduct(product);
 
       if (mapped !== null) {
@@ -72,36 +90,16 @@ export class OpenFoodFactsSource implements FoodSource {
   }
 
   private async fetchJson(url: string): Promise<unknown> {
-    const response = await this.fetchFn(url);
+    const response = await this.fetchFn(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "User-Agent": USER_AGENT },
+    });
 
     if (response.ok === false) {
       return null;
     }
 
     return (await response.json()) as unknown;
-  }
-
-  private hostForLocale(locale?: string): string {
-    if (locale === undefined || locale.length === 0) {
-      return this.baseUrl;
-    }
-
-    try {
-      const url = new URL(this.baseUrl);
-
-      if (url.hostname.endsWith("openfoodfacts.org")) {
-        const labels = url.hostname.split(".");
-
-        labels[0] = locale;
-        url.hostname = labels.join(".");
-
-        return url.origin;
-      }
-    } catch {
-      // Non-URL base (e.g. a test stub) — fall back to the configured base.
-    }
-
-    return this.baseUrl;
   }
 }
 
@@ -128,7 +126,7 @@ function mapProduct(
     defaultUnit: "g",
     nutrientsPer100g: mapNutriments(asRecord(record["nutriments"])),
   };
-  const brand = asNonEmptyString(record["brands"]);
+  const brand = mapBrand(record["brands"]);
 
   if (brand !== null) {
     // Only set when present — never assign `undefined` (exactOptionalPropertyTypes).
@@ -136,6 +134,32 @@ function mapProduct(
   }
 
   return result;
+}
+
+/**
+ * Brands come back as a comma-separated string (v2 product API) or an array
+ * of strings (Search-a-licious); either way, surface the first brand only.
+ */
+function mapBrand(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const brand = asNonEmptyString(entry);
+
+      if (brand !== null) {
+        return brand;
+      }
+    }
+
+    return null;
+  }
+
+  const raw = asNonEmptyString(value);
+
+  if (raw === null) {
+    return null;
+  }
+
+  return asNonEmptyString(raw.split(",")[0]);
 }
 
 /** Map OFF per-100g nutriments to our set; missing/NaN → 0, sodium g → mg. */
