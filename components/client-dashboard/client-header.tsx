@@ -65,10 +65,10 @@ export function ClientHeader({
     }
   };
 
-  // Load unread count on mount and fallback poll every 60s
+  // Load unread count on mount and fallback poll every 30s
   useEffect(() => {
     loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 60_000);
+    const interval = setInterval(loadUnreadCount, 30_000);
 
     return () => clearInterval(interval);
   }, [clientId, tenantSlug]);
@@ -136,7 +136,9 @@ export function ClientHeader({
             </Badge>
             <NotificationsDropdown
               clientId={clientId}
+              isChatOpen={isChatOpen}
               tenantSlug={tenantSlug}
+              onOpenChat={() => setIsChatOpen(true)}
               {...(onOpenWeeklyForm ? { onOpenWeeklyForm } : {})}
               {...(onOpenDailyForm ? { onOpenDailyForm } : {})}
             />
