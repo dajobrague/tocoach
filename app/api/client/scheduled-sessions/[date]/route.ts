@@ -50,9 +50,10 @@ interface ResolvedExercise {
   cardio_type: string | null;
   heart_rate_min: number | null;
   heart_rate_max: number | null;
-  /** Strength coaching meta (tempo, sistema de entrenamiento). */
+  /** Strength coaching meta (tempo, sistema de entrenamiento, RIR). */
   tempo: string | null;
   training_system: string | null;
+  rir: string | null;
   /**
    * Pesos del último log finalizado del mismo cliente+ejercicio, indexados
    * por posición de set (0..N-1). El form usa estos valores para prellenar
@@ -358,6 +359,7 @@ function makeResolvedDay(
         heart_rate_max: readNum("heart_rate_max"),
         tempo: readStr("tempo"),
         training_system: readStr("training_system"),
+        rir: readStr("rir"),
         // Se completa después con enrichWithLastUsedWeights — la query
         // necesita el supabase client y el clientId, que viven en el GET
         // handler, así que makeResolvedDay deja el array vacío como

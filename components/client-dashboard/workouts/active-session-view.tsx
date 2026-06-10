@@ -34,6 +34,8 @@ interface ExerciseLike {
   sets?: number;
   reps?: string;
   rest?: string;
+  /** RIR (reps in reserve) prescrito — texto libre. */
+  rir?: string;
   tempo?: string;
   trainingSystem?: string;
   /** Uniform prescribed weight in kg (from the session template). */
@@ -456,6 +458,10 @@ function formatExerciseStats(
     const rest = exercise.rest?.toString().trim();
 
     if (rest) parts.push(`${rest} descanso`);
+
+    const rir = exercise.rir?.toString().trim();
+
+    if (rir) parts.push(`RIR ${rir}`);
   }
 
   return parts.join(" · ");
@@ -531,6 +537,7 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   }
   if (r.tempo) out.tempo = r.tempo;
   if (r.training_system) out.trainingSystem = r.training_system;
+  if (r.rir) out.rir = r.rir;
   // El descanso puede vivir en metadata.rest_description (texto libre del
   // flujo add/edit de la página del cliente) o en la columna rest_seconds
   // (editor de templates); leer solo rest_seconds dejaba el descanso vacío.

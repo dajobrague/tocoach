@@ -39,14 +39,20 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
 
   return [...row.session.session_exercises]
     .sort((a, b) => a.exercise_order - b.exercise_order)
-    .map((se) => ({
-      exerciseId: se.exercise.id,
-      name: se.exercise.name,
-      category: se.exercise.category,
-      prescribedSets: se.sets ?? 0,
-      prescribedReps: se.reps,
-      prescribedWeightKg: se.weight_kg,
-    }));
+    .map((se) => {
+      const rir = se.metadata?.rir;
+
+      return {
+        exerciseId: se.exercise.id,
+        name: se.exercise.name,
+        category: se.exercise.category,
+        prescribedSets: se.sets ?? 0,
+        prescribedReps: se.reps,
+        prescribedWeightKg: se.weight_kg,
+        prescribedRir:
+          typeof rir === "string" && rir.trim() !== "" ? rir : null,
+      };
+    });
 }
 
 function buildWeekMetrics(

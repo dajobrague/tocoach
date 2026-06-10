@@ -9,6 +9,8 @@ export interface PrescribedExercise {
   /** Reps come back as TEXT from session_exercises (can be "10-12", "AMRAP", etc.). */
   prescribedReps: string | null;
   prescribedWeightKg: number | null;
+  /** RIR prescrito (texto libre de metadata.rir). */
+  prescribedRir: string | null;
 }
 
 /** A session as it travels back from the trainer endpoint (template or actual). */
@@ -21,6 +23,7 @@ export interface SessionLite {
     sets: number | null;
     reps: string | null;
     weight_kg: number | null;
+    metadata?: Record<string, unknown> | null;
     exercise: { id: string; name: string; category: string };
   }>;
 }

@@ -169,6 +169,8 @@ export interface WorkoutExercise {
   reps: string;
   tempo: string;
   rest: string;
+  /** RIR (reps in reserve) prescrito — texto libre, vive en metadata.rir. */
+  rir?: string;
   trainingSystem: string;
   videoUrl?: string;
   uploadedVideoUrl?: string;
@@ -248,6 +250,7 @@ export interface CreateExerciseRequest {
   reps?: string;
   tempo?: string;
   rest?: string;
+  rir?: string;
   trainingSystem?: string;
   // Cardio-specific fields
   duration?: string;

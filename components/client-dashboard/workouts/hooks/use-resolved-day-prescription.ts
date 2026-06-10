@@ -35,9 +35,10 @@ export interface ResolvedExercise {
   cardio_type: string | null;
   heart_rate_min: number | null;
   heart_rate_max: number | null;
-  /** Strength coaching meta (tempo, sistema de entrenamiento). */
+  /** Strength coaching meta (tempo, sistema de entrenamiento, RIR). */
   tempo: string | null;
   training_system: string | null;
+  rir: string | null;
   /**
    * Pesos del último log finalizado del mismo ejercicio (indexados por
    * posición de set, 0..N-1). El form de log usa estos valores para

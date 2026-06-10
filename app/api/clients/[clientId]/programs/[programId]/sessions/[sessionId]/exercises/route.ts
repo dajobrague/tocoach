@@ -34,6 +34,7 @@ export async function POST(
       tempo,
       rest,
       trainingSystem,
+      rir,
       // Cardio-specific fields
       duration,
       distance,
@@ -169,6 +170,7 @@ export async function POST(
         tempo,
         training_system: trainingSystem,
         rest_description: rest,
+        rir: rir || null,
       };
     }
 
@@ -250,6 +252,7 @@ export async function PUT(
       tempo,
       rest,
       trainingSystem,
+      rir,
       // Cardio-specific fields
       duration,
       distance,
@@ -383,6 +386,7 @@ export async function PUT(
         tempo,
         training_system: trainingSystem,
         rest_description: rest,
+        rir: rir || null,
       };
     }
 

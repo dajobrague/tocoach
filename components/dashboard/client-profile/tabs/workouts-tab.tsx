@@ -204,6 +204,7 @@ export default function WorkoutsTab({
     reps: "",
     tempo: "",
     rest: "",
+    rir: "",
     trainingSystem: "",
     videoUrl: "",
     exerciseId: "", // Store selected library exercise ID
@@ -552,6 +553,7 @@ export default function WorkoutsTab({
         reps: "",
         tempo: "",
         rest: "",
+        rir: "",
         trainingSystem: "",
         videoUrl: exercise.video_url || "",
         exerciseId: exercise.id,
@@ -573,6 +575,7 @@ export default function WorkoutsTab({
       reps: "",
       tempo: "",
       rest: "",
+      rir: "",
       trainingSystem: "",
       videoUrl: "",
       exerciseId: "",
@@ -981,6 +984,7 @@ export default function WorkoutsTab({
       reps: exercise.reps,
       tempo: exercise.tempo,
       rest: exercise.rest,
+      rir: exercise.rir || "",
       trainingSystem: exercise.trainingSystem,
       videoUrl: exercise.videoUrl || "",
       exerciseId: exercise.exercise_id ?? "",
@@ -1014,6 +1018,7 @@ export default function WorkoutsTab({
       reps: "",
       tempo: "",
       rest: "",
+      rir: "",
       trainingSystem: "",
       videoUrl: "",
       exerciseId: "",
@@ -1834,6 +1839,22 @@ export default function WorkoutsTab({
                       setExerciseForm({ ...exerciseForm, rest: value })
                     }
                   />
+                  <Input
+                    label="RIR"
+                    placeholder="Ej: 2, 1-2, al fallo..."
+                    size="lg"
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:target-linear"
+                        width={18}
+                      />
+                    }
+                    value={exerciseForm.rir}
+                    onValueChange={(value) =>
+                      setExerciseForm({ ...exerciseForm, rir: value })
+                    }
+                  />
                 </div>
               </div>
 
@@ -2120,6 +2141,22 @@ export default function WorkoutsTab({
                     value={exerciseForm.rest}
                     onValueChange={(value) =>
                       setExerciseForm({ ...exerciseForm, rest: value })
+                    }
+                  />
+                  <Input
+                    label="RIR"
+                    placeholder="Ej: 2, 1-2, al fallo..."
+                    size="lg"
+                    startContent={
+                      <Icon
+                        className="text-gray-400"
+                        icon="solar:target-linear"
+                        width={18}
+                      />
+                    }
+                    value={exerciseForm.rir}
+                    onValueChange={(value) =>
+                      setExerciseForm({ ...exerciseForm, rir: value })
                     }
                   />
                 </div>

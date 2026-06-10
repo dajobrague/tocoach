@@ -27,6 +27,7 @@ interface SessionExercise {
   sets: number | null;
   reps: string | null;
   weight_kg: number | null;
+  metadata: Record<string, unknown> | null;
   exercise: { id: string; name: string; category: string };
 }
 
@@ -130,7 +131,7 @@ export async function GET(
          session:sessions(
            id, name,
            session_exercises(
-             id, exercise_order, sets, reps, weight_kg,
+             id, exercise_order, sets, reps, weight_kg, metadata,
              exercise:exercises(id, name, category)
            )
          )`
@@ -373,7 +374,7 @@ async function loadSessionsWithExercises(
     .select(
       `id, name,
        session_exercises(
-         id, exercise_order, sets, reps, weight_kg,
+         id, exercise_order, sets, reps, weight_kg, metadata,
          exercise:exercises(id, name, category)
        )`
     )

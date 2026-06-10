@@ -7,6 +7,7 @@ interface TargetExercise {
   reps?: string;
   tempo?: string;
   rest?: string;
+  rir?: string;
   trainingSystem?: string;
   duration?: number;
   distance?: number;
@@ -57,6 +58,7 @@ function buildStrengthChips(e: TargetExercise): Chip[] {
   if (e.sets) chips.push({ label: "Series", value: String(e.sets) });
   if (e.reps) chips.push({ label: "Reps", value: String(e.reps) });
   if (e.rest) chips.push({ label: "Descanso", value: String(e.rest) });
+  if (e.rir) chips.push({ label: "RIR", value: String(e.rir) });
   if (e.tempo) chips.push({ label: "Tempo", value: String(e.tempo) });
   if (e.trainingSystem)
     chips.push({ label: "Sistema", value: String(e.trainingSystem) });
