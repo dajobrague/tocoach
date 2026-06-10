@@ -27,10 +27,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
+      // Las filas de chat llevan ambos ids (client_id es NOT NULL);
+      // metadata.audience decide qué campana puede mostrarlas. Filas legacy
+      // sin audience siguen visibles para ambos lados.
       const { data: notifications, error } = await supabase
         .from("notifications")
         .select("*")
         .eq("trainer_id", trainerId)
+        .or("metadata->>audience.is.null,metadata->>audience.eq.trainer")
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -77,11 +81,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Excluye filas de chat dirigidas al trainer (ver comentario en la rama
+    // trainer): el cliente no debe ver notificaciones de sus propios envíos.
     const { data: notifications, error } = await supabase
       .from("notifications")
       .select("*")
       .eq("client_id", clientId)
       .eq("tenant_slug", tenantSlug)
+      .or("metadata->>audience.is.null,metadata->>audience.eq.client")
       .order("created_at", { ascending: false })
       .limit(limit);
 

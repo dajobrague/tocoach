@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import { buildChatNotificationRow } from "@/lib/notifications/chat-notification";
 
 // Lazy Supabase client initialization
 function getSupabaseClient() {
@@ -154,6 +155,50 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Notifica al trainer en su campana (fila en `notifications` → el
+    // dropdown ya está suscrito por trainer_id vía realtime). Fire-and-forget:
+    // el envío del mensaje no debe fallar ni demorarse por la notificación.
+    const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    void (async () => {
+      const { data: trainer } = await supabase
+        .from("trainers")
+        .select("id")
+        .eq("tenant_host", tenant.host)
+        .maybeSingle();
+
+      if (!trainer?.id) {
+        console.warn(
+          `[Messages POST] ${correlationId} no trainer for host — skipping chat notification`
+        );
+
+        return;
+      }
+
+      const { error: notifError } = await supabase.from("notifications").insert(
+        buildChatNotificationRow({
+          recipientType: "trainer",
+          trainerId: trainer.id,
+          clientId: Number(clientId),
+          tenantSlug,
+          senderName: session.full_name || "Un cliente",
+          message: String(message),
+        })
+      );
+
+      if (notifError) {
+        console.error(
+          `[Messages POST] ${correlationId} chat notification insert failed:`,
+          notifError
+        );
+      }
+    })().catch((e) => {
+      console.error(
+        `[Messages POST] ${correlationId} chat notification failed:`,
+        e
+      );
+    });
 
     return NextResponse.json({ message: newMessage }, { status: 201 });
   } catch (error) {

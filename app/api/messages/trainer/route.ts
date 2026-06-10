@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
+import { buildChatNotificationRow } from "@/lib/notifications/chat-notification";
 
 // Lazy Supabase client initialization
 function getSupabaseClient() {
@@ -281,8 +282,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Send notification to client
-    // You can integrate with the notifications API here
+    // Notifica al cliente en su campana (fila en `notifications` → el
+    // dropdown ya está suscrito por client_id vía realtime). La fila guarda
+    // el SLUG porque el GET de notificaciones del cliente filtra por slug.
+    // Fire-and-forget: el mensaje no debe fallar por la notificación.
+    const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    void (async () => {
+      const { data: tenantRow } = await supabase
+        .from("tenants")
+        .select("slug")
+        .eq("host", trainer.tenant_host)
+        .maybeSingle();
+
+      if (!tenantRow?.slug) {
+        console.warn(
+          `[Trainer Messages POST] ${correlationId} no tenant slug for host — skipping chat notification`
+        );
+
+        return;
+      }
+
+      const { error: notifError } = await supabase.from("notifications").insert(
+        buildChatNotificationRow({
+          recipientType: "client",
+          trainerId: session.trainer_id,
+          clientId: Number(clientId),
+          tenantSlug: tenantRow.slug,
+          senderName: session.full_name || "Tu entrenador",
+          message: String(message),
+        })
+      );
+
+      if (notifError) {
+        console.error(
+          `[Trainer Messages POST] ${correlationId} chat notification insert failed:`,
+          notifError
+        );
+      }
+    })().catch((e) => {
+      console.error(
+        `[Trainer Messages POST] ${correlationId} chat notification failed:`,
+        e
+      );
+    });
 
     return NextResponse.json({ message: newMessage }, { status: 201 });
   } catch (error) {
