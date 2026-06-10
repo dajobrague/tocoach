@@ -4,6 +4,8 @@ import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useClientExerciseLogs } from "../workouts/use-client-exercise-logs";
+
 import { DayDetail } from "./day-detail";
 import { useWeekMetrics } from "./use-week-metrics";
 import { WeekNavigator } from "./week-navigator";
@@ -48,6 +50,11 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     getLocalYmd(new Date())
   );
   const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
+
+  // Historial all-time de logs por ejercicio — un solo fetch a nivel de
+  // sección (igual que en Entrenamiento/Cardio) compartido por todos los
+  // popovers de métricas del detalle del día.
+  const { getLogsForExercise } = useClientExerciseLogs(clientId);
 
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
   const openVideo = useCallback(
@@ -150,6 +157,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
             <DayDetail
               clientId={clientId}
               day={selectedDay}
+              getLogsForExercise={getLogsForExercise}
               orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
               onPlayVideo={openVideo}
             />

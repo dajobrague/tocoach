@@ -6,6 +6,7 @@ import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 import { Icon } from "@iconify/react";
 
 import { formatPercent } from "./adherence";
+import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -162,11 +163,14 @@ function ExecutedSetRow({
 function PrescribedRow({
   prescribed,
   logs,
+  allTimeLogs,
   isFuture,
   onPlayVideo,
 }: {
   prescribed: PrescribedExercise;
   logs: ExerciseLog[];
+  /** Historial completo del ejercicio para el popover de métricas. */
+  allTimeLogs: ExerciseLog[];
   isFuture: boolean;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
@@ -225,6 +229,9 @@ function PrescribedRow({
             {prescribed.prescribedWeightKg != null
               ? ` @ ${prescribed.prescribedWeightKg} kg`
               : ""}
+            {prescribed.prescribedRir
+              ? ` · RIR ${prescribed.prescribedRir}`
+              : ""}
           </p>
 
           {!isFuture && prescribedSets > 0 ? (
@@ -240,6 +247,15 @@ function PrescribedRow({
               <ProgressBar value={stats.series} />
             </div>
           ) : null}
+        </div>
+
+        <div className="shrink-0">
+          <ExerciseMetricsPopover
+            category={prescribed.category}
+            exerciseName={prescribed.name}
+            logs={allTimeLogs}
+            onPlayVideo={onPlayVideo}
+          />
         </div>
       </div>
 
@@ -291,10 +307,15 @@ function PrescribedRow({
 function LoggedExerciseRow({
   exerciseName,
   logs,
+  allTimeLogs,
+  category,
   onPlayVideo,
 }: {
   exerciseName: string;
   logs: ExerciseLog[];
+  /** Historial completo del ejercicio para el popover de métricas. */
+  allTimeLogs: ExerciseLog[];
+  category: string | undefined;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   const allSets = logs.flatMap((l) => l.sets ?? []);
@@ -322,6 +343,15 @@ function LoggedExerciseRow({
             {totalSets}{" "}
             {totalSets === 1 ? "serie ejecutada" : "series ejecutadas"}
           </p>
+        </div>
+
+        <div className="shrink-0">
+          <ExerciseMetricsPopover
+            category={category}
+            exerciseName={exerciseName}
+            logs={allTimeLogs}
+            onPlayVideo={onPlayVideo}
+          />
         </div>
       </div>
 
@@ -387,10 +417,16 @@ function groupLogsByExercise(
 
 interface SessionCardProps {
   entry: SessionEntry;
+  /** Historial all-time por ejercicio (popover de métricas). */
+  getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
 
-function SessionCard({ entry, onPlayVideo }: SessionCardProps) {
+function SessionCard({
+  entry,
+  getLogsForExercise,
+  onPlayVideo,
+}: SessionCardProps) {
   const showFuture = entry.classification === "future";
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
@@ -482,6 +518,8 @@ function SessionCard({ entry, onPlayVideo }: SessionCardProps) {
             {groupLogsByExercise(entry.logs).map((g) => (
               <LoggedExerciseRow
                 key={g.exerciseId}
+                allTimeLogs={getLogsForExercise(g.exerciseId)}
+                category={g.logs[0]?.exercises?.category}
                 exerciseName={g.name}
                 logs={g.logs}
                 onPlayVideo={onPlayVideo}
@@ -494,6 +532,7 @@ function SessionCard({ entry, onPlayVideo }: SessionCardProps) {
           {entry.prescribed.map((p) => (
             <PrescribedRow
               key={p.exerciseId}
+              allTimeLogs={getLogsForExercise(p.exerciseId)}
               isFuture={showFuture}
               logs={entry.logs}
               prescribed={p}
@@ -506,6 +545,8 @@ function SessionCard({ entry, onPlayVideo }: SessionCardProps) {
           {groupLogsByExercise(entry.logs).map((g) => (
             <LoggedExerciseRow
               key={g.exerciseId}
+              allTimeLogs={getLogsForExercise(g.exerciseId)}
+              category={g.logs[0]?.exercises?.category}
               exerciseName={g.name}
               logs={g.logs}
               onPlayVideo={onPlayVideo}
@@ -523,6 +564,8 @@ interface Props {
   clientId: string;
   day: DayMetrics;
   orphanLogs: ExerciseLog[];
+  /** Historial all-time por ejercicio (popover de métricas en cada fila). */
+  getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo?: ((url: string, name: string) => void) | undefined;
 }
 
@@ -530,6 +573,7 @@ export function DayDetail({
   clientId: _clientId,
   day,
   orphanLogs: _orphanLogs,
+  getLogsForExercise,
   onPlayVideo,
 }: Props) {
   // Rest day: no sessions in either direction.
@@ -568,6 +612,7 @@ export function DayDetail({
         <SessionCard
           key={entry.scheduledSession.id}
           entry={entry}
+          getLogsForExercise={getLogsForExercise}
           onPlayVideo={onPlayVideo}
         />
       ))}
