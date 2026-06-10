@@ -21,6 +21,7 @@ import {
 import { getSessionTypeStyle } from "./session-type-style";
 
 import { logMatchesSlot } from "@/lib/training/log-attribution";
+import { resolveRestLabel } from "@/lib/training/rest-label";
 
 interface ExerciseLike {
   order: number;
@@ -530,7 +531,12 @@ function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   }
   if (r.tempo) out.tempo = r.tempo;
   if (r.training_system) out.trainingSystem = r.training_system;
-  if (r.rest_seconds != null) out.rest = `${Math.round(r.rest_seconds)}s`;
+  // El descanso puede vivir en metadata.rest_description (texto libre del
+  // flujo add/edit de la página del cliente) o en la columna rest_seconds
+  // (editor de templates); leer solo rest_seconds dejaba el descanso vacío.
+  const restLabel = resolveRestLabel(r.rest_description, r.rest_seconds);
+
+  if (restLabel) out.rest = restLabel;
   if (r.last_used_weights && r.last_used_weights.length > 0) {
     out.lastUsedWeights = r.last_used_weights;
   }

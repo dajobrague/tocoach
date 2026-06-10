@@ -23,6 +23,12 @@ export interface ResolvedExercise {
   duration_seconds: number | null;
   distance_meters: number | null;
   rest_seconds: number | null;
+  /**
+   * Descanso como texto libre (metadata.rest_description). El flujo de
+   * add/edit en la página del cliente lo guarda SOLO aquí; tiene
+   * precedencia sobre rest_seconds al renderizar.
+   */
+  rest_description: string | null;
   notes: string | null;
   /** Cardio coaching meta — antes el endpoint los dropeaba y override de cardio se renderizaba como strength. */
   intensity: string | null;

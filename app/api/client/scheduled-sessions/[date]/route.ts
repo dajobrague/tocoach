@@ -32,6 +32,13 @@ interface ResolvedExercise {
   duration_seconds: number | null;
   distance_meters: number | null;
   rest_seconds: number | null;
+  /**
+   * Descanso como texto libre (metadata.rest_description). El flujo de
+   * add/edit en la página del cliente guarda el descanso SOLO aquí (nunca
+   * escribe rest_seconds), así que omitirlo deja el descanso vacío en la
+   * vista de sesión activa aunque el trainer lo haya configurado.
+   */
+  rest_description: string | null;
   notes: string | null;
   /**
    * Cardio coaching meta (intensidad subjetiva, tipo cardio, zona FC).
@@ -343,6 +350,7 @@ function makeResolvedDay(
         duration_seconds: r.duration_seconds,
         distance_meters: r.distance_meters,
         rest_seconds: r.rest_seconds,
+        rest_description: readStr("rest_description"),
         notes: r.notes,
         intensity: readStr("intensity"),
         cardio_type: readStr("cardio_type"),
