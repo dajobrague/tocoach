@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { JWT_SECRET_BYTES } from "@/lib/auth/jwt-secret";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { healThemeJson } from "@/lib/theme/heal";
 import { TEMP_PASSWORD_TRAINER } from "@/lib/constants/auth";
 
 // Helper to verify admin authentication
@@ -340,7 +341,11 @@ export async function POST(request: NextRequest) {
         theme_slug: "default",
         status: "active",
         trainer_id: authUser.user.id,
-        theme_json: {
+        // healThemeJson: la semilla cruda (fonts string, shadow {sm,md},
+        // sin accent/text/border/fill) NO pasa validateTheme — el
+        // generador de CSS la descartaba y el tenant quedaba clavado en
+        // el tema default aunque el trainer guardara sus colores después.
+        theme_json: healThemeJson({
           meta: {
             name: fullName.trim(),
             description: `${fullName.trim()}'s Coaching Platform`,
@@ -366,7 +371,7 @@ export async function POST(request: NextRequest) {
             lg: 12,
             xl: 16,
           },
-        },
+        }),
       },
       {
         onConflict: "host",
