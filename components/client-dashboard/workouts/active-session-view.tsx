@@ -14,6 +14,7 @@ import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
+import { collectExtraLoggedExercises } from "./extra-logged-exercises";
 import {
   useResolvedDayPrescription,
   type ResolvedExercise,
@@ -127,41 +128,26 @@ export function ActiveSessionView({
     (log) => (log.training_date ?? log.scheduled_date) === scheduledDate
   );
 
-  // Exercises logged on this date that aren't in the session template —
-  // the client trained exercises from a different session. Append them
-  // so the view shows everything that was actually done.
+  // Logs de este día que no están en el template Y pertenecen a ESTA
+  // sesión (off-template legítimo, p.ej. el trainer quitó el ejercicio
+  // después de que el cliente lo logueó). Los logs de OTRAS sesiones del
+  // mismo día NO se anexan — antes se "sumaban" a la sesión activa como
+  // si fueran prescritos y el cliente terminaba haciéndolos (ver
+  // collectExtraLoggedExercises para la historia completa).
   const templateExerciseIds = new Set(
     exercises
       .map((e) => e.exercise_id)
       .filter((id): id is string => Boolean(id))
   );
-  const extraLoggedExercises = useMemo(() => {
-    const seen = new Set<string>();
-    const extras: Array<ExerciseLike & Record<string, unknown>> = [];
-
-    for (const log of logsForDate) {
-      const eid = log.exercise_id;
-
-      if (!eid || templateExerciseIds.has(eid) || seen.has(eid)) continue;
-      seen.add(eid);
-
-      const logAny = log as Record<string, unknown>;
-      const exercisesRel = logAny.exercises as
-        | { name?: string }
-        | null
-        | undefined;
-      const name =
-        exercisesRel?.name ?? (logAny.exercise_name as string) ?? eid;
-
-      extras.push({
-        order: 1000 + extras.length,
-        name,
-        exercise_id: eid,
-      } as ExerciseLike & Record<string, unknown>);
-    }
-
-    return extras;
-  }, [logsForDate, templateExerciseIds]);
+  const extraLoggedExercises = useMemo(
+    () =>
+      collectExtraLoggedExercises(
+        logsForDate,
+        session.id,
+        templateExerciseIds
+      ) as Array<ExerciseLike & Record<string, unknown>>,
+    [logsForDate, templateExerciseIds, session.id]
+  );
 
   const allExercises = useMemo(
     () => [...exercises, ...extraLoggedExercises],
