@@ -18,7 +18,7 @@ import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { clientFetch } from "@/lib/auth/client-token-storage";
+import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import {
   clearFormResponseDraft,
   formResponseDraftStorageKey,
@@ -27,6 +27,9 @@ import {
 } from "@/lib/client/checkin-draft";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/conditional";
+// La heurística de pasos vive en lib/forms para que el server aplique la
+// misma regla (relax del required cuando el cliente no tiene NEAT cards).
+import { isStepsQuestion } from "@/lib/forms/neat-steps";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
 import { isEmptyAnswer } from "@/lib/forms/validation";
 import {
@@ -73,6 +76,11 @@ export function DynamicFormModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Mensaje de error del último intento de envío que NO mapea a ninguna
+  // pregunta renderizada (sesión expirada, error de red, campo oculto…).
+  // Se muestra inline en el footer — los toasts solos no bastan: si fallan
+  // en renderizarse el cliente percibe "aprieto Enviar y no pasa nada".
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isEditingExisting, setIsEditingExisting] = useState(false);
   const [existingResponseDate, setExistingResponseDate] = useState<string>("");
@@ -206,6 +214,7 @@ export function DynamicFormModal({
     let cancelled = false;
     const isCancelled = () => cancelled;
 
+    setSubmitError(null);
     checkNeatCards(isCancelled);
     fetchFormConfig(isCancelled);
     checkExistingResponse(isCancelled);
@@ -456,26 +465,6 @@ export function DynamicFormModal({
   const shouldShowQuestion = (question: QuestionConfig): boolean =>
     sharedShouldShowQuestion(question, answers);
 
-  /**
-   * Heurística para detectar la pregunta "de pasos" del formulario de hábitos.
-   * Se usa para ocultarla cuando el cliente no tiene NEAT cards configuradas.
-   *
-   * Históricamente sólo se comprobaba `id === "steps" || id === "pasos"`, pero
-   * trainers que renombran la pregunta (p.ej. `daily_steps`, `pasos_diarios`)
-   * bypassaban el filtro. Ampliamos a label/unit/id-contains para atrapar más
-   * casos sin falsos positivos evidentes. Mantenemos los ids canónicos como
-   * match exacto por compatibilidad.
-   */
-  const isStepsQuestion = (q: QuestionConfig): boolean => {
-    const id = q.id.toLowerCase();
-
-    if (id === "steps" || id === "pasos") return true;
-    if (id.includes("step") || id.includes("paso")) return true;
-    if (q.unit && /^(pasos|steps)$/i.test(q.unit)) return true;
-
-    return false;
-  };
-
   // Get visible questions for current view. NEAT filter applies at render
   // time so it reacts to `hasNeatCards` resolving after mount.
   const visibleQuestions = questions.filter((q) => {
@@ -572,12 +561,17 @@ export function DynamicFormModal({
     const sectionErrors: Record<string, string> = {};
 
     section.questions.forEach((question) => {
-      if (question.required && !shouldShowQuestion(question)) return;
+      if (!shouldShowQuestion(question)) return;
 
       if (question.type === "group" && question.subQuestions) {
         question.subQuestions
           .filter((sq) => sq.enabled && sq.required)
           .forEach((sq) => {
+            // Paridad con `validateFormResponse` del server: una subpregunta
+            // condicional oculta no se renderiza (ver el render de grupos),
+            // así que exigirla bloquearía el envío con un error invisible.
+            if (!shouldShowQuestion(sq)) return;
+
             if (isEmptyAnswer(sq.type, answers[sq.id])) {
               sectionErrors[sq.id] = "Este campo es obligatorio";
             }
@@ -655,6 +649,7 @@ export function DynamicFormModal({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
     // 30s timeout on submit. If the network stalls (tunnel, flaky 3G,
     // etc.), abort instead of hanging the modal indefinitely. The user's
     // answers stay in `answers` state so a retry just reruns this same
@@ -728,6 +723,21 @@ export function DynamicFormModal({
         setCurrentStep(0);
         setIsEditingExisting(false);
         onClose();
+      } else if (response.status === 401) {
+        // Sesión muerta: cookie bloqueada/expirada Y token local inválido.
+        // Limpiamos el token para no seguir adjuntando un JWT muerto y
+        // damos una instrucción accionable en vez del genérico
+        // "No autorizado".
+        clearClientToken();
+        const sessionMessage =
+          "Tu sesión expiró. Cierra el formulario y vuelve a iniciar sesión para poder enviarlo. Tus respuestas quedan guardadas en este dispositivo.";
+
+        setSubmitError(sessionMessage);
+        addToast({
+          title: "Sesión expirada",
+          description: sessionMessage,
+          color: "danger",
+        });
       } else {
         // Mapear errores de validación server-side al state local
         // `errors` para que se vean inline en cada pregunta, en vez
@@ -770,6 +780,26 @@ export function DynamicFormModal({
             setCurrentStep(firstStepWithError);
           }
 
+          // Errores sobre campos que NO están renderizados (p.ej. una
+          // pregunta filtrada client-side o de una versión vieja del
+          // config) no tienen dónde mostrarse inline. Sin este banner el
+          // cliente no ve nada y cree que el botón no funciona.
+          const renderedIds = new Set<string>();
+
+          sections.forEach((s) =>
+            s.questions.forEach((q) => {
+              renderedIds.add(q.id);
+              q.subQuestions?.forEach((sq) => renderedIds.add(sq.id));
+            })
+          );
+          const unmappedMessages = Object.entries(serverErrors)
+            .filter(([field]) => !renderedIds.has(field))
+            .map(([, message]) => message);
+
+          if (unmappedMessages.length > 0) {
+            setSubmitError(unmappedMessages.join(" · "));
+          }
+
           addToast({
             title: "Revisa los campos marcados",
             description:
@@ -777,6 +807,7 @@ export function DynamicFormModal({
             color: "warning",
           });
         } else {
+          setSubmitError(data.error || "Error al enviar formulario");
           addToast({
             title: "Error",
             description: data.error || "Error al enviar formulario",
@@ -794,6 +825,9 @@ export function DynamicFormModal({
         err?.name === "AbortError" &&
         controller.signal.reason === "timeout"
       ) {
+        setSubmitError(
+          "El envío tardó demasiado. Verifica tu conexión y toca Enviar otra vez. Tus respuestas siguen aquí."
+        );
         addToast({
           title: "El envío tardó demasiado",
           description:
@@ -802,6 +836,9 @@ export function DynamicFormModal({
         });
       } else {
         console.error("Error submitting form:", error);
+        setSubmitError(
+          "No se pudo enviar el formulario. Verifica tu conexión y toca Enviar otra vez."
+        );
         addToast({
           title: "Error de conexión",
           description: "No se pudo enviar el formulario",
@@ -817,6 +854,7 @@ export function DynamicFormModal({
   const handleAnswerChange = (id: string, value: any) => {
     if (isViewMode) return;
     setAnswers((prev) => ({ ...prev, [id]: value }));
+    if (submitError) setSubmitError(null);
     // Clear error on change
     if (errors[id]) {
       setErrors((prev) => {
@@ -1730,7 +1768,16 @@ export function DynamicFormModal({
               )}
             </ModalBody>
 
-            <ModalFooter className="border-t border-default-200">
+            <ModalFooter className="border-t border-default-200 flex-col gap-2">
+              {!isViewMode && submitError && (
+                <div className="w-full rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger flex items-start gap-2">
+                  <Icon
+                    className="text-base mt-0.5 shrink-0"
+                    icon="solar:danger-triangle-bold"
+                  />
+                  <span>{submitError}</span>
+                </div>
+              )}
               {isViewMode ? (
                 <div className="flex justify-end w-full">
                   <Button color="primary" onPress={onModalClose}>
