@@ -352,7 +352,14 @@ function makeResolvedDay(
         distance_meters: r.distance_meters,
         rest_seconds: r.rest_seconds,
         rest_description: readStr("rest_description"),
-        notes: r.notes,
+        // Notas del trainer: columna primero, fallback a metadata.notes —
+        // mismo criterio que resolveStrengthCoachingFields (template path).
+        // Sin el fallback, un comentario guardado solo en metadata se veía
+        // cualquier día EXCEPTO el recomendado.
+        notes:
+          (typeof r.notes === "string" && r.notes.trim() !== ""
+            ? r.notes
+            : null) ?? readStr("notes"),
         intensity: readStr("intensity"),
         cardio_type: readStr("cardio_type"),
         heart_rate_min: readNum("heart_rate_min"),
