@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { healThemeJson } from "@/lib/theme/heal";
 
 export async function POST(request: NextRequest) {
   // Feature flag: disable public registration
@@ -121,7 +122,12 @@ export async function POST(request: NextRequest) {
         theme_slug: "default", // Default theme, can be customized later
         status: "inactive", // Inactive until setup is completed
         trainer_id: authUser.user.id,
-        theme_json: {
+        // healThemeJson garantiza una forma que pasa validateTheme. La
+        // semilla anterior (fonts como strings, shadow {sm,md}, sin
+        // accent/text/border/fill) era inválida: el generador de CSS la
+        // descartaba y servía el tema default para siempre, incluso
+        // después de que el trainer guardara sus colores.
+        theme_json: healThemeJson({
           meta: {
             name: fullName.trim(),
             description: `${fullName.trim()}'s Coaching Platform`,
@@ -141,7 +147,7 @@ export async function POST(request: NextRequest) {
             sm: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
             md: "0 2px 4px -1px rgb(0 0 0 / 0.1)",
           },
-        },
+        }),
       },
       {
         onConflict: "host",
