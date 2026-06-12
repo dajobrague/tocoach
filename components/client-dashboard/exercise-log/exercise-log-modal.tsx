@@ -37,7 +37,11 @@ import { ExerciseLogForm } from "./exercise-log-form";
 import { ExerciseLogHero } from "./exercise-log-hero";
 import { ExerciseLogIdentity } from "./exercise-log-identity";
 import { ExerciseTargetSection } from "./exercise-target-section";
-import { isExerciseCardio, type ExerciseShape } from "./helpers";
+import {
+  isExerciseCardio,
+  shouldAutosaveDraft,
+  type ExerciseShape,
+} from "./helpers";
 import { useExerciseLogDraft } from "./hooks/use-exercise-log-draft";
 import { useExerciseVideo } from "./hooks/use-exercise-video";
 import { useSetVideos } from "./hooks/use-set-videos";
@@ -94,15 +98,16 @@ export function ExerciseLogModal({
 
   const isCardio = exercise ? isExerciseCardio(exercise) : false;
 
-  const { formData, setFormData, draftKey } = useExerciseLogDraft({
-    isOpen,
-    exercise,
-    existingLog,
-    clientId,
-    sessionId,
-    exerciseId,
-    scheduledDate,
-  });
+  const { formData, setFormData, draftKey, hydratedSigRef } =
+    useExerciseLogDraft({
+      isOpen,
+      exercise,
+      existingLog,
+      clientId,
+      sessionId,
+      exerciseId,
+      scheduledDate,
+    });
 
   // Flag de "el usuario tocó algo desde el último save". Solo cuando
   // está en true disparamos autosave. Lo manejamos por ref para no
@@ -280,20 +285,31 @@ export function ExerciseLogModal({
   );
 
   // Autosave debounced. Solo dispara si el usuario tocó algo desde el
-  // último save (isDirtyRef). El re-hydrate post-save (que reemplaza
-  // formData con el nuevo existingLog del server) NO es input del
-  // usuario y por eso no debería disparar — gate por isDirtyRef.
+  // último save (isDirtyRef) Y el form difiere del baseline de
+  // hidratación (shouldAutosaveDraft). El re-hydrate post-save NO es
+  // input del usuario; y el contenido PRELLENADO (reps de prescripción,
+  // peso de lastUsedWeights) tampoco — sin la comparación contra el
+  // baseline, mirar un ejercicio por curiosidad y rozar un input creaba
+  // un log fantasma "En curso" con los valores prescritos.
   useEffect(() => {
     if (!isOpen || !exercise) return;
-    if (!isDirtyRef.current) return;
-    if (!hasMeaningfulFormData(formData, isCardio)) return;
+    if (
+      !shouldAutosaveDraft(
+        formData,
+        isCardio,
+        isDirtyRef.current,
+        hydratedSigRef.current
+      )
+    ) {
+      return;
+    }
 
     const t = window.setTimeout(() => {
       void performSave(true, false);
     }, 1500);
 
     return () => window.clearTimeout(t);
-  }, [formData, isCardio, isOpen, exercise, performSave]);
+  }, [formData, isCardio, isOpen, exercise, performSave, hydratedSigRef]);
 
   // Reset al cerrar el modal: volvemos a estado limpio para la próxima
   // apertura (otro ejercicio o reapertura del mismo).
@@ -470,30 +486,5 @@ export function ExerciseLogModal({
         </ModalFooter>
       </ModalContent>
     </Modal>
-  );
-}
-
-// Decide si vale la pena disparar autosave. Si el cliente abrió el
-// modal pero todavía no tipeó nada significativo, no creamos un log
-// vacío en BD.
-function hasMeaningfulFormData(
-  formData: ReturnType<typeof useExerciseLogDraft>["formData"],
-  isCardio: boolean
-): boolean {
-  if (isCardio) {
-    return Boolean(
-      formData.durationCompleted ||
-        formData.distanceCompleted ||
-        formData.intensityCompleted ||
-        formData.avgHeartRate ||
-        formData.notes
-    );
-  }
-
-  return formData.sets.some(
-    (s) =>
-      (s.reps && s.reps.trim().length > 0) ||
-      (s.weight && s.weight.trim().length > 0) ||
-      Boolean(s.videoUrl)
   );
 }
