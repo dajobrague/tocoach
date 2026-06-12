@@ -10,6 +10,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
+
 interface ActiveTraining {
   date: string;
   sessionId: string;
@@ -18,23 +20,51 @@ interface ActiveTraining {
 const STORAGE_KEY = (clientId: string) =>
   `topcoach:client:${clientId}:active-training`;
 
-function read(clientId: string): ActiveTraining | null {
-  if (typeof window === "undefined") return null;
+// Parsea y valida el valor persistido. Solo se restaura cuando la fecha
+// guardada es HOY (local): cada día tiene su propio contexto — la
+// persistencia existe para sobrevivir navegación/reloads DENTRO del
+// mismo entrenamiento, no para arrastrar el último día entrenado.
+// Sin este corte, un cliente que entrenó el lunes y nunca salió de la
+// sesión abría la pestaña Entrenamiento el miércoles y la app le
+// mostraba el lunes en vez de hoy. Pure y exportada para testearla.
+export function parseActiveTraining(
+  raw: string | null,
+  todayYmd: string
+): ActiveTraining | null {
+  if (!raw) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY(clientId));
-
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ActiveTraining> | null;
 
     if (
       parsed &&
       typeof parsed.date === "string" &&
-      typeof parsed.sessionId === "string"
+      typeof parsed.sessionId === "string" &&
+      parsed.date === todayYmd
     ) {
       return { date: parsed.date, sessionId: parsed.sessionId };
     }
   } catch {
-    /* localStorage puede tirar QuotaExceededError o JSON inválido — ignorar */
+    /* JSON inválido — tratar como ausente */
+  }
+
+  return null;
+}
+
+function read(clientId: string): ActiveTraining | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY(clientId));
+    const result = parseActiveTraining(raw, getLocalTodayYmd());
+
+    // Self-clean: un valor presente pero stale/ilegible no va a volver a
+    // ser válido — lo borramos para no re-parsearlo en cada mount.
+    if (raw && !result) {
+      window.localStorage.removeItem(STORAGE_KEY(clientId));
+    }
+
+    return result;
+  } catch {
+    /* localStorage puede tirar QuotaExceededError — ignorar */
   }
 
   return null;
