@@ -38,6 +38,52 @@ export function isExerciseCardio(exercise: ExerciseShape): boolean {
   );
 }
 
+// Decide si vale la pena disparar autosave. Si el cliente abrió el
+// modal pero todavía no tipeó nada significativo, no creamos un log
+// vacío en BD.
+export function hasMeaningfulFormData(
+  formData: ExerciseLogFormDraft,
+  isCardio: boolean
+): boolean {
+  if (isCardio) {
+    return Boolean(
+      formData.durationCompleted ||
+        formData.distanceCompleted ||
+        formData.intensityCompleted ||
+        formData.avgHeartRate ||
+        formData.notes
+    );
+  }
+
+  return formData.sets.some(
+    (s) =>
+      (s.reps && s.reps.trim().length > 0) ||
+      (s.weight && s.weight.trim().length > 0) ||
+      Boolean(s.videoUrl)
+  );
+}
+
+// Gate completo del autosave. Además de "hay contenido", exige que el
+// form DIFIERA de su baseline de hidratación (JSON.stringify del estado
+// que el hook aplicó al abrir). El form se hidrata PRELLENADO — reps de
+// la prescripción, peso de lastUsedWeights — así que contenido ≠ input
+// del cliente: sin esta comparación, un cliente que entraba a mirar un
+// ejercicio por curiosidad y rozaba cualquier input creaba un log
+// fantasma "En curso" con los valores prescritos, que luego aparecía
+// solapado en otras sesiones del día y como sesión a medias para el
+// trainer.
+export function shouldAutosaveDraft(
+  formData: ExerciseLogFormDraft,
+  isCardio: boolean,
+  isDirty: boolean,
+  hydratedSig: string
+): boolean {
+  if (!isDirty) return false;
+  if (!hasMeaningfulFormData(formData, isCardio)) return false;
+
+  return JSON.stringify(formData) !== hydratedSig;
+}
+
 /**
  * Convención usada por varios trainers para codificar prescripción per-set
  * dentro del campo uniform reps: "12 | 12 | 10 | 8" indica 4 sets con esos
