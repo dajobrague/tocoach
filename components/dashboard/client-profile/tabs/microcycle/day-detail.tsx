@@ -7,6 +7,7 @@ import { Icon } from "@iconify/react";
 
 import { formatPercent } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
+import { buildLoggedExerciseGroups, countLoggedSets } from "./logged-view";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -309,6 +310,7 @@ function LoggedExerciseRow({
   logs,
   allTimeLogs,
   category,
+  offPlan,
   onPlayVideo,
 }: {
   exerciseName: string;
@@ -316,6 +318,8 @@ function LoggedExerciseRow({
   /** Historial completo del ejercicio para el popover de métricas. */
   allTimeLogs: ExerciseLog[];
   category: string | undefined;
+  /** True when the client logged this exercise but it wasn't prescribed. */
+  offPlan?: boolean;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   const allSets = logs.flatMap((l) => l.sets ?? []);
@@ -338,7 +342,14 @@ function LoggedExerciseRow({
         </span>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
+            {offPlan ? (
+              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                Fuera de plan
+              </span>
+            ) : null}
+          </div>
           <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
             {totalSets}{" "}
             {totalSets === 1 ? "serie ejecutada" : "series ejecutadas"}
@@ -391,28 +402,6 @@ function LoggedExerciseRow({
   );
 }
 
-function groupLogsByExercise(
-  logs: ExerciseLog[]
-): Array<{ name: string; exerciseId: string; logs: ExerciseLog[] }> {
-  const map = new Map<string, { name: string; logs: ExerciseLog[] }>();
-
-  for (const log of logs) {
-    const id = log.exercise_id ?? "unknown";
-    const entry = map.get(id) ?? {
-      name: log.exercises?.name ?? "Ejercicio",
-      logs: [],
-    };
-
-    entry.logs.push(log);
-    map.set(id, entry);
-  }
-
-  return Array.from(map.entries()).map(([exerciseId, v]) => ({
-    exerciseId,
-    ...v,
-  }));
-}
-
 // ─── Single-session card ─────────────────────────────────────────────────────
 
 interface SessionCardProps {
@@ -431,17 +420,18 @@ function SessionCard({
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
 
-  // Decide rendering mode: if the client logged exercises, check whether
-  // they match the prescription. If they don't, render logged exercises
-  // as the primary view instead of the prescription.
+  // Actuals-first: whenever the client logged anything for this session, show
+  // what they ACTUALLY did (the prescription drops to a reference line),
+  // mirroring the client app. Previously this only triggered when the logs
+  // FULLY diverged from the prescription; on partial overlap (client did the
+  // session but swapped/added exercises) we rendered the prescription and
+  // silently hid the off-plan work — so the trainer saw exercises the client
+  // never did and missed the ones they actually logged.
   const hasLogs = entry.logs.length > 0;
-  const prescriptionMatch =
-    hasLogs &&
-    entry.prescribed.length > 0 &&
-    entry.prescribed.some((p) =>
-      entry.logs.some((l) => l.exercise_id === p.exerciseId)
-    );
-  const showLoggedView = hasLogs && !prescriptionMatch && !showFuture;
+  const showLoggedView = hasLogs && !showFuture;
+  const loggedGroups = buildLoggedExerciseGroups(entry.prescribed, entry.logs);
+  const offPlanCount = loggedGroups.filter((g) => g.offPlan).length;
+  const loggedSetsActual = countLoggedSets(entry.logs);
 
   return (
     <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
@@ -475,15 +465,19 @@ function SessionCard({
           <div className="grid grid-cols-2 gap-2">
             <StatChip
               accent="green"
-              hint={`${entry.adherence.completedExercises} ejercicios`}
+              hint={
+                offPlanCount > 0
+                  ? `${offPlanCount} fuera de plan`
+                  : "ejercicios"
+              }
               label="Ejercicios realizados"
-              value={String(entry.adherence.completedExercises)}
+              value={String(loggedGroups.length)}
             />
             <StatChip
               accent="green"
               hint="series totales"
               label="Series ejecutadas"
-              value={String(totalSetsLogged)}
+              value={String(loggedSetsActual)}
             />
           </div>
         ) : (
@@ -515,13 +509,14 @@ function SessionCard({
             </div>
           ) : null}
           <ul className="divide-y divide-gray-100">
-            {groupLogsByExercise(entry.logs).map((g) => (
+            {loggedGroups.map((g) => (
               <LoggedExerciseRow
                 key={g.exerciseId}
                 allTimeLogs={getLogsForExercise(g.exerciseId)}
                 category={g.logs[0]?.exercises?.category}
                 exerciseName={g.name}
                 logs={g.logs}
+                offPlan={g.offPlan}
                 onPlayVideo={onPlayVideo}
               />
             ))}
@@ -542,13 +537,14 @@ function SessionCard({
         </ul>
       ) : hasLogs ? (
         <ul className="divide-y divide-gray-100">
-          {groupLogsByExercise(entry.logs).map((g) => (
+          {loggedGroups.map((g) => (
             <LoggedExerciseRow
               key={g.exerciseId}
               allTimeLogs={getLogsForExercise(g.exerciseId)}
               category={g.logs[0]?.exercises?.category}
               exerciseName={g.name}
               logs={g.logs}
+              offPlan={g.offPlan}
               onPlayVideo={onPlayVideo}
             />
           ))}
