@@ -51,6 +51,7 @@ import { useClientExerciseLogs } from "./workouts/use-client-exercise-logs";
 import { useExerciseExpandedState } from "./workouts/use-exercise-expanded-state";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
+import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
   TrainerExerciseVideoModal,
   type TrainerExerciseVideoHandle,
@@ -567,7 +568,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
     // The API now requires a library exercise to anchor the slot.
     if (!exerciseForm.exerciseId) {
-      alert("Selecciona un ejercicio de tu biblioteca");
+      await alertAfterPress("Selecciona un ejercicio de tu biblioteca");
 
       return;
     }
@@ -598,13 +599,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddExercise();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al guardar ejercicio: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving exercise:", err);
-      alert("Error al guardar ejercicio");
+      await alertAfterPress("Error al guardar ejercicio");
     } finally {
       setIsSaving(false);
     }
@@ -703,13 +704,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditProgram();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating program:", err);
-      alert("Error al actualizar programa");
+      await alertAfterPress("Error al actualizar programa");
     } finally {
       setIsSaving(false);
     }
@@ -719,7 +720,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     programId: string,
     programName: string
   ) => {
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
         "Esto eliminará permanentemente:\n" +
         "• Todas las sesiones del programa\n" +
@@ -745,13 +746,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting program:", err);
-      alert("Error al eliminar programa");
+      await alertAfterPress("Error al eliminar programa");
     } finally {
       setIsSaving(false);
     }
@@ -759,13 +760,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
   const handleSaveProgram = async () => {
     if (!programForm.name.trim()) {
-      alert("El nombre del programa es obligatorio");
+      await alertAfterPress("El nombre del programa es obligatorio");
 
       return;
     }
 
     if (!programForm.startDate) {
-      alert("La fecha de inicio es obligatoria");
+      await alertAfterPress("La fecha de inicio es obligatoria");
 
       return;
     }
@@ -788,13 +789,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddProgram();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al crear programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving program:", err);
-      alert("Error al crear programa");
+      await alertAfterPress("Error al crear programa");
     } finally {
       setIsSaving(false);
     }
@@ -838,11 +839,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddSession();
       } else {
-        alert("Error al crear sesión: " + (data.error || "Error desconocido"));
+        await alertAfterPress(
+          "Error al crear sesión: " + (data.error || "Error desconocido")
+        );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving session:", err);
-      alert("Error al crear sesión");
+      await alertAfterPress("Error al crear sesión");
     } finally {
       setIsSaving(false);
     }
@@ -902,13 +905,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditSession();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar sesión: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating session:", err);
-      alert("Error al actualizar sesión");
+      await alertAfterPress("Error al actualizar sesión");
     } finally {
       setIsSaving(false);
     }
@@ -921,7 +924,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
     if (!session) return;
 
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro de que deseas eliminar la sesión "${session.name}"? Esta acción no se puede deshacer.`
     );
 
@@ -941,13 +944,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar sesión: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting session:", err);
-      alert("Error al eliminar sesión");
+      await alertAfterPress("Error al eliminar sesión");
     }
   };
 
@@ -1013,7 +1016,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     // The edit now swaps the slot's library exercise. Require an explicit
     // pick so we never PUT an empty exerciseId.
     if (!exerciseForm.exerciseId) {
-      alert("Selecciona un ejercicio de tu biblioteca");
+      await alertAfterPress("Selecciona un ejercicio de tu biblioteca");
 
       return;
     }
@@ -1027,7 +1030,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       editOriginalExerciseId &&
       getLogsForExercise(editOriginalExerciseId).length > 0
     ) {
-      const proceed = window.confirm(
+      const proceed = await confirmAfterPress(
         "Este cliente ya registró entrenamientos del ejercicio anterior. Esos registros quedarán ligados al ejercicio anterior; los nuevos serán del ejercicio nuevo. ¿Continuar?"
       );
 
@@ -1056,14 +1059,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditExercise();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar ejercicio: " +
             (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating exercise:", err);
-      alert("Error al actualizar ejercicio");
+      await alertAfterPress("Error al actualizar ejercicio");
     } finally {
       setIsSaving(false);
     }
@@ -1072,7 +1075,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   const handleDeleteExercise = async (sessionId: string, exercise: any) => {
     if (!activeProgram) return;
 
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro de que deseas eliminar el ejercicio "${exercise.name}"? Esta acción no se puede deshacer.`
     );
 
@@ -1094,13 +1097,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar ejercicio: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting exercise:", err);
-      alert("Error al eliminar ejercicio");
+      await alertAfterPress("Error al eliminar ejercicio");
     }
   };
 
