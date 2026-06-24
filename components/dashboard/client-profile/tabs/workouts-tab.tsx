@@ -547,19 +547,15 @@ export default function WorkoutsTab({
       librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Prefill only identity fields; the trainer enters programming per-session.
-      setExerciseForm({
+      // Only update identity fields — name, exerciseId, videoUrl.
+      // All workout params (sets/reps/tempo/rest/rir/sistema) are preserved
+      // so changing the selected exercise doesn't wipe values already entered.
+      setExerciseForm((prev) => ({
+        ...prev,
         name: exercise.name,
-        sets: "",
-        reps: "",
-        tempo: "",
-        rest: "",
-        rir: "",
-        trainingSystem: "",
-        videoUrl: exercise.video_url || "",
         exerciseId: exercise.id,
-        notes: "",
-      });
+        videoUrl: exercise.video_url || prev.videoUrl,
+      }));
       // Keep the controlled input text in sync with the picked exercise.
       setLibraryInputValue(exercise.name);
     }

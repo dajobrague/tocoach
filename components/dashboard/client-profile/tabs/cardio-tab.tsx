@@ -527,18 +527,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Prefill identity + activity type; per-session metrics are entered manually.
-      setExerciseForm({
+      // Only update identity fields — name and exerciseId.
+      // All other params (type/duration/intensity/notes) are preserved
+      // so changing the selected exercise doesn't wipe values already entered.
+      setExerciseForm((prev) => ({
+        ...prev,
         name: exercise.name,
-        type: exercise.metadata?.cardio_type || exercise.category || "",
-        duration: "",
-        distance: "",
-        intensity: exercise.metadata?.intensity || "",
-        minHeartRate: "",
-        maxHeartRate: "",
-        notes: exercise.description || "",
         exerciseId: exercise.id,
-      });
+      }));
       // Keep the controlled input text in sync with the picked exercise.
       setLibraryInputValue(exercise.name);
     }
