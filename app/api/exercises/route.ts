@@ -163,6 +163,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reject duplicate names (case-insensitive) for this trainer.
+    // No DB unique constraint exists, so this is the only guard.
+    const { data: existing } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("trainer_id", session.trainer_id)
+      .ilike("name", name.trim())
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Ya existe un ejercicio con ese nombre en tu biblioteca. Usa un nombre diferente o edita el existente.",
+        },
+        { status: 409 }
+      );
+    }
+
     // Create the exercise
     const { data: exercise, error: exerciseError } = await supabase
       .from("exercises")
