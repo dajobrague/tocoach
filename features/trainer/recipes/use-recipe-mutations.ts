@@ -5,6 +5,7 @@ import type {
   AddFromFoodArgs,
   ManualIngredientInput,
   RecipeFormValues,
+  RecipeIngredientItem,
 } from "./recipe-api";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,8 +14,11 @@ import {
   addIngredientFromFood,
   addIngredientManual,
   createRecipe,
+  deleteRecipe,
   removeIngredient,
   removeMedia,
+  replaceIngredients,
+  reorderIngredients,
   updateIngredient,
   updateRecipe,
   uploadMedia,
@@ -53,6 +57,17 @@ export function useUpdateRecipe(recipeId: string) {
   });
 }
 
+export function useDeleteRecipe() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (recipeId: string) => deleteRecipe(recipeId),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["recipes"] });
+    },
+  });
+}
+
 export function useAddIngredient(recipeId: string) {
   const client = useQueryClient();
 
@@ -76,15 +91,77 @@ export function useUpdateIngredient(recipeId: string) {
       ingredientRowId: string;
       quantity?: number;
       unit?: string;
+      gramsPerUnit?: number | null;
     }) => {
-      const patch: { quantity?: number; unit?: string } = {};
+      const patch: {
+        quantity?: number;
+        unit?: string;
+        gramsPerUnit?: number | null;
+      } = {};
 
       if (args.quantity !== undefined) patch.quantity = args.quantity;
       if (args.unit !== undefined) patch.unit = args.unit;
+      if (args.gramsPerUnit !== undefined)
+        patch.gramsPerUnit = args.gramsPerUnit;
 
       return updateIngredient(recipeId, args.ingredientRowId, patch);
     },
     onSuccess: () => invalidateRecipe(client, recipeId),
+  });
+}
+
+const INGREDIENTS_KEY = (recipeId: string) =>
+  ["recipe-ingredients", recipeId] as const;
+
+/**
+ * Reorder ingredient lines with an optimistic cache update so the list settles
+ * instantly and never snaps back mid-drag. On error we roll back to the
+ * pre-drag snapshot; on settle we refetch to reconcile server sort_order.
+ */
+export function useReorderIngredients(recipeId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      reorderIngredients(recipeId, orderedIds),
+    onMutate: async (orderedIds: string[]) => {
+      const key = INGREDIENTS_KEY(recipeId);
+
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<RecipeIngredientItem[]>(key) ?? [];
+      const byId = new Map(previous.map((item) => [item.id, item]));
+      const next = orderedIds
+        .map((id) => byId.get(id))
+        .filter((item): item is RecipeIngredientItem => item !== undefined);
+
+      client.setQueryData<RecipeIngredientItem[]>(key, next);
+
+      return { previous };
+    },
+    onError: (_error, _orderedIds, context) => {
+      if (context !== undefined) {
+        client.setQueryData(INGREDIENTS_KEY(recipeId), context.previous);
+      }
+    },
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: INGREDIENTS_KEY(recipeId) });
+      client.invalidateQueries({ queryKey: ["recipes"] });
+    },
+  });
+}
+
+/** Persist the whole buffered ingredient list at once (the editor's save). */
+export function useReplaceIngredients(recipeId: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: { ingredients: Record<string, unknown>[] }) =>
+      replaceIngredients(recipeId, body),
+    onSuccess: (rows) => {
+      client.setQueryData(["recipe-ingredients", recipeId], rows);
+      client.invalidateQueries({ queryKey: ["recipe", recipeId] });
+      client.invalidateQueries({ queryKey: ["recipes"] });
+    },
   });
 }
 
@@ -106,9 +183,10 @@ export function useUploadMedia(recipeId: string) {
       file: File;
       orientation?: "vertical" | "horizontal";
     }) => uploadMedia(recipeId, args.file, args.orientation),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["recipe-media", recipeId] });
-    },
+    // Media edits change the recipe's thumbnail too, so invalidate the recipe
+    // and the recipes list (not just recipe-media) — otherwise the picker keeps
+    // a stale thumbnailUrl pointing at the now-deleted storage object (404).
+    onSuccess: () => invalidateRecipe(client, recipeId),
   });
 }
 
@@ -117,8 +195,6 @@ export function useRemoveMedia(recipeId: string) {
 
   return useMutation({
     mutationFn: (mediaId: string) => removeMedia(recipeId, mediaId),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["recipe-media", recipeId] });
-    },
+    onSuccess: () => invalidateRecipe(client, recipeId),
   });
 }

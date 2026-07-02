@@ -28,6 +28,9 @@ export interface RecipeRow {
   updated_at: string;
 }
 
+/** A list row: a recipe plus its derived card thumbnail (first image). */
+export type RecipeListRow = RecipeRow & { thumbnailUrl: string | null };
+
 export interface RecipeCreateInput {
   name: string;
   description?: string;
@@ -130,10 +133,12 @@ export class RecipeService {
   async list(
     tenantHost: string,
     filter: RecipeListFilter
-  ): Promise<RecipeRow[]> {
+  ): Promise<RecipeListRow[]> {
+    // Embed each recipe's media so the list can show the first image as the
+    // card thumbnail (the recipes table has no image column of its own).
     let query = this.client
       .from(TABLE)
-      .select("*")
+      .select("*, recipe_media(url, type, sort_order)")
       .eq("tenant_host", tenantHost);
 
     if (filter.status !== undefined) {
@@ -156,7 +161,13 @@ export class RecipeService {
       throw new Error(`RecipeService.list failed: ${error.message}`);
     }
 
-    return (data ?? []) as RecipeRow[];
+    return (data ?? []).map((raw) => {
+      const { recipe_media: media, ...row } = raw as RecipeRow & {
+        recipe_media?: unknown;
+      };
+
+      return { ...(row as RecipeRow), thumbnailUrl: pickThumbnailUrl(media) };
+    });
   }
 
   async update(
@@ -224,4 +235,29 @@ export class RecipeService {
 
     return (data as RecipeRow | null) ?? null;
   }
+}
+
+/**
+ * Pick a recipe's card thumbnail from its (untrusted) embedded media: the image
+ * with the lowest sort_order. Videos are ignored; returns null when there are
+ * no images.
+ */
+export function pickThumbnailUrl(media: unknown): string | null {
+  if (Array.isArray(media) === false) {
+    return null;
+  }
+
+  const images = media
+    .filter(
+      (m): m is { url: string; sort_order: unknown } =>
+        typeof m === "object" &&
+        m !== null &&
+        (m as Record<string, unknown>).type === "image" &&
+        typeof (m as Record<string, unknown>).url === "string" &&
+        ((m as Record<string, unknown>).url as string).length > 0
+    )
+    .map((m) => ({ url: m.url, sort: Number(m.sort_order) || 0 }))
+    .sort((a, b) => a.sort - b.sort);
+
+  return images[0]?.url ?? null;
 }

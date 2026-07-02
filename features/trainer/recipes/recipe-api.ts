@@ -1,5 +1,16 @@
 import type { RecipeStatus } from "./recipe-query";
 
+/**
+ * Transitional default quantity (grams) for library ingredients.
+ *
+ * Recipes are portion-free: per-client quantities are set when a dish is
+ * assigned. The authoring UI no longer collects a quantity, but the add path,
+ * macro recompute, and assignment snapshot still expect one — so we submit this
+ * neutral default to keep them working unchanged. Phase 2 (per-client portions
+ * at assignment) removes it and makes the column nullable.
+ */
+export const LIBRARY_DEFAULT_QUANTITY = 100;
+
 // ─── Client-side API shapes ─────────────────────────────────────────────────
 
 export interface RecipeFormValues {
@@ -31,8 +42,16 @@ export interface RecipeIngredientItem {
   id: string;
   ingredient_id: string | null;
   name_snapshot: string;
+  /** Frozen brand for display; null for unbranded/raw/manual lines. */
+  brand: string | null;
+  /** Frozen product thumbnail URL; null when none. */
+  image_url: string | null;
+  /** Frozen per-100g nutrients (kcal etc.) for reference display. */
+  nutrient_snapshot: Record<string, number>;
   quantity: number;
   unit: string;
+  /** Grams per piece when unit="u"; null for g/ml/lt. */
+  grams_per_unit: number | null;
   sort_order: number;
 }
 
@@ -45,10 +64,12 @@ export interface RecipeMediaItem {
 }
 
 export interface FoodSearchResult {
-  source: "off" | "manual";
+  source: "off" | "manual" | "seed";
   sourceRef: string | null;
   name: string;
   brand?: string;
+  /** Optional product thumbnail URL (Open Food Facts); absent when none. */
+  imageUrl?: string;
   defaultUnit: "g";
   nutrientsPer100g: Record<string, number>;
 }
@@ -88,12 +109,19 @@ export interface AddFromFoodArgs {
 export function buildAddFromFoodPayload(
   args: AddFromFoodArgs
 ): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     name: args.food.name,
     quantity: args.quantity,
     unit: args.unit ?? args.food.defaultUnit ?? "g",
     nutrients_per_100g: args.food.nutrientsPer100g,
   };
+
+  // Freeze brand + image alongside the name so the library list can show what
+  // the ingredient is beyond its name. Omitted when the food has neither.
+  if (args.food.brand !== undefined) payload.brand = args.food.brand;
+  if (args.food.imageUrl !== undefined) payload.image_url = args.food.imageUrl;
+
+  return payload;
 }
 
 const MANUAL_NUTRIENT_KEYS = [
@@ -143,11 +171,14 @@ export function buildAddManualPayload(
 export function buildUpdateIngredientPayload(patch: {
   quantity?: number;
   unit?: string;
+  gramsPerUnit?: number | null;
 }): Record<string, unknown> {
   const out: Record<string, unknown> = {};
 
   if (patch.quantity !== undefined) out.quantity = patch.quantity;
   if (patch.unit !== undefined) out.unit = patch.unit;
+  // null is meaningful — it clears grams-per-piece when switching off "u".
+  if (patch.gramsPerUnit !== undefined) out.grams_per_unit = patch.gramsPerUnit;
 
   return out;
 }
@@ -181,7 +212,7 @@ async function readData<T>(response: Response): Promise<T> {
 
 async function sendJson<T>(
   url: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "PUT",
   body: Record<string, unknown>
 ): Promise<T> {
   const response = await fetch(url, {
@@ -226,6 +257,16 @@ export function fetchRecipe(recipeId: string): Promise<RecipeDetail> {
   return getData<RecipeDetail>(`/api/recipes/${recipeId}`);
 }
 
+/** Soft-deletes (archives) a recipe so it leaves the library. */
+export async function deleteRecipe(recipeId: string): Promise<void> {
+  const response = await fetch(`/api/recipes/${recipeId}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+
+  await readData<unknown>(response);
+}
+
 export function fetchRecipeIngredients(
   recipeId: string
 ): Promise<RecipeIngredientItem[]> {
@@ -238,10 +279,18 @@ export function fetchRecipeMedia(recipeId: string): Promise<RecipeMediaItem[]> {
   return getData<RecipeMediaItem[]>(`/api/recipes/${recipeId}/media`);
 }
 
-export function searchFoods(query: string): Promise<FoodSearchResult[]> {
-  return getData<FoodSearchResult[]>(
-    `/api/foods/search?q=${encodeURIComponent(query)}`
-  );
+export function searchFoods(
+  query: string,
+  brand?: string
+): Promise<FoodSearchResult[]> {
+  const params = new URLSearchParams({ q: query });
+  const trimmedBrand = brand?.trim() ?? "";
+
+  if (trimmedBrand.length > 0) {
+    params.set("brand", trimmedBrand);
+  }
+
+  return getData<FoodSearchResult[]>(`/api/foods/search?${params.toString()}`);
 }
 
 export function addIngredientFromFood(
@@ -269,12 +318,36 @@ export function addIngredientManual(
 export function updateIngredient(
   recipeId: string,
   ingredientRowId: string,
-  patch: { quantity?: number; unit?: string }
+  patch: { quantity?: number; unit?: string; gramsPerUnit?: number | null }
 ): Promise<RecipeIngredientItem> {
   return sendJson<RecipeIngredientItem>(
     `/api/recipes/${recipeId}/ingredients/${ingredientRowId}`,
     "PATCH",
     buildUpdateIngredientPayload(patch)
+  );
+}
+
+/** Persist a new ingredient order; returns the re-ordered list. */
+export function reorderIngredients(
+  recipeId: string,
+  orderedIds: string[]
+): Promise<RecipeIngredientItem[]> {
+  return sendJson<RecipeIngredientItem[]>(
+    `/api/recipes/${recipeId}/ingredients/reorder`,
+    "PATCH",
+    { order: orderedIds }
+  );
+}
+
+/** Replace the whole ingredient list in one call (the editor's explicit save). */
+export function replaceIngredients(
+  recipeId: string,
+  body: { ingredients: Record<string, unknown>[] }
+): Promise<RecipeIngredientItem[]> {
+  return sendJson<RecipeIngredientItem[]>(
+    `/api/recipes/${recipeId}/ingredients`,
+    "PUT",
+    body
   );
 }
 

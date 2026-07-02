@@ -3,11 +3,13 @@ import type { NutrientsPer100g } from "@/lib/nutrition/food-source";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { rollupRecipeTotals } from "./macro-rollup";
+import { toGrams } from "./unit-conversion";
 
 /** Shape we read from recipe_ingredients (untrusted/loosely-typed JSON). */
 interface RecipeIngredientRow {
   quantity: number | string | null;
   unit: string | null;
+  grams_per_unit: number | string | null;
   nutrient_snapshot: unknown;
 }
 
@@ -16,9 +18,8 @@ interface RecipeIngredientRow {
  * lines and persist them (invariant §4.2). The Supabase client is injected for
  * testability.
  *
- * v1 treats `quantity` as grams. The `unit` column is read but not converted —
- * non-gram units are treated as grams for now; real unit conversion is a later
- * ticket.
+ * Each line's quantity is resolved to grams by unit (see `toGrams`): g/ml are
+ * 1:1, lt ×1000, and pieces (`u`) use the line's `grams_per_unit`.
  */
 export async function recomputeRecipeTotals(
   recipeId: string,
@@ -26,7 +27,7 @@ export async function recomputeRecipeTotals(
 ): Promise<NutrientTotals> {
   const { data, error } = await client
     .from("recipe_ingredients")
-    .select("quantity, unit, nutrient_snapshot")
+    .select("quantity, unit, grams_per_unit, nutrient_snapshot")
     .eq("recipe_id", recipeId);
 
   if (error !== null) {
@@ -52,8 +53,7 @@ export async function recomputeRecipeTotals(
 
 function toContribution(row: RecipeIngredientRow): IngredientContribution {
   return {
-    // v1: quantity is grams regardless of unit.
-    quantityGrams: Number(row.quantity),
+    quantityGrams: toGrams(row.quantity, row.unit, row.grams_per_unit),
     nutrientsPer100g: toNutrients(row.nutrient_snapshot),
   };
 }

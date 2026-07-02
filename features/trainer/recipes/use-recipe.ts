@@ -42,14 +42,15 @@ export function useRecipeMedia(recipeId: string) {
   });
 }
 
-export function useFoodSearch(query: string) {
+export function useFoodSearch(query: string, brand?: string) {
   // Debounce so a request fires per pause, not per keystroke (OFF rate-limits),
   // and keep the previous results on screen while the next page loads.
   const debounced = useDebouncedValue(query.trim(), 300);
+  const debouncedBrand = useDebouncedValue((brand ?? "").trim(), 300);
 
   return useQuery<FoodSearchResult[]>({
-    queryKey: ["food-search", debounced],
-    queryFn: () => searchFoods(debounced),
+    queryKey: ["food-search", debounced, debouncedBrand],
+    queryFn: () => searchFoods(debounced, debouncedBrand),
     enabled: debounced.length >= 2,
     placeholderData: keepPreviousData,
     staleTime: 60_000,

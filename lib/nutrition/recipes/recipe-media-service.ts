@@ -70,6 +70,47 @@ export class RecipeMediaService {
     return (data ?? []) as RecipeMediaRow[];
   }
 
+  /**
+   * Current media for many recipes in a single query, grouped by `recipe_id`
+   * and ordered by `sort_order`. Unlike {@link list} this does NOT re-check
+   * ownership per recipe (that would defeat the batch): callers MUST pass ids
+   * that are already tenant-scoped — e.g. the `source_ref_id`s of options that
+   * were themselves loaded with a `tenant_host` filter. Recipes with no media
+   * are simply absent from the map. Used to overlay live media onto frozen
+   * option snapshots at read time.
+   */
+  async listByRecipeIds(
+    recipeIds: string[]
+  ): Promise<Map<string, RecipeMediaRow[]>> {
+    const unique = [...new Set(recipeIds)];
+    const byRecipe = new Map<string, RecipeMediaRow[]>();
+
+    if (unique.length === 0) {
+      return byRecipe;
+    }
+
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select("*")
+      .in("recipe_id", unique)
+      .order("sort_order", { ascending: true });
+
+    if (error !== null) {
+      throw new Error(
+        `RecipeMediaService.listByRecipeIds failed: ${error.message}`
+      );
+    }
+
+    for (const row of (data ?? []) as RecipeMediaRow[]) {
+      const list = byRecipe.get(row.recipe_id) ?? [];
+
+      list.push(row);
+      byRecipe.set(row.recipe_id, list);
+    }
+
+    return byRecipe;
+  }
+
   async create(
     tenantHost: string,
     recipeId: string,

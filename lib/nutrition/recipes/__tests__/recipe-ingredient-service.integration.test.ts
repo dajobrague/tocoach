@@ -197,4 +197,140 @@ describe("RecipeIngredientService (integration, local DB)", () => {
     expect(crossAdd).toBeNull();
     expect(await ingredients.list(OTHER_TENANT, recipeId)).toBeNull();
   });
+
+  it("appends new lines and keeps order stable across edits, with reorder", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Order Recipe",
+    });
+    const recipeId = recipe.id;
+
+    // Add three lines without an explicit sortOrder: the service must append.
+    const a = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "A",
+      quantity: 100,
+      nutrientsPer100g: chicken,
+    });
+    const b = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "B",
+      quantity: 100,
+      nutrientsPer100g: chicken,
+    });
+    const c = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "C",
+      quantity: 100,
+      nutrientsPer100g: chicken,
+    });
+
+    if (a === null || b === null || c === null) {
+      throw new Error("add returned null");
+    }
+
+    const names = async (): Promise<string[]> => {
+      const rows = await ingredients.list(TEST_TENANT_HOST, recipeId);
+
+      return (rows ?? []).map((r) => r.name_snapshot);
+    };
+
+    expect(await names()).toEqual(["A", "B", "C"]);
+
+    // Editing a line must NOT reshuffle the list (the reported bug).
+    await ingredients.update(TEST_TENANT_HOST, recipeId, a.id, {
+      quantity: 250,
+    });
+    expect(await names()).toEqual(["A", "B", "C"]);
+
+    // Explicit reorder persists the new order.
+    const reordered = await ingredients.reorder(TEST_TENANT_HOST, recipeId, [
+      c.id,
+      a.id,
+      b.id,
+    ]);
+
+    expect((reordered ?? []).map((r) => r.name_snapshot)).toEqual([
+      "C",
+      "A",
+      "B",
+    ]);
+
+    // A second tenant cannot reorder this recipe's lines.
+    expect(
+      await ingredients.reorder(OTHER_TENANT, recipeId, [a.id, b.id, c.id])
+    ).toBeNull();
+  });
+
+  it("replaceAll reconciles the whole list (keep+edit, drop, add, reorder)", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Replace Recipe",
+    });
+    const recipeId = recipe.id;
+
+    const a = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "A",
+      quantity: 100,
+      nutrientsPer100g: chicken,
+    });
+    const b = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "B",
+      quantity: 100,
+      nutrientsPer100g: chicken,
+    });
+
+    if (a === null || b === null) {
+      throw new Error("add returned null");
+    }
+
+    // Keep A (edit its quantity), drop B, add a new C — and put C first.
+    const rows = await ingredients.replaceAll(TEST_TENANT_HOST, recipeId, [
+      { name: "C", quantity: 50, nutrientsPer100g: oats },
+      { id: a.id, quantity: 250, unit: "g" },
+    ]);
+    const result = rows ?? [];
+
+    expect(result.map((r) => r.name_snapshot)).toEqual(["C", "A"]);
+    // A is updated in place (same id, new quantity), not recreated.
+    const keptA = result.find((r) => r.name_snapshot === "A");
+
+    expect(keptA?.id).toBe(a.id);
+    expect(Number(keptA?.quantity)).toBe(250);
+
+    // Totals recomputed from the new set (50 g oats + 250 g chicken).
+    const expected = rollupRecipeTotals([
+      { quantityGrams: 50, nutrientsPer100g: oats },
+      { quantityGrams: 250, nutrientsPer100g: chicken },
+    ]);
+
+    expect(await recipeKcal(recipeId)).toBeCloseTo(expected.kcal, 6);
+
+    // A second tenant cannot replace this recipe's ingredients.
+    expect(await ingredients.replaceAll(OTHER_TENANT, recipeId, [])).toBeNull();
+  });
+
+  it("replaceAll persists trainer-corrected macros on an existing line (quantity untouched)", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Macro Fix Recipe",
+    });
+    const recipeId = recipe.id;
+
+    const row = await ingredients.add(TEST_TENANT_HOST, recipeId, {
+      name: "Pechuga",
+      quantity: 200,
+      nutrientsPer100g: chicken, // external-API values the trainer distrusts
+    });
+
+    if (row === null) throw new Error("add returned null");
+
+    // Correct kcal/protein per 100 g without changing the quantity.
+    const corrected = { ...chicken, kcal: 180, protein_g: 25 };
+    const rows = await ingredients.replaceAll(TEST_TENANT_HOST, recipeId, [
+      { id: row.id, quantity: 200, unit: "g", nutrientsPer100g: corrected },
+    ]);
+    const kept = (rows ?? []).find((r) => r.id === row.id);
+
+    expect(Number(kept?.quantity)).toBe(200); // unchanged
+    expect(kept?.nutrient_snapshot["kcal"]).toBe(180);
+    expect(kept?.nutrient_snapshot["protein_g"]).toBe(25);
+
+    // Recipe totals recompute from the corrected values (200 g → ×2).
+    expect(await recipeKcal(recipeId)).toBeCloseTo(360, 6);
+  });
 });

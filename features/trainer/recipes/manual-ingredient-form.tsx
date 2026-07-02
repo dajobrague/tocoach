@@ -5,6 +5,8 @@ import type { ManualIngredientInput } from "./recipe-api";
 import { Button, Input } from "@heroui/react";
 import { useState } from "react";
 
+import { LIBRARY_DEFAULT_QUANTITY } from "./recipe-api";
+
 interface NutrientField {
   key: string;
   label: string;
@@ -41,27 +43,23 @@ export function ManualIngredientForm({
   onSubmit,
 }: ManualIngredientFormProps) {
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState("100");
   const [nutrients, setNutrients] =
     useState<Record<string, string>>(emptyNutrients());
 
-  const parsedQuantity = Number(quantity);
-  const canSubmit =
-    name.trim().length > 0 &&
-    Number.isFinite(parsedQuantity) &&
-    parsedQuantity > 0;
+  const canSubmit = name.trim().length > 0;
 
   const reset = () => {
     setName("");
-    setQuantity("100");
     setNutrients(emptyNutrients());
   };
 
   const submit = () => {
     if (canSubmit === false) return;
 
+    // Recipes are portion-free: per-client quantities are set at assignment.
+    // A neutral default keeps the (unchanged) add path valid until Phase 2.
     // Per-100g values are coerced (and defaulted to 0) by buildAddManualPayload.
-    onSubmit({ name, quantity: parsedQuantity, nutrients });
+    onSubmit({ name, quantity: LIBRARY_DEFAULT_QUANTITY, nutrients });
     reset();
   };
 
@@ -80,18 +78,6 @@ export function ManualIngredientForm({
           value={name}
           variant="bordered"
           onValueChange={setName}
-        />
-        <Input
-          isRequired
-          className="sm:max-w-[140px]"
-          endContent={<span className="text-xs text-default-400">g</span>}
-          isDisabled={busy}
-          label="Cantidad"
-          size="sm"
-          type="number"
-          value={quantity}
-          variant="bordered"
-          onValueChange={setQuantity}
         />
       </div>
 

@@ -28,6 +28,7 @@ const food: FoodSearchResult = {
   sourceRef: "off:1",
   name: "Rolled Oats",
   brand: "TestBrand",
+  imageUrl: "https://img.test/oats.200.jpg",
   defaultUnit: "g",
   nutrientsPer100g: { kcal: 389, protein_g: 16.9 },
 };
@@ -60,13 +61,29 @@ describe("buildRecipePayload", () => {
 });
 
 describe("buildAddFromFoodPayload", () => {
-  it("freezes name + per-100g nutrients via the free-text path", () => {
+  it("freezes name + brand + image + per-100g nutrients via the free-text path", () => {
     expect(buildAddFromFoodPayload({ food, quantity: 50 })).toEqual({
       name: "Rolled Oats",
+      brand: "TestBrand",
+      image_url: "https://img.test/oats.200.jpg",
       quantity: 50,
       unit: "g",
       nutrients_per_100g: { kcal: 389, protein_g: 16.9 },
     });
+  });
+
+  it("omits brand and image_url when the food has neither", () => {
+    const plain: FoodSearchResult = {
+      source: "manual",
+      sourceRef: null,
+      name: "Agua",
+      defaultUnit: "g",
+      nutrientsPer100g: { kcal: 0 },
+    };
+    const payload = buildAddFromFoodPayload({ food: plain, quantity: 100 });
+
+    expect("brand" in payload).toBe(false);
+    expect("image_url" in payload).toBe(false);
   });
 
   it("honors an explicit unit override", () => {
@@ -143,6 +160,15 @@ describe("buildUpdateIngredientPayload", () => {
     expect(buildUpdateIngredientPayload({ quantity: 1, unit: "g" })).toEqual({
       quantity: 1,
       unit: "g",
+    });
+  });
+
+  it("carries grams-per-unit, including an explicit null to clear it", () => {
+    expect(
+      buildUpdateIngredientPayload({ unit: "u", gramsPerUnit: 60 })
+    ).toEqual({ unit: "u", grams_per_unit: 60 });
+    expect(buildUpdateIngredientPayload({ gramsPerUnit: null })).toEqual({
+      grams_per_unit: null,
     });
   });
 });

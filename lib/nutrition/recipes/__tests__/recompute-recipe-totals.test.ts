@@ -9,6 +9,7 @@ import { recomputeRecipeTotals } from "../recompute-recipe-totals";
 interface FakeRow {
   quantity: number;
   unit: string;
+  grams_per_unit?: number | null;
   nutrient_snapshot: Record<string, number>;
 }
 
@@ -106,6 +107,34 @@ describe("recomputeRecipeTotals", () => {
       sat_fat_g: 0,
       sodium_mg: 0,
     });
+    expect(capture.totals).toEqual(result);
+  });
+
+  it("converts non-gram units to grams before scaling", async () => {
+    const capture: { totals?: NutrientTotals } = {};
+    // 2 eggs × 60 g/piece = 120 g; 0.5 lt = 500 g.
+    const unitRows: FakeRow[] = [
+      {
+        quantity: 2,
+        unit: "u",
+        grams_per_unit: 60,
+        nutrient_snapshot: { kcal: 150, protein_g: 12 },
+      },
+      {
+        quantity: 0.5,
+        unit: "lt",
+        grams_per_unit: null,
+        nutrient_snapshot: { kcal: 40, protein_g: 3 },
+      },
+    ];
+    const client = makeClient(unitRows, capture);
+
+    const result = await recomputeRecipeTotals("recipe-units", client);
+
+    // (150 × 120/100) + (40 × 500/100) = 180 + 200 = 380 kcal.
+    expect(result.kcal).toBeCloseTo(380);
+    // (12 × 1.2) + (3 × 5) = 14.4 + 15 = 29.4 g protein.
+    expect(result.protein_g).toBeCloseTo(29.4);
     expect(capture.totals).toEqual(result);
   });
 

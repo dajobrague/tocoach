@@ -1,35 +1,45 @@
 "use client";
 
-import type { RecipeDetail, RecipeFormValues } from "./recipe-api";
-import type { RecipeStatus } from "./recipe-query";
+import type {
+  RecipeDetail,
+  RecipeFormValues,
+  RecipeIngredientItem,
+} from "./recipe-api";
 
 import {
   Button,
   Card,
   CardBody,
-  Chip,
   Input,
-  Select,
-  SelectItem,
   Spinner,
   Textarea,
-  type Selection,
 } from "@heroui/react";
+import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { IngredientRow } from "./ingredient-row";
-import { IngredientSearch } from "./ingredient-search";
+import { DeleteRecipeModal } from "./delete-recipe-modal";
+import { EditorHeaderActions } from "./editor-header-actions";
+import { IngredientsSection } from "./ingredients-section";
 import { MacroSummary } from "./macro-summary";
 import { MediaUploader } from "./media-uploader";
+import { PublishChecklist } from "./publish-checklist";
+import { ErrorText, FormShell, SectionCard } from "./recipe-form-shell";
 import { statusLabel } from "./recipe-format";
+import { ingredientCountLabel, publishChecklist } from "./recipe-macros";
+import {
+  buildReplaceIngredientsBody,
+  ingredientsEqual,
+  previewTotals,
+} from "./recipe-draft";
+import { RecipePreviewModal } from "./recipe-preview-modal";
+import { RecipeSummaryStrip } from "./recipe-summary-strip";
+import { UnsavedChangesModal } from "./unsaved-changes-modal";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
 import {
-  useAddIngredient,
   useCreateRecipe,
-  useRemoveIngredient,
   useRemoveMedia,
-  useUpdateIngredient,
+  useReplaceIngredients,
   useUpdateRecipe,
   useUploadMedia,
 } from "./use-recipe-mutations";
@@ -37,7 +47,7 @@ import {
 type Orientation = "vertical" | "horizontal";
 type RecipeFormProps = { mode: "create" } | { mode: "edit"; recipeId: string };
 
-const STATUS_OPTIONS: RecipeStatus[] = ["draft", "active", "archived"];
+const RECIPES_PATH = "/trainer/dashboard/recipes";
 const EMPTY_VALUES: RecipeFormValues = {
   name: "",
   description: "",
@@ -45,17 +55,6 @@ const EMPTY_VALUES: RecipeFormValues = {
   mealTypeTags: [],
   status: "draft",
 };
-
-function firstKey(keys: Selection): string {
-  if (keys === "all") return "";
-  const first = Array.from(keys)[0];
-
-  return first === undefined ? "" : String(first);
-}
-
-function isRecipeStatus(value: string): value is RecipeStatus {
-  return value === "draft" || value === "active" || value === "archived";
-}
 
 function toFormValues(recipe: RecipeDetail): RecipeFormValues {
   return {
@@ -65,6 +64,20 @@ function toFormValues(recipe: RecipeDetail): RecipeFormValues {
     mealTypeTags: recipe.meal_type_tags,
     status: recipe.status,
   };
+}
+
+// Field-by-field equality so the header Save button can stay disabled until the
+// trainer actually changes something. Ingredients and media save instantly via
+// their own mutations, so they are intentionally not part of this comparison.
+function valuesEqual(a: RecipeFormValues, b: RecipeFormValues): boolean {
+  return (
+    a.name === b.name &&
+    a.description === b.description &&
+    a.instructions === b.instructions &&
+    a.status === b.status &&
+    a.mealTypeTags.length === b.mealTypeTags.length &&
+    a.mealTypeTags.every((tag, index) => tag === b.mealTypeTags[index])
+  );
 }
 
 export function RecipeForm(props: RecipeFormProps) {
@@ -77,12 +90,14 @@ export function RecipeForm(props: RecipeFormProps) {
 
 function CreateRecipeForm() {
   const router = useRouter();
-  const [values, setValues] = useState<RecipeFormValues>(EMPTY_VALUES);
+  const [name, setName] = useState("");
   const create = useCreateRecipe();
-  const nameEmpty = values.name.trim().length === 0;
+  const nameEmpty = name.trim().length === 0;
 
   const save = () => {
     if (nameEmpty) return;
+    const values: RecipeFormValues = { ...EMPTY_VALUES, name: name.trim() };
+
     create.mutate(values, {
       onSuccess: (recipe) =>
         router.push(`/trainer/dashboard/recipes/${recipe.id}/edit`),
@@ -90,53 +105,141 @@ function CreateRecipeForm() {
   };
 
   return (
-    <FormShell title="Nueva receta">
-      <RecipeFields
-        disabled={create.isPending}
-        values={values}
-        onChange={setValues}
-      />
-      <div className="flex justify-end">
-        <Button
-          color="primary"
-          isDisabled={nameEmpty}
-          isLoading={create.isPending}
-          onPress={save}
-        >
-          Crear receta
-        </Button>
+    <FormShell breadcrumb="Nueva receta" title="Nueva receta">
+      <div className="mx-auto flex w-full max-w-lg flex-col gap-6 pt-2 sm:pt-8">
+        <Card className="border border-gray-200 bg-white shadow-sm">
+          <CardBody className="gap-5 p-6">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-700">
+                <Icon icon="solar:chef-hat-bold" width={26} />
+              </span>
+              <h2 className="text-lg font-bold text-gray-900">
+                Empieza tu receta
+              </h2>
+              <p className="text-sm text-default-500">
+                Solo necesitas un nombre. En el siguiente paso añadirás
+                ingredientes, fotos y la nutrición se calculará sola.
+              </p>
+            </div>
+
+            <Input
+              autoFocus
+              isRequired
+              isDisabled={create.isPending}
+              label="Nombre de la receta"
+              placeholder="Ej. Desayuno alto en proteína"
+              value={name}
+              variant="bordered"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  save();
+                }
+              }}
+              onValueChange={setName}
+            />
+
+            <Button
+              className="w-full bg-black text-white"
+              color="primary"
+              isDisabled={nameEmpty}
+              isLoading={create.isPending}
+              startContent={
+                create.isPending ? null : (
+                  <Icon icon="solar:arrow-right-linear" width={18} />
+                )
+              }
+              onPress={save}
+            >
+              Crear y continuar
+            </Button>
+
+            {create.isError && <ErrorText />}
+          </CardBody>
+        </Card>
       </div>
-      {create.isError && <ErrorText />}
     </FormShell>
   );
 }
 
 function EditRecipeForm({ recipeId }: { recipeId: string }) {
+  const router = useRouter();
   const recipeQuery = useRecipe(recipeId);
   const ingredientsQuery = useRecipeIngredients(recipeId);
   const mediaQuery = useRecipeMedia(recipeId);
 
   const update = useUpdateRecipe(recipeId);
-  const addIngredient = useAddIngredient(recipeId);
-  const updateIngredient = useUpdateIngredient(recipeId);
-  const removeIngredient = useRemoveIngredient(recipeId);
+  const replaceIngredients = useReplaceIngredients(recipeId);
   const uploadMedia = useUploadMedia(recipeId);
   const removeMedia = useRemoveMedia(recipeId);
 
   const recipe = recipeQuery.data;
   const [values, setValues] = useState<RecipeFormValues>(EMPTY_VALUES);
+  // Last persisted snapshot — drives the dirty indicator on the Save button.
+  const [savedValues, setSavedValues] =
+    useState<RecipeFormValues>(EMPTY_VALUES);
   const [seeded, setSeeded] = useState(false);
+
+  // Buffered ingredient list — every edit stays local until "Guardar".
+  const [draftIngredients, setDraftIngredients] = useState<
+    RecipeIngredientItem[]
+  >([]);
+  const [savedIngredients, setSavedIngredients] = useState<
+    RecipeIngredientItem[]
+  >([]);
+  const [ingredientsSeeded, setIngredientsSeeded] = useState(false);
+
+  const [publishing, setPublishing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
   useEffect(() => {
     if (recipe !== undefined && seeded === false) {
-      setValues(toFormValues(recipe));
+      const next = toFormValues(recipe);
+
+      setValues(next);
+      setSavedValues(next);
       setSeeded(true);
     }
   }, [recipe, seeded]);
 
+  const serverIngredients = ingredientsQuery.data;
+
+  useEffect(() => {
+    if (serverIngredients !== undefined && ingredientsSeeded === false) {
+      setDraftIngredients(serverIngredients);
+      setSavedIngredients(serverIngredients);
+      setIngredientsSeeded(true);
+    }
+  }, [serverIngredients, ingredientsSeeded]);
+
+  const media = mediaQuery.data ?? [];
+  const nameEmpty = values.name.trim().length === 0;
+  const textDirty = valuesEqual(values, savedValues) === false;
+  const ingredientsDirty =
+    ingredientsEqual(draftIngredients, savedIngredients) === false;
+  const isDirty = textDirty || ingredientsDirty;
+  const busy = update.isPending || replaceIngredients.isPending;
+  const isSaving = busy && publishing === false;
+
+  // Native warning when closing/refreshing the tab with unsaved edits.
+  useEffect(() => {
+    if (isDirty === false) return;
+
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handler);
+
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
   if (recipeQuery.isLoading) {
     return (
-      <FormShell title="Editar receta">
+      <FormShell breadcrumb="Editar receta" title="Editar receta">
         <div className="flex justify-center py-12">
           <Spinner color="primary" size="lg" />
         </div>
@@ -146,214 +249,248 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
 
   if (recipe === undefined) {
     return (
-      <FormShell title="Editar receta">
+      <FormShell breadcrumb="Editar receta" title="Editar receta">
         <ErrorText />
       </FormShell>
     );
   }
 
-  const ingredients = ingredientsQuery.data ?? [];
-  const media = mediaQuery.data ?? [];
-  const ingredientBusy =
-    updateIngredient.isPending || removeIngredient.isPending;
+  // Live per-serving preview from the buffered list (the server recomputes the
+  // authoritative totals on save), overlaid with the buffered form fields so
+  // the summary strip / sidebar / preview always show the latest local edits.
+  const totals = previewTotals(draftIngredients);
+  const previewRecipe: RecipeDetail = {
+    ...recipe,
+    ...totals,
+    name: values.name,
+    description: values.description.length > 0 ? values.description : null,
+    instructions: values.instructions.length > 0 ? values.instructions : null,
+    meal_type_tags: values.mealTypeTags,
+    status: values.status,
+  };
+
+  // Persist the buffered edits: ingredients first (server recomputes totals),
+  // then the recipe fields. `publishNow` also flips status to active.
+  const persist = async (publishNow: boolean) => {
+    if (ingredientsDirty) {
+      const rows = await replaceIngredients.mutateAsync(
+        buildReplaceIngredientsBody(draftIngredients)
+      );
+
+      setDraftIngredients(rows);
+      setSavedIngredients(rows);
+    }
+
+    const nextValues: RecipeFormValues = publishNow
+      ? { ...values, status: "active" }
+      : values;
+
+    if (valuesEqual(nextValues, savedValues) === false) {
+      await update.mutateAsync(nextValues);
+      setValues(nextValues);
+      setSavedValues(nextValues);
+    }
+  };
+
+  const save = () => {
+    if (nameEmpty || isDirty === false) return;
+    // Mutation state (update/replaceIngredients isError) drives the UI; the
+    // catch only keeps a failed save from surfacing as an unhandled rejection.
+    persist(false).catch((error) =>
+      console.error("[RecipeForm] save failed:", error)
+    );
+  };
+
+  const publish = () => {
+    setPublishing(true);
+    persist(true)
+      .catch((error) => console.error("[RecipeForm] publish failed:", error))
+      .finally(() => setPublishing(false));
+  };
+
+  // Return true to block the Back link's navigation and warn instead; return
+  // false to let the link navigate to the list normally.
+  const handleBack = (): boolean => {
+    if (isDirty) {
+      setLeaveOpen(true);
+
+      return true;
+    }
+
+    return false;
+  };
+
+  const checklist = publishChecklist({
+    hasName: nameEmpty === false,
+    ingredientCount: draftIngredients.length,
+    kcal: totals.kcal,
+    hasInstructions: values.instructions.trim().length > 0,
+    hasPhoto: media.some((item) => item.type === "image"),
+  });
+
+  const metaParts = [
+    statusLabel(values.status),
+    ingredientCountLabel(draftIngredients.length),
+    `${Math.round(totals.kcal)} kcal`,
+  ];
+
+  const action = (
+    <EditorHeaderActions
+      canSave={nameEmpty === false && isDirty}
+      isDirty={isDirty}
+      isSaving={isSaving}
+      onDelete={() => setDeleteOpen(true)}
+      onPreview={() => setPreviewOpen(true)}
+      onSave={save}
+    />
+  );
 
   return (
-    <FormShell title="Editar receta">
-      <RecipeFields
-        disabled={update.isPending}
-        values={values}
-        onChange={setValues}
-      />
-      <div className="flex justify-end">
-        <Button
-          color="primary"
-          isDisabled={values.name.trim().length === 0}
-          isLoading={update.isPending}
-          onPress={() => update.mutate(values)}
-        >
-          Guardar cambios
-        </Button>
+    <FormShell
+      action={action}
+      breadcrumb="Editar receta"
+      meta={metaParts}
+      title={recipe.name || "Editar receta"}
+      onBack={handleBack}
+    >
+      <div className="flex flex-col gap-6">
+        <RecipeSummaryStrip recipe={previewRecipe} />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Main column: the content the trainer actively edits. */}
+          <div className="flex flex-col gap-6 lg:col-span-2">
+            <SectionCard
+              icon="solar:document-text-linear"
+              title="Información básica"
+            >
+              <BasicInfoFields
+                disabled={busy}
+                values={values}
+                onChange={setValues}
+              />
+            </SectionCard>
+
+            <IngredientsSection
+              disabled={busy}
+              ingredients={draftIngredients}
+              onChange={setDraftIngredients}
+            />
+
+            <SectionCard icon="solar:chef-hat-linear" title="Preparación">
+              <InstructionsField
+                disabled={busy}
+                values={values}
+                onChange={setValues}
+              />
+            </SectionCard>
+
+            <SectionCard icon="solar:gallery-linear" title="Fotos y videos">
+              <MediaUploader
+                busy={uploadMedia.isPending}
+                media={media}
+                onRemove={(mediaId) => removeMedia.mutate(mediaId)}
+                onUpload={(file, orientation) => {
+                  const arg: { file: File; orientation?: Orientation } = {
+                    file,
+                  };
+
+                  if (orientation !== undefined) arg.orientation = orientation;
+                  uploadMedia.mutate(arg);
+                }}
+              />
+            </SectionCard>
+          </div>
+
+          {/* Sidebar: focused on nutrition + publish readiness. */}
+          <aside className="flex flex-col gap-6">
+            <MacroSummary recipe={previewRecipe} />
+
+            <PublishChecklist
+              isPublished={values.status === "active"}
+              isPublishing={publishing}
+              items={checklist.items}
+              ready={checklist.ready}
+              onPublish={publish}
+            />
+          </aside>
+        </div>
       </div>
 
-      <MacroSummary recipe={recipe} />
-
-      <Card className="bg-white border border-gray-200 shadow-sm">
-        <CardBody className="gap-4 p-4">
-          <h3 className="text-sm font-semibold text-gray-900">Ingredientes</h3>
-          <IngredientSearch
-            busy={addIngredient.isPending}
-            onAdd={(food, quantity) =>
-              addIngredient.mutate({ kind: "food", food, quantity })
-            }
-            onAddManual={(input) =>
-              addIngredient.mutate({ kind: "manual", input })
-            }
-          />
-          {ingredients.length > 0 && (
-            <div className="flex flex-col">
-              {ingredients.map((item) => (
-                <IngredientRow
-                  key={item.id}
-                  busy={ingredientBusy}
-                  item={item}
-                  onRemove={(id) => removeIngredient.mutate(id)}
-                  onUpdateQuantity={(id, quantity) =>
-                    updateIngredient.mutate({ ingredientRowId: id, quantity })
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card className="bg-white border border-gray-200 shadow-sm">
-        <CardBody className="gap-4 p-4">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Fotos y videos
-          </h3>
-          <MediaUploader
-            busy={uploadMedia.isPending}
-            media={media}
-            onRemove={(mediaId) => removeMedia.mutate(mediaId)}
-            onUpload={(file, orientation) => {
-              const arg: { file: File; orientation?: Orientation } = { file };
-
-              if (orientation !== undefined) arg.orientation = orientation;
-              uploadMedia.mutate(arg);
-            }}
-          />
-        </CardBody>
-      </Card>
+      <RecipePreviewModal
+        ingredients={draftIngredients}
+        isOpen={previewOpen}
+        media={media}
+        recipe={previewRecipe}
+        onClose={() => setPreviewOpen(false)}
+      />
+      <DeleteRecipeModal
+        recipe={deleteOpen ? { id: recipeId, name: recipe.name } : null}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => router.push(RECIPES_PATH)}
+      />
+      <UnsavedChangesModal
+        isOpen={leaveOpen}
+        onCancel={() => setLeaveOpen(false)}
+        onDiscard={() => {
+          setLeaveOpen(false);
+          router.push(RECIPES_PATH);
+        }}
+      />
     </FormShell>
   );
 }
 
-function FormShell({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
-      <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-      {children}
-    </div>
-  );
-}
-
-function ErrorText() {
-  return (
-    <p className="text-sm text-danger">Algo salió mal. Inténtalo de nuevo.</p>
-  );
-}
-
-interface RecipeFieldsProps {
+interface FieldGroupProps {
   values: RecipeFormValues;
   disabled: boolean;
   onChange: (values: RecipeFormValues) => void;
 }
 
-function RecipeFields({ values, disabled, onChange }: RecipeFieldsProps) {
-  const [tagInput, setTagInput] = useState("");
-
+function BasicInfoFields({ values, disabled, onChange }: FieldGroupProps) {
   const set = (patch: Partial<RecipeFormValues>) => {
     onChange({ ...values, ...patch });
   };
 
-  const addTag = () => {
-    const tag = tagInput.trim();
+  return (
+    <>
+      <Input
+        isRequired
+        isDisabled={disabled}
+        label="Nombre"
+        placeholder="Ej. Desayuno alto en proteína"
+        value={values.name}
+        variant="bordered"
+        onValueChange={(value) => set({ name: value })}
+      />
 
-    if (tag.length > 0 && values.mealTypeTags.includes(tag) === false) {
-      set({ mealTypeTags: [...values.mealTypeTags, tag] });
-    }
-    setTagInput("");
+      <Textarea
+        isDisabled={disabled}
+        label="Descripción"
+        maxRows={4}
+        minRows={2}
+        placeholder="Una línea sobre la receta (opcional)"
+        value={values.description}
+        variant="bordered"
+        onValueChange={(value) => set({ description: value })}
+      />
+    </>
+  );
+}
+
+function InstructionsField({ values, disabled, onChange }: FieldGroupProps) {
+  const set = (patch: Partial<RecipeFormValues>) => {
+    onChange({ ...values, ...patch });
   };
 
   return (
-    <Card className="bg-white border border-gray-200 shadow-sm">
-      <CardBody className="gap-4 p-4">
-        <Input
-          isRequired
-          isDisabled={disabled}
-          label="Nombre"
-          value={values.name}
-          variant="bordered"
-          onValueChange={(value) => set({ name: value })}
-        />
-
-        <Textarea
-          isDisabled={disabled}
-          label="Descripción"
-          minRows={2}
-          value={values.description}
-          variant="bordered"
-          onValueChange={(value) => set({ description: value })}
-        />
-
-        <Textarea
-          isDisabled={disabled}
-          label="Instrucciones"
-          minRows={3}
-          value={values.instructions}
-          variant="bordered"
-          onValueChange={(value) => set({ instructions: value })}
-        />
-
-        <div className="flex flex-col gap-2">
-          <Input
-            isDisabled={disabled}
-            label="Tipos de comida (Enter para añadir)"
-            value={tagInput}
-            variant="bordered"
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                addTag();
-              }
-            }}
-            onValueChange={setTagInput}
-          />
-          {values.mealTypeTags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {values.mealTypeTags.map((tag) => (
-                <Chip
-                  key={tag}
-                  variant="flat"
-                  onClose={() =>
-                    set({
-                      mealTypeTags: values.mealTypeTags.filter(
-                        (existing) => existing !== tag
-                      ),
-                    })
-                  }
-                >
-                  {tag}
-                </Chip>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <Select
-          disallowEmptySelection
-          isDisabled={disabled}
-          label="Estado"
-          selectedKeys={[values.status]}
-          variant="bordered"
-          onSelectionChange={(keys) => {
-            const key = firstKey(keys);
-
-            if (isRecipeStatus(key)) set({ status: key });
-          }}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <SelectItem key={option}>{statusLabel(option)}</SelectItem>
-          ))}
-        </Select>
-      </CardBody>
-    </Card>
+    <Textarea
+      isDisabled={disabled}
+      label="Pasos de preparación"
+      minRows={4}
+      placeholder="Escribe los pasos de preparación..."
+      value={values.instructions}
+      variant="bordered"
+      onValueChange={(value) => set({ instructions: value })}
+    />
   );
 }
