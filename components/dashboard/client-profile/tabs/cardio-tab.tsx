@@ -455,19 +455,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     const exercise = libraryExercises.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Auto-fill form with exercise data
-      // For cardio exercises, default_reps might be duration, default_tempo might be type, etc.
-      setExerciseForm({
+      // Only update identity fields — name and exerciseId.
+      // All other params (type/duration/intensity/notes) are preserved.
+      setExerciseForm((prev) => ({
+        ...prev,
         name: exercise.name,
-        type: exercise.metadata?.cardio_type || exercise.category || "",
-        duration: exercise.default_reps || "", // Could repurpose for duration
-        distance: "",
-        intensity: exercise.metadata?.intensity || "",
-        minHeartRate: "",
-        maxHeartRate: "",
-        notes: exercise.description || "",
         exerciseId: exercise.id,
-      });
+      }));
     }
   };
 

@@ -525,20 +525,16 @@ export default function WorkoutsTab({
       librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
-      // Auto-fill form with exercise defaults
-      setExerciseForm({
+      // Only update identity fields — name, exerciseId, videoUrl.
+      // All workout params (sets/reps/tempo/rest/sistema) are preserved.
+      // videoUrl follows the NEW exercise (cleared when it has none) — keeping
+      // the previous one would attach a stale video to the wrong exercise.
+      setExerciseForm((prev) => ({
+        ...prev,
         name: exercise.name,
-        sets: exercise.default_sets?.toString() || "",
-        reps: exercise.default_reps || "",
-        tempo: exercise.default_tempo || "",
-        rest: exercise.default_rest_seconds
-          ? `${exercise.default_rest_seconds}s`
-          : "",
-        trainingSystem: exercise.default_training_system || "",
-        videoUrl: exercise.video_url || "",
         exerciseId: exercise.id,
-        notes: "",
-      });
+        videoUrl: exercise.video_url || "",
+      }));
     }
   };
 

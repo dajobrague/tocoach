@@ -30,6 +30,7 @@ export async function POST(
     const body = await request.json();
     const {
       name,
+      exerciseId: providedExerciseId,
       sets,
       reps,
       tempo,
@@ -72,23 +73,15 @@ export async function POST(
       );
     }
 
-    // First, create or find the exercise in the exercise library
+    // Resolve the library exercise ID — prefer the UUID sent by the client
+    // (selected from the dropdown) to avoid name-based lookups that can
+    // create duplicates when the same exercise already exists.
     let exerciseId: string;
 
-    // Check if an exercise with this name already exists for this trainer
-    const { data: existingExercise } = await supabase
-      .from("exercises")
-      .select("id")
-      .eq("name", name)
-      .eq("trainer_id", session.trainer_id)
-      .maybeSingle();
+    if (providedExerciseId) {
+      exerciseId = providedExerciseId;
+      console.log("[Exercises API] Using exercise from library:", exerciseId);
 
-    if (existingExercise) {
-      exerciseId = existingExercise.id;
-      console.log("[Exercises API] Using existing exercise:", exerciseId);
-
-      // If a videoUrl was provided, update the library exercise so the
-      // video is available everywhere this exercise is referenced.
       if (videoUrl) {
         await supabase
           .from("exercises")
@@ -96,38 +89,62 @@ export async function POST(
           .eq("id", exerciseId);
       }
     } else {
-      // Determine exercise category based on session type
-      const exerciseCategory =
-        sessionData.session_type === "cardio" ? "cardio" : "strength";
-
-      // Create a new exercise in the library
-      const { data: newExercise, error: exerciseError } = await supabase
+      // No UUID provided — fall back to name lookup. Use limit(1) so that
+      // existing duplicates don't cause maybeSingle() to return null and
+      // trigger yet another insert.
+      const { data: existingExercises } = await supabase
         .from("exercises")
-        .insert({
-          tenant_host: sessionData.tenant_host,
-          trainer_id: session.trainer_id,
-          name,
-          category: exerciseCategory,
-          video_url: videoUrl || null,
-          is_public: false,
-        })
-        .select()
-        .single();
+        .select("id")
+        .eq("name", name)
+        .eq("trainer_id", session.trainer_id)
+        .limit(1);
 
-      if (exerciseError || !newExercise) {
-        console.error(
-          "[Exercises API] Error creating exercise:",
-          exerciseError
-        );
+      const existingExercise = existingExercises?.[0] ?? null;
 
-        return NextResponse.json(
-          { success: false, error: "Error al crear ejercicio" },
-          { status: 500 }
-        );
+      if (existingExercise) {
+        exerciseId = existingExercise.id;
+        console.log("[Exercises API] Using existing exercise:", exerciseId);
+
+        if (videoUrl) {
+          await supabase
+            .from("exercises")
+            .update({ video_url: videoUrl })
+            .eq("id", exerciseId);
+        }
+      } else {
+        // Determine exercise category based on session type
+        const exerciseCategory =
+          sessionData.session_type === "cardio" ? "cardio" : "strength";
+
+        // Create a new exercise in the library
+        const { data: newExercise, error: exerciseError } = await supabase
+          .from("exercises")
+          .insert({
+            tenant_host: sessionData.tenant_host,
+            trainer_id: session.trainer_id,
+            name,
+            category: exerciseCategory,
+            video_url: videoUrl || null,
+            is_public: false,
+          })
+          .select()
+          .single();
+
+        if (exerciseError || !newExercise) {
+          console.error(
+            "[Exercises API] Error creating exercise:",
+            exerciseError
+          );
+
+          return NextResponse.json(
+            { success: false, error: "Error al crear ejercicio" },
+            { status: 500 }
+          );
+        }
+
+        exerciseId = newExercise.id;
+        console.log("[Exercises API] Created new exercise:", exerciseId);
       }
-
-      exerciseId = newExercise.id;
-      console.log("[Exercises API] Created new exercise:", exerciseId);
     }
 
     // Get the current max exercise_order for this session
