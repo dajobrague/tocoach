@@ -15,7 +15,8 @@ interface RouteContext {
   params: Promise<{ id: string; slotId: string; optionId: string }>;
 }
 
-// PATCH /api/meal-cycles/[id]/slots/[slotId]/options/[optionId] — reorder.
+// PATCH /api/meal-cycles/[id]/slots/[slotId]/options/[optionId] — reorder, or
+// re-portion (per-client quantities) when `quantities` is provided.
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const guard = await guardRecipeRequest();
 
@@ -36,11 +37,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const service = new MealSlotOptionService(createSupabaseClient());
-    const option = await service.updateOption(
-      guard.session.tenant_host,
-      optionId,
-      parsed.value
-    );
+    const tenantHost = guard.session.tenant_host;
+    const option =
+      parsed.value.quantities !== undefined
+        ? await service.updateOptionPortions(
+            tenantHost,
+            optionId,
+            parsed.value.quantities
+          )
+        : await service.updateOption(
+            tenantHost,
+            optionId,
+            parsed.value.position !== undefined
+              ? { position: parsed.value.position }
+              : {}
+          );
 
     if (option === null) {
       return recipeNotFound();

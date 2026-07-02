@@ -1,5 +1,11 @@
 import type { MealSlotOptionRow } from "./meal-slot-option-service";
+import type { SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { MealSlotOptionService } from "./meal-slot-option-service";
+import { overlayLiveMedia } from "./option-snapshot";
+
+import { RecipeMediaService } from "@/lib/nutrition/recipes/recipe-media-service";
 
 const CYCLES_TABLE = "meal_cycles";
 const SLOTS_TABLE = "meal_slots";
@@ -49,6 +55,7 @@ export interface AddSlotInput {
 }
 
 export interface UpdateCycleInput {
+  name?: string;
   durationDays?: number;
   startDate?: string;
   status?: CycleStatus;
@@ -196,6 +203,264 @@ export class MealCycleService {
     return data as MealSlotRow;
   }
 
+  /**
+   * Replace `targetDayIndex` with a copy of `sourceDayIndex`: delete the target
+   * day's slots (cascading their options), then recreate each source slot on the
+   * target day and copy its options verbatim — the frozen snapshots (and their
+   * exact per-client portions) are preserved. Powers both "Duplicar día"
+   * (target picked) and "Copiar desde otro día" (source picked). Tenant-scoped.
+   * Returns null when the cycle isn't the tenant's; throws
+   * {@link MealCycleValidationError} for out-of-range or equal day indices.
+   */
+  async copyDay(
+    tenantHost: string,
+    cycleId: string,
+    sourceDayIndex: number,
+    targetDayIndex: number
+  ): Promise<boolean | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    for (const dayIndex of [sourceDayIndex, targetDayIndex]) {
+      if (
+        Number.isInteger(dayIndex) === false ||
+        dayIndex < 0 ||
+        dayIndex >= cycle.duration_days
+      ) {
+        throw new MealCycleValidationError(
+          `dayIndex must be within 0..${cycle.duration_days - 1}`
+        );
+      }
+    }
+
+    if (sourceDayIndex === targetDayIndex) {
+      throw new MealCycleValidationError(
+        "source and target day must be different"
+      );
+    }
+
+    const { data, error } = await this.client
+      .from(SLOTS_TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("cycle_id", cycleId)
+      .order("position", { ascending: true });
+
+    if (error !== null) {
+      throw new Error(`MealCycleService.copyDay slots: ${error.message}`);
+    }
+
+    const slots = (data ?? []) as MealSlotRow[];
+    const source = slots.filter((slot) => slot.day_index === sourceDayIndex);
+    const target = slots.filter((slot) => slot.day_index === targetDayIndex);
+
+    // Replace: remove the target day's slots (options cascade-delete).
+    for (const slot of target) {
+      await this.deleteSlot(tenantHost, slot.id);
+    }
+
+    // Recreate source slots on the target day, copying options verbatim.
+    const options = new MealSlotOptionService(this.client);
+    let position = 0;
+
+    for (const slot of source) {
+      const created = await this.addSlot(tenantHost, cycleId, {
+        dayIndex: targetDayIndex,
+        label: slot.label,
+        position,
+      });
+
+      position += 1;
+
+      if (created !== null) {
+        await options.copyOptionsToSlot(tenantHost, slot.id, created.id);
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Remove a day and renumber the later days down (no gaps): delete every slot
+   * on `dayIndex` (options cascade), decrement `day_index` for every slot on a
+   * later day, then shrink `duration_days` by 1. Refuses to remove the last
+   * remaining day (a cycle keeps at least one). Tenant-scoped: returns null when
+   * the cycle isn't the tenant's; throws {@link MealCycleValidationError} for an
+   * out-of-range index or a one-day cycle.
+   */
+  async removeDay(
+    tenantHost: string,
+    cycleId: string,
+    dayIndex: number
+  ): Promise<boolean | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    if (
+      Number.isInteger(dayIndex) === false ||
+      dayIndex < 0 ||
+      dayIndex >= cycle.duration_days
+    ) {
+      throw new MealCycleValidationError(
+        `dayIndex must be within 0..${cycle.duration_days - 1}`
+      );
+    }
+
+    if (cycle.duration_days <= 1) {
+      throw new MealCycleValidationError("A cycle must keep at least one day");
+    }
+
+    const { data, error } = await this.client
+      .from(SLOTS_TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("cycle_id", cycleId);
+
+    if (error !== null) {
+      throw new Error(`MealCycleService.removeDay slots: ${error.message}`);
+    }
+
+    const slots = (data ?? []) as MealSlotRow[];
+
+    // Drop the removed day's slots (their options cascade-delete).
+    for (const slot of slots.filter((s) => s.day_index === dayIndex)) {
+      await this.deleteSlot(tenantHost, slot.id);
+    }
+
+    // Renumber every later day down by one so there are no gaps.
+    for (const slot of slots.filter((s) => s.day_index > dayIndex)) {
+      await this.updateSlot(tenantHost, slot.id, {
+        dayIndex: slot.day_index - 1,
+      });
+    }
+
+    await this.update(tenantHost, cycleId, {
+      durationDays: cycle.duration_days - 1,
+    });
+
+    return true;
+  }
+
+  /**
+   * Append a new day at the end. With `copyFromDayIndex`, the new day is seeded
+   * from a verbatim copy of that day (frozen snapshots preserved via
+   * {@link copyDay}); omit it for a blank day. Tenant-scoped: returns null when
+   * the cycle isn't the tenant's; throws {@link MealCycleValidationError} for an
+   * out-of-range copy source.
+   */
+  async addDay(
+    tenantHost: string,
+    cycleId: string,
+    copyFromDayIndex?: number
+  ): Promise<boolean | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    const newDayIndex = cycle.duration_days;
+
+    if (copyFromDayIndex !== undefined) {
+      if (
+        Number.isInteger(copyFromDayIndex) === false ||
+        copyFromDayIndex < 0 ||
+        copyFromDayIndex >= cycle.duration_days
+      ) {
+        throw new MealCycleValidationError(
+          `copyFromDayIndex must be within 0..${cycle.duration_days - 1}`
+        );
+      }
+    }
+
+    await this.update(tenantHost, cycleId, {
+      durationDays: cycle.duration_days + 1,
+    });
+
+    if (copyFromDayIndex !== undefined) {
+      await this.copyDay(tenantHost, cycleId, copyFromDayIndex, newDayIndex);
+    }
+
+    return true;
+  }
+
+  /**
+   * Move the day at `fromIndex` to `toIndex`, renumbering every day in between
+   * (a drag-reorder). Rewrites each slot's `day_index` to its new position;
+   * `duration_days` is unchanged. Tenant-scoped: returns null when the cycle
+   * isn't the tenant's; throws {@link MealCycleValidationError} for an
+   * out-of-range index. Equal indices are a no-op.
+   */
+  async reorderDay(
+    tenantHost: string,
+    cycleId: string,
+    fromIndex: number,
+    toIndex: number
+  ): Promise<boolean | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    for (const dayIndex of [fromIndex, toIndex]) {
+      if (
+        Number.isInteger(dayIndex) === false ||
+        dayIndex < 0 ||
+        dayIndex >= cycle.duration_days
+      ) {
+        throw new MealCycleValidationError(
+          `dayIndex must be within 0..${cycle.duration_days - 1}`
+        );
+      }
+    }
+
+    if (fromIndex === toIndex) {
+      return true;
+    }
+
+    // Permutation: pull the moved day out of the 0..n-1 order and reinsert it at
+    // the target, then map each old day index to its new position.
+    const order = Array.from({ length: cycle.duration_days }, (_, i) => i);
+
+    order.splice(fromIndex, 1);
+    order.splice(toIndex, 0, fromIndex);
+
+    const newIndexByOld = new Map<number, number>();
+
+    order.forEach((oldIndex, newIndex) =>
+      newIndexByOld.set(oldIndex, newIndex)
+    );
+
+    const { data, error } = await this.client
+      .from(SLOTS_TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("cycle_id", cycleId);
+
+    if (error !== null) {
+      throw new Error(`MealCycleService.reorderDay slots: ${error.message}`);
+    }
+
+    // Slots keep their day_index if the day didn't move; multiple slots share a
+    // day and all remap together (no unique constraint on day_index).
+    for (const slot of (data ?? []) as MealSlotRow[]) {
+      const nextDay = newIndexByOld.get(slot.day_index);
+
+      if (nextDay !== undefined && nextDay !== slot.day_index) {
+        await this.updateSlot(tenantHost, slot.id, { dayIndex: nextDay });
+      }
+    }
+
+    return true;
+  }
+
   /** List the tenant's cycles, newest first, optionally filtered by client. */
   async list(
     tenantHost: string,
@@ -279,6 +544,16 @@ export class MealCycleService {
     }
 
     const updates: Record<string, unknown> = {};
+
+    if (patch.name !== undefined) {
+      const name = patch.name.trim();
+
+      if (name.length === 0) {
+        throw new MealCycleValidationError("Cycle name is required");
+      }
+
+      updates.name = name;
+    }
 
     if (patch.durationDays !== undefined) {
       if (
@@ -463,10 +738,40 @@ export class MealCycleService {
       );
     }
 
-    for (const option of (data ?? []) as MealSlotOptionRow[]) {
+    const rows = (data ?? []) as MealSlotOptionRow[];
+    // Recipe photos are cosmetic and tracked live: overlay each recipe option's
+    // frozen media with the recipe's *current* library media, so a later image
+    // edit shows up here (nutrition/ingredients stay frozen). `source_ref_id`s
+    // come from these tenant-scoped rows, so the batched lookup is safe.
+    const mediaByRecipe = await new RecipeMediaService(
+      this.client
+    ).listByRecipeIds(
+      rows
+        .filter((option) => option.source_type === "recipe")
+        .map((option) => option.source_ref_id)
+    );
+
+    for (const option of rows) {
+      const liveMedia = mediaByRecipe.get(option.source_ref_id);
+      const enriched: MealSlotOptionRow =
+        liveMedia !== undefined
+          ? {
+              ...option,
+              item_snapshot: overlayLiveMedia(
+                option.item_snapshot,
+                liveMedia.map(
+                  (row): SnapshotMedia => ({
+                    type: row.type,
+                    url: row.url,
+                    orientation: row.orientation,
+                  })
+                )
+              ),
+            }
+          : option;
       const list = bySlot.get(option.slot_id) ?? [];
 
-      list.push(option);
+      list.push(enriched);
       bySlot.set(option.slot_id, list);
     }
 

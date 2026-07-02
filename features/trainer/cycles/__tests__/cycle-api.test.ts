@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAddOptionBody,
+  dayReorderMapping,
   groupSlotsByDay,
   optionKcal,
   resolveRelabel,
@@ -50,6 +51,24 @@ describe("groupSlotsByDay", () => {
   });
 });
 
+describe("dayReorderMapping", () => {
+  it("maps each old day index to its new position when moving a day earlier", () => {
+    // Move day 4 to position 1 in a 5-day cycle: order becomes [0,4,1,2,3].
+    // So old 0→0, old 4→1, old 1→2, old 2→3, old 3→4.
+    expect(dayReorderMapping(5, 4, 1)).toEqual([0, 2, 3, 4, 1]);
+  });
+
+  it("maps correctly when moving a day later", () => {
+    // Move day 1 to position 3 in a 5-day cycle: order becomes [0,2,3,1,4].
+    // old 0→0, old 1→3, old 2→1, old 3→2, old 4→4.
+    expect(dayReorderMapping(5, 1, 3)).toEqual([0, 3, 1, 2, 4]);
+  });
+
+  it("is the identity when from equals to", () => {
+    expect(dayReorderMapping(4, 2, 2)).toEqual([0, 1, 2, 3]);
+  });
+});
+
 describe("optionKcal", () => {
   it("reads + rounds kcal from the frozen snapshot", () => {
     const option = {
@@ -87,6 +106,20 @@ describe("buildAddOptionBody", () => {
     expect(buildAddOptionBody({ kind: "recipe", recipeId: "r1" })).toEqual({
       source_type: "recipe",
       recipe_id: "r1",
+    });
+  });
+
+  it("includes per-ingredient quantities for a recipe when given", () => {
+    expect(
+      buildAddOptionBody({
+        kind: "recipe",
+        recipeId: "r1",
+        quantities: [100, 150],
+      })
+    ).toEqual({
+      source_type: "recipe",
+      recipe_id: "r1",
+      quantities: [100, 150],
     });
   });
 

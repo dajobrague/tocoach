@@ -95,31 +95,34 @@ describe("buildCreateBody / scopeLabel", () => {
         anchorDate: "2026-06-10",
         dayIndex: null,
         slotId: "slot-1",
-        swap: { kind: "recipe", recipeId: "r-1" },
+        swapItems: [{ kind: "recipe", recipeId: "r-1" }],
       })
     ).toEqual({
       overrideType: "swap",
       scope: "day_forward",
       anchorDate: "2026-06-10",
       slotId: "slot-1",
-      swapSourceType: "recipe",
-      swapSourceRefId: "r-1",
+      swapItems: [{ swapSourceType: "recipe", swapSourceRefId: "r-1" }],
     });
   });
 
-  it("builds a food swap body with quantity", () => {
+  it("builds a multi-item food swap body with quantities", () => {
     const body = buildCreateBody({
       overrideType: "swap",
       scope: "single_day",
       anchorDate: "2026-06-10",
       dayIndex: null,
       slotId: "slot-1",
-      swap: { kind: "food", ingredientId: "i-1", quantity: 150 },
+      swapItems: [
+        { kind: "food", ingredientId: "i-1", quantity: 150 },
+        { kind: "food", ingredientId: "i-2", quantity: 80 },
+      ],
     });
 
-    expect(body.swapSourceType).toBe("food");
-    expect(body.swapSourceRefId).toBe("i-1");
-    expect(body.swapQuantity).toBe(150);
+    expect(body.swapItems).toEqual([
+      { swapSourceType: "food", swapSourceRefId: "i-1", swapQuantity: 150 },
+      { swapSourceType: "food", swapSourceRefId: "i-2", swapQuantity: 80 },
+    ]);
   });
 
   it("scopeLabel is human-readable", () => {

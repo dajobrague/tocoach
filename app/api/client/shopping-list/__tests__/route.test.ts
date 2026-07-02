@@ -87,6 +87,7 @@ function tree(): MealCycleTree {
             source_type: "recipe",
             source_ref_id: "r1",
             position: 1,
+            group_index: 0,
             created_at: "2026-06-01T00:00:00Z",
             updated_at: "2026-06-01T00:00:00Z",
             item_snapshot: {
@@ -101,6 +102,7 @@ function tree(): MealCycleTree {
                   name: "Pollo",
                   quantity: 200,
                   unit: "g",
+                  gramsPerUnit: null,
                   nutrientsPer100g: {},
                 },
               ],
@@ -114,6 +116,7 @@ function tree(): MealCycleTree {
             source_type: "recipe",
             source_ref_id: "r2",
             position: 0,
+            group_index: 0,
             created_at: "2026-06-01T00:00:00Z",
             updated_at: "2026-06-01T00:00:00Z",
             item_snapshot: {
@@ -124,11 +127,18 @@ function tree(): MealCycleTree {
               images: [],
               media: [],
               ingredients: [
-                { name: "Oats", quantity: 50, unit: "g", nutrientsPer100g: {} },
+                {
+                  name: "Oats",
+                  quantity: 50,
+                  unit: "g",
+                  gramsPerUnit: null,
+                  nutrientsPer100g: {},
+                },
                 {
                   name: "Milk",
                   quantity: 200,
                   unit: "ml",
+                  gramsPerUnit: null,
                   nutrientsPer100g: {},
                 },
               ],

@@ -19,7 +19,7 @@ function ingredient(
   quantity: number,
   unit = "g"
 ): SnapshotIngredient {
-  return { name, quantity, unit, nutrientsPer100g: {} };
+  return { name, quantity, unit, gramsPerUnit: null, nutrientsPer100g: {} };
 }
 
 function option(
@@ -34,6 +34,7 @@ function option(
     source_type: "recipe",
     source_ref_id: "r1",
     position,
+    group_index: 0,
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     item_snapshot: {

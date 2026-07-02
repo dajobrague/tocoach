@@ -16,7 +16,13 @@ export interface OptionSnapshot {
   name: string;
   steps: string | null;
   images: { url: string; orientation: "vertical" | "horizontal" | null }[];
-  ingredients: { name: string; quantity: number; unit: string }[];
+  ingredients: {
+    name: string;
+    quantity: number;
+    unit: string;
+    /** Grams per piece for `unit === "u"`; null for g/ml/lt. */
+    gramsPerUnit: number | null;
+  }[];
   totals: OptionTotals;
 }
 
@@ -26,6 +32,9 @@ export interface SlotOption {
   source_type: "recipe" | "food";
   source_ref_id: string;
   position: number;
+  /** Component within the slot: same value = alternatives; different = separate
+   *  components that sum toward the meal. Defaults to 0 for legacy rows. */
+  group_index: number;
   item_snapshot: OptionSnapshot;
 }
 
@@ -60,13 +69,26 @@ export interface RecipeHit {
 export interface FoodHit {
   id?: string;
   name: string;
+  brand?: string;
+  imageUrl?: string;
   nutrientsPer100g: Record<string, number>;
 }
 
-/** Selection coming back from the picker drawer. */
+/** Selection coming back from the picker drawer. `groupIndex` targets a meal
+ *  component (omit/0 for a new meal's first component). */
 export type OptionSelection =
-  | { kind: "recipe"; recipeId: string }
-  | { kind: "food"; ingredientId: string; quantity: number };
+  | {
+      kind: "recipe";
+      recipeId: string;
+      quantities?: number[];
+      groupIndex?: number;
+    }
+  | {
+      kind: "food";
+      ingredientId: string;
+      quantity: number;
+      groupIndex?: number;
+    };
 
 // ─── Pure helpers (unit-tested) ─────────────────────────────────────────────
 
@@ -98,6 +120,30 @@ export function groupSlotsByDay(
   return days;
 }
 
+/**
+ * Permutation for moving the day at `from` to `to` across `n` days: returns an
+ * array where `result[oldIndex]` is that day's new index. Used to optimistically
+ * renumber slots (and follow the selected day) before the server confirms.
+ */
+export function dayReorderMapping(
+  n: number,
+  from: number,
+  to: number
+): number[] {
+  const order = Array.from({ length: n }, (_, i) => i);
+
+  order.splice(from, 1);
+  order.splice(to, 0, from);
+
+  const newIndexByOld = new Array<number>(n);
+
+  order.forEach((oldIndex, newIndex) => {
+    newIndexByOld[oldIndex] = newIndex;
+  });
+
+  return newIndexByOld;
+}
+
 /** Rounded kcal of an option, read from its frozen snapshot (never the library). */
 export function optionKcal(option: SlotOption): number {
   return Math.round(Number(option.item_snapshot?.totals?.kcal) || 0);
@@ -126,14 +172,31 @@ export function buildAddOptionBody(
   selection: OptionSelection
 ): Record<string, unknown> {
   if (selection.kind === "recipe") {
-    return { source_type: "recipe", recipe_id: selection.recipeId };
+    const body: Record<string, unknown> = {
+      source_type: "recipe",
+      recipe_id: selection.recipeId,
+    };
+
+    if (selection.quantities !== undefined)
+      body.quantities = selection.quantities;
+    // 0 is the default component; only send it for additional components so the
+    // base add flow works before the group_index migration is applied.
+    if (selection.groupIndex !== undefined && selection.groupIndex > 0)
+      body.group_index = selection.groupIndex;
+
+    return body;
   }
 
-  return {
+  const body: Record<string, unknown> = {
     source_type: "food",
     ingredient_id: selection.ingredientId,
     quantity: selection.quantity,
   };
+
+  if (selection.groupIndex !== undefined)
+    body.group_index = selection.groupIndex;
+
+  return body;
 }
 
 // ─── Fetch layer ────────────────────────────────────────────────────────────
@@ -167,7 +230,7 @@ function getJson<T>(url: string): Promise<T> {
 
 function sendJson<T>(
   url: string,
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   body?: Record<string, unknown>
 ): Promise<T> {
   return fetch(url, {
@@ -204,10 +267,16 @@ export function createCycle(input: {
 
 export function updateCycle(
   cycleId: string,
-  patch: { status?: CycleStatus; durationDays?: number; startDate?: string }
+  patch: {
+    name?: string;
+    status?: CycleStatus;
+    durationDays?: number;
+    startDate?: string;
+  }
 ): Promise<CycleSummary> {
   const body: Record<string, unknown> = {};
 
+  if (patch.name !== undefined) body.name = patch.name;
   if (patch.status !== undefined) body.status = patch.status;
   if (patch.durationDays !== undefined) body.duration_days = patch.durationDays;
   if (patch.startDate !== undefined) body.start_date = patch.startDate;
@@ -251,6 +320,51 @@ export function deleteSlot(
   return sendJson<CycleSlot>(`${BASE}/${cycleId}/slots/${slotId}`, "DELETE");
 }
 
+/** Replace `targetDayIndex` with a copy of `sourceDayIndex` (verbatim options). */
+export function copyDay(
+  cycleId: string,
+  sourceDayIndex: number,
+  targetDayIndex: number
+): Promise<void> {
+  return sendJson<void>(`${BASE}/${cycleId}/copy-day`, "POST", {
+    source_day_index: sourceDayIndex,
+    target_day_index: targetDayIndex,
+  });
+}
+
+/** Drop a day; the later days renumber down (no gaps). */
+export function removeDay(cycleId: string, dayIndex: number): Promise<void> {
+  return sendJson<void>(`${BASE}/${cycleId}/remove-day`, "POST", {
+    day_index: dayIndex,
+  });
+}
+
+/** Append a day at the end — blank, or seeded from a copy of `copyFromDayIndex`. */
+export function addDay(
+  cycleId: string,
+  copyFromDayIndex?: number
+): Promise<void> {
+  return sendJson<void>(
+    `${BASE}/${cycleId}/add-day`,
+    "POST",
+    copyFromDayIndex !== undefined
+      ? { copy_from_day_index: copyFromDayIndex }
+      : {}
+  );
+}
+
+/** Move the day at `fromIndex` to `toIndex`; the days in between renumber. */
+export function reorderDay(
+  cycleId: string,
+  fromIndex: number,
+  toIndex: number
+): Promise<void> {
+  return sendJson<void>(`${BASE}/${cycleId}/reorder-day`, "POST", {
+    from_index: fromIndex,
+    to_index: toIndex,
+  });
+}
+
 export function addOption(
   cycleId: string,
   slotId: string,
@@ -274,10 +388,58 @@ export function deleteOption(
   );
 }
 
+/** Re-portion an option for this client: new grams per ingredient (by order). */
+export function updateOptionPortions(
+  cycleId: string,
+  slotId: string,
+  optionId: string,
+  quantities: number[]
+): Promise<SlotOption> {
+  return sendJson<SlotOption>(
+    `${BASE}/${cycleId}/slots/${slotId}/options/${optionId}`,
+    "PATCH",
+    { quantities }
+  );
+}
+
+/** A client's daily nutrition targets (kcal + macros). Same shape as MacroTotals. */
+export interface NutritionGoals {
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+
+/** The client's saved goals, or null when they have none (use app defaults). */
+export function fetchClientGoals(
+  clientId: number
+): Promise<NutritionGoals | null> {
+  return getJson<NutritionGoals | null>(
+    `/api/nutrition-goals?clientId=${clientId}`
+  );
+}
+
+/** Create or replace the client's daily goals. */
+export function saveClientGoals(
+  clientId: number,
+  goals: NutritionGoals
+): Promise<NutritionGoals> {
+  return sendJson<NutritionGoals>("/api/nutrition-goals", "PUT", {
+    client_id: clientId,
+    ...goals,
+  });
+}
+
 export function searchRecipes(query: string): Promise<RecipeHit[]> {
   return getJson<RecipeHit[]>(`/api/recipes?q=${encodeURIComponent(query)}`);
 }
 
-export function searchFoods(query: string): Promise<FoodHit[]> {
-  return getJson<FoodHit[]>(`/api/foods/search?q=${encodeURIComponent(query)}`);
+export function searchFoods(query: string, brand?: string): Promise<FoodHit[]> {
+  const params = new URLSearchParams({ q: query });
+
+  if (brand !== undefined && brand.trim().length > 0) {
+    params.set("brand", brand.trim());
+  }
+
+  return getJson<FoodHit[]>(`/api/foods/search?${params.toString()}`);
 }

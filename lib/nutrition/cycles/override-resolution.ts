@@ -21,10 +21,11 @@ import { currentCycleDayIndex, groupSlotsByDay } from "./cycle-day";
  * date.
  */
 
-/** A winning swap for a slot — the frozen snapshot replaces the slot's options. */
+/** A winning swap for a slot — the frozen snapshot(s) replace the slot's
+ *  options. A swap may carry one item or several (multi-item meal). */
 export interface EffectiveSwap {
   overrideId: string;
-  snapshot: OptionSnapshot;
+  snapshots: OptionSnapshot[];
 }
 
 /** One slot of the effective day: its base options, plus any winning swap. */
@@ -124,7 +125,7 @@ function resolveSlot(
     (override) =>
       override.override_type === "swap" &&
       override.slot_id === slot.id &&
-      override.swap_snapshot !== null
+      (override.swap_snapshots !== null || override.swap_snapshot !== null)
   );
   const winner = pickWinner(swaps);
 
@@ -135,7 +136,13 @@ function resolveSlot(
     swap:
       winner === null
         ? null
-        : { overrideId: winner.id, snapshot: winner.swap_snapshot! },
+        : {
+            overrideId: winner.id,
+            // New multi-item column wins; fall back to the legacy single snapshot.
+            snapshots:
+              winner.swap_snapshots ??
+              (winner.swap_snapshot !== null ? [winner.swap_snapshot] : []),
+          },
   };
 }
 

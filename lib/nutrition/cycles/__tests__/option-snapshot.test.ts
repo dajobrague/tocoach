@@ -5,7 +5,11 @@ import type {
 
 import { describe, expect, it } from "vitest";
 
-import { buildOptionSnapshot } from "../option-snapshot";
+import {
+  applyPortions,
+  buildOptionSnapshot,
+  overlayLiveMedia,
+} from "../option-snapshot";
 
 function recipe(over: Partial<RecipeSnapshotInput> = {}): RecipeSnapshotInput {
   return {
@@ -20,12 +24,14 @@ function recipe(over: Partial<RecipeSnapshotInput> = {}): RecipeSnapshotInput {
         name: "Arroz",
         quantity: 200,
         unit: "g",
+        gramsPerUnit: null,
         nutrientSnapshot: { kcal: 130, protein_g: 2.7, carbs_g: 28 },
       },
       {
         name: "Pollo",
         quantity: 150,
         unit: "g",
+        gramsPerUnit: null,
         nutrientSnapshot: { kcal: 165, protein_g: 31, fat_g: 3.6 },
       },
     ],
@@ -42,6 +48,34 @@ function food(over: Partial<FoodSnapshotInput> = {}): FoodSnapshotInput {
     ...over,
   };
 }
+
+describe("applyPortions", () => {
+  it("overrides per-ingredient quantities and recomputes totals", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = applyPortions(snap, [100, 200]);
+
+    expect(out.ingredients[0]?.quantity).toBe(100);
+    expect(out.ingredients[1]?.quantity).toBe(200);
+    // 100g arroz: kcal 130; 200g pollo: kcal 330 → 460
+    expect(out.totals.kcal).toBeCloseTo(460, 4);
+  });
+
+  it("keeps the existing quantity when an entry is missing or non-finite", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = applyPortions(snap, [100, Number.NaN]);
+
+    expect(out.ingredients[0]?.quantity).toBe(100);
+    expect(out.ingredients[1]?.quantity).toBe(150); // unchanged
+  });
+
+  it("does not mutate the original snapshot", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    applyPortions(snap, [100, 200]);
+
+    expect(snap.ingredients[0]?.quantity).toBe(200);
+  });
+});
 
 describe("buildOptionSnapshot — recipe", () => {
   it("freezes a self-contained snapshot with rolled-up totals", () => {
@@ -64,12 +98,14 @@ describe("buildOptionSnapshot — recipe", () => {
         name: "Arroz",
         quantity: 200,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: { kcal: 130, protein_g: 2.7, carbs_g: 28 },
       },
       {
         name: "Pollo",
         quantity: 150,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: { kcal: 165, protein_g: 31, fat_g: 3.6 },
       },
     ]);
@@ -89,6 +125,7 @@ describe("buildOptionSnapshot — recipe", () => {
             name: "Sal",
             quantity: "5" as unknown as number,
             unit: null,
+            gramsPerUnit: null,
             nutrientSnapshot: { sodium_mg: 38000, bogus: 1, kcal: "x" },
           },
         ],
@@ -99,6 +136,7 @@ describe("buildOptionSnapshot — recipe", () => {
       name: "Sal",
       quantity: 5,
       unit: "g",
+      gramsPerUnit: null,
       nutrientsPer100g: { sodium_mg: 38000 },
     });
   });
@@ -172,6 +210,103 @@ describe("buildOptionSnapshot — recipe", () => {
   });
 });
 
+describe("buildOptionSnapshot — units", () => {
+  it("carries gramsPerUnit onto each snapshot ingredient", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Huevo",
+            quantity: 2,
+            unit: "u",
+            gramsPerUnit: 60,
+            nutrientSnapshot: { kcal: 155, protein_g: 13 },
+          },
+        ],
+      }),
+    });
+
+    expect(snap.ingredients[0]).toEqual({
+      name: "Huevo",
+      quantity: 2,
+      unit: "u",
+      gramsPerUnit: 60,
+      nutrientsPer100g: { kcal: 155, protein_g: 13 },
+    });
+  });
+
+  it("scales piece (u) macros by quantity × gramsPerUnit, not the raw count", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Huevo",
+            quantity: 2,
+            unit: "u",
+            gramsPerUnit: 60,
+            nutrientSnapshot: { kcal: 155, protein_g: 13 },
+          },
+        ],
+      }),
+    });
+
+    // 2 u × 60 g = 120 g → kcal 155 × 1.2 = 186; protein 13 × 1.2 = 15.6
+    expect(snap.totals.kcal).toBeCloseTo(186, 4);
+    expect(snap.totals.protein_g).toBeCloseTo(15.6, 4);
+  });
+
+  it("treats ml as grams (density ≈ 1) and lt as 1000 g", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Leche",
+            quantity: 250,
+            unit: "ml",
+            gramsPerUnit: null,
+            nutrientSnapshot: { kcal: 60 },
+          },
+          {
+            name: "Agua",
+            quantity: 1,
+            unit: "lt",
+            gramsPerUnit: null,
+            nutrientSnapshot: { kcal: 0 },
+          },
+        ],
+      }),
+    });
+
+    // 250 ml → 250 g → kcal 60 × 2.5 = 150; 1 lt → 1000 g → kcal 0
+    expect(snap.totals.kcal).toBeCloseTo(150, 4);
+  });
+
+  it("recomputes totals from a native-unit portion override (pieces)", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Huevo",
+            quantity: 2,
+            unit: "u",
+            gramsPerUnit: 60,
+            nutrientSnapshot: { kcal: 155 },
+          },
+        ],
+      }),
+    });
+    // Override to 3 pieces → 3 × 60 = 180 g → kcal 155 × 1.8 = 279
+    const out = applyPortions(snap, [3]);
+
+    expect(out.ingredients[0]?.quantity).toBe(3);
+    expect(out.totals.kcal).toBeCloseTo(279, 4);
+  });
+});
+
 describe("buildOptionSnapshot — food", () => {
   it("freezes a single-ingredient snapshot scaled by quantity", () => {
     const snap = buildOptionSnapshot({ type: "food", food: food() });
@@ -187,6 +322,7 @@ describe("buildOptionSnapshot — food", () => {
         name: "Plátano",
         quantity: 120,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: { kcal: 89, protein_g: 1.1, carbs_g: 23 },
       },
     ]);
@@ -194,6 +330,92 @@ describe("buildOptionSnapshot — food", () => {
     expect(snap.totals.kcal).toBeCloseTo(106.8, 4);
     expect(snap.totals.protein_g).toBeCloseTo(1.32, 4);
     expect(snap.totals.carbs_g).toBeCloseTo(27.6, 4);
+  });
+
+  it("captures the food's product image into media + images", () => {
+    const snap = buildOptionSnapshot({
+      type: "food",
+      food: food({ imageUrl: "https://off/cafe.jpg" }),
+    });
+
+    expect(snap.media).toEqual([
+      { type: "image", url: "https://off/cafe.jpg", orientation: null },
+    ]);
+    expect(snap.images).toEqual([
+      { url: "https://off/cafe.jpg", orientation: null },
+    ]);
+  });
+
+  it("leaves media + images empty when the food has no image", () => {
+    const snap = buildOptionSnapshot({
+      type: "food",
+      food: food({ imageUrl: null }),
+    });
+
+    expect(snap.media).toEqual([]);
+    expect(snap.images).toEqual([]);
+  });
+});
+
+describe("overlayLiveMedia", () => {
+  it("replaces a recipe snapshot's media + images with the live library media", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = overlayLiveMedia(snap, [
+      { type: "image", url: "https://cdn/new.jpg", orientation: "vertical" },
+      { type: "video", url: "https://cdn/new.mp4", orientation: "vertical" },
+    ]);
+
+    expect(out.media).toEqual([
+      { type: "image", url: "https://cdn/new.jpg", orientation: "vertical" },
+      { type: "video", url: "https://cdn/new.mp4", orientation: "vertical" },
+    ]);
+    // `images` is the image-only subset of the new media.
+    expect(out.images).toEqual([
+      { url: "https://cdn/new.jpg", orientation: "vertical" },
+    ]);
+  });
+
+  it("keeps the frozen nutrition, ingredients, name and steps untouched", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = overlayLiveMedia(snap, [
+      { type: "image", url: "https://cdn/new.jpg", orientation: null },
+    ]);
+
+    expect(out.ingredients).toEqual(snap.ingredients);
+    expect(out.totals).toEqual(snap.totals);
+    expect(out.name).toBe(snap.name);
+    expect(out.steps).toBe(snap.steps);
+    expect(out.sourceRefId).toBe(snap.sourceRefId);
+  });
+
+  it("returns the snapshot unchanged when there is no live media (frozen fallback)", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = overlayLiveMedia(snap, []);
+
+    expect(out.media).toEqual(snap.media);
+    expect(out.images).toEqual(snap.images);
+  });
+
+  it("never overlays a food option (foods have no library media to track)", () => {
+    const snap = buildOptionSnapshot({ type: "food", food: food() });
+    const out = overlayLiveMedia(snap, [
+      { type: "image", url: "https://cdn/new.jpg", orientation: null },
+    ]);
+
+    expect(out.media).toEqual(snap.media);
+    expect(out.images).toEqual(snap.images);
+  });
+
+  it("does not mutate the original snapshot", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    overlayLiveMedia(snap, [
+      { type: "image", url: "https://cdn/new.jpg", orientation: null },
+    ]);
+
+    expect(snap.media).toEqual([
+      { type: "image", url: "https://cdn/x.jpg", orientation: "horizontal" },
+    ]);
   });
 });
 

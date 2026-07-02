@@ -142,6 +142,27 @@ describe("OverrideService (integration, local DB)", () => {
     expect(swap?.swap_snapshot?.name).toBe("Override swap recipe");
   });
 
+  it("creates a multi-item swap freezing one snapshot per item", async () => {
+    const { cycleId, slotId, recipeId } = await seedCycle();
+
+    const swap = await overrides.create(TEST_TENANT_HOST, {
+      cycleId,
+      overrideType: "swap",
+      scope: "single_day",
+      anchorDate: "2026-06-03",
+      slotId,
+      swapItems: [
+        { sourceType: "recipe", sourceRefId: recipeId },
+        { sourceType: "recipe", sourceRefId: recipeId },
+      ],
+    });
+
+    expect(swap?.swap_snapshots).toHaveLength(2);
+    expect(swap?.swap_snapshots?.[0]?.name).toBe("Override swap recipe");
+    // The legacy single column mirrors the first item for back-compat.
+    expect(swap?.swap_snapshot?.name).toBe("Override swap recipe");
+  });
+
   it("keeps the swap_snapshot frozen after the source recipe is edited (§4.1)", async () => {
     const { cycleId, slotId, recipeId } = await seedCycle();
 

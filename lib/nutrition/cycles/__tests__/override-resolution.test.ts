@@ -43,6 +43,7 @@ function option(id: string): MealSlotOptionRow {
     source_type: "recipe",
     source_ref_id: "r1",
     position: 0,
+    group_index: 0,
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     item_snapshot: snapshot(`base ${id}`),
@@ -106,6 +107,7 @@ function override(partial: Partial<OverrideRow>): OverrideRow {
     swap_source_type: null,
     swap_source_ref_id: null,
     swap_snapshot: null,
+    swap_snapshots: null,
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     ...partial,
@@ -248,7 +250,7 @@ describe("resolveOverridesForDate — swap precedence (most-specific wins)", () 
     const s0 = day.slots.find((s) => s.slotId === "s0");
 
     expect(s0?.swap?.overrideId).toBe(single.id);
-    expect(s0?.swap?.snapshot.name).toBe("SINGLE");
+    expect(s0?.swap?.snapshots[0]?.name).toBe("SINGLE");
   });
 
   it("day_forward beats every_cycle when no single_day is present", () => {
@@ -263,9 +265,9 @@ describe("resolveOverridesForDate — swap precedence (most-specific wins)", () 
 
     const day = resolveOverridesForDate(TWO_DAY(), [every, forward], DATE);
 
-    expect(day.slots.find((s) => s.slotId === "s0")?.swap?.snapshot.name).toBe(
-      "FORWARD"
-    );
+    expect(
+      day.slots.find((s) => s.slotId === "s0")?.swap?.snapshots[0]?.name
+    ).toBe("FORWARD");
   });
 
   it("ties within the same scope go to the latest created_at", () => {
@@ -299,7 +301,7 @@ describe("resolveOverridesForDate — independence", () => {
     const s0 = day.slots.find((s) => s.slotId === "s0");
     const s1 = day.slots.find((s) => s.slotId === "s1");
 
-    expect(s0?.swap?.snapshot.name).toBe("SWAP");
+    expect(s0?.swap?.snapshots[0]?.name).toBe("SWAP");
     expect(s1?.swap).toBeNull();
     expect(s1?.options.map((o) => o.id)).toEqual(["o1a"]);
   });
@@ -319,9 +321,9 @@ describe("resolveOverridesForDate — independence", () => {
 
     expect(day.notes).toHaveLength(1);
     expect(day.notes[0]?.text).toBe("Extra agua hoy");
-    expect(day.slots.find((s) => s.slotId === "s0")?.swap?.snapshot.name).toBe(
-      "SWAP"
-    );
+    expect(
+      day.slots.find((s) => s.slotId === "s0")?.swap?.snapshots[0]?.name
+    ).toBe("SWAP");
   });
 });
 
@@ -350,7 +352,7 @@ describe("resolveOverridesForDate — frozen snapshot is used (no live read)", (
     const day = resolveOverridesForDate(TWO_DAY(), [swap], "2026-06-01");
 
     // Identity: resolution hands back the frozen object — it never reads a recipe.
-    expect(day.slots.find((s) => s.slotId === "s0")?.swap?.snapshot).toBe(
+    expect(day.slots.find((s) => s.slotId === "s0")?.swap?.snapshots[0]).toBe(
       frozen
     );
   });

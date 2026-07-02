@@ -220,6 +220,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
         name: "Avena",
         quantity: 200,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: { kcal: 100, protein_g: 10 },
       },
     ]);
@@ -256,11 +257,50 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
         name: "Avena",
         quantity: 50,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: { kcal: 999, protein_g: 1 },
       },
     ]);
     expect(snap2.totals.kcal).toBeCloseTo(499.5, 4); // 50g * 999/100
     expect(snap2).not.toEqual(frozen);
+  });
+
+  it("freezes a piece (u) ingredient with grams_per_unit and unit-aware macros", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Huevos revueltos",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Huevo",
+      quantity: 2,
+      unit: "u",
+      gramsPerUnit: 60,
+      nutrientsPer100g: { kcal: 155, protein_g: 13 },
+    });
+
+    const slotId = await newCycleSlot();
+    const option = await options.addRecipeOption(
+      TEST_TENANT_HOST,
+      slotId,
+      recipe.id
+    );
+
+    const frozen = await readSnapshot(option!.id);
+
+    // The snapshot keeps the native amount + unit + piece weight …
+    expect(frozen.ingredients).toEqual([
+      {
+        name: "Huevo",
+        quantity: 2,
+        unit: "u",
+        gramsPerUnit: 60,
+        nutrientsPer100g: { kcal: 155, protein_g: 13 },
+      },
+    ]);
+    // … and rolls totals up from 2 × 60 = 120 g, not the raw count of 2.
+    expect(frozen.totals.kcal).toBeCloseTo(186, 4); // 155 × 1.2
+    expect(frozen.totals.protein_g).toBeCloseTo(15.6, 4); // 13 × 1.2
   });
 
   it("freezes a food option independent of the ingredients cache", async () => {
@@ -289,6 +329,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
         name: "Plátano",
         quantity: 120,
         unit: "g",
+        gramsPerUnit: null,
         nutrientsPer100g: {
           kcal: 89,
           protein_g: 1.1,
@@ -307,6 +348,39 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
     await client.from("ingredients").update({ kcal: 1 }).eq("id", ingredientId);
 
     expect(await readSnapshot(option!.id)).toEqual(frozen);
+  });
+
+  it("freezes the food's product image into the option snapshot", async () => {
+    const { data } = await client
+      .from("ingredients")
+      .insert({
+        tenant_host: TEST_TENANT_HOST,
+        source: "off",
+        name: "Café Marcilla",
+        image_url: "https://off/cafe.jpg",
+        kcal: 2,
+      })
+      .select("id")
+      .single();
+    const ingredientId = (data as { id: string }).id;
+    const slotId = await newCycleSlot();
+
+    const option = await options.addFoodOption(
+      TEST_TENANT_HOST,
+      slotId,
+      ingredientId,
+      10
+    );
+
+    const frozen = await readSnapshot(option!.id);
+
+    // The OFF product thumbnail is captured so the plan can render it.
+    expect(frozen.media).toEqual([
+      { type: "image", url: "https://off/cafe.jpg", orientation: null },
+    ]);
+    expect(frozen.images).toEqual([
+      { url: "https://off/cafe.jpg", orientation: null },
+    ]);
   });
 
   it("is tenant-scoped — another tenant cannot add an option to this slot", async () => {

@@ -1,5 +1,6 @@
 import type {
   CreateOverrideInput,
+  SwapItemInput,
   UpdateOverrideInput,
 } from "./override-service";
 import type { OverrideScope, OverrideType } from "./override-types";
@@ -101,6 +102,29 @@ export function parseCreateOverride(
     return { ok: false, error: "slotId es obligatorio para un swap" };
   }
 
+  // Preferred: a list of one or more items (multi-item / re-portioned meal).
+  const rawItems = record["swapItems"];
+
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    const items: SwapItemInput[] = [];
+
+    for (const raw of rawItems) {
+      const item = parseSwapItem(raw);
+
+      if (item === null) {
+        return { ok: false, error: "swapItems inválido" };
+      }
+
+      items.push(item);
+    }
+
+    return {
+      ok: true,
+      value: { ...base, slotId: record["slotId"], swapItems: items },
+    };
+  }
+
+  // Legacy: a single source (back-compat).
   const swapSourceType = record["swapSourceType"];
 
   if (swapSourceType !== "recipe" && swapSourceType !== "food") {
@@ -123,6 +147,45 @@ export function parseCreateOverride(
         : {}),
     },
   };
+}
+
+/** Validate one item of a `swapItems` array (recipe or food + portions). */
+function parseSwapItem(raw: unknown): SwapItemInput | null {
+  const record = asRecord(raw);
+
+  if (record === null) {
+    return null;
+  }
+
+  const sourceType = record["swapSourceType"];
+
+  if (sourceType !== "recipe" && sourceType !== "food") {
+    return null;
+  }
+
+  if (!nonEmptyString(record["swapSourceRefId"])) {
+    return null;
+  }
+
+  const item: SwapItemInput = {
+    sourceType,
+    sourceRefId: record["swapSourceRefId"],
+  };
+
+  if (typeof record["swapQuantity"] === "number") {
+    item.quantity = record["swapQuantity"];
+  }
+
+  const quantities = record["quantities"];
+
+  if (
+    Array.isArray(quantities) &&
+    quantities.every((value) => typeof value === "number")
+  ) {
+    item.quantities = quantities as number[];
+  }
+
+  return item;
 }
 
 /**

@@ -3,6 +3,7 @@ import type { NutrientTotals } from "@/lib/nutrition/recipes/macro-rollup";
 
 import { rollupRecipeTotals } from "@/lib/nutrition/recipes/macro-rollup";
 import { pickNutrients } from "@/lib/nutrition/recipes/nutrient-snapshot";
+import { toGrams } from "@/lib/nutrition/recipes/unit-conversion";
 
 /**
  * Snapshot-at-assignment (§4.1).
@@ -33,9 +34,11 @@ export interface SnapshotMedia {
 
 export interface SnapshotIngredient {
   name: string;
-  /** Grams of this line in the option. */
+  /** Amount of this line, expressed in {@link unit} (e.g. 2 for "2 u"). */
   quantity: number;
   unit: string;
+  /** Weight of one piece, in grams — only meaningful when `unit === "u"`. */
+  gramsPerUnit: number | null;
   nutrientsPer100g: Partial<NutrientsPer100g>;
 }
 
@@ -62,6 +65,8 @@ export interface RecipeSnapshotInput {
     name: string;
     quantity: number | string | null;
     unit: string | null;
+    /** Weight of one piece, in grams — only meaningful when `unit === "u"`. */
+    gramsPerUnit: number | null;
     nutrientSnapshot: Record<string, unknown> | null;
   }>;
   /** All recipe media (image + video) in display order — the freeze source. */
@@ -74,6 +79,9 @@ export interface FoodSnapshotInput {
   name: string;
   quantity: number;
   unit?: string | null;
+  /** Product thumbnail (e.g. Open Food Facts) frozen with the option; null/absent
+   *  when the food has no image. It's an external URL, so freezing it is safe. */
+  imageUrl?: string | null;
   nutrientsPer100g: Record<string, unknown>;
 }
 
@@ -87,11 +95,70 @@ export function buildOptionSnapshot(source: SnapshotSource): OptionSnapshot {
     : buildFoodSnapshot(source.food);
 }
 
+/**
+ * Return a copy of `snapshot` with per-client portions applied: `quantities[i]`
+ * (in ingredient `i`'s own unit — e.g. pieces for `u`, grams for `g`) overrides
+ * ingredient `i` when finite; missing/NaN entries keep the existing quantity.
+ * The line's `unit`/`gramsPerUnit` are never changed — only the amount. Totals
+ * are recomputed (unit-aware) from the result. Pure — the input snapshot is
+ * never mutated. Used to set portions when a dish is assigned to a client, and
+ * to edit them afterwards, without touching the recipe library.
+ */
+export function applyPortions(
+  snapshot: OptionSnapshot,
+  quantities: number[]
+): OptionSnapshot {
+  const ingredients: SnapshotIngredient[] = snapshot.ingredients.map(
+    (line, i) => {
+      const override = quantities[i];
+
+      // Only non-negative finite amounts; a negative portion is never valid.
+      return typeof override === "number" &&
+        Number.isFinite(override) &&
+        override >= 0
+        ? { ...line, quantity: override }
+        : { ...line };
+    }
+  );
+
+  return { ...snapshot, ingredients, totals: totalsFrom(ingredients) };
+}
+
+/**
+ * Return a copy of `snapshot` with its photos/videos replaced by the recipe's
+ * *current* library media, keeping every frozen field (name, steps, ingredients,
+ * quantities, totals) untouched. Images are treated as cosmetic and tracked
+ * live; nutrition stays frozen (§4.1). Only recipe snapshots are overlaid, and
+ * only when `liveMedia` is non-empty — a food option, a deleted recipe, or a
+ * recipe with no media is returned unchanged (the frozen media is the fallback).
+ * Pure: the input snapshot is never mutated.
+ */
+export function overlayLiveMedia(
+  snapshot: OptionSnapshot,
+  liveMedia: SnapshotMedia[]
+): OptionSnapshot {
+  if (snapshot.sourceType !== "recipe" || liveMedia.length === 0) {
+    return snapshot;
+  }
+
+  const media: SnapshotMedia[] = liveMedia.map((item) => ({
+    type: item.type,
+    url: item.url,
+    orientation: item.orientation,
+  }));
+  const images: SnapshotImage[] = media
+    .filter((item) => item.type === "image")
+    .map((item) => ({ url: item.url, orientation: item.orientation }));
+
+  return { ...snapshot, images, media };
+}
+
 function buildRecipeSnapshot(recipe: RecipeSnapshotInput): OptionSnapshot {
   const ingredients: SnapshotIngredient[] = recipe.ingredients.map((line) => ({
     name: `${line.name ?? ""}`,
     quantity: toFinite(line.quantity),
     unit: line.unit !== null && line.unit !== undefined ? line.unit : "g",
+    gramsPerUnit: gramsPerUnitOrNull(line.gramsPerUnit),
     nutrientsPer100g: pickNutrients(line.nutrientSnapshot ?? {}),
   }));
 
@@ -120,16 +187,28 @@ function buildFoodSnapshot(food: FoodSnapshotInput): OptionSnapshot {
     name: food.name,
     quantity: toFinite(food.quantity),
     unit: food.unit !== null && food.unit !== undefined ? food.unit : "g",
+    gramsPerUnit: null,
     nutrientsPer100g: pickNutrients(food.nutrientsPer100g),
   };
+
+  const url =
+    typeof food.imageUrl === "string" && food.imageUrl.length > 0
+      ? food.imageUrl
+      : null;
+  const media: SnapshotMedia[] =
+    url !== null ? [{ type: "image", url, orientation: null }] : [];
+  const images: SnapshotImage[] = media.map((item) => ({
+    url: item.url,
+    orientation: item.orientation,
+  }));
 
   return {
     sourceType: "food",
     sourceRefId: food.id,
     name: food.name,
     steps: null,
-    images: [],
-    media: [],
+    images,
+    media,
     ingredients: [ingredient],
     totals: totalsFrom([ingredient]),
   };
@@ -138,7 +217,7 @@ function buildFoodSnapshot(food: FoodSnapshotInput): OptionSnapshot {
 function totalsFrom(ingredients: SnapshotIngredient[]): NutrientTotals {
   return rollupRecipeTotals(
     ingredients.map((line) => ({
-      quantityGrams: line.quantity,
+      quantityGrams: toGrams(line.quantity, line.unit, line.gramsPerUnit),
       nutrientsPer100g: line.nutrientsPer100g,
     }))
   );
@@ -154,4 +233,11 @@ function toFinite(value: number | string | null | undefined): number {
   const num = Number(value);
 
   return Number.isFinite(num) ? num : 0;
+}
+
+/** Keep a positive finite grams-per-piece; anything else (missing/NaN/≤0) → null. */
+function gramsPerUnitOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 }

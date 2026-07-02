@@ -125,6 +125,373 @@ describe("MealCycleService API methods (integration, local DB)", () => {
     expect(tree?.slots[1]?.options).toHaveLength(0);
   });
 
+  it("copyDay replaces the target day with a verbatim copy of the source day", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Avena",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Avena",
+      quantity: 100,
+      unit: "g",
+      nutrientsPer100g: { kcal: 100, protein_g: 5 },
+    });
+
+    const { data: ing } = await client
+      .from("ingredients")
+      .insert({
+        tenant_host: TEST_TENANT_HOST,
+        source: "manual",
+        name: "Plátano",
+        kcal: 89,
+      })
+      .select("id")
+      .single();
+    const ingredientId = (ing as { id: string }).id;
+
+    const cycleId = await draftFor(clientA);
+    // Source day 0: two meals (a recipe and a food).
+    const s1 = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Desayuno",
+      position: 0,
+    });
+    const s2 = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Comida",
+      position: 1,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, s1!.id, recipe.id);
+    await options.addFoodOption(TEST_TENANT_HOST, s2!.id, ingredientId, 120);
+
+    // Target day 1 already has a meal that must be replaced.
+    const stale = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 1,
+      label: "Viejo",
+      position: 0,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, stale!.id, recipe.id);
+
+    expect(await cycles.copyDay(TEST_TENANT_HOST, cycleId, 0, 1)).toBe(true);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+    const day1 = (tree?.slots ?? [])
+      .filter((slot) => slot.day_index === 1)
+      .sort((a, b) => a.position - b.position);
+
+    // Target day now mirrors the source (the "Viejo" slot is gone).
+    expect(day1.map((slot) => slot.label)).toEqual(["Desayuno", "Comida"]);
+    expect(day1[0]?.options[0]?.source_ref_id).toBe(recipe.id);
+    expect(day1[0]?.options[0]?.item_snapshot.name).toBe("Avena");
+    expect(day1[1]?.options[0]?.source_type).toBe("food");
+    expect(day1[1]?.options[0]?.item_snapshot.name).toBe("Plátano");
+
+    // Source day untouched.
+    const day0 = (tree?.slots ?? []).filter((slot) => slot.day_index === 0);
+
+    expect(day0.map((slot) => slot.label)).toEqual(["Desayuno", "Comida"]);
+  });
+
+  it("copyDay rejects equal source/target and out-of-range days", async () => {
+    const cycleId = await draftFor(clientA); // duration 3 → valid 0..2
+
+    await expect(
+      cycles.copyDay(TEST_TENANT_HOST, cycleId, 1, 1)
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
+    await expect(
+      cycles.copyDay(TEST_TENANT_HOST, cycleId, 0, 5)
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
+  });
+
+  it("copyDay returns null for a cycle that isn't the tenant's", async () => {
+    const cycleId = await draftFor(clientA);
+
+    expect(await cycles.copyDay(OTHER_TENANT, cycleId, 0, 1)).toBeNull();
+  });
+
+  it("removeDay deletes the day's slots and renumbers the later days down", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Avena",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Avena",
+      quantity: 100,
+      unit: "g",
+      nutrientsPer100g: { kcal: 100 },
+    });
+
+    const cycleId = await draftFor(clientA); // duration 3 → days 0,1,2
+
+    await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "D0",
+      position: 0,
+    });
+    const mid = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 1,
+      label: "D1",
+      position: 0,
+    });
+    const last = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 2,
+      label: "D2",
+      position: 0,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, mid!.id, recipe.id);
+    await options.addRecipeOption(TEST_TENANT_HOST, last!.id, recipe.id);
+
+    expect(await cycles.removeDay(TEST_TENANT_HOST, cycleId, 1)).toBe(true);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+
+    // Duration shrank and the removed day's slot is gone.
+    expect(tree?.duration_days).toBe(2);
+    expect((tree?.slots ?? []).some((slot) => slot.id === mid!.id)).toBe(false);
+
+    // Day 2's slot renumbered to day 1, options preserved.
+    const shifted = (tree?.slots ?? []).find((slot) => slot.id === last!.id);
+
+    expect(shifted?.day_index).toBe(1);
+    expect(shifted?.label).toBe("D2");
+
+    const day1 = (tree?.slots ?? []).filter((slot) => slot.day_index === 1);
+
+    expect(day1).toHaveLength(1);
+    expect(day1[0]?.options).toHaveLength(1);
+
+    // Day 0 untouched.
+    expect(
+      (tree?.slots ?? [])
+        .filter((slot) => slot.day_index === 0)
+        .map((s) => s.label)
+    ).toEqual(["D0"]);
+  });
+
+  it("removeDay refuses to remove the last remaining day", async () => {
+    const cycle = await cycles.create(TEST_TENANT_HOST, {
+      trainerId: TEST_TRAINER_ID,
+      clientId: clientA,
+      name: "Un día",
+      durationDays: 1,
+    });
+
+    await expect(
+      cycles.removeDay(TEST_TENANT_HOST, cycle.id, 0)
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
+  });
+
+  it("removeDay range-checks the day index and is tenant-scoped", async () => {
+    const cycleId = await draftFor(clientA); // duration 3 → valid 0..2
+
+    await expect(
+      cycles.removeDay(TEST_TENANT_HOST, cycleId, 5)
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
+    expect(await cycles.removeDay(OTHER_TENANT, cycleId, 0)).toBeNull();
+  });
+
+  it("addDay appends a blank day, growing duration with no new slots", async () => {
+    const cycleId = await draftFor(clientA); // duration 3
+
+    await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "D0",
+    });
+
+    expect(await cycles.addDay(TEST_TENANT_HOST, cycleId)).toBe(true);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+
+    expect(tree?.duration_days).toBe(4);
+    expect(tree?.slots).toHaveLength(1); // no slots added for the new day
+    expect((tree?.slots ?? []).filter((s) => s.day_index === 3)).toHaveLength(
+      0
+    );
+  });
+
+  it("addDay can seed the new day from a copy of an existing day", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Avena",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Avena",
+      quantity: 100,
+      unit: "g",
+      nutrientsPer100g: { kcal: 100 },
+    });
+
+    const cycleId = await draftFor(clientA); // duration 3 → new day is index 3
+    const s1 = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Desayuno",
+      position: 0,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, s1!.id, recipe.id);
+
+    expect(await cycles.addDay(TEST_TENANT_HOST, cycleId, 0)).toBe(true);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+
+    expect(tree?.duration_days).toBe(4);
+
+    const newDay = (tree?.slots ?? []).filter((slot) => slot.day_index === 3);
+
+    expect(newDay.map((slot) => slot.label)).toEqual(["Desayuno"]);
+    expect(newDay[0]?.options[0]?.item_snapshot.name).toBe("Avena");
+  });
+
+  it("addDay returns null for a cycle that isn't the tenant's", async () => {
+    const cycleId = await draftFor(clientA);
+
+    expect(await cycles.addDay(OTHER_TENANT, cycleId)).toBeNull();
+  });
+
+  it("reorderDay moves a day and renumbers the ones in between", async () => {
+    const cycle = await cycles.create(TEST_TENANT_HOST, {
+      trainerId: TEST_TRAINER_ID,
+      clientId: clientA,
+      name: "Reorder",
+      durationDays: 5, // days 0..4
+    });
+
+    // One labelled slot per day so we can track where each day lands.
+    for (let d = 0; d < 5; d += 1) {
+      await cycles.addSlot(TEST_TENANT_HOST, cycle.id, {
+        dayIndex: d,
+        label: `S${d}`,
+        position: 0,
+      });
+    }
+
+    // Move day 4 to position 1: expected new order of old days = [0,4,1,2,3].
+    expect(await cycles.reorderDay(TEST_TENANT_HOST, cycle.id, 4, 1)).toBe(
+      true
+    );
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycle.id);
+    const labelByDay = new Map(
+      (tree?.slots ?? []).map((slot) => [slot.day_index, slot.label])
+    );
+
+    expect(labelByDay.get(0)).toBe("S0");
+    expect(labelByDay.get(1)).toBe("S4");
+    expect(labelByDay.get(2)).toBe("S1");
+    expect(labelByDay.get(3)).toBe("S2");
+    expect(labelByDay.get(4)).toBe("S3");
+    expect(tree?.duration_days).toBe(5); // duration unchanged
+  });
+
+  it("reorderDay range-checks indices and is tenant-scoped; equal is a no-op", async () => {
+    const cycleId = await draftFor(clientA); // duration 3 → valid 0..2
+
+    await expect(
+      cycles.reorderDay(TEST_TENANT_HOST, cycleId, 0, 9)
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
+    expect(await cycles.reorderDay(TEST_TENANT_HOST, cycleId, 1, 1)).toBe(true);
+    expect(await cycles.reorderDay(OTHER_TENANT, cycleId, 0, 1)).toBeNull();
+  });
+
+  it("overlays a recipe option's photo with the live library media, keeping nutrition frozen", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Tostadas",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Pan",
+      quantity: 100,
+      unit: "g",
+      nutrientsPer100g: { kcal: 250, protein_g: 9 },
+    });
+
+    // Initial library image, then freeze the option from it.
+    await client.from("recipe_media").insert({
+      recipe_id: recipe.id,
+      type: "image",
+      url: "https://cdn/old.jpg",
+      orientation: "horizontal",
+      sort_order: 0,
+    });
+
+    const cycleId = await draftFor(clientA);
+    const slot = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Desayuno",
+      position: 0,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, slot!.id, recipe.id);
+
+    // The freeze captured the old image.
+    const before = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+    const frozen = before?.slots[0]?.options[0]?.item_snapshot;
+
+    expect(frozen?.images[0]?.url).toBe("https://cdn/old.jpg");
+
+    // Trainer edits the recipe image in the library (old row+object replaced).
+    await client.from("recipe_media").delete().eq("recipe_id", recipe.id);
+    await client.from("recipe_media").insert({
+      recipe_id: recipe.id,
+      type: "image",
+      url: "https://cdn/new.jpg",
+      orientation: "vertical",
+      sort_order: 0,
+    });
+
+    // Reading the tree now shows the NEW image; frozen nutrition is intact.
+    const after = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+    const option = after?.slots[0]?.options[0]?.item_snapshot;
+
+    expect(option?.media).toEqual([
+      { type: "image", url: "https://cdn/new.jpg", orientation: "vertical" },
+    ]);
+    expect(option?.images).toEqual([
+      { url: "https://cdn/new.jpg", orientation: "vertical" },
+    ]);
+    expect(option?.totals).toEqual(frozen?.totals);
+    expect(option?.ingredients).toEqual(frozen?.ingredients);
+  });
+
+  it("falls back to the frozen photo when the recipe has no live media", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Sopa",
+      status: "active",
+    });
+
+    await client.from("recipe_media").insert({
+      recipe_id: recipe.id,
+      type: "image",
+      url: "https://cdn/frozen.jpg",
+      orientation: "horizontal",
+      sort_order: 0,
+    });
+
+    const cycleId = await draftFor(clientA);
+    const slot = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Comida",
+      position: 0,
+    });
+
+    await options.addRecipeOption(TEST_TENANT_HOST, slot!.id, recipe.id);
+
+    // All library media removed (or the recipe deleted) → keep the frozen image.
+    await client.from("recipe_media").delete().eq("recipe_id", recipe.id);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+    const option = tree?.slots[0]?.options[0]?.item_snapshot;
+
+    expect(option?.images[0]?.url).toBe("https://cdn/frozen.jpg");
+  });
+
   it("enforces one active cycle per client (app layer → 409)", async () => {
     const first = await draftFor(clientA);
     const second = await draftFor(clientA);
@@ -171,6 +538,22 @@ describe("MealCycleService API methods (integration, local DB)", () => {
 
     expect(conflict.error).not.toBeNull();
     expect(conflict.error?.code).toBe("23505");
+  });
+
+  it("renames a cycle and updates its start date; rejects a blank name", async () => {
+    const cycleId = await draftFor(clientA);
+
+    const renamed = await cycles.update(TEST_TENANT_HOST, cycleId, {
+      name: "  Definición — Fase 2  ",
+      startDate: "2026-08-01",
+    });
+
+    expect(renamed?.name).toBe("Definición — Fase 2"); // trimmed
+    expect(renamed?.start_date).toBe("2026-08-01");
+
+    await expect(
+      cycles.update(TEST_TENANT_HOST, cycleId, { name: "   " })
+    ).rejects.toBeInstanceOf(MealCycleValidationError);
   });
 
   it("archives via status update rather than deleting", async () => {

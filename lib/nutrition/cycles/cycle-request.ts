@@ -15,8 +15,24 @@ export interface CreateCycleBody {
 }
 
 export type AddOptionBody =
-  | { sourceType: "recipe"; recipeId: string }
-  | { sourceType: "food"; ingredientId: string; quantity: number };
+  | {
+      sourceType: "recipe";
+      recipeId: string;
+      quantities?: number[];
+      groupIndex?: number;
+    }
+  | {
+      sourceType: "food";
+      ingredientId: string;
+      quantity: number;
+      groupIndex?: number;
+    };
+
+export interface UpdateOptionBody {
+  position?: number;
+  /** Per-ingredient grams (by sort order) for a per-client re-portion. */
+  quantities?: number[];
+}
 
 export interface AddSlotBody {
   dayIndex: number;
@@ -94,6 +110,16 @@ export function parseUpdateCycle(body: unknown): ParseResult<UpdateCycleInput> {
 
   const value: UpdateCycleInput = {};
 
+  if (record.name !== undefined) {
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+
+    if (name.length === 0) {
+      return { ok: false, error: "El nombre es obligatorio" };
+    }
+
+    value.name = name;
+  }
+
   if (record.duration_days !== undefined) {
     if (isInt(record.duration_days) === false || record.duration_days < 1) {
       return { ok: false, error: "duration_days debe ser un entero positivo" };
@@ -140,6 +166,121 @@ export function parseAddSlot(body: unknown): ParseResult<AddSlotBody> {
 
   if (typeof record.label === "string") value.label = record.label;
   if (isInt(record.position)) value.position = record.position;
+
+  return { ok: true, value };
+}
+
+export interface CopyDayBody {
+  sourceDayIndex: number;
+  targetDayIndex: number;
+}
+
+/** Body for POST .../copy-day: replace one day with a copy of another. */
+export function parseCopyDay(body: unknown): ParseResult<CopyDayBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  if (isInt(record.source_day_index) === false || record.source_day_index < 0) {
+    return { ok: false, error: "source_day_index debe ser un entero >= 0" };
+  }
+
+  if (isInt(record.target_day_index) === false || record.target_day_index < 0) {
+    return { ok: false, error: "target_day_index debe ser un entero >= 0" };
+  }
+
+  if (record.source_day_index === record.target_day_index) {
+    return {
+      ok: false,
+      error: "source_day_index y target_day_index deben ser diferentes",
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      sourceDayIndex: record.source_day_index,
+      targetDayIndex: record.target_day_index,
+    },
+  };
+}
+
+export interface RemoveDayBody {
+  dayIndex: number;
+}
+
+/** Body for POST .../remove-day: drop a day and renumber the later ones down. */
+export function parseRemoveDay(body: unknown): ParseResult<RemoveDayBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  if (isInt(record.day_index) === false || record.day_index < 0) {
+    return { ok: false, error: "day_index debe ser un entero >= 0" };
+  }
+
+  return { ok: true, value: { dayIndex: record.day_index } };
+}
+
+export interface ReorderDayBody {
+  fromIndex: number;
+  toIndex: number;
+}
+
+/** Body for POST .../reorder-day: move a day to a new position (days renumber). */
+export function parseReorderDay(body: unknown): ParseResult<ReorderDayBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  if (isInt(record.from_index) === false || record.from_index < 0) {
+    return { ok: false, error: "from_index debe ser un entero >= 0" };
+  }
+
+  if (isInt(record.to_index) === false || record.to_index < 0) {
+    return { ok: false, error: "to_index debe ser un entero >= 0" };
+  }
+
+  return {
+    ok: true,
+    value: { fromIndex: record.from_index, toIndex: record.to_index },
+  };
+}
+
+export interface AddDayBody {
+  /** Seed the new day from a copy of this day; omit for a blank day. */
+  copyFromDayIndex?: number;
+}
+
+/** Body for POST .../add-day: append a day, optionally copied from another. */
+export function parseAddDay(body: unknown): ParseResult<AddDayBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  const value: AddDayBody = {};
+
+  if (record.copy_from_day_index !== undefined) {
+    if (
+      isInt(record.copy_from_day_index) === false ||
+      record.copy_from_day_index < 0
+    ) {
+      return {
+        ok: false,
+        error: "copy_from_day_index debe ser un entero >= 0",
+      };
+    }
+
+    value.copyFromDayIndex = record.copy_from_day_index;
+  }
 
   return { ok: true, value };
 }
@@ -199,7 +340,27 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
       return { ok: false, error: "recipe_id es obligatorio" };
     }
 
-    return { ok: true, value: { sourceType: "recipe", recipeId } };
+    const quantities = asNumberArray(record.quantities);
+
+    if (quantities === null) {
+      return {
+        ok: false,
+        error: "quantities debe ser una lista de números ≥ 0",
+      };
+    }
+
+    const groupIndex = parseGroupIndex(record.group_index);
+
+    if (groupIndex === null) {
+      return { ok: false, error: "group_index debe ser un entero >= 0" };
+    }
+
+    const value: AddOptionBody = { sourceType: "recipe", recipeId };
+
+    if (quantities !== undefined) value.quantities = quantities;
+    if (groupIndex !== undefined) value.groupIndex = groupIndex;
+
+    return { ok: true, value };
   }
 
   if (record.source_type === "food") {
@@ -216,10 +377,21 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
       return { ok: false, error: "quantity debe ser un número positivo" };
     }
 
-    return {
-      ok: true,
-      value: { sourceType: "food", ingredientId, quantity: record.quantity },
+    const groupIndex = parseGroupIndex(record.group_index);
+
+    if (groupIndex === null) {
+      return { ok: false, error: "group_index debe ser un entero >= 0" };
+    }
+
+    const value: AddOptionBody = {
+      sourceType: "food",
+      ingredientId,
+      quantity: record.quantity,
     };
+
+    if (groupIndex !== undefined) value.groupIndex = groupIndex;
+
+    return { ok: true, value };
   }
 
   return { ok: false, error: "source_type debe ser 'recipe' o 'food'" };
@@ -227,12 +399,59 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
 
 export function parseUpdateOption(
   body: unknown
-): ParseResult<{ position: number }> {
+): ParseResult<UpdateOptionBody> {
   const record = asRecord(body);
 
-  if (record === null || isInt(record.position) === false) {
-    return { ok: false, error: "position debe ser un entero" };
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
   }
 
-  return { ok: true, value: { position: record.position } };
+  const value: UpdateOptionBody = {};
+
+  if (isInt(record.position)) value.position = record.position;
+
+  const quantities = asNumberArray(record.quantities);
+
+  if (quantities === null) {
+    return { ok: false, error: "quantities debe ser una lista de números ≥ 0" };
+  }
+
+  if (quantities !== undefined) value.quantities = quantities;
+
+  if (value.position === undefined && value.quantities === undefined) {
+    return { ok: false, error: "position o quantities es obligatorio" };
+  }
+
+  return { ok: true, value };
+}
+
+/**
+ * Validate an optional group index: `undefined` when absent, `null` when
+ * present but not a non-negative integer (fail fast on bad grouping).
+ */
+function parseGroupIndex(value: unknown): number | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return isInt(value) && value >= 0 ? value : null;
+}
+
+/**
+ * Validate an optional array of portion amounts: `undefined` when absent,
+ * `null` when present but malformed (non-array entries, NaN/Infinity, or
+ * negatives) so callers reject instead of silently re-portioning to 0.
+ */
+function asNumberArray(value: unknown): number[] | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value) === false) {
+    return null;
+  }
+
+  return value.every((v) => isFiniteNumber(v) && v >= 0)
+    ? (value as number[])
+    : null;
 }

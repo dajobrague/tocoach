@@ -60,7 +60,7 @@ export function applyOverridesToClientView(
 
         return swap === undefined
           ? slot
-          : { ...slot, options: [swapOption(slot, swap)] };
+          : { ...slot, options: swapOptions(slot, swap) };
       }),
     };
   });
@@ -69,23 +69,25 @@ export function applyOverridesToClientView(
 }
 
 /**
- * A synthetic option carrying the frozen swap snapshot, so the client renders
+ * Synthetic options carrying the frozen swap snapshot(s), so the client renders
  * the swapped meal exactly like any other option (same recipe detail) — fully
- * decoupled from the live library.
+ * decoupled from the live library. Multi-item swaps become separate components
+ * (distinct `group_index`) so they sum toward the meal.
  */
-function swapOption(
+function swapOptions(
   slot: MealSlotWithOptions,
   swap: EffectiveSwap
-): MealSlotOptionRow {
-  return {
-    id: `override-${swap.overrideId}`,
+): MealSlotOptionRow[] {
+  return swap.snapshots.map((snapshot, index) => ({
+    id: `override-${swap.overrideId}-${index}`,
     slot_id: slot.id,
     tenant_host: slot.tenant_host,
-    source_type: swap.snapshot.sourceType,
-    source_ref_id: swap.snapshot.sourceRefId,
-    item_snapshot: swap.snapshot,
-    position: 0,
+    source_type: snapshot.sourceType,
+    source_ref_id: snapshot.sourceRefId,
+    item_snapshot: snapshot,
+    position: index,
+    group_index: index,
     created_at: slot.created_at,
     updated_at: slot.updated_at,
-  };
+  }));
 }

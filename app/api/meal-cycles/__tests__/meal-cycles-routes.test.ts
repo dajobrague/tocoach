@@ -341,13 +341,58 @@ describe("POST options (snapshot-on-add wiring)", () => {
     );
 
     expect(res.status).toBe(201);
-    // Delegates to the freeze-at-add-time service path.
+    // Delegates to the freeze-at-add-time service path (no quantities given).
     expect(optionMocks.addRecipeOption).toHaveBeenCalledWith(
       "acme.tenant",
       "s1",
-      "r1"
+      "r1",
+      undefined,
+      undefined,
+      undefined
     );
     expect(optionMocks.addFoodOption).not.toHaveBeenCalled();
+  });
+
+  it("forwards per-client quantities when adding a recipe option", async () => {
+    optionMocks.addRecipeOption.mockResolvedValue({ id: "o1" });
+
+    const res = await optionPOST(
+      jsonReq({
+        source_type: "recipe",
+        recipe_id: "r1",
+        quantities: [100, 150],
+      }),
+      slotCtx()
+    );
+
+    expect(res.status).toBe(201);
+    expect(optionMocks.addRecipeOption).toHaveBeenCalledWith(
+      "acme.tenant",
+      "s1",
+      "r1",
+      undefined,
+      [100, 150],
+      undefined
+    );
+  });
+
+  it("forwards group_index to a new meal component", async () => {
+    optionMocks.addRecipeOption.mockResolvedValue({ id: "o1" });
+
+    const res = await optionPOST(
+      jsonReq({ source_type: "recipe", recipe_id: "r1", group_index: 2 }),
+      slotCtx()
+    );
+
+    expect(res.status).toBe(201);
+    expect(optionMocks.addRecipeOption).toHaveBeenCalledWith(
+      "acme.tenant",
+      "s1",
+      "r1",
+      undefined,
+      undefined,
+      2
+    );
   });
 
   it("adds a food option via the snapshot service (201)", async () => {
@@ -363,7 +408,9 @@ describe("POST options (snapshot-on-add wiring)", () => {
       "acme.tenant",
       "s1",
       "i1",
-      120
+      120,
+      undefined,
+      undefined
     );
   });
 

@@ -26,6 +26,8 @@ export interface OverrideRow {
   swap_source_type: "recipe" | "food" | null;
   swap_source_ref_id: string | null;
   swap_snapshot: OptionSnapshot | null;
+  /** Multi-item swap: ordered frozen snapshots. Null for legacy single swaps. */
+  swap_snapshots: OptionSnapshot[] | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,7 +1,7 @@
 import type { OptionSnapshot, SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buildOptionSnapshot } from "./option-snapshot";
+import { applyPortions, buildOptionSnapshot } from "./option-snapshot";
 
 import { RecipeService } from "@/lib/nutrition/recipes/recipe-service";
 
@@ -20,6 +20,9 @@ export interface MealSlotOptionRow {
   source_ref_id: string;
   item_snapshot: OptionSnapshot;
   position: number;
+  /** Component index within the slot: same value = alternatives, different =
+   *  separate components that sum toward the meal. */
+  group_index: number;
   created_at: string;
   updated_at: string;
 }
@@ -46,7 +49,12 @@ export class MealSlotOptionService {
     tenantHost: string,
     slotId: string,
     recipeId: string,
-    position?: number
+    position?: number,
+    /** Per-client grams per ingredient (by sort order); overrides the library
+     *  defaults so this option's portions are specific to this client. */
+    quantities?: number[],
+    /** Component this option belongs to (see {@link MealSlotOptionRow}). */
+    groupIndex?: number
   ): Promise<MealSlotOptionRow | null> {
     const slotOwned = await this.slotExists(tenantHost, slotId);
 
@@ -54,11 +62,14 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const snapshot = await this.freezeSource(tenantHost, "recipe", recipeId);
+    const frozen = await this.freezeSource(tenantHost, "recipe", recipeId);
 
-    if (snapshot === null) {
+    if (frozen === null) {
       return null;
     }
+
+    const snapshot =
+      quantities !== undefined ? applyPortions(frozen, quantities) : frozen;
 
     return this.insertOption(
       tenantHost,
@@ -66,7 +77,8 @@ export class MealSlotOptionService {
       "recipe",
       recipeId,
       snapshot,
-      position
+      position,
+      groupIndex
     );
   }
 
@@ -119,6 +131,7 @@ export class MealSlotOptionService {
         id: sourceRefId,
         name: typeof food.name === "string" ? food.name : "",
         quantity,
+        imageUrl: typeof food.image_url === "string" ? food.image_url : null,
         nutrientsPer100g: food,
       },
     });
@@ -129,7 +142,8 @@ export class MealSlotOptionService {
     slotId: string,
     ingredientId: string,
     quantity: number,
-    position?: number
+    position?: number,
+    groupIndex?: number
   ): Promise<MealSlotOptionRow | null> {
     const slotOwned = await this.slotExists(tenantHost, slotId);
 
@@ -154,7 +168,8 @@ export class MealSlotOptionService {
       "food",
       ingredientId,
       snapshot,
-      position
+      position,
+      groupIndex
     );
   }
 
@@ -211,6 +226,81 @@ export class MealSlotOptionService {
     return (data as MealSlotOptionRow | null) ?? null;
   }
 
+  /**
+   * Re-portion an existing option for this client: override the snapshot's
+   * per-ingredient grams and recompute totals, in place. Reads the option's own
+   * frozen snapshot (never the recipe library), so editing portions cannot pull
+   * in later library changes. Returns null when the option is not found.
+   */
+  async updateOptionPortions(
+    tenantHost: string,
+    optionId: string,
+    quantities: number[]
+  ): Promise<MealSlotOptionRow | null> {
+    const option = await this.getOption(tenantHost, optionId);
+
+    if (option === null) {
+      return null;
+    }
+
+    const snapshot = applyPortions(option.item_snapshot, quantities);
+
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .update({ item_snapshot: snapshot })
+      .eq("tenant_host", tenantHost)
+      .eq("id", optionId)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.updateOptionPortions failed: ${error.message}`
+      );
+    }
+
+    return (data as MealSlotOptionRow | null) ?? null;
+  }
+
+  /**
+   * Copy every option from `sourceSlotId` into `targetSlotId` verbatim — the
+   * frozen snapshot, source ref, position and group_index are preserved, so the
+   * copy keeps the exact per-client portions (no re-freeze). Both slots are
+   * tenant-scoped (the caller has verified cycle ownership). Returns the number
+   * of options copied, or null when the source slot isn't the tenant's.
+   */
+  async copyOptionsToSlot(
+    tenantHost: string,
+    sourceSlotId: string,
+    targetSlotId: string
+  ): Promise<number | null> {
+    const source = await this.listForSlot(tenantHost, sourceSlotId);
+
+    if (source === null) {
+      return null;
+    }
+
+    // Defense in depth: never write into a slot outside the tenant, even if a
+    // future caller passes an unverified target id.
+    if ((await this.slotExists(tenantHost, targetSlotId)) === false) {
+      return null;
+    }
+
+    for (const option of source) {
+      await this.insertOption(
+        tenantHost,
+        targetSlotId,
+        option.source_type,
+        option.source_ref_id,
+        option.item_snapshot,
+        option.position,
+        option.group_index
+      );
+    }
+
+    return source.length;
+  }
+
   /** Delete an option (tenant-scoped). Returns null when not found. */
   async deleteOption(
     tenantHost: string,
@@ -259,7 +349,8 @@ export class MealSlotOptionService {
     sourceType: "recipe" | "food",
     sourceRefId: string,
     snapshot: OptionSnapshot,
-    position?: number
+    position?: number,
+    groupIndex?: number
   ): Promise<MealSlotOptionRow> {
     const { data, error } = await this.client
       .from(OPTIONS_TABLE)
@@ -270,6 +361,11 @@ export class MealSlotOptionService {
         source_ref_id: sourceRefId,
         item_snapshot: snapshot,
         position: position ?? 0,
+        // Only set the column when targeting a non-default component, so the
+        // base add flow keeps working before the group_index migration is run.
+        ...(groupIndex !== undefined && groupIndex > 0
+          ? { group_index: groupIndex }
+          : {}),
       })
       .select()
       .single();
@@ -306,7 +402,9 @@ export class MealSlotOptionService {
   private async readRecipeIngredients(recipeId: string) {
     const { data, error } = await this.client
       .from(RECIPE_INGREDIENTS_TABLE)
-      .select("name_snapshot, quantity, unit, nutrient_snapshot")
+      .select(
+        "name_snapshot, quantity, unit, grams_per_unit, nutrient_snapshot"
+      )
       .eq("recipe_id", recipeId)
       .order("sort_order", { ascending: true });
 
@@ -320,6 +418,7 @@ export class MealSlotOptionService {
       name: (row as { name_snapshot: string }).name_snapshot,
       quantity: (row as { quantity: number | string | null }).quantity,
       unit: (row as { unit: string | null }).unit,
+      gramsPerUnit: (row as { grams_per_unit: number | null }).grams_per_unit,
       nutrientSnapshot:
         (row as { nutrient_snapshot: Record<string, unknown> | null })
           .nutrient_snapshot ?? {},
@@ -361,7 +460,7 @@ export class MealSlotOptionService {
     const { data, error } = await this.client
       .from(INGREDIENTS_TABLE)
       .select(
-        "name, kcal, protein_g, carbs_g, fat_g, sugar_g, fiber_g, sat_fat_g, sodium_mg"
+        "name, image_url, kcal, protein_g, carbs_g, fat_g, sugar_g, fiber_g, sat_fat_g, sodium_mg"
       )
       .eq("tenant_host", tenantHost)
       .eq("id", ingredientId)

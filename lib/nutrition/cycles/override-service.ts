@@ -1,3 +1,4 @@
+import type { OptionSnapshot } from "./option-snapshot";
 import type {
   OverrideRow,
   OverrideScope,
@@ -6,6 +7,17 @@ import type {
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { MealSlotOptionService } from "./meal-slot-option-service";
+import { applyPortions } from "./option-snapshot";
+
+/** One item of a (possibly multi-item) swap: a recipe or food + its portions. */
+export interface SwapItemInput {
+  sourceType: "recipe" | "food";
+  sourceRefId: string;
+  /** Grams for a food source; ignored for recipes. */
+  quantity?: number;
+  /** Per-ingredient grams for a recipe re-portion; ignored for foods. */
+  quantities?: number[];
+}
 
 const TABLE = "meal_cycle_overrides";
 const CYCLES_TABLE = "meal_cycles";
@@ -23,6 +35,9 @@ export interface CreateOverrideInput {
   swapSourceRefId?: string | null;
   /** Grams for a food swap source (ignored for recipes). */
   swapQuantity?: number;
+  /** Multi-item swap: one or more items replacing the meal. Preferred over the
+   *  single swapSource* fields when present. */
+  swapItems?: SwapItemInput[];
 }
 
 export interface UpdateOverrideInput {
@@ -79,22 +94,44 @@ export class OverrideService {
       }
     }
 
-    let snapshot = null;
+    const isSwap = input.overrideType === "swap";
+    const snapshots: OptionSnapshot[] = [];
+    let firstItem: SwapItemInput | null = null;
 
-    if (input.overrideType === "swap") {
-      snapshot = await this.options.freezeSource(
-        tenantHost,
-        input.swapSourceType!,
-        input.swapSourceRefId!,
-        input.swapQuantity ?? 0
-      );
+    if (isSwap) {
+      // Prefer the multi-item list; fall back to the legacy single-source fields.
+      const items: SwapItemInput[] =
+        input.swapItems !== undefined && input.swapItems.length > 0
+          ? input.swapItems
+          : input.swapSourceType != null && input.swapSourceRefId != null
+            ? [
+                {
+                  sourceType: input.swapSourceType,
+                  sourceRefId: input.swapSourceRefId,
+                  ...(input.swapQuantity !== undefined
+                    ? { quantity: input.swapQuantity }
+                    : {}),
+                },
+              ]
+            : [];
 
-      if (snapshot === null) {
+      if (items.length === 0) {
         return null;
+      }
+
+      firstItem = items[0] ?? null;
+
+      for (const item of items) {
+        const frozen = await this.freezeItem(tenantHost, item);
+
+        if (frozen === null) {
+          return null;
+        }
+
+        snapshots.push(frozen);
       }
     }
 
-    const isSwap = input.overrideType === "swap";
     const { data, error } = await this.client
       .from(TABLE)
       .insert({
@@ -107,9 +144,11 @@ export class OverrideService {
         day_index: input.dayIndex ?? null,
         slot_id: input.slotId ?? null,
         note_text: input.noteText ?? null,
-        swap_source_type: isSwap ? input.swapSourceType : null,
-        swap_source_ref_id: isSwap ? input.swapSourceRefId : null,
-        swap_snapshot: snapshot,
+        // Legacy single-item columns mirror the first item for back-compat.
+        swap_source_type: isSwap ? (firstItem?.sourceType ?? null) : null,
+        swap_source_ref_id: isSwap ? (firstItem?.sourceRefId ?? null) : null,
+        swap_snapshot: isSwap ? (snapshots[0] ?? null) : null,
+        swap_snapshots: isSwap ? snapshots : null,
       })
       .select()
       .single();
@@ -253,6 +292,29 @@ export class OverrideService {
     }
 
     return (data ?? []) as OverrideRow[];
+  }
+
+  /** Freeze one swap item, applying a recipe's per-ingredient re-portion. */
+  private async freezeItem(
+    tenantHost: string,
+    item: SwapItemInput
+  ): Promise<OptionSnapshot | null> {
+    const snapshot = await this.options.freezeSource(
+      tenantHost,
+      item.sourceType,
+      item.sourceRefId,
+      item.quantity ?? 0
+    );
+
+    if (snapshot === null) {
+      return null;
+    }
+
+    if (item.sourceType === "recipe" && item.quantities !== undefined) {
+      return applyPortions(snapshot, item.quantities);
+    }
+
+    return snapshot;
   }
 
   /** The cycle's authoritative `client_id`, or `null` if not in the tenant. */
