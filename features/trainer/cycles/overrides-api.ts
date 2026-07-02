@@ -29,8 +29,8 @@ export interface OverrideFormInput {
   dayIndex: number | null;
   noteText?: string;
   slotId?: string;
-  /** The swap source, as the picker drawer returns it. */
-  swap?: OptionSelection;
+  /** The swap replacement — one or more items, as the picker returns them. */
+  swapItems?: OptionSelection[];
 }
 
 /**
@@ -56,17 +56,27 @@ export function buildCreateBody(
     return body;
   }
 
-  if (input.swap !== undefined && input.slotId !== undefined) {
+  if (
+    input.swapItems !== undefined &&
+    input.swapItems.length > 0 &&
+    input.slotId !== undefined
+  ) {
     body.slotId = input.slotId;
-
-    if (input.swap.kind === "recipe") {
-      body.swapSourceType = "recipe";
-      body.swapSourceRefId = input.swap.recipeId;
-    } else {
-      body.swapSourceType = "food";
-      body.swapSourceRefId = input.swap.ingredientId;
-      body.swapQuantity = input.swap.quantity;
-    }
+    body.swapItems = input.swapItems.map((selection) =>
+      selection.kind === "recipe"
+        ? {
+            swapSourceType: "recipe",
+            swapSourceRefId: selection.recipeId,
+            ...(selection.quantities !== undefined
+              ? { quantities: selection.quantities }
+              : {}),
+          }
+        : {
+            swapSourceType: "food",
+            swapSourceRefId: selection.ingredientId,
+            swapQuantity: selection.quantity,
+          }
+    );
   }
 
   return body;
@@ -130,18 +140,5 @@ export function deleteOverride(
   return fetch(`${BASE}/${cycleId}/overrides/${overrideId}`, {
     method: "DELETE",
     credentials: "same-origin",
-  }).then(readEnvelope<OverrideRow>);
-}
-
-export function updateOverride(
-  cycleId: string,
-  overrideId: string,
-  patch: Record<string, unknown>
-): Promise<OverrideRow> {
-  return fetch(`${BASE}/${cycleId}/overrides/${overrideId}`, {
-    method: "PATCH",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
   }).then(readEnvelope<OverrideRow>);
 }
