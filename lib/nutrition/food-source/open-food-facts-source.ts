@@ -2,14 +2,22 @@ import type { FoodResult, FoodSource, NutrientsPer100g } from "./types";
 
 const DEFAULT_BASE_URL = "https://world.openfoodfacts.org";
 const DEFAULT_SEARCH_BASE_URL = "https://search.openfoodfacts.org";
-const SEARCH_PAGE_SIZE = 20;
+const SEARCH_PAGE_SIZE = 40;
 const DEFAULT_SEARCH_LANG = "es";
+/**
+ * Rank by crowd popularity so recognizable products surface first. Without a
+ * sort the default text-match relevance returns foreign-language near-dupes
+ * and low-quality entries ahead of the products users actually scan.
+ */
+const SEARCH_SORT_BY = "-unique_scans_n";
 /** Abort slow OFF calls so the UI never hangs behind the external API. */
 const REQUEST_TIMEOUT_MS = 8000;
 /** OFF asks API consumers to identify themselves. */
 const USER_AGENT = "TopCoach/1.0 (https://app.topcoach.io)";
 /** Trim the search payload to what mapProduct reads (~5KB vs ~700KB). */
-const SEARCH_FIELDS = "code,product_name,generic_name,brands,nutriments";
+const SEARCH_FIELDS =
+  "code,product_name,generic_name,brands,nutriments," +
+  "image_front_small_url,image_small_url,image_url";
 
 /**
  * {@link FoodSource} backed by the Open Food Facts (OFF) public API.
@@ -39,13 +47,38 @@ export class OpenFoodFactsSource implements FoodSource {
     this.searchBaseUrl = searchBaseUrl.replace(/\/+$/, "");
   }
 
-  async search(query: string, locale?: string): Promise<FoodResult[]> {
+  async search(
+    query: string,
+    locale?: string,
+    country?: string,
+    brand?: string
+  ): Promise<FoodResult[]> {
     const langs =
       locale !== undefined && locale.length > 0 ? locale : DEFAULT_SEARCH_LANG;
+    // Fold optional Lucene filter clauses into the query: a country scope and a
+    // brand narrowing. Omitting both searches the world catalogue (prior behavior).
+    const filters: string[] = [];
+
+    if (country !== undefined && country.length > 0) {
+      filters.push(`countries_tags:"en:${country}"`);
+    }
+
+    const cleanBrand = brand?.trim() ?? "";
+
+    if (cleanBrand.length > 0) {
+      // Escape backslashes and quotes so user text can't break out of the
+      // quoted Lucene clause (e.g. a brand like `Bob "Organic"`).
+      const escaped = cleanBrand.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+      filters.push(`brands:"${escaped}"`);
+    }
+
+    const q = filters.length > 0 ? `${query} ${filters.join(" ")}` : query;
     const url =
-      `${this.searchBaseUrl}/search?q=${encodeURIComponent(query)}` +
+      `${this.searchBaseUrl}/search?q=${encodeURIComponent(q)}` +
       `&langs=${encodeURIComponent(langs)}` +
-      `&page_size=${SEARCH_PAGE_SIZE}&fields=${SEARCH_FIELDS}`;
+      `&page_size=${SEARCH_PAGE_SIZE}&sort_by=${SEARCH_SORT_BY}` +
+      `&fields=${SEARCH_FIELDS}`;
     const json = await this.fetchJson(url);
     const hits = asArray(asRecord(json)["hits"]);
 
@@ -133,7 +166,25 @@ function mapProduct(
     result.brand = brand;
   }
 
+  const imageUrl = mapImageUrl(record);
+
+  if (imageUrl !== null) {
+    result.imageUrl = imageUrl;
+  }
+
   return result;
+}
+
+/**
+ * Pick a thumbnail, smallest first: the 200px front image is ideal for a list
+ * row; fall back to the generic small image, then the full-size image.
+ */
+function mapImageUrl(record: Record<string, unknown>): string | null {
+  return (
+    asNonEmptyString(record["image_front_small_url"]) ??
+    asNonEmptyString(record["image_small_url"]) ??
+    asNonEmptyString(record["image_url"])
+  );
 }
 
 /**

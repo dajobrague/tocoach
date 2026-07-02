@@ -6,6 +6,10 @@ import { SupabaseCommonFoodsRepository } from "@/lib/nutrition/food-source/commo
 import { createFoodSource } from "@/lib/nutrition/food-source/create-food-source";
 import { FoodLookupService } from "@/lib/nutrition/food-source/food-lookup-service";
 import { SupabaseIngredientRepository } from "@/lib/nutrition/food-source/ingredient-repository";
+import {
+  DEFAULT_MARKET,
+  resolveMarket,
+} from "@/lib/nutrition/food-source/market";
 
 const LOG_PREFIX = "[Foods Search API]";
 
@@ -41,20 +45,45 @@ export async function GET(request: NextRequest) {
         ? localeParam
         : undefined;
 
+    const brandParam = searchParams.get("brand")?.trim();
+    const brand =
+      brandParam !== undefined && brandParam.length > 0
+        ? brandParam
+        : undefined;
+
     const tenantHost = session.tenant_host;
     const supabase = createSupabaseClient();
+
+    // Scope OFF search to the tenant's market (features.food_market), defaulting
+    // to Spain so foreign products never surface. A read failure must not break
+    // search — fall back to the same default rather than a world search.
+    let country: string = DEFAULT_MARKET;
+
+    try {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("features")
+        .eq("host", tenantHost)
+        .maybeSingle();
+
+      country = resolveMarket(tenant?.features);
+    } catch {
+      country = DEFAULT_MARKET;
+    }
+
     const service = new FoodLookupService({
       repo: new SupabaseIngredientRepository(supabase),
       source: createFoodSource(),
       commonFoods: new SupabaseCommonFoodsRepository(supabase),
     });
 
-    const results = await service.search(tenantHost, q, locale);
+    const results = await service.search(tenantHost, q, locale, country, brand);
 
     console.log(`${LOG_PREFIX} search`, {
       correlationId,
       tenantHost,
       q,
+      brand,
       count: results.length,
     });
 

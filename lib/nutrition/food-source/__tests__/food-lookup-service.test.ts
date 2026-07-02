@@ -21,6 +21,7 @@ function makeRow(overrides: Partial<IngredientRow> = {}): IngredientRow {
     source_ref: "off:cached-1",
     name: "Cached Oats",
     brand: "CachedBrand",
+    image_url: null,
     default_unit: "g",
     kcal: 389,
     protein_g: 16.9,
@@ -125,6 +126,73 @@ describe("FoodLookupService.search", () => {
     expect(insertResolved).toHaveBeenCalledWith(TENANT, [sourceResult]);
     // The persisted cache row (with id) is returned, not the raw source hit.
     expect(results).toEqual([rowToFoodResult(insertedRow)]);
+  });
+
+  it("forwards the country market to the external source", async () => {
+    const source = new MockFoodSource({ searchResults: [] });
+    const searchSpy = vi.spyOn(source, "search");
+    const service = new FoodLookupService({ repo: makeRepo(), source });
+
+    await service.search(TENANT, "yogur", "es", "spain");
+
+    expect(searchSpy).toHaveBeenCalledWith("yogur", "es", "spain", undefined);
+  });
+
+  it("with a brand: queries the source even when local results are plentiful", async () => {
+    const cachedRows = manyCachedRows(); // 6 rows → would normally skip source
+    const brandedResult = makeResult({
+      source: "off",
+      sourceRef: "off:h1",
+      name: "Yogur Hacendado",
+      brand: "Hacendado",
+    });
+    const insertedRow = makeRow({
+      id: "00000000-0000-0000-0000-0000000000h1",
+      source_ref: "off:h1",
+      name: "Yogur Hacendado",
+      brand: "Hacendado",
+    });
+    const repo = makeRepo({
+      findCachedByQuery: vi.fn(async () => cachedRows),
+      insertResolved: vi.fn(async () => [insertedRow]),
+    });
+    const source = new MockFoodSource({ searchResults: [brandedResult] });
+    const searchSpy = vi.spyOn(source, "search");
+    const service = new FoodLookupService({ repo, source });
+
+    const results = await service.search(
+      TENANT,
+      "yogur",
+      "es",
+      "spain",
+      "hacendado"
+    );
+
+    expect(searchSpy).toHaveBeenCalledWith("yogur", "es", "spain", "hacendado");
+    // Only brand matches survive — the 6 "CachedBrand" rows are filtered out.
+    expect(results.every((r) => r.brand === "Hacendado")).toBe(true);
+    expect(results).toHaveLength(1);
+  });
+
+  it("with a brand: filters out cached rows that do not match the brand", async () => {
+    const rows = [
+      makeRow({ source_ref: "off:1", name: "Yogur A", brand: "Hacendado" }),
+      makeRow({ source_ref: "off:2", name: "Yogur B", brand: "Danone" }),
+      makeRow({ source_ref: "off:3", name: "Yogur C", brand: null }),
+    ];
+    const repo = makeRepo({ findCachedByQuery: vi.fn(async () => rows) });
+    const source = new MockFoodSource({ searchResults: [] });
+    const service = new FoodLookupService({ repo, source });
+
+    const results = await service.search(
+      TENANT,
+      "yogur",
+      undefined,
+      undefined,
+      "hacendado"
+    );
+
+    expect(results.map((r) => r.brand)).toEqual(["Hacendado"]);
   });
 
   it("merges seed foods and persists the ones not yet cached", async () => {

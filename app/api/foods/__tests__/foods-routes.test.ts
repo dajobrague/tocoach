@@ -5,14 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 // Hoisted mock fns so the vi.mock factory below can reference them.
-const { searchMock, getByBarcodeMock } = vi.hoisted(() => ({
+const { searchMock, getByBarcodeMock, maybeSingleMock } = vi.hoisted(() => ({
   searchMock: vi.fn(),
   getByBarcodeMock: vi.fn(),
+  maybeSingleMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getTrainerSession: vi.fn() }));
 vi.mock("@/lib/clients/supabase-api", () => ({
-  createSupabaseClient: vi.fn(() => ({})),
+  // Chainable stub for the tenant `features` lookup the search route performs.
+  createSupabaseClient: vi.fn(() => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: maybeSingleMock }) }),
+    }),
+  })),
 }));
 vi.mock("@/lib/nutrition/food-source/food-lookup-service", () => ({
   // A function expression (not an arrow) so `new FoodLookupService(...)` works;
@@ -67,6 +73,8 @@ function barcodeArgs(code: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: tenant has no configured market → falls back to Spain.
+  maybeSingleMock.mockResolvedValue({ data: { features: {} } });
 });
 
 describe("GET /api/foods/search", () => {
@@ -99,7 +107,64 @@ describe("GET /api/foods/search", () => {
     const body = await res.json();
 
     expect(body).toEqual({ success: true, data: [sampleResult] });
-    expect(searchMock).toHaveBeenCalledWith("acme.tenant", "oats", "es");
+    // No configured market → country defaults to Spain; no brand → undefined.
+    expect(searchMock).toHaveBeenCalledWith(
+      "acme.tenant",
+      "oats",
+      "es",
+      "spain",
+      undefined
+    );
+  });
+
+  it("scopes search to the tenant's configured market", async () => {
+    mockedGetSession.mockResolvedValue(SESSION);
+    maybeSingleMock.mockResolvedValue({
+      data: { features: { food_market: "spain" } },
+    });
+    searchMock.mockResolvedValue([sampleResult]);
+
+    await searchGET(searchRequest("?q=oats&locale=es"));
+
+    expect(searchMock).toHaveBeenCalledWith(
+      "acme.tenant",
+      "oats",
+      "es",
+      "spain",
+      undefined
+    );
+  });
+
+  it("passes the brand filter to the service", async () => {
+    mockedGetSession.mockResolvedValue(SESSION);
+    searchMock.mockResolvedValue([sampleResult]);
+
+    await searchGET(searchRequest("?q=oats&locale=es&brand=hacendado"));
+
+    expect(searchMock).toHaveBeenCalledWith(
+      "acme.tenant",
+      "oats",
+      "es",
+      "spain",
+      "hacendado"
+    );
+  });
+
+  it("falls back to the Spain default when the tenant lookup fails", async () => {
+    mockedGetSession.mockResolvedValue(SESSION);
+    maybeSingleMock.mockRejectedValue(new Error("db down"));
+    searchMock.mockResolvedValue([sampleResult]);
+
+    const res = await searchGET(searchRequest("?q=oats&locale=es"));
+
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(
+      "acme.tenant",
+      "oats",
+      "es",
+      "spain",
+      undefined
+    );
   });
 });
 

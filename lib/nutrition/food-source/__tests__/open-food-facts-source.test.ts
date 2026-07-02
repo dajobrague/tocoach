@@ -24,6 +24,8 @@ const searchPayload = {
       code: "0123",
       product_name: "Greek Yogurt",
       brands: ["Fage"],
+      image_front_small_url: "https://img.test/0123-front.200.jpg",
+      image_url: "https://img.test/0123-front.400.jpg",
       nutriments: {
         "energy-kcal_100g": 97,
         proteins_100g: "10", // string value → coerced to number
@@ -55,6 +57,7 @@ describe("OpenFoodFactsSource.search", () => {
       sourceRef: "0123",
       name: "Greek Yogurt",
       brand: "Fage",
+      imageUrl: "https://img.test/0123-front.200.jpg",
       defaultUnit: "g",
       nutrientsPer100g: {
         kcal: 97,
@@ -70,8 +73,121 @@ describe("OpenFoodFactsSource.search", () => {
     expect(calls[0] ?? "").toContain(
       "https://search.stub.test/search?q=yogurt"
     );
-    expect(calls[0] ?? "").toContain("page_size=20");
+    expect(calls[0] ?? "").toContain("page_size=40");
     expect(calls[0] ?? "").toContain("fields=");
+  });
+
+  it("requests popularity sort so recognizable products surface first", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogurt");
+
+    expect(calls[0] ?? "").toContain("sort_by=-unique_scans_n");
+  });
+
+  it("scopes results to a country via countries_tags when a market is given", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogurt", "es", "spain");
+
+    // q carries a Lucene country filter, URL-encoded.
+    expect(calls[0] ?? "").toContain(
+      encodeURIComponent('countries_tags:"en:spain"')
+    );
+  });
+
+  it("scopes results to a brand via a brands filter when given", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogur", "es", undefined, "hacendado");
+
+    expect(calls[0] ?? "").toContain(encodeURIComponent('brands:"hacendado"'));
+  });
+
+  it("combines country and brand filters in one query", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogur", "es", "spain", "hacendado");
+
+    expect(calls[0] ?? "").toContain(
+      encodeURIComponent('countries_tags:"en:spain"')
+    );
+    expect(calls[0] ?? "").toContain(encodeURIComponent('brands:"hacendado"'));
+  });
+
+  it("omits the brand filter when no brand is given", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogur");
+
+    expect(calls[0] ?? "").not.toContain("brands:");
+  });
+
+  it("omits the country filter when no market is given", async () => {
+    const { fetchFn, calls } = stubFetch(searchPayload);
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://stub.test",
+      "https://search.stub.test"
+    );
+
+    await source.search("yogurt");
+
+    expect(calls[0] ?? "").not.toContain("countries_tags");
+  });
+
+  it("prefers the small front image, falling back to image_url", async () => {
+    const { fetchFn } = stubFetch({
+      hits: [
+        {
+          code: "1",
+          product_name: "Oats",
+          image_url: "https://img.test/oats.400.jpg",
+          nutriments: {},
+        },
+      ],
+    });
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    const results = await source.search("oats");
+
+    expect(results[0]?.imageUrl).toBe("https://img.test/oats.400.jpg");
+  });
+
+  it("leaves imageUrl absent when the product has no image", async () => {
+    const { fetchFn } = stubFetch({
+      hits: [{ code: "2", product_name: "Water", nutriments: {} }],
+    });
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    const results = await source.search("water");
+
+    expect(results[0] && "imageUrl" in results[0]).toBe(false);
   });
 
   it("defaults langs to es and honors an explicit locale", async () => {
@@ -178,6 +294,23 @@ describe("OpenFoodFactsSource.getByBarcode / getByRef", () => {
     expect(result?.nutrientsPer100g.kcal).toBe(884);
     expect(result?.nutrientsPer100g.sodium_mg).toBe(0);
     expect(calls[0] ?? "").toContain("/api/v2/product/555.json");
+  });
+
+  it("extracts the product image on a barcode lookup", async () => {
+    const { fetchFn } = stubFetch({
+      status: 1,
+      product: {
+        code: "555",
+        product_name: "Olive Oil",
+        image_front_small_url: "https://img.test/555-front.200.jpg",
+        nutriments: {},
+      },
+    });
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    const result = await source.getByBarcode("555");
+
+    expect(result?.imageUrl).toBe("https://img.test/555-front.200.jpg");
   });
 
   it("returns null when OFF reports status 0 (not found)", async () => {

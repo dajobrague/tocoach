@@ -11,6 +11,7 @@ export interface IngredientRow {
   source_ref: string | null;
   name: string;
   brand: string | null;
+  image_url: string | null;
   default_unit: string;
   kcal: number;
   protein_g: number;
@@ -33,6 +34,7 @@ export interface IngredientInsert {
   source_ref: string | null;
   name: string;
   brand?: string;
+  image_url?: string;
   default_unit: string;
   kcal: number;
   protein_g: number;
@@ -76,6 +78,10 @@ export function rowToFoodResult(row: IngredientRow): FoodResult {
     result.brand = row.brand;
   }
 
+  if (row.image_url !== null) {
+    result.imageUrl = row.image_url;
+  }
+
   return result;
 }
 
@@ -104,6 +110,10 @@ export function foodResultToInsert(
   if (r.brand !== undefined) {
     // Only set when present (exactOptionalPropertyTypes).
     insert.brand = r.brand;
+  }
+
+  if (r.imageUrl !== undefined) {
+    insert.image_url = r.imageUrl;
   }
 
   return insert;

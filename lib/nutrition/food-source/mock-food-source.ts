@@ -35,7 +35,12 @@ export class MockFoodSource implements FoodSource {
     this.byBarcode.set(code, result);
   }
 
-  async search(_query: string, _locale?: string): Promise<FoodResult[]> {
+  async search(
+    _query: string,
+    _locale?: string,
+    _country?: string,
+    _brand?: string
+  ): Promise<FoodResult[]> {
     return this.searchResults;
   }
 

@@ -50,8 +50,11 @@ export class FoodLookupService {
   async search(
     tenantHost: string,
     query: string,
-    locale?: string
+    locale?: string,
+    country?: string,
+    brand?: string
   ): Promise<FoodResult[]> {
+    const hasBrand = brand !== undefined && brand.length > 0;
     const [cachedRows, seedResults] = await Promise.all([
       this.repo.findCachedByQuery(tenantHost, query),
       this.searchCommonFoods(query),
@@ -67,8 +70,13 @@ export class FoodLookupService {
 
     let freshSource: FoodResult[] = [];
 
-    if (cachedRows.length + freshSeed.length < MIN_LOCAL_RESULTS) {
-      freshSource = (await this.searchSource(query, locale)).filter(
+    // A brand filter always queries the source: the brand's catalogue lives in
+    // OFF, not the local cache, so the usual "enough local results" short-circuit
+    // would hide most of it.
+    if (hasBrand || cachedRows.length + freshSeed.length < MIN_LOCAL_RESULTS) {
+      freshSource = (
+        await this.searchSource(query, locale, country, brand)
+      ).filter(
         (r) =>
           r.sourceRef === null ||
           cachedKeys.has(`${r.source}::${r.sourceRef}`) === false
@@ -81,10 +89,17 @@ export class FoodLookupService {
       ...freshSource,
     ]);
 
-    return rankResults(query, [
+    const merged = [
       ...cachedRows.map(rowToFoodResult),
       ...insertedRows.map(rowToFoodResult),
-    ]);
+    ];
+    // When a brand is requested, drop anything that doesn't match it — cached
+    // rows and seed foods are name-matched only and would otherwise leak in.
+    const filtered = hasBrand
+      ? merged.filter((r) => brandMatches(r, brand))
+      : merged;
+
+    return rankResults(query, filtered);
   }
 
   /** Cache-first lookup by barcode (OFF product code). */
@@ -132,10 +147,12 @@ export class FoodLookupService {
   /** External search that degrades to [] on failure instead of erroring out. */
   private async searchSource(
     query: string,
-    locale?: string
+    locale?: string,
+    country?: string,
+    brand?: string
   ): Promise<FoodResult[]> {
     try {
-      return await this.source.search(query, locale);
+      return await this.source.search(query, locale, country, brand);
     } catch (error) {
       console.warn("[FoodLookupService] external food search failed:", {
         error: error instanceof Error ? error.message : String(error),
@@ -169,6 +186,15 @@ export class FoodLookupService {
     // Prefer the cache row (it carries the id); fall back to the raw result.
     return row !== undefined ? rowToFoodResult(row) : result;
   }
+}
+
+/** Case-insensitive brand match; results without a brand never match. */
+function brandMatches(result: FoodResult, brand: string): boolean {
+  if (result.brand === undefined) {
+    return false;
+  }
+
+  return result.brand.toLowerCase().includes(brand.toLowerCase());
 }
 
 /**

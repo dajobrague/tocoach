@@ -33,6 +33,8 @@ export interface FoodResult {
   name: string;
   /** Optional brand; absent (not `undefined`) when unknown. */
   brand?: string;
+  /** Optional product thumbnail URL; absent (not `undefined`) when none. */
+  imageUrl?: string;
   /** Quantities are always expressed in grams for v2. */
   defaultUnit: "g";
   nutrientsPer100g: NutrientsPer100g;
@@ -43,7 +45,17 @@ export interface FoodResult {
  * should resolve to `null`/`[]` rather than throwing when nothing matches.
  */
 export interface FoodSource {
-  search(query: string, locale?: string): Promise<FoodResult[]>;
+  /**
+   * @param country Optional OFF country slug (e.g. "spain") used to scope
+   *   results via `countries_tags`. Omit for an unscoped (world) search.
+   * @param brand Optional brand to narrow results via `brands`. Omit for any brand.
+   */
+  search(
+    query: string,
+    locale?: string,
+    country?: string,
+    brand?: string
+  ): Promise<FoodResult[]>;
   getByRef(sourceRef: string): Promise<FoodResult | null>;
   getByBarcode(code: string): Promise<FoodResult | null>;
 }
