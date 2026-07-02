@@ -26,7 +26,14 @@ export default defineConfig({
     environment: "node",
     env: testEnv,
     include: ["**/*.integration.test.ts"],
-    exclude: ["node_modules", ".next", "tests/e2e/**"],
+    // .claude/worktrees holds parallel-session checkouts — never test those here.
+    exclude: [
+      "node_modules",
+      "**/node_modules/**",
+      ".next",
+      ".claude/**",
+      "tests/e2e/**",
+    ],
     // Run serially (no file-level parallelism) so tests sharing the one test
     // tenant never race on insert/cleanup.
     fileParallelism: false,
