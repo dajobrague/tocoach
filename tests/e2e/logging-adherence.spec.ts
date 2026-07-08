@@ -142,7 +142,11 @@ test.afterAll(async () => {
   expect(photosLeft ?? []).toHaveLength(0);
 });
 
-test("client logs a meal end-to-end and the trainer sees it in adherence", async ({
+// Skipped Jul 2026: the client-side log buttons ("Comí el plan" / "No comí")
+// were removed by product decision — the client's menu choice + selections are
+// the record now. The meal-logs API stays for history; re-enable if a logging
+// UI ever returns.
+test.skip("client logs a meal end-to-end and the trainer sees it in adherence", async ({
   page,
   context,
 }) => {

@@ -134,9 +134,9 @@ test("client opens their plan, views a recipe, and picks an option that persists
   console.log(
     "[e2e] step 3 — the week selector lands on today and meals render"
   );
-  await expect(page.getByRole("heading", { name: CYCLE_NAME })).toBeVisible();
-  // The week selector defaults to today (its "Hoy" subtitle), and the selected
-  // day's meals render in the day panel.
+  // The page opens straight on the week selector (the plan-name header was
+  // removed by design, Jul 2026): it defaults to today (its "Hoy" subtitle),
+  // and the selected day's meals render in the day panel.
   await expect(page.getByText("Hoy", { exact: true })).toBeVisible();
   await expect(page.getByTestId("day-panel")).toBeVisible();
   await expect(page.getByText(SLOT_LABEL)).toBeVisible();

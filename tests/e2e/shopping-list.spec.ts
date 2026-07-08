@@ -128,7 +128,10 @@ test.afterAll(async () => {
   expect(recipesLeft.data ?? []).toHaveLength(0);
 });
 
-test("client picks meals in the wizard and sees the merged list", async ({
+// Skipped Jul 2026: the shopping-list entry point was removed from the client
+// UI by product decision. The API + wizard components stay (unit/integration
+// tested); re-enable if the feature returns.
+test.skip("client picks meals in the wizard and sees the merged list", async ({
   page,
   context,
 }) => {
@@ -143,7 +146,9 @@ test("client picks meals in the wizard and sees the merged list", async ({
 
   console.log("[e2e] step 2 — open the plan page (v2 nutrition view)");
   await page.goto(PLAN_PATH);
-  await expect(page.getByRole("heading", { name: CYCLE_NAME })).toBeVisible();
+  // The plan-name header was removed by design (Jul 2026); the wizard button
+  // rendering is the "page loaded" signal now.
+  await expect(page.getByTestId("open-shopping-wizard")).toBeVisible();
 
   console.log("[e2e] step 3 — open the shopping wizard");
   await page.getByTestId("open-shopping-wizard").click();

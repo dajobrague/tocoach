@@ -82,42 +82,46 @@ test("§4.1 — an assigned option keeps its frozen macros after the recipe is e
   console.log("[e2e] step 1 — open the per-client cycle builder");
   await page.goto(NUTRITION_PATH);
 
-  console.log("[e2e] step 2 — create a cycle");
-  await page.getByLabel("Nombre").fill("E2E Ciclo");
-  await page.getByLabel("Duración (días)").fill("3");
-  await page.getByRole("button", { name: "Crear ciclo" }).click();
+  console.log("[e2e] step 2 — create a plan via the empty-state modal");
+  await page.getByRole("button", { name: "Crear primer plan" }).click();
+  await page.getByLabel("Nombre del plan").fill("E2E Ciclo");
+  await page.getByLabel("Duración personalizada (días)").fill("3");
+  await page.getByRole("button", { name: "Crear plan" }).click();
   await expect(page.getByRole("heading", { name: "E2E Ciclo" })).toBeVisible();
 
-  console.log("[e2e] step 3 — add a slot to day 1");
-  await page
-    .getByTestId("day-column")
-    .first()
-    .getByRole("button", { name: "Añadir comida" })
-    .click();
-  await expect(page.getByTestId("slot-card").first()).toBeVisible();
+  console.log("[e2e] step 3 — add a Desayuno slot to day 1");
+  await page.getByRole("button", { name: "Añadir comida" }).click();
+  // The HeroUI menu re-renders while animating in, which makes a direct click
+  // flaky ("element is not stable"); react-aria keyboard nav is deterministic —
+  // ArrowDown focuses the first item (Desayuno), Enter picks it.
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Desayuno").first()).toBeVisible();
 
   console.log("[e2e] step 4 — open the picker and add the recipe as an option");
   await page
-    .getByTestId("slot-card")
+    .getByRole("button", { name: "Añadir recetas o alimentos" })
     .first()
-    .getByRole("button", { name: "Añadir opción" })
     .click();
   const drawer = page.getByRole("dialog");
-  // The Recetas tab shows the library as recipe cards; filter, then click the card.
-  await drawer.getByPlaceholder("Buscar…").first().fill("E2E Snapshot");
-  await drawer
-    .getByTestId("picker-recipe")
-    .filter({ hasText: RECIPE_NAME })
-    .click();
 
-  // The option chip shows the FROZEN kcal.
+  await drawer
+    .getByPlaceholder("Buscar recetas publicadas...")
+    .fill("E2E Snapshot");
+  await drawer.getByText(RECIPE_NAME).first().click();
+  // Step 2 of the picker (per-client portions) — confirm with the defaults.
+  await drawer.getByRole("button", { name: "Añadir al plan" }).click();
+
+  // The option row shows the FROZEN kcal.
   await expect(page.getByTestId("option-kcal")).toHaveText(
     `${ORIGINAL_KCAL} kcal`
   );
 
-  console.log("[e2e] step 5 — activate the cycle");
+  console.log("[e2e] step 5 — activate the plan");
   await page.getByRole("button", { name: "Activar" }).click();
-  await expect(page.getByText("Activo")).toBeVisible();
+  // "Activo" shows in both the plan selector and the status chip.
+  await expect(page.getByText("Activo").first()).toBeVisible();
 
   console.log(
     `[e2e] step 6 — edit the recipe in the library (kcal ${ORIGINAL_KCAL} → ${EDITED_KCAL})`
@@ -129,21 +133,30 @@ test("§4.1 — an assigned option keeps its frozen macros after the recipe is e
 
   expect(edit.error).toBeNull();
 
-  console.log("[e2e] step 7 — the library now shows the EDITED macro");
-  await page.goto("/trainer/dashboard/recipes");
-  await expect(page.getByText(`${EDITED_KCAL} kcal`)).toBeVisible();
+  console.log(
+    "[e2e] step 7 — the picker (library values) now shows the EDITED macro"
+  );
+  await page.goto(NUTRITION_PATH);
+  await page
+    .getByRole("button", { name: "Añadir recetas o alimentos a esta comida" })
+    .click();
+  const picker = page.getByRole("dialog");
+
+  await picker
+    .getByPlaceholder("Buscar recetas publicadas...")
+    .fill("E2E Snapshot");
+  await expect(picker.getByText(`${EDITED_KCAL} kcal`).first()).toBeVisible();
+  await page.keyboard.press("Escape");
 
   console.log(
-    "[e2e] step 8 — re-open the cycle: the option still shows the ORIGINAL frozen macro"
+    "[e2e] step 8 — reload the plan: the option still shows the ORIGINAL frozen macro"
   );
   await page.goto(NUTRITION_PATH);
   await expect(page.getByTestId("option-kcal")).toHaveText(
     `${ORIGINAL_KCAL} kcal`
   );
   // The edited value never leaks into the frozen option.
-  await expect(
-    page.getByTestId("cycle-grid").getByText(`${EDITED_KCAL} kcal`)
-  ).toHaveCount(0);
+  await expect(page.getByText(`${EDITED_KCAL} kcal`)).toHaveCount(0);
 
   console.log("[e2e] journey complete — snapshot did not move");
 });
