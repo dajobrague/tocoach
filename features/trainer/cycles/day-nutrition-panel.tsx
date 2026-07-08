@@ -1,12 +1,15 @@
 "use client";
 
+import type { GoalPreset } from "./cycle-api";
 import type { DayStatus, MacroTotals } from "./cycle-math";
 
-import { Card, CardBody } from "@heroui/react";
+import { Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { pct } from "./cycle-math";
 import { ProgressBar } from "./progress-bar";
+
+const DEFAULT_TARGET_KEY = "__default__";
 
 interface DayNutritionPanelProps {
   totals: MacroTotals;
@@ -17,6 +20,11 @@ interface DayNutritionPanelProps {
   onClear: () => void;
   onDuplicate?: () => void;
   onCopyFrom?: () => void;
+  /** Named objectives available for this client (day-target selector). */
+  presets?: GoalPreset[];
+  /** Preset assigned to this day, or null → default goals. */
+  assignedPresetId?: string | null;
+  onAssignPreset?: (presetId: string | null) => void;
 }
 
 export function DayNutritionPanel({
@@ -28,8 +36,17 @@ export function DayNutritionPanel({
   onClear,
   onDuplicate,
   onCopyFrom,
+  presets,
+  assignedPresetId = null,
+  onAssignPreset,
 }: DayNutritionPanelProps) {
   const kcalPct = pct(totals.kcal, target.kcal);
+  // A deleted preset leaves a dangling id — show it as the default fallback.
+  const selectedKey =
+    assignedPresetId !== null &&
+    (presets ?? []).some((preset) => preset.id === assignedPresetId)
+      ? assignedPresetId
+      : DEFAULT_TARGET_KEY;
 
   const macros = [
     {
@@ -65,6 +82,41 @@ export function DayNutritionPanel({
             Nutrición del día
           </h3>
         </div>
+
+        {onAssignPreset !== undefined && (
+          <Select
+            aria-label="Objetivo del día"
+            isDisabled={disabled}
+            label="Objetivo del día"
+            labelPlacement="outside"
+            placeholder="Metas por defecto"
+            selectedKeys={[selectedKey]}
+            size="sm"
+            variant="bordered"
+            onSelectionChange={(keys) => {
+              const key = Array.from(keys)[0];
+
+              if (key === undefined) return;
+              onAssignPreset(key === DEFAULT_TARGET_KEY ? null : String(key));
+            }}
+          >
+            {[
+              <SelectItem key={DEFAULT_TARGET_KEY}>
+                Metas por defecto
+              </SelectItem>,
+              ...(presets ?? []).map((preset) => (
+                <SelectItem key={preset.id} textValue={preset.name}>
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate">{preset.name}</span>
+                    <span className="shrink-0 text-xs text-default-400 tabular-nums">
+                      {preset.kcal} kcal
+                    </span>
+                  </span>
+                </SelectItem>
+              )),
+            ]}
+          </Select>
+        )}
 
         <div className="flex items-center gap-4">
           <Ring value={kcalPct} />
@@ -120,7 +172,7 @@ export function DayNutritionPanel({
             danger
             disabled={disabled || plannedMeals === 0}
             icon="solar:trash-bin-trash-linear"
-            label="Limpiar día"
+            label="Eliminar comidas del día"
             onPress={onClear}
           />
         </div>

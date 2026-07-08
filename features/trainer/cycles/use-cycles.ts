@@ -5,6 +5,7 @@ import type {
   CycleStatus,
   CycleSummary,
   CycleTree,
+  GoalPreset,
   NutritionGoals,
   OptionSelection,
   RecipeHit,
@@ -22,20 +23,26 @@ import {
   addDay,
   addOption,
   addSlot,
+  assignDayTarget,
   copyDay,
   createCycle,
+  createGoalPreset,
   dayReorderMapping,
+  deleteGoalPreset,
   deleteOption,
   deleteSlot,
   fetchClientGoals,
   fetchCycleTree,
   listCycles,
+  listGoalPresets,
   removeDay,
+  renameDay,
   reorderDay,
   saveClientGoals,
   searchFoods,
   searchRecipes,
   updateCycle,
+  updateGoalPreset,
   updateOptionPortions,
   updateSlot,
 } from "./cycle-api";
@@ -45,6 +52,7 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 const cyclesKey = (clientId: number) => ["cycles", clientId] as const;
 const treeKey = (cycleId: string) => ["cycle-tree", cycleId] as const;
 const goalsKey = (clientId: number) => ["client-goals", clientId] as const;
+const presetsKey = (clientId: number) => ["goal-presets", clientId] as const;
 
 /** Apply a slot patch to a cached slot row (snake_case columns). */
 function applySlotPatch(
@@ -79,6 +87,82 @@ export function useSaveClientGoals(clientId: number) {
   return useMutation({
     mutationFn: (goals: NutritionGoals) => saveClientGoals(clientId, goals),
     onSuccess: (saved) => qc.setQueryData(goalsKey(clientId), saved),
+  });
+}
+
+export function useGoalPresets(clientId: number) {
+  return useQuery<GoalPreset[]>({
+    queryKey: presetsKey(clientId),
+    queryFn: () => listGoalPresets(clientId),
+  });
+}
+
+/** Create/update/delete a client's named goal presets. */
+export function useGoalPresetMutations(clientId: number) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: presetsKey(clientId) });
+  };
+
+  const createM = useMutation({
+    mutationFn: (input: { name: string } & NutritionGoals) =>
+      createGoalPreset(clientId, input),
+    onSuccess: invalidate,
+  });
+  const updateM = useMutation({
+    mutationFn: (vars: {
+      presetId: string;
+      input: { name: string } & NutritionGoals;
+    }) => updateGoalPreset(vars.presetId, vars.input),
+    onSuccess: invalidate,
+  });
+  const deleteM = useMutation({
+    mutationFn: (presetId: string) => deleteGoalPreset(presetId),
+    onSuccess: invalidate,
+  });
+
+  return { createM, updateM, deleteM };
+}
+
+/** Name/clear one day of the plan; patches the cached tree in place. */
+export function useRenameDay(cycleId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (vars: { dayIndex: number; name: string }) =>
+      renameDay(cycleId, vars.dayIndex, vars.name),
+    onSuccess: (result) => {
+      const previous = qc.getQueryData<CycleTree>(treeKey(cycleId));
+
+      if (previous !== undefined) {
+        qc.setQueryData<CycleTree>(treeKey(cycleId), {
+          ...previous,
+          day_names: result.day_names,
+        });
+      }
+    },
+  });
+}
+
+/** Assign/clear one day's goal preset; refreshes the cycle tree. */
+export function useAssignDayTarget(cycleId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (vars: { dayIndex: number; presetId: string | null }) =>
+      assignDayTarget(cycleId, vars.dayIndex, vars.presetId),
+    // Patch the cached tree's day_targets right away so the progress bars
+    // re-measure without waiting for the refetch.
+    onSuccess: (result) => {
+      const previous = qc.getQueryData<CycleTree>(treeKey(cycleId));
+
+      if (previous !== undefined) {
+        qc.setQueryData<CycleTree>(treeKey(cycleId), {
+          ...previous,
+          day_targets: result.day_targets,
+        });
+      }
+    },
   });
 }
 
@@ -278,6 +362,21 @@ export function useCycleMutations(cycleId: string) {
           vars.toIndex
         );
 
+        // Day-keyed maps (objectives, names) follow the same permutation so
+        // the selected day's panel doesn't flash stale data until the refetch.
+        const remapDayMap = (map: Record<string, string> | undefined) => {
+          if (map === undefined) return undefined;
+          const next: Record<string, string> = {};
+
+          for (const [key, value] of Object.entries(map)) {
+            next[String(mapping[Number(key)] ?? Number(key))] = value;
+          }
+
+          return next;
+        };
+        const dayTargets = remapDayMap(previous.day_targets);
+        const dayNames = remapDayMap(previous.day_names);
+
         qc.setQueryData<CycleTree>(treeKey(cycleId), {
           ...previous,
           slots: previous.slots.map((slot) => {
@@ -285,6 +384,8 @@ export function useCycleMutations(cycleId: string) {
 
             return next === undefined ? slot : { ...slot, day_index: next };
           }),
+          ...(dayTargets !== undefined ? { day_targets: dayTargets } : {}),
+          ...(dayNames !== undefined ? { day_names: dayNames } : {}),
         });
       }
 

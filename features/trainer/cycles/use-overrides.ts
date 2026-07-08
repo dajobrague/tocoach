@@ -1,6 +1,10 @@
 "use client";
 
-import type { OverrideFormInput, OverrideRow } from "./overrides-api";
+import type {
+  ClientActivity,
+  OverrideFormInput,
+  OverrideRow,
+} from "./overrides-api";
 import type { MealCycleTree } from "@/lib/nutrition/cycles/meal-cycle-service";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,12 +12,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createOverride,
   deleteOverride,
+  fetchClientActivity,
   fetchCycleTreeFull,
   listOverrides,
 } from "./overrides-api";
 
 const overridesKey = (cycleId: string) => ["cycle-overrides", cycleId] as const;
 const fullTreeKey = (cycleId: string) => ["cycle-tree-full", cycleId] as const;
+const activityKey = (cycleId: string, from: string, to: string) =>
+  ["cycle-client-activity", cycleId, from, to] as const;
 
 /** The full cycle tree (server shape) for resolving the calendar. */
 export function useCycleTreeFull(cycleId: string | null) {
@@ -21,6 +28,19 @@ export function useCycleTreeFull(cycleId: string | null) {
     queryKey: fullTreeKey(cycleId ?? "none"),
     queryFn: () => fetchCycleTreeFull(cycleId as string),
     enabled: cycleId !== null,
+  });
+}
+
+/** The client's menu choices in [from, to] + standing alternative picks. */
+export function useClientActivity(
+  cycleId: string | null,
+  from: string,
+  to: string
+) {
+  return useQuery<ClientActivity>({
+    queryKey: activityKey(cycleId ?? "none", from, to),
+    queryFn: () => fetchClientActivity(cycleId as string, from, to),
+    enabled: cycleId !== null && from.length > 0 && to.length > 0,
   });
 }
 

@@ -26,6 +26,8 @@ import { dayStatus, dayTotals } from "./cycle-math";
 
 interface DaySelectorProps {
   days: DayGroup[];
+  /** Day index (string key) → menu name; unnamed days render "Día N". */
+  dayNames?: Record<string, string>;
   selectedDay: number;
   onSelect: (dayIndex: number) => void;
   /** When set, tiles show a hover "×" (remove) and a trailing "+" (add) tile. */
@@ -85,6 +87,7 @@ function SortableDay({
 
 export function DaySelector({
   days,
+  dayNames = {},
   selectedDay,
   onSelect,
   onRequestRemoveDay,
@@ -140,9 +143,13 @@ export function DaySelector({
         >
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-sm font-semibold text-gray-900">
-              Día {summary.dayIndex + 1}
+              {dayNames[String(summary.dayIndex)] ??
+                `Día ${summary.dayIndex + 1}`}
             </span>
             <span className="truncate text-xs text-default-500 tabular-nums">
+              {dayNames[String(summary.dayIndex)] !== undefined
+                ? `Día ${summary.dayIndex + 1} · `
+                : ""}
               {summary.status === "empty"
                 ? "Sin comidas"
                 : `${summary.kcal} kcal`}

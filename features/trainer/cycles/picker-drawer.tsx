@@ -20,6 +20,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { MultiplierField } from "./multiplier-field";
 import { useFoodSearch } from "./use-cycles";
 
 import {
@@ -234,7 +235,7 @@ export function PickerDrawer({
 
   const subtitle =
     dayNumber !== undefined && cycleName !== undefined
-      ? `Día ${dayNumber} · ciclo ${cycleName}`
+      ? `Día ${dayNumber} · plan ${cycleName}`
       : undefined;
 
   return (
@@ -307,6 +308,7 @@ export function PickerDrawer({
               preview={recipePreview}
               query={recipeQuery}
               selectedRecipe={selectedRecipe}
+              {...(dayTotals !== undefined ? { dayTotals } : {})}
               onBack={() => setSelectedRecipe(null)}
               onMultiplier={(value) => {
                 setMultiplier(value);
@@ -375,6 +377,7 @@ function RecipesPanel({
   onMultiplier,
   onQuantity,
   preview,
+  dayTotals,
 }: {
   isLoading: boolean;
   hasAnyPublished: boolean;
@@ -391,6 +394,7 @@ function RecipesPanel({
   onMultiplier: (value: number) => void;
   onQuantity: (id: string, value: number) => void;
   preview: Macros;
+  dayTotals?: MacroTotals;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -489,8 +493,15 @@ function RecipesPanel({
               )}
             </div>
 
-            <div className="md:sticky md:top-0">
+            <div className="flex flex-col gap-3 md:sticky md:top-0">
               <NutritionPreview preview={preview} />
+              {dayTotals !== undefined && (
+                <DayMacrosPreview
+                  addition={preview}
+                  current={dayTotals}
+                  subject="esta receta"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -637,11 +648,16 @@ function IngredientTable({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-default-400">
         <span>Ingrediente</span>
-        <span>Cantidad</span>
+        <span>Multiplicador · Cantidad</span>
       </div>
       {ingredients.map((item) => {
         const kcal = item.nutrient_snapshot?.kcal;
         const unit = normalizeUnit(item.unit);
+        // Recipe's base amount for this line — the ×1 reference. Editing the
+        // multiplier rescales the amount; editing the amount re-derives it.
+        const base = Number(item.quantity);
+        const rowMultiplier =
+          base > 0 ? Math.round((amountFor(item) / base) * 100) / 100 : null;
         // Only pieces carry a weight-per-unit; it's fixed by the recipe.
         const perPiece =
           unit === "u" &&
@@ -684,6 +700,15 @@ function IngredientTable({
                 <span className="text-[10px] text-default-400 tabular-nums">
                   {perPiece}
                 </span>
+              )}
+              {rowMultiplier !== null && (
+                <MultiplierField
+                  ariaLabel={`Multiplicador de ${item.name_snapshot}`}
+                  value={rowMultiplier}
+                  onCommit={(value) =>
+                    onQuantity(item.id, Math.round(base * value * 100) / 100)
+                  }
+                />
               )}
               <Input
                 aria-label={`Cantidad de ${item.name_snapshot}`}
@@ -1063,13 +1088,15 @@ function FoodDetail({
   );
 }
 
-/** Day macro total (current → projected) with the pending food folded in. */
+/** Day macro total (current → projected) with the pending option folded in. */
 function DayMacrosPreview({
   current,
   addition,
+  subject = "este alimento",
 }: {
   current: MacroTotals;
   addition: Macros;
+  subject?: string;
 }) {
   const rows: {
     label: string;
@@ -1112,7 +1139,7 @@ function DayMacrosPreview({
           width={16}
         />
         <h4 className="text-sm font-semibold text-emerald-900">
-          Total del día con este alimento
+          Total del día con {subject}
         </h4>
       </div>
 
@@ -1143,7 +1170,7 @@ function DayMacrosPreview({
       </div>
 
       <p className="mt-3 border-t border-emerald-200/70 pt-2 text-[11px] font-medium text-emerald-700">
-        +{Math.round(addition.kcal)} kcal de este alimento
+        +{Math.round(addition.kcal)} kcal de {subject}
       </p>
     </div>
   );

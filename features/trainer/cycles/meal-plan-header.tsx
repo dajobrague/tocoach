@@ -13,7 +13,6 @@ interface MealPlanHeaderProps {
   onSelectCycle: (id: string) => void;
   onNewCycle: () => void;
   onViewCalendar?: () => void;
-  onOpenGoals?: () => void;
 }
 
 export function MealPlanHeader({
@@ -22,7 +21,6 @@ export function MealPlanHeader({
   onSelectCycle,
   onNewCycle,
   onViewCalendar,
-  onOpenGoals,
 }: MealPlanHeaderProps) {
   const hasCycles = cycles.length > 0;
 
@@ -33,7 +31,7 @@ export function MealPlanHeader({
           Plan de comidas
         </h1>
         <p className="text-sm text-default-500">
-          Construye ciclos de comidas con días, comidas y opciones.
+          Construye planes de comidas con días, comidas y opciones.
         </p>
       </div>
 
@@ -54,22 +52,13 @@ export function MealPlanHeader({
             Ver calendario
           </Button>
         )}
-        {hasCycles && onOpenGoals !== undefined && (
-          <Button
-            startContent={<Icon icon="solar:target-linear" width={18} />}
-            variant="bordered"
-            onPress={onOpenGoals}
-          >
-            Metas Nutricionales
-          </Button>
-        )}
         <Button
           className="bg-slate-900 text-white"
           color="primary"
           startContent={<Icon icon="solar:add-circle-bold" width={18} />}
           onPress={onNewCycle}
         >
-          Nuevo ciclo
+          Nuevo plan
         </Button>
       </div>
     </div>

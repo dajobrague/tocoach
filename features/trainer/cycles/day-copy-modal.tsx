@@ -100,7 +100,7 @@ export function DayCopyModal({
 
           {choices.length === 0 ? (
             <p className="rounded-large bg-gray-50 p-3 text-sm text-default-500">
-              Este ciclo solo tiene un día.
+              Este plan solo tiene un día.
             </p>
           ) : (
             <div className="flex flex-col gap-2">

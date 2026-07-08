@@ -32,6 +32,7 @@ import { NoteEditor } from "./override-editor";
 import { scopeLabel } from "./overrides-api";
 import { useClientCycles } from "./use-cycles";
 import {
+  useClientActivity,
   useCycleTreeFull,
   useOverrides,
   useOverrideMutations,
@@ -49,6 +50,34 @@ function rotationIndex(tree: MealCycleTree, date: string): number | null {
   const pos = currentCycleDayIndex(tree.start_date, tree.duration_days, date);
 
   return pos.started ? pos.dayIndex : null;
+}
+
+/** The menu the date actually follows: the client's choice ?? the rotation. */
+function effectiveIndex(
+  tree: MealCycleTree,
+  date: string,
+  choices: Record<string, number>
+): { index: number | null; hasChoice: boolean } {
+  const rotation = rotationIndex(tree, date);
+  const choice = choices[date];
+  const valid =
+    rotation !== null &&
+    choice !== undefined &&
+    Number.isInteger(choice) &&
+    choice >= 0 &&
+    choice < tree.duration_days;
+
+  return { index: valid ? choice : rotation, hasChoice: valid };
+}
+
+/** "Día de entreno" when the day is named; "Día N" otherwise. */
+function menuName(
+  dayNames: Record<string, string>,
+  index: number | null
+): string {
+  if (index === null) return "Fuera del plan";
+
+  return dayNames[String(index)] ?? `Día ${index + 1}`;
 }
 
 /** Today's calendar date as YYYY-MM-DD (local), to mark the current day. */
@@ -97,6 +126,7 @@ function sumPrimaryKcal(options: KcalOption[]): number {
 }
 
 interface ProductOption {
+  id?: string;
   group_index?: number;
   item_snapshot: { name: string; images?: { url: string }[] };
 }
@@ -104,11 +134,19 @@ interface ProductOption {
 interface MealProduct {
   name: string;
   image: string | null;
+  /** True when this is the alternative the client currently picks. */
+  chosen?: boolean;
 }
 
-/** One entry per meal component (group); alternatives within a group are joined
- *  with "o", and the component's image comes from its primary option. */
-function groupProducts(options: ProductOption[]): MealProduct[] {
+/**
+ * One entry per meal component (group). When the client's standing selection
+ * lands in a group, that alternative is shown (marked as chosen); otherwise
+ * the alternatives are joined with "o" and the primary's image is used.
+ */
+function groupProducts(
+  options: ProductOption[],
+  chosenOptionId: string | null = null
+): MealProduct[] {
   const byGroup = new Map<number, ProductOption[]>();
 
   for (const option of options) {
@@ -121,10 +159,25 @@ function groupProducts(options: ProductOption[]): MealProduct[] {
 
   return Array.from(byGroup.entries())
     .sort((a, b) => a[0] - b[0])
-    .map(([, opts]) => ({
-      name: opts.map((option) => option.item_snapshot.name).join(" o "),
-      image: opts[0]?.item_snapshot.images?.[0]?.url ?? null,
-    }));
+    .map(([, opts]) => {
+      const chosen =
+        chosenOptionId !== null && opts.length > 1
+          ? opts.find((option) => option.id === chosenOptionId)
+          : undefined;
+
+      if (chosen !== undefined) {
+        return {
+          name: chosen.item_snapshot.name,
+          image: chosen.item_snapshot.images?.[0]?.url ?? null,
+          chosen: true,
+        };
+      }
+
+      return {
+        name: opts.map((option) => option.item_snapshot.name).join(" o "),
+        image: opts[0]?.item_snapshot.images?.[0]?.url ?? null,
+      };
+    });
 }
 
 /** Rebuild a picker selection from a frozen snapshot (for pre-filling the cart).
@@ -244,6 +297,8 @@ function MonthGrid({
   selectedDate,
   today,
   kcalByDay,
+  choices,
+  dayNames,
   onSelect,
 }: {
   tree: MealCycleTree;
@@ -252,6 +307,8 @@ function MonthGrid({
   selectedDate: string;
   today: string;
   kcalByDay: number[];
+  choices: Record<string, number>;
+  dayNames: Record<string, string>;
   onSelect: (date: string) => void;
 }) {
   const weeks = buildMonthGrid(anchor);
@@ -266,8 +323,13 @@ function MonthGrid({
       {weeks.map((week) => (
         <div key={week[0]!.date} className="grid grid-cols-7 gap-1.5">
           {week.map((cell) => {
-            const idx = rotationIndex(tree, cell.date);
+            const { index: idx, hasChoice } = effectiveIndex(
+              tree,
+              cell.date,
+              choices
+            );
             const inCycle = idx !== null;
+            const isFuture = cell.date > today;
             const hasOverride = overrides.some((override) =>
               overrideAppliesToDate(override, cell.date, idx)
             );
@@ -301,21 +363,44 @@ function MonthGrid({
                   >
                     {dayNumber(cell.date)}
                   </span>
-                  {hasOverride ? (
-                    <Icon
-                      className="text-amber-500"
-                      icon="solar:pen-2-bold"
-                      width={12}
-                    />
-                  ) : null}
+                  <span className="flex items-center gap-0.5">
+                    {hasChoice ? (
+                      <Icon
+                        className="text-blue-500"
+                        icon="solar:user-check-rounded-bold"
+                        width={12}
+                      />
+                    ) : null}
+                    {hasOverride ? (
+                      <Icon
+                        className="text-amber-500"
+                        icon="solar:pen-2-bold"
+                        width={12}
+                      />
+                    ) : null}
+                  </span>
                 </span>
 
                 {inCycle ? (
-                  <span className="mt-auto flex w-full flex-col gap-0.5">
-                    <span className="w-fit rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-700">
-                      Día {(idx ?? 0) + 1}
+                  // Past/today = what the client follows (their choice wins);
+                  // the future is only the rotation's recommendation, dimmed.
+                  <span
+                    className={`mt-auto flex w-full flex-col gap-0.5 ${
+                      isFuture ? "opacity-55" : ""
+                    }`}
+                  >
+                    <span
+                      className={`w-fit max-w-full truncate rounded-full px-1.5 py-px text-[10px] font-semibold ${
+                        isFuture
+                          ? "border border-dashed border-gray-300 text-default-500"
+                          : hasChoice
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-emerald-100 text-emerald-700"
+                      }`}
+                    >
+                      {menuName(dayNames, idx)}
                     </span>
-                    {kcal > 0 ? (
+                    {kcal > 0 && isFuture === false ? (
                       <span className="text-[10px] tabular-nums text-default-500">
                         {kcal} kcal
                       </span>
@@ -335,6 +420,10 @@ function SelectedDayPanel({
   tree,
   overrides,
   date,
+  today,
+  choices,
+  selections,
+  dayNames,
   onDelete,
   onEditMeal,
   deleting,
@@ -342,6 +431,10 @@ function SelectedDayPanel({
   tree: MealCycleTree;
   overrides: OverrideRow[];
   date: string;
+  today: string;
+  choices: Record<string, number>;
+  selections: Record<string, string>;
+  dayNames: Record<string, string>;
   onDelete: (overrideId: string) => void;
   onEditMeal: (target: {
     slotId: string;
@@ -350,8 +443,15 @@ function SelectedDayPanel({
   }) => void;
   deleting: boolean;
 }) {
-  const dayIndex = rotationIndex(tree, date);
-  const effective = resolveOverridesForDate(tree, overrides, date);
+  const { index: dayIndex, hasChoice } = effectiveIndex(tree, date, choices);
+  const isFuture = date > today;
+  const effective = resolveOverridesForDate(
+    tree,
+    overrides,
+    date,
+    "UTC",
+    choices[date]
+  );
   const onDate = overrides.filter((override) =>
     overrideAppliesToDate(override, date, dayIndex)
   );
@@ -368,17 +468,37 @@ function SelectedDayPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold capitalize text-gray-900">
             {formatFullDate(date)}
           </p>
           <Chip
-            color={dayIndex === null ? "default" : "success"}
+            color={
+              dayIndex === null ? "default" : hasChoice ? "primary" : "success"
+            }
             size="sm"
             variant="flat"
           >
-            {dayIndex === null ? "Fuera del ciclo" : `Día ${dayIndex + 1}`}
+            {menuName(dayNames, dayIndex)}
           </Chip>
+          {dayIndex !== null ? (
+            hasChoice ? (
+              <Chip
+                color="primary"
+                size="sm"
+                startContent={
+                  <Icon icon="solar:user-check-rounded-bold" width={13} />
+                }
+                variant="flat"
+              >
+                Elegido por el cliente
+              </Chip>
+            ) : (
+              <Chip size="sm" variant="flat">
+                {isFuture ? "Recomendado" : "Según el plan"}
+              </Chip>
+            )
+          ) : null}
         </div>
         {dayKcal > 0 ? (
           <Chip
@@ -430,7 +550,7 @@ function SelectedDayPanel({
             const products: MealProduct[] =
               slot.swap !== null
                 ? swapProducts(slot.swap.snapshots)
-                : groupProducts(slot.options);
+                : groupProducts(slot.options, selections[slot.slotId] ?? null);
             const label = slot.label.trim().length > 0 ? slot.label : "Comida";
             const currentItems = slotCartItems(
               slot.swap !== null ? slot.swap.snapshots : null,
@@ -535,6 +655,12 @@ function SelectedDayPanel({
                         <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
                           {product.name}
                         </span>
+                        {product.chosen === true ? (
+                          <span className="flex shrink-0 items-center gap-1 rounded-full border border-blue-300 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                            <Icon icon="solar:check-circle-bold" width={11} />
+                            Su elección
+                          </span>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -620,6 +746,23 @@ export function CalendarSection({
     initialItems: MealCartItem[];
   } | null>(null);
 
+  // The visible grid's date range → the client's menu choices for it.
+  const gridRange = useMemo(() => {
+    if (anchor === null) return { from: "", to: "" };
+    const weeks = buildMonthGrid(anchor);
+    const lastWeek = weeks[weeks.length - 1];
+
+    return {
+      from: weeks[0]?.[0]?.date ?? "",
+      to: lastWeek?.[lastWeek.length - 1]?.date ?? "",
+    };
+  }, [anchor]);
+  const { data: activity } = useClientActivity(
+    cycleId,
+    gridRange.from,
+    gridRange.to
+  );
+
   useEffect(() => {
     if (tree !== undefined && anchor === null) {
       // Open on today so the trainer lands on the client's current day.
@@ -652,7 +795,8 @@ export function CalendarSection({
         </Button>
         <Card>
           <CardBody className="px-6 py-10 text-center text-sm text-default-500">
-            Este cliente aún no tiene un ciclo. Crea uno en el plan.
+            Este cliente aún no tiene un plan de comidas. Créalo en la pestaña
+            del plan.
           </CardBody>
         </Card>
       </div>
@@ -662,9 +806,13 @@ export function CalendarSection({
   const overrideRows = overrides ?? [];
   const month = anchor ?? firstOfMonth(tree.start_date);
   const date = selectedDate ?? tree.start_date;
-  const dayIndex = rotationIndex(tree, date);
   const today = todayIso();
   const kcalByDay = baseKcalByDay(tree);
+  const dayNames = tree.day_names ?? {};
+  const choices = activity?.choices ?? {};
+  const selections = activity?.selections ?? {};
+  // Overrides authored from this panel anchor to the menu the date follows.
+  const { index: dayIndex } = effectiveIndex(tree, date, choices);
 
   const goToday = () => {
     setAnchor(firstOfMonth(today));
@@ -719,6 +867,8 @@ export function CalendarSection({
 
           <MonthGrid
             anchor={month}
+            choices={choices}
+            dayNames={dayNames}
             kcalByDay={kcalByDay}
             overrides={overrideRows}
             selectedDate={date}
@@ -732,7 +882,19 @@ export function CalendarSection({
               <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-700">
                 Día N
               </span>
-              Día del ciclo
+              Según el plan
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full bg-blue-100 px-1.5 py-px text-[10px] font-semibold text-blue-700">
+                Día N
+              </span>
+              Elegido por el cliente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full border border-dashed border-gray-300 px-1.5 py-px text-[10px] font-semibold text-default-500">
+                Día N
+              </span>
+              Futuro (recomendación)
             </span>
             <span className="flex items-center gap-1.5">
               <Icon
@@ -755,9 +917,13 @@ export function CalendarSection({
       <Card>
         <CardBody className="gap-4">
           <SelectedDayPanel
+            choices={choices}
             date={date}
+            dayNames={dayNames}
             deleting={deleteM.isPending}
             overrides={overrideRows}
+            selections={selections}
+            today={today}
             tree={tree}
             onDelete={(overrideId) => deleteM.mutate(overrideId)}
             onEditMeal={setEditTarget}

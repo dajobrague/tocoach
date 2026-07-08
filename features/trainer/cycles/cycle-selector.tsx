@@ -39,11 +39,11 @@ export function CycleSelector({
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-default-500">
-              Ciclo actual
+              Plan actual
             </span>
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-gray-900">
-                {active?.name ?? "Sin ciclo"}
+                {active?.name ?? "Sin plan"}
               </span>
               {activeStatus !== null && (
                 <Chip
@@ -67,7 +67,7 @@ export function CycleSelector({
         </button>
       </DropdownTrigger>
       <DropdownMenu
-        aria-label="Seleccionar ciclo"
+        aria-label="Seleccionar plan"
         selectedKeys={activeId !== null ? [activeId] : []}
         selectionMode="single"
         onAction={(key) => onSelect(String(key))}

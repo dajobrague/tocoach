@@ -64,18 +64,18 @@ export function NewCycleModal({
             icon="solar:calendar-add-linear"
             width={20}
           />
-          Nuevo ciclo
+          Nuevo plan
         </ModalHeader>
         <ModalBody className="gap-4">
           <p className="text-sm text-default-500">
-            Un ciclo agrupa varios días con sus comidas, opciones y porciones.
+            Un plan agrupa varios días con sus comidas, opciones y porciones.
           </p>
 
           <Input
             autoFocus
             isRequired
             isDisabled={pending}
-            label="Nombre del ciclo"
+            label="Nombre del plan"
             placeholder="Ej. Definición — Fase 1"
             value={name}
             variant="bordered"
@@ -142,7 +142,7 @@ export function NewCycleModal({
             }
             onPress={submit}
           >
-            Crear ciclo
+            Crear plan
           </Button>
         </ModalFooter>
       </ModalContent>

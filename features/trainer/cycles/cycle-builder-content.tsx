@@ -13,6 +13,8 @@ import {
   ModalFooter,
   ModalHeader,
   Spinner,
+  Tab,
+  Tabs,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
@@ -24,19 +26,21 @@ import { CycleSummaryCard } from "./cycle-summary-card";
 import { DayCopyModal, type DayCopyMode } from "./day-copy-modal";
 import { DaySelector } from "./day-selector";
 import { EditPortionsModal } from "./edit-portions-modal";
-import { GoalsModal } from "./goals-modal";
+import { GoalsSection } from "./goals-section";
 import { MealPlanHeader } from "./meal-plan-header";
 import { NewCycleModal } from "./new-cycle-modal";
 import { PickerDrawer } from "./picker-drawer";
 import { RemoveDayModal } from "./remove-day-modal";
 import { SelectedDayEditor } from "./selected-day-editor";
 import {
+  useAssignDayTarget,
   useClientCycles,
   useClientGoals,
   useCreateCycle,
   useCycleMutations,
   useCycleTree,
-  useSaveClientGoals,
+  useGoalPresets,
+  useRenameDay,
   useUpdateCycle,
 } from "./use-cycles";
 
@@ -53,16 +57,25 @@ export function CycleBuilderContent({
   const { data: cycles, isLoading } = useClientCycles(clientId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const activeId = selectedId ?? cycles?.[0]?.id ?? null;
+  // Default to the client's ACTIVE plan (what the client actually sees);
+  // fall back to the newest one when none is active.
+  const activeId =
+    selectedId ??
+    cycles?.find((cycle) => cycle.status === "active")?.id ??
+    cycles?.[0]?.id ??
+    null;
   const { data: tree } = useCycleTree(activeId);
 
   const create = useCreateCycle(clientId);
   const update = useUpdateCycle(clientId, activeId ?? "none");
   const mutations = useCycleMutations(activeId ?? "none");
   const { data: goals } = useClientGoals(clientId);
-  const saveGoals = useSaveClientGoals(clientId);
+  const { data: presets } = useGoalPresets(clientId);
+  const assignTarget = useAssignDayTarget(activeId ?? "none");
+  const renameDayM = useRenameDay(activeId ?? "none");
   const targets = goals ?? DEFAULT_TARGETS;
 
+  const [builderTab, setBuilderTab] = useState<"plan" | "goals">("plan");
   const [selectedDay, setSelectedDay] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{
@@ -79,7 +92,6 @@ export function CycleBuilderContent({
   const [removeDayTarget, setRemoveDayTarget] = useState<number | null>(null);
   const [addDayOpen, setAddDayOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [goalsOpen, setGoalsOpen] = useState(false);
 
   useEffect(() => {
     setSelectedDay(0);
@@ -94,6 +106,17 @@ export function CycleBuilderContent({
   const disabled = tree?.status === "archived";
   const day = days[Math.min(selectedDay, Math.max(0, days.length - 1))];
   const hasCycles = (cycles?.length ?? 0) > 0;
+
+  // The selected day's effective objective: its assigned preset when it still
+  // exists, otherwise the client's default goals.
+  const presetList = presets ?? [];
+  const assignedPresetId =
+    day !== undefined
+      ? ((tree?.day_targets ?? {})[String(day.dayIndex)] ?? null)
+      : null;
+  const assignedPreset =
+    presetList.find((preset) => preset.id === assignedPresetId) ?? null;
+  const dayTargets = assignedPreset ?? targets;
 
   function handleCreate(input: {
     name: string;
@@ -116,8 +139,8 @@ export function CycleBuilderContent({
         onError: (error) =>
           setActivateError(
             error instanceof CycleApiError && error.status === 409
-              ? "Este cliente ya tiene un ciclo activo. Archiva el otro primero."
-              : "No se pudo activar el ciclo."
+              ? "Este cliente ya tiene un plan activo. Archiva el otro primero."
+              : "No se pudo activar el plan."
           ),
       }
     );
@@ -178,7 +201,6 @@ export function CycleBuilderContent({
           activeId={activeId}
           cycles={cycles ?? []}
           onNewCycle={() => setNewOpen(true)}
-          onOpenGoals={() => setGoalsOpen(true)}
           onSelectCycle={setSelectedId}
           {...(onViewCalendar !== undefined ? { onViewCalendar } : {})}
         />
@@ -189,11 +211,50 @@ export function CycleBuilderContent({
           </div>
         ) : null}
 
-        {isLoading === false && hasCycles === false ? (
+        {isLoading === false && (
+          <Tabs
+            aria-label="Sección del plan"
+            classNames={{
+              tabList: "rounded-large bg-gray-100 p-1 gap-1",
+              cursor: "rounded-medium bg-white shadow-sm",
+              tab: "h-9 min-w-[11rem] px-6",
+              tabContent:
+                "font-medium text-default-500 group-data-[selected=true]:text-gray-900",
+            }}
+            selectedKey={builderTab}
+            variant="light"
+            onSelectionChange={(key) => setBuilderTab(key as "plan" | "goals")}
+          >
+            <Tab
+              key="plan"
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Icon icon="solar:clipboard-list-linear" width={16} />
+                  Plan de comidas
+                </span>
+              }
+            />
+            <Tab
+              key="goals"
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Icon icon="solar:target-linear" width={16} />
+                  Objetivos
+                </span>
+              }
+            />
+          </Tabs>
+        )}
+
+        {isLoading === false && builderTab === "goals" ? (
+          <GoalsSection clientId={clientId} />
+        ) : null}
+
+        {isLoading === false && builderTab === "plan" && hasCycles === false ? (
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : null}
 
-        {tree !== undefined ? (
+        {tree !== undefined && builderTab === "plan" ? (
           <>
             <CycleSummaryCard
               activateError={activateError}
@@ -207,6 +268,7 @@ export function CycleBuilderContent({
             />
 
             <DaySelector
+              dayNames={tree.day_names ?? {}}
               days={days}
               disabled={disabled === true}
               selectedDay={selectedDay}
@@ -218,9 +280,12 @@ export function CycleBuilderContent({
 
             {day !== undefined ? (
               <SelectedDayEditor
+                assignedPresetId={assignedPresetId}
                 day={day}
+                dayName={(tree.day_names ?? {})[String(day.dayIndex)] ?? null}
                 disabled={disabled === true}
-                targets={targets}
+                presets={presetList}
+                targets={dayTargets}
                 onAddAlternative={(slotId, groupIndex) =>
                   setPickerTarget({ slotId, groupIndex })
                 }
@@ -246,6 +311,9 @@ export function CycleBuilderContent({
                     ...(label !== undefined ? { label } : {}),
                   })
                 }
+                onAssignPreset={(presetId) =>
+                  assignTarget.mutate({ dayIndex: day.dayIndex, presetId })
+                }
                 onClearDay={() => setClearDayOpen(true)}
                 onCopyFromDay={() => setDayCopyMode("copyFrom")}
                 onDuplicateDay={() => setDayCopyMode("duplicate")}
@@ -259,6 +327,9 @@ export function CycleBuilderContent({
                   mutations.deleteOptionM.mutate({ slotId, optionId })
                 }
                 onRemoveSlot={(slotId) => mutations.deleteSlotM.mutate(slotId)}
+                onRenameDay={(name) =>
+                  renameDayM.mutate({ dayIndex: day.dayIndex, name })
+                }
               />
             ) : null}
           </>
@@ -358,17 +429,6 @@ export function CycleBuilderContent({
         onConfirm={confirmAddDay}
       />
 
-      <GoalsModal
-        initial={targets}
-        isCustom={goals !== null && goals !== undefined}
-        isOpen={goalsOpen}
-        saving={saveGoals.isPending}
-        onClose={() => setGoalsOpen(false)}
-        onSave={(next) =>
-          saveGoals.mutate(next, { onSuccess: () => setGoalsOpen(false) })
-        }
-      />
-
       <Modal
         isOpen={archiveOpen}
         placement="center"
@@ -414,7 +474,7 @@ export function CycleBuilderContent({
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-danger-50 text-danger">
               <Icon icon="solar:trash-bin-trash-linear" width={20} />
             </span>
-            Limpiar día
+            Eliminar comidas del día
           </ModalHeader>
           <ModalBody>
             <p className="text-sm text-default-600">
@@ -436,7 +496,7 @@ export function CycleBuilderContent({
               }
               onPress={clearDay}
             >
-              Limpiar día
+              Eliminar
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -454,11 +514,11 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         </span>
         <div className="flex max-w-md flex-col gap-1">
           <p className="font-semibold text-gray-900">
-            Aún no hay ciclos de comidas
+            Aún no hay planes de comidas
           </p>
           <p className="text-sm text-default-500">
-            Crea un ciclo para empezar a construir el plan de este cliente:
-            días, comidas, opciones, porciones y totales de nutrición.
+            Crea un plan para empezar a construir la alimentación de este
+            cliente: días, comidas, opciones, porciones y totales de nutrición.
           </p>
         </div>
         <Button
@@ -467,7 +527,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
           startContent={<Icon icon="solar:add-circle-bold" width={18} />}
           onPress={onCreate}
         >
-          Crear primer ciclo
+          Crear primer plan
         </Button>
       </CardBody>
     </Card>

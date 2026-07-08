@@ -1,6 +1,6 @@
 "use client";
 
-import type { DayGroup, SlotOption } from "./cycle-api";
+import type { DayGroup, GoalPreset, SlotOption } from "./cycle-api";
 
 import {
   Card,
@@ -9,8 +9,10 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
+  Input,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useState } from "react";
 
 import { DayNutritionPanel } from "./day-nutrition-panel";
 import { dayStatus, dayTotals, type MacroTotals } from "./cycle-math";
@@ -40,6 +42,88 @@ interface SelectedDayEditorProps {
   onDuplicateDay: () => void;
   onCopyFromDay: () => void;
   targets: MacroTotals;
+  /** Named objectives + this day's assignment (day-target selector). */
+  presets?: GoalPreset[];
+  assignedPresetId?: string | null;
+  onAssignPreset?: (presetId: string | null) => void;
+  /** Menu name of this day ("Día de entreno"), editable when the handler is set. */
+  dayName?: string | null;
+  onRenameDay?: (name: string) => void;
+}
+
+/**
+ * Inline editor for the day's menu name. Shows the name (or a subtle "Nombrar
+ * día" affordance), switches to an input on click, saves on Enter/blur. Keyed
+ * by day+name from the parent so switching days resets the draft.
+ */
+function DayNameEditor({
+  name,
+  disabled,
+  onRename,
+}: {
+  name: string | null;
+  disabled: boolean;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name ?? "");
+
+  const save = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+
+    if (trimmed !== (name ?? "")) onRename(trimmed);
+  };
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        aria-label="Nombre del día"
+        className="w-56"
+        placeholder="Ej. Día de entreno"
+        size="sm"
+        value={draft}
+        variant="bordered"
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          }
+          if (event.key === "Escape") {
+            setDraft(name ?? "");
+            setEditing(false);
+          }
+        }}
+        onValueChange={setDraft}
+      />
+    );
+  }
+
+  return (
+    <button
+      className="group flex min-w-0 items-center gap-1.5 rounded-medium px-1.5 py-0.5 text-sm transition-colors hover:bg-gray-100 disabled:opacity-50"
+      disabled={disabled}
+      type="button"
+      onClick={() => setEditing(true)}
+    >
+      <span
+        className={`truncate font-medium ${
+          name !== null && name.length > 0
+            ? "text-gray-900"
+            : "text-default-400"
+        }`}
+      >
+        {name !== null && name.length > 0 ? name : "Nombrar día"}
+      </span>
+      <Icon
+        className="shrink-0 text-default-300 group-hover:text-default-500"
+        icon="solar:pen-2-linear"
+        width={14}
+      />
+    </button>
+  );
 }
 
 export function SelectedDayEditor({
@@ -56,6 +140,11 @@ export function SelectedDayEditor({
   onDuplicateDay,
   onCopyFromDay,
   targets,
+  presets,
+  assignedPresetId = null,
+  onAssignPreset,
+  dayName = null,
+  onRenameDay,
 }: SelectedDayEditorProps) {
   const plannedMeals = day.slots.filter(
     (slot) => slot.options.length > 0
@@ -65,7 +154,7 @@ export function SelectedDayEditor({
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <Card className="border border-gray-200 bg-white shadow-sm lg:col-span-2">
         <CardBody className="gap-4 p-5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Icon
               className="text-default-500"
               icon="solar:clipboard-list-linear"
@@ -77,6 +166,14 @@ export function SelectedDayEditor({
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-default-500">
               Día {day.dayIndex + 1}
             </span>
+            {onRenameDay !== undefined && (
+              <DayNameEditor
+                key={`${day.dayIndex}-${dayName ?? ""}`}
+                disabled={disabled}
+                name={dayName}
+                onRename={onRenameDay}
+              />
+            )}
           </div>
 
           {day.slots.length === 0 ? (
@@ -147,12 +244,15 @@ export function SelectedDayEditor({
       </Card>
 
       <DayNutritionPanel
+        assignedPresetId={assignedPresetId}
         disabled={disabled}
         plannedMeals={plannedMeals}
         status={dayStatus(day.slots)}
         target={targets}
         totals={dayTotals(day.slots)}
         onClear={onClearDay}
+        {...(presets !== undefined ? { presets } : {})}
+        {...(onAssignPreset !== undefined ? { onAssignPreset } : {})}
         {...(disabled
           ? {}
           : { onCopyFrom: onCopyFromDay, onDuplicate: onDuplicateDay })}

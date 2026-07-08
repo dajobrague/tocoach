@@ -168,7 +168,7 @@ export function MealRow({
             onClick={onAddComponent}
           >
             <Icon icon="solar:add-circle-linear" width={18} />
-            Añadir alimento
+            Añadir recetas o alimentos
           </button>
         ) : (
           <>
@@ -190,7 +190,7 @@ export function MealRow({
                 onClick={onAddComponent}
               >
                 <Icon icon="solar:add-circle-linear" width={16} />
-                Añadir alimento a esta comida
+                Añadir recetas o alimentos a esta comida
               </button>
             )}
           </>
@@ -235,7 +235,10 @@ function ComponentBlock({
             protein_g={primary.item_snapshot.totals.protein_g}
           />
         </div>
-        <span className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums">
+        <span
+          className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums"
+          data-testid="option-kcal"
+        >
           {optionKcal(primary)} kcal
         </span>
 

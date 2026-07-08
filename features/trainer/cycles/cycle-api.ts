@@ -58,6 +58,10 @@ export interface CycleSummary {
 
 export interface CycleTree extends CycleSummary {
   slots: CycleSlot[];
+  /** Day index (string key) → goal preset id. Absent on older rows. */
+  day_targets?: Record<string, string>;
+  /** Day index (string key) → menu display name. Absent on older rows. */
+  day_names?: Record<string, string>;
 }
 
 export interface RecipeHit {
@@ -428,6 +432,65 @@ export function saveClientGoals(
     client_id: clientId,
     ...goals,
   });
+}
+
+/** A named daily objective (e.g. "Día de entrenamiento") for one client. */
+export interface GoalPreset extends NutritionGoals {
+  id: string;
+  name: string;
+}
+
+export function listGoalPresets(clientId: number): Promise<GoalPreset[]> {
+  return getJson<GoalPreset[]>(`/api/goal-presets?clientId=${clientId}`);
+}
+
+export function createGoalPreset(
+  clientId: number,
+  input: { name: string } & NutritionGoals
+): Promise<GoalPreset> {
+  return sendJson<GoalPreset>("/api/goal-presets", "POST", {
+    client_id: clientId,
+    ...input,
+  });
+}
+
+export function updateGoalPreset(
+  presetId: string,
+  input: { name: string } & NutritionGoals
+): Promise<GoalPreset> {
+  return sendJson<GoalPreset>(`/api/goal-presets/${presetId}`, "PATCH", {
+    ...input,
+  });
+}
+
+export function deleteGoalPreset(presetId: string): Promise<void> {
+  return sendJson<void>(`/api/goal-presets/${presetId}`, "DELETE");
+}
+
+/** Name one day of the plan ("Día de entreno"); empty name clears it. */
+export function renameDay(
+  cycleId: string,
+  dayIndex: number,
+  name: string
+): Promise<{ day_names: Record<string, string> }> {
+  return sendJson<{ day_names: Record<string, string> }>(
+    `${BASE}/${cycleId}/day-name`,
+    "PUT",
+    { day_index: dayIndex, name }
+  );
+}
+
+/** Assign a goal preset to one day of the plan (null → default goals). */
+export function assignDayTarget(
+  cycleId: string,
+  dayIndex: number,
+  presetId: string | null
+): Promise<{ day_targets: Record<string, string> }> {
+  return sendJson<{ day_targets: Record<string, string> }>(
+    `${BASE}/${cycleId}/day-target`,
+    "PUT",
+    { day_index: dayIndex, preset_id: presetId }
+  );
 }
 
 export function searchRecipes(query: string): Promise<RecipeHit[]> {

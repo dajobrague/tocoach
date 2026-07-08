@@ -12,7 +12,7 @@ export type { OverrideRow, OverrideScope, OverrideType };
 export const SCOPE_OPTIONS: { key: OverrideScope; label: string }[] = [
   { key: "single_day", label: "Solo este día" },
   { key: "day_forward", label: "Este día en adelante" },
-  { key: "every_cycle", label: "Cada ciclo (este día de la rotación)" },
+  { key: "every_cycle", label: "Cada repetición del plan (este día)" },
 ];
 
 /** Spanish label for a scope (used in lists). */
@@ -141,4 +141,23 @@ export function deleteOverride(
     method: "DELETE",
     credentials: "same-origin",
   }).then(readEnvelope<OverrideRow>);
+}
+
+/** What the client actually did — for the retrospective calendar. */
+export interface ClientActivity {
+  /** Date ("YYYY-MM-DD") → menu (day index) the client chose to follow. */
+  choices: Record<string, number>;
+  /** The client's current standing alternative picks (slotId → optionId). */
+  selections: Record<string, string>;
+}
+
+export function fetchClientActivity(
+  cycleId: string,
+  from: string,
+  to: string
+): Promise<ClientActivity> {
+  return fetch(
+    `${BASE}/${cycleId}/client-activity?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    { credentials: "same-origin", cache: "no-store" }
+  ).then(readEnvelope<ClientActivity>);
 }

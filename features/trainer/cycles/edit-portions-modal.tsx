@@ -13,6 +13,8 @@ import {
 } from "@heroui/react";
 import { useState } from "react";
 
+import { MultiplierField } from "./multiplier-field";
+
 import {
   RECIPE_UNIT_LABELS,
   normalizeUnit,
@@ -40,7 +42,7 @@ export function EditPortionsModal({
   onSave,
 }: EditPortionsModalProps) {
   return (
-    <Modal isOpen={option !== null} size="sm" onClose={onClose}>
+    <Modal isOpen={option !== null} size="md" onClose={onClose}>
       <ModalContent>
         {option !== null ? (
           <PortionsForm
@@ -95,6 +97,13 @@ function PortionsForm({
             Number.isFinite(ing.gramsPerUnit)
               ? `× ${ing.gramsPerUnit} g`
               : null;
+          // ×1 reference is the amount the modal opened with; the multiplier
+          // and the amount input stay linked both ways from there.
+          const base = Number(ing.quantity);
+          const rowMultiplier =
+            base > 0
+              ? Math.round(((Number(amounts[idx]) || 0) / base) * 100) / 100
+              : null;
 
           return (
             <div key={`${idx}-${ing.name}`} className="flex items-center gap-3">
@@ -105,6 +114,22 @@ function PortionsForm({
                 <span className="text-[10px] text-default-400 tabular-nums">
                   {perPiece}
                 </span>
+              )}
+              {rowMultiplier !== null && (
+                <MultiplierField
+                  ariaLabel={`Multiplicador de ${ing.name}`}
+                  disabled={busy}
+                  value={rowMultiplier}
+                  onCommit={(value) =>
+                    setAmounts((prev) => {
+                      const next = [...prev];
+
+                      next[idx] = String(Math.round(base * value * 100) / 100);
+
+                      return next;
+                    })
+                  }
+                />
               )}
               <Input
                 aria-label={`Cantidad de ${ing.name}`}
