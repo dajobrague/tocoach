@@ -387,6 +387,52 @@ export function useSetMealCycleSelection() {
   });
 }
 
+async function putMenuChoice(input: {
+  date: string;
+  dayIndex: number | null;
+}): Promise<void> {
+  // The route validates "today or later" in the client's timezone.
+  let tz = "UTC";
+
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // Keep UTC.
+  }
+
+  const response = await clientFetch(
+    `/api/client/meal-cycle/menu-choice?tz=${encodeURIComponent(tz)}`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date: input.date, day_index: input.dayIndex }),
+    }
+  );
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error ?? `request_failed (${response.status})`);
+  }
+}
+
+/**
+ * Pick which plan menu (day) to follow on a date — `dayIndex: null` goes back
+ * to the rotation's recommendation. The chosen day's slots live server-side,
+ * so there is no optimistic patch: the week refetches on settle and the picker
+ * shows its pending state meanwhile.
+ */
+export function useSetMenuChoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: putMenuChoice,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+    },
+  });
+}
+
 export function useSupplements() {
   return useQuery({
     queryKey: ["client", "supplements"],
