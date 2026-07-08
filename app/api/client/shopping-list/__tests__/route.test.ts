@@ -18,11 +18,15 @@ vi.mock("@/lib/nutrition/cycles/client-cycle-reader", () => ({
 vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
   getClientSelections: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/cycles/menu-choice-service", () => ({
+  getMenuChoices: vi.fn(),
+}));
 
 import { GET } from "../route";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { loadTenantContext } from "@/lib/tenant/loader";
@@ -32,6 +36,7 @@ const mockedFlag = vi.mocked(isNutritionV2Enabled);
 const mockedTenant = vi.mocked(loadTenantContext);
 const mockedRead = vi.mocked(getActiveCycleTreeForClient);
 const mockedSelections = vi.mocked(getClientSelections);
+const mockedChoices = vi.mocked(getMenuChoices);
 
 const CLIENT_SESSION: ClientSession = {
   client_id: "999000001",
@@ -67,6 +72,8 @@ function tree(): MealCycleTree {
     duration_days: 1,
     start_date: "2026-06-01",
     status: "active",
+    day_targets: {},
+    day_names: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     slots: [
@@ -161,6 +168,7 @@ beforeEach(() => {
   } as never);
   mockedRead.mockResolvedValue(null);
   mockedSelections.mockResolvedValue([]);
+  mockedChoices.mockResolvedValue([]);
 });
 
 describe("GET /api/client/shopping-list — auth boundary", () => {

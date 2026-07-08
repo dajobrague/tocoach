@@ -21,6 +21,9 @@ vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
 vi.mock("@/lib/nutrition/logs/meal-log-service", () => ({
   getMealLogs: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/cycles/menu-choice-service", () => ({
+  getMenuChoices: vi.fn(),
+}));
 vi.mock("@/lib/nutrition/cycles/override-service", () => ({
   // No overrides in these tests — listForCycle returns []. (P7 adds the fold.)
   OverrideService: vi.fn(function () {
@@ -32,6 +35,7 @@ import { GET } from "../route";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { getMealLogs } from "@/lib/nutrition/logs/meal-log-service";
@@ -44,6 +48,7 @@ const mockedTenant = vi.mocked(loadTenantContext);
 const mockedRead = vi.mocked(getActiveCycleTreeForClient);
 const mockedSelections = vi.mocked(getClientSelections);
 const mockedLogs = vi.mocked(getMealLogs);
+const mockedChoices = vi.mocked(getMenuChoices);
 
 const CLIENT_SESSION: ClientSession = {
   client_id: "999000001",
@@ -69,6 +74,8 @@ function tree(): MealCycleTree {
     duration_days: 3,
     start_date: "2026-06-01",
     status: "active",
+    day_targets: {},
+    day_names: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     slots: [],
@@ -86,6 +93,7 @@ beforeEach(() => {
   mockedRead.mockResolvedValue(null);
   mockedSelections.mockResolvedValue([]);
   mockedLogs.mockResolvedValue([]);
+  mockedChoices.mockResolvedValue([]);
 });
 
 describe("GET /api/client/meal-cycle — auth boundary (§4.4)", () => {

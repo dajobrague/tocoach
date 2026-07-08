@@ -285,6 +285,100 @@ export function parseAddDay(body: unknown): ParseResult<AddDayBody> {
   return { ok: true, value };
 }
 
+export interface AssignDayTargetBody {
+  dayIndex: number;
+  /** Goal preset to assign, or null to fall back to the default goals. */
+  presetId: string | null;
+}
+
+/** Body for PUT .../day-target: assign/clear one day's goal preset. */
+export function parseAssignDayTarget(
+  body: unknown
+): ParseResult<AssignDayTargetBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  if (isInt(record.day_index) === false || record.day_index < 0) {
+    return { ok: false, error: "day_index debe ser un entero >= 0" };
+  }
+
+  if (record.preset_id === null) {
+    return { ok: true, value: { dayIndex: record.day_index, presetId: null } };
+  }
+
+  const presetId =
+    typeof record.preset_id === "string" ? record.preset_id.trim() : "";
+
+  if (presetId.length === 0) {
+    return { ok: false, error: "preset_id debe ser un id o null" };
+  }
+
+  return { ok: true, value: { dayIndex: record.day_index, presetId } };
+}
+
+export interface RenameDayBody {
+  dayIndex: number;
+  /** Empty string clears the name (back to "Día N"). */
+  name: string;
+}
+
+/** Body for PUT .../day-name: name one day of the plan. */
+export function parseRenameDay(body: unknown): ParseResult<RenameDayBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  if (isInt(record.day_index) === false || record.day_index < 0) {
+    return { ok: false, error: "day_index debe ser un entero >= 0" };
+  }
+
+  if (typeof record.name !== "string") {
+    return { ok: false, error: "name debe ser un texto" };
+  }
+
+  return {
+    ok: true,
+    value: { dayIndex: record.day_index, name: record.name },
+  };
+}
+
+export interface MenuChoiceBody {
+  /** "YYYY-MM-DD". */
+  date: string;
+  /** Menu to follow that date, or null to go back to the recommendation. */
+  dayIndex: number | null;
+}
+
+/** Body for PUT /api/client/meal-cycle/menu-choice. */
+export function parseMenuChoice(body: unknown): ParseResult<MenuChoiceBody> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  const date = typeof record.date === "string" ? record.date : "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date) === false) {
+    return { ok: false, error: "date inválida (YYYY-MM-DD)" };
+  }
+
+  if (record.day_index === null) {
+    return { ok: true, value: { date, dayIndex: null } };
+  }
+
+  if (isInt(record.day_index) === false || record.day_index < 0) {
+    return { ok: false, error: "day_index debe ser un entero >= 0 o null" };
+  }
+
+  return { ok: true, value: { date, dayIndex: record.day_index } };
+}
+
 export function parseUpdateSlot(body: unknown): ParseResult<UpdateSlotInput> {
   const record = asRecord(body);
 

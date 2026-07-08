@@ -1,7 +1,15 @@
+import type { DayTargets } from "./day-targets";
 import type { MealSlotOptionRow } from "./meal-slot-option-service";
 import type { SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  normalizeDayTargets,
+  remapOnCopyDay,
+  remapOnRemoveDay,
+  remapOnReorderDay,
+  setDayTarget,
+} from "./day-targets";
 import { MealSlotOptionService } from "./meal-slot-option-service";
 import { overlayLiveMedia } from "./option-snapshot";
 
@@ -23,6 +31,10 @@ export interface MealCycleRow {
   duration_days: number;
   start_date: string;
   status: CycleStatus;
+  /** Day index (string key) → client_goal_presets.id. Empty for older rows. */
+  day_targets: DayTargets;
+  /** Day index (string key) → menu display name ("Día de entreno"). */
+  day_names: DayTargets;
   created_at: string;
   updated_at: string;
 }
@@ -280,6 +292,20 @@ export class MealCycleService {
       }
     }
 
+    // The copied day inherits the source day's objective and name too.
+    await this.saveDayMaps(tenantHost, cycleId, {
+      day_targets: remapOnCopyDay(
+        normalizeDayTargets(cycle.day_targets),
+        sourceDayIndex,
+        targetDayIndex
+      ),
+      day_names: remapOnCopyDay(
+        normalizeDayTargets(cycle.day_names),
+        sourceDayIndex,
+        targetDayIndex
+      ),
+    });
+
     return true;
   }
 
@@ -342,6 +368,18 @@ export class MealCycleService {
 
     await this.update(tenantHost, cycleId, {
       durationDays: cycle.duration_days - 1,
+    });
+
+    // Day objectives and names follow the renumbering.
+    await this.saveDayMaps(tenantHost, cycleId, {
+      day_targets: remapOnRemoveDay(
+        normalizeDayTargets(cycle.day_targets),
+        dayIndex
+      ),
+      day_names: remapOnRemoveDay(
+        normalizeDayTargets(cycle.day_names),
+        dayIndex
+      ),
     });
 
     return true;
@@ -458,7 +496,142 @@ export class MealCycleService {
       }
     }
 
+    // Day objectives and names follow the same permutation.
+    const mapping = Array.from(
+      { length: cycle.duration_days },
+      (_, index) => newIndexByOld.get(index) ?? index
+    );
+
+    await this.saveDayMaps(tenantHost, cycleId, {
+      day_targets: remapOnReorderDay(
+        normalizeDayTargets(cycle.day_targets),
+        mapping
+      ),
+      day_names: remapOnReorderDay(
+        normalizeDayTargets(cycle.day_names),
+        mapping
+      ),
+    });
+
     return true;
+  }
+
+  /**
+   * Assign a goal preset to one day of the plan (or clear it with null). The
+   * preset must belong to the same tenant and the cycle's client — the day's
+   * progress UI resolves it at read time and falls back to the client's
+   * default goals when unset or deleted. Tenant-scoped: null when the cycle
+   * isn't the tenant's; throws {@link MealCycleValidationError} for an
+   * out-of-range day or a foreign preset.
+   */
+  async assignDayTarget(
+    tenantHost: string,
+    cycleId: string,
+    dayIndex: number,
+    presetId: string | null
+  ): Promise<MealCycleRow | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    if (
+      Number.isInteger(dayIndex) === false ||
+      dayIndex < 0 ||
+      dayIndex >= cycle.duration_days
+    ) {
+      throw new MealCycleValidationError(
+        `dayIndex must be within 0..${cycle.duration_days - 1}`
+      );
+    }
+
+    if (presetId !== null) {
+      const { data, error } = await this.client
+        .from("client_goal_presets")
+        .select("id")
+        .eq("tenant_host", tenantHost)
+        .eq("client_id", cycle.client_id)
+        .eq("id", presetId)
+        .maybeSingle();
+
+      if (error !== null) {
+        throw new Error(
+          `MealCycleService.assignDayTarget preset lookup: ${error.message}`
+        );
+      }
+
+      if (data === null) {
+        throw new MealCycleValidationError("Objetivo no encontrado");
+      }
+    }
+
+    return this.saveDayMaps(tenantHost, cycleId, {
+      day_targets: setDayTarget(
+        normalizeDayTargets(cycle.day_targets),
+        dayIndex,
+        presetId
+      ),
+    });
+  }
+
+  /**
+   * Name one day of the plan ("Día de entreno"); an empty name clears it back
+   * to the default "Día N" rendering. Tenant-scoped: null when the cycle isn't
+   * the tenant's; throws {@link MealCycleValidationError} for an out-of-range
+   * day.
+   */
+  async renameDay(
+    tenantHost: string,
+    cycleId: string,
+    dayIndex: number,
+    name: string
+  ): Promise<MealCycleRow | null> {
+    const cycle = await this.getById(tenantHost, cycleId);
+
+    if (cycle === null) {
+      return null;
+    }
+
+    if (
+      Number.isInteger(dayIndex) === false ||
+      dayIndex < 0 ||
+      dayIndex >= cycle.duration_days
+    ) {
+      throw new MealCycleValidationError(
+        `dayIndex must be within 0..${cycle.duration_days - 1}`
+      );
+    }
+
+    const trimmed = name.trim();
+
+    return this.saveDayMaps(tenantHost, cycleId, {
+      day_names: setDayTarget(
+        normalizeDayTargets(cycle.day_names),
+        dayIndex,
+        trimmed.length > 0 ? trimmed : null
+      ),
+    });
+  }
+
+  private async saveDayMaps(
+    tenantHost: string,
+    cycleId: string,
+    patch: { day_targets?: DayTargets; day_names?: DayTargets }
+  ): Promise<MealCycleRow | null> {
+    const { data, error } = await this.client
+      .from(CYCLES_TABLE)
+      .update(patch)
+      .eq("tenant_host", tenantHost)
+      .eq("id", cycleId)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(`MealCycleService.saveDayMaps failed: ${error.message}`);
+    }
+
+    return (data as MealCycleRow | null) ?? null;
   }
 
   /** List the tenant's cycles, newest first, optionally filtered by client. */

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { aggregateShoppingList } from "@/lib/nutrition/shopping/shopping-list";
@@ -16,7 +17,8 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * GET /api/client/shopping-list?from=&to= — a merged ingredient shopping list
  * for the authed client's own active meal cycle over the `[from, to]` calendar
- * range. Each date resolves to its rotation day, the selected (or first) option
+ * range. Each date resolves to the day it follows (the client's menu choice
+ * when one exists, otherwise the rotation day), the selected (or first) option
  * per slot is taken, and snapshot ingredient quantities are summed, merging by
  * (name, unit).
  *
@@ -65,15 +67,28 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createSupabaseClient();
-    const [tree, selections] = await Promise.all([
+    const [tree, selections, choices] = await Promise.all([
       getActiveCycleTreeForClient(supabase, clientId),
       getClientSelections(supabase, clientId),
+      getMenuChoices(supabase, clientId, range.from, range.to),
     ]);
+
+    // Dates where the client chose a menu shop for THAT menu, not the
+    // rotation's. Choices from an older (archived) cycle are ignored.
+    const menuChoices: Record<string, number> = {};
+
+    for (const choice of choices) {
+      if (tree !== null && choice.cycle_id === tree.id) {
+        menuChoices[choice.date] = choice.day_index;
+      }
+    }
+
     const items = aggregateShoppingList({
       tree,
       selections,
       from: range.from,
       to: range.to,
+      menuChoices,
     });
 
     return NextResponse.json({

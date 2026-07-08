@@ -82,6 +82,8 @@ function tree(
     duration_days: durationDays,
     start_date: startDate,
     status: "active",
+    day_targets: {},
+    day_names: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     slots,

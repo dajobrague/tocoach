@@ -64,7 +64,14 @@ export function resolveOverridesForDate(
   tree: MealCycleTree | null,
   overrides: OverrideRow[],
   date: string | Date,
-  timeZone = "UTC"
+  timeZone = "UTC",
+  /**
+   * Resolve against this day instead of the rotation's — the client's menu
+   * choice for the date. Swaps target that day's slots and `every_cycle`
+   * scoping follows the menu actually eaten. Ignored when out of range or
+   * before the cycle starts.
+   */
+  dayIndexOverride?: number
 ): EffectiveDay {
   const dateYmd = toYmd(date, timeZone);
 
@@ -78,7 +85,14 @@ export function resolveOverridesForDate(
     date,
     timeZone
   );
-  const dayIndex = position.started === true ? position.dayIndex : null;
+  const rotationDay = position.started === true ? position.dayIndex : null;
+  const overrideValid =
+    dayIndexOverride !== undefined &&
+    rotationDay !== null &&
+    Number.isInteger(dayIndexOverride) &&
+    dayIndexOverride >= 0 &&
+    dayIndexOverride < tree.duration_days;
+  const dayIndex = overrideValid ? dayIndexOverride : rotationDay;
   const daySlots: MealSlotWithOptions[] =
     dayIndex === null
       ? []

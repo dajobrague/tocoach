@@ -6,6 +6,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
 import { buildClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { applyOverridesToClientView } from "@/lib/nutrition/cycles/override-client-view";
 import { OverrideService } from "@/lib/nutrition/cycles/override-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
@@ -60,14 +61,30 @@ export async function GET(request: NextRequest) {
     const timeZone = new URL(request.url).searchParams.get("tz") || "UTC";
     const todayIso = toYmdInTimezone(new Date(), timeZone);
     const supabase = createSupabaseClient();
-    const [tree, selections, logs] = await Promise.all([
+    const [tree, selections, logs, choiceRows] = await Promise.all([
       getActiveCycleTreeForClient(supabase, clientId),
       getClientSelections(supabase, clientId),
       // Today's logs only — the today view lets the client log today's meals.
       getMealLogs(supabase, clientId, todayIso, todayIso),
+      getMenuChoices(supabase, clientId, todayIso, todayIso),
     ]);
     const now = new Date();
     const view = buildClientCycleView(tree, now, timeZone, selections, logs);
+
+    // Today's menu choice (this cycle only) beats the rotation — same
+    // resolution as the week route, so both views never disagree.
+    const rawChoice =
+      tree !== null
+        ? choiceRows.find((row) => row.cycle_id === tree.id)?.day_index
+        : undefined;
+    const choice =
+      tree !== null &&
+      rawChoice !== undefined &&
+      Number.isInteger(rawChoice) &&
+      rawChoice >= 0 &&
+      rawChoice < tree.duration_days
+        ? rawChoice
+        : undefined;
 
     // Fold trainer overrides (P7) into today's view: swaps replace their slot's
     // options (from the frozen snapshot), and the date's notes are attached.
@@ -84,8 +101,16 @@ export async function GET(request: NextRequest) {
         tree,
         overrides,
         now,
-        timeZone
+        timeZone,
+        choice
       );
+    }
+
+    if (choice !== undefined && resolved.position?.started === true) {
+      resolved = {
+        ...resolved,
+        position: { started: true, dayIndex: choice },
+      };
     }
 
     return NextResponse.json({ success: true, data: resolved });

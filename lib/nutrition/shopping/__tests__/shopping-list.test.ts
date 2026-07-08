@@ -92,6 +92,8 @@ function tree(
     duration_days: durationDays,
     start_date: startDate,
     status: "active",
+    day_targets: {},
+    day_names: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     slots,
@@ -379,6 +381,49 @@ describe("aggregateShoppingList — multi-day rotation", () => {
       { name: "Oats", unit: "g", quantity: 100 },
       { name: "Rice", unit: "g", quantity: 160 },
     ]);
+  });
+});
+
+describe("aggregateShoppingList — menu choices beat the rotation", () => {
+  it("shops for the CHOSEN menu on dates with a choice", () => {
+    // 2-day cycle: day 0 = Oats 50g, day 1 = Rice 80g. Start 2026-06-01.
+    const t = tree(
+      [
+        slot("s0", 0, [option("o0", 0, [ingredient("Oats", 50)])]),
+        slot("s1", 1, [option("o1", 0, [ingredient("Rice", 80)])]),
+      ],
+      2,
+      "2026-06-01"
+    );
+
+    // 06-02 rotates to day 1 (Rice) but the client chose day 0 → Oats×2.
+    const items = aggregateShoppingList({
+      tree: t,
+      selections: NO_SELECTIONS,
+      from: "2026-06-01",
+      to: "2026-06-02",
+      menuChoices: { "2026-06-02": 0 },
+    });
+
+    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 100 }]);
+  });
+
+  it("ignores an out-of-range choice and falls back to the rotation", () => {
+    const t = tree(
+      [slot("s0", 0, [option("o0", 0, [ingredient("Oats", 50)])])],
+      1,
+      "2026-06-01"
+    );
+
+    const items = aggregateShoppingList({
+      tree: t,
+      selections: NO_SELECTIONS,
+      from: "2026-06-01",
+      to: "2026-06-01",
+      menuChoices: { "2026-06-01": 9 },
+    });
+
+    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 50 }]);
   });
 });
 

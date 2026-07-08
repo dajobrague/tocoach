@@ -5,8 +5,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
-import { buildClientWeek } from "@/lib/nutrition/cycles/client-week";
+import {
+  attachDayGoals,
+  buildClientWeek,
+} from "@/lib/nutrition/cycles/client-week";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
+import { ClientGoalsService } from "@/lib/nutrition/goals/client-goals-service";
+import { GoalPresetsService } from "@/lib/nutrition/goals/goal-presets-service";
 import { OverrideService } from "@/lib/nutrition/cycles/override-service";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { isYmd, shiftYmd } from "@/lib/nutrition/logs/log-window";
@@ -67,25 +73,51 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseClient();
     const tree = await getActiveCycleTreeForClient(supabase, clientId);
 
-    const [overrides, logs, selections] = await Promise.all([
-      tree === null
-        ? Promise.resolve([])
-        : new OverrideService(supabase).listForCycle(tree.tenant_host, tree.id),
-      getMealLogs(supabase, clientId, weekStart, weekEnd),
-      getClientSelections(supabase, clientId),
-    ]);
+    const [overrides, logs, selections, goals, presetsById, choices] =
+      await Promise.all([
+        tree === null
+          ? Promise.resolve([])
+          : new OverrideService(supabase).listForCycle(
+              tree.tenant_host,
+              tree.id
+            ),
+        getMealLogs(supabase, clientId, weekStart, weekEnd),
+        getClientSelections(supabase, clientId),
+        new ClientGoalsService(supabase).get(tenant?.host ?? "", clientId),
+        new GoalPresetsService(supabase).mapByIdForClient(
+          tenant?.host ?? "",
+          clientId
+        ),
+        getMenuChoices(supabase, clientId, weekStart, weekEnd),
+      ]);
 
-    const week = buildClientWeek(
-      tree,
-      overrides,
-      logs,
-      weekStart,
-      todayIso,
-      timeZone,
-      selections
+    // Only choices made against THIS plan count; a stale row from an older
+    // (archived) cycle silently falls back to the recommendation.
+    const menuChoices: Record<string, number> = {};
+
+    for (const choice of choices) {
+      if (tree !== null && choice.cycle_id === tree.id) {
+        menuChoices[choice.date] = choice.day_index;
+      }
+    }
+
+    const week = attachDayGoals(
+      buildClientWeek(
+        tree,
+        overrides,
+        logs,
+        weekStart,
+        todayIso,
+        timeZone,
+        selections,
+        menuChoices
+      ),
+      tree?.day_targets,
+      presetsById,
+      goals
     );
 
-    return NextResponse.json({ success: true, data: week });
+    return NextResponse.json({ success: true, data: { ...week, goals } });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
       correlationId,

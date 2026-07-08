@@ -72,6 +72,8 @@ function tree(): MealCycleTree {
     duration_days: 2,
     start_date: "2026-06-01",
     status: "active",
+    day_targets: {},
+    day_names: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     slots: [slot("s0", 0), slot("s1", 0), slot("s2", 1)],

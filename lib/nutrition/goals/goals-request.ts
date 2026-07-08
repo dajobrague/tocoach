@@ -1,4 +1,5 @@
 import type { NutritionGoals } from "./client-goals-service";
+import type { GoalPresetInput } from "./goal-presets-service";
 import type { ParseResult } from "@/lib/nutrition/recipes/recipe-request";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -46,4 +47,27 @@ export function parseNutritionGoals(
       fat_g: record.fat_g as number,
     },
   };
+}
+
+/** Body for POST/PATCH goal presets: a name plus the four daily targets. */
+export function parseGoalPreset(body: unknown): ParseResult<GoalPresetInput> {
+  const record = asRecord(body);
+
+  if (record === null) {
+    return { ok: false, error: "Cuerpo de la petición inválido" };
+  }
+
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+
+  if (name.length === 0) {
+    return { ok: false, error: "El nombre es obligatorio" };
+  }
+
+  const goals = parseNutritionGoals(body);
+
+  if (goals.ok === false) {
+    return goals;
+  }
+
+  return { ok: true, value: { name, ...goals.value } };
 }

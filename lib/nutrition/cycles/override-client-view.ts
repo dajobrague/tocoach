@@ -20,13 +20,22 @@ export function applyOverridesToClientView(
   tree: MealCycleTree | null,
   overrides: OverrideRow[],
   today: string | Date,
-  timeZone = "UTC"
+  timeZone = "UTC",
+  /** The client's menu choice for the date — swaps then resolve against (and
+   *  rewrite) that day instead of the rotation's. */
+  dayIndexOverride?: number
 ): ClientCycleView {
   if (tree === null || view.position === null) {
     return view;
   }
 
-  const effective = resolveOverridesForDate(tree, overrides, today, timeZone);
+  const effective = resolveOverridesForDate(
+    tree,
+    overrides,
+    today,
+    timeZone,
+    dayIndexOverride
+  );
   const notes = effective.notes.map((note) => ({
     id: note.id,
     slotId: note.slotId,
@@ -42,7 +51,7 @@ export function applyOverridesToClientView(
     }
   }
 
-  const todayIndex = view.position.dayIndex;
+  const todayIndex = effective.dayIndex ?? view.position.dayIndex;
 
   if (todayIndex === null || swapBySlot.size === 0) {
     return { ...view, notes };
