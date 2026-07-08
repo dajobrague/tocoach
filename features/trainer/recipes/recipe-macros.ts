@@ -67,8 +67,8 @@ export interface PublishChecklist {
   ready: boolean;
 }
 
-// Drives the "Checklist para publicar" panel. Name, an ingredient, computed
-// nutrition, and a photo are required to publish; instructions are recommended.
+// Gates the publish button. Name, an ingredient, and computed nutrition are
+// required to publish; a photo and instructions are recommended.
 export function publishChecklist(input: ChecklistInput): PublishChecklist {
   const items: ChecklistItem[] = [
     {
@@ -93,7 +93,7 @@ export function publishChecklist(input: ChecklistInput): PublishChecklist {
       id: "photo",
       label: "Foto de la receta",
       done: input.hasPhoto,
-      optional: false,
+      optional: true,
     },
     {
       id: "instructions",

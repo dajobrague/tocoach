@@ -1,12 +1,9 @@
 "use client";
 
-import type { ChecklistItem } from "./recipe-macros";
-
 import { Button, Card, CardBody, Chip } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 interface PublishChecklistProps {
-  items: ChecklistItem[];
   ready: boolean;
   isPublished: boolean;
   isPublishing: boolean;
@@ -14,7 +11,6 @@ interface PublishChecklistProps {
 }
 
 export function PublishChecklist({
-  items,
   ready,
   isPublished,
   isPublishing,
@@ -26,39 +22,11 @@ export function PublishChecklist({
         <div className="flex items-center gap-2">
           <Icon
             className="text-default-500"
-            icon="solar:checklist-minimalistic-linear"
+            icon="solar:rocket-2-linear"
             width={18}
           />
-          <h3 className="text-sm font-semibold text-gray-900">
-            Checklist para publicar
-          </h3>
+          <h3 className="text-sm font-semibold text-gray-900">Publicación</h3>
         </div>
-
-        <ul className="flex flex-col gap-2.5">
-          {items.map((item) => (
-            <li key={item.id} className="flex items-center gap-2.5 text-sm">
-              <Icon
-                className={item.done ? "text-success-500" : "text-default-300"}
-                icon={
-                  item.done
-                    ? "solar:check-circle-bold"
-                    : "solar:close-circle-linear"
-                }
-                width={20}
-              />
-              <span
-                className={item.done ? "text-gray-900" : "text-default-500"}
-              >
-                {item.label}
-                {item.optional && (
-                  <span className="ml-1 text-xs text-default-400">
-                    (opcional)
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
 
         {isPublished ? (
           <div className="flex items-center gap-2 rounded-large bg-success-50 px-3 py-2.5">
@@ -89,7 +57,7 @@ export function PublishChecklist({
             </Button>
             {ready === false && (
               <p className="text-xs text-default-500">
-                Completa los pasos obligatorios para publicar.
+                Agrega un nombre y al menos un ingrediente para publicar.
               </p>
             )}
             {ready && (

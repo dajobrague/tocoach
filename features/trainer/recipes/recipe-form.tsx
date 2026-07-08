@@ -408,7 +408,6 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
             <PublishChecklist
               isPublished={values.status === "active"}
               isPublishing={publishing}
-              items={checklist.items}
               ready={checklist.ready}
               onPublish={publish}
             />

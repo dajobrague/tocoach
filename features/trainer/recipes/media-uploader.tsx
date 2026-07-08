@@ -46,13 +46,13 @@ export function MediaUploader({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Photos — required. */}
+      {/* Photos — recommended, never block publishing. */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-default-500">
             Fotos
-            <span className="rounded-full bg-danger-50 px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-danger-600">
-              Obligatorio
+            <span className="rounded-full bg-default-100 px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-default-500">
+              Recomendado
             </span>
           </span>
           <Button
@@ -104,7 +104,7 @@ export function MediaUploader({
               width={28}
             />
             <span className="px-6 text-sm text-default-500">
-              Añade al menos una foto de la receta
+              Añade una foto de la receta (opcional)
             </span>
           </button>
         )}

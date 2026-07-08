@@ -83,12 +83,18 @@ describe("publishChecklist", () => {
     );
   });
 
-  it("requires a name, ingredient, nutrition, and a photo", () => {
+  it("requires a name, ingredient, and nutrition", () => {
     expect(publishChecklist({ ...ready, hasName: false }).ready).toBe(false);
     expect(publishChecklist({ ...ready, ingredientCount: 0 }).ready).toBe(
       false
     );
     expect(publishChecklist({ ...ready, kcal: 0 }).ready).toBe(false);
-    expect(publishChecklist({ ...ready, hasPhoto: false }).ready).toBe(false);
+  });
+
+  it("does not require a photo (recommended only)", () => {
+    const result = publishChecklist({ ...ready, hasPhoto: false });
+
+    expect(result.ready).toBe(true);
+    expect(result.items.find((i) => i.id === "photo")?.optional).toBe(true);
   });
 });
