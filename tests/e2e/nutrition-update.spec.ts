@@ -109,32 +109,46 @@ test.afterAll(async () => {
     .eq("host", TEST_TENANT_HOST);
 });
 
-test("wizard renders all four steps with real candidates and verdicts", async ({
+test("wizard walks page by page through the four steps", async ({
   context,
   page,
 }) => {
   await addTrainerAuthCookie(context);
   await page.goto(WIZARD_PATH);
 
+  // Step 1 — importer with a seeded legacy candidate.
   await expect(page.getByText("Actualización a Nutrición 2.0")).toBeVisible();
+  await expect(page.getByText("Paso 1 de 4")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Importa tus recetas" })
   ).toBeVisible();
-  // A seeded legacy candidate shows in step 1's embedded importer.
   await expect(page.getByText("Pollo con arroz")).toBeVisible();
 
-  // Step 2: the test client appears with the PDF verdict.
+  // Step 2 — the test client appears with the PDF verdict.
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await expect(page.getByText("Paso 2 de 4")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Revisa a tus clientes" })
   ).toBeVisible();
   await expect(page.getByText("Verá su PDF").first()).toBeVisible();
 
-  // Steps 3 & 4 are present.
+  // Step 3 — the explainer.
+  await page.getByRole("button", { name: "Siguiente" }).click();
   await expect(
     page.getByRole("heading", { name: "Conoce la nueva nutrición" })
   ).toBeVisible();
+
+  // Step 4 — the switch; Siguiente disappears on the last step.
+  await page.getByRole("button", { name: "Siguiente" }).click();
   await expect(
     page.getByRole("heading", { name: "Activa el cambio" })
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Siguiente" })).toHaveCount(0);
+
+  // Atrás returns to step 3.
+  await page.getByRole("button", { name: "Atrás" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Conoce la nueva nutrición" })
   ).toBeVisible();
 });
 
@@ -145,6 +159,8 @@ test("phone-frame preview shows the client's real PDF", async ({
   await addTrainerAuthCookie(context);
   await page.goto(WIZARD_PATH);
 
+  // The client list lives on step 2.
+  await page.getByRole("button", { name: "Siguiente" }).click();
   await page.getByRole("button", { name: "Vista previa" }).first().click();
 
   await expect(
