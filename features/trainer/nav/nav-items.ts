@@ -7,6 +7,8 @@ export type TrainerNavItem = {
   items?: TrainerNavItem[];
   /** Only show when the tenant's nutrition_v2 flag is enabled. */
   requiresNutritionV2?: boolean;
+  /** Hide once the client-facing cutover is live (rollout-only entries). */
+  hideWhenNutritionV2Live?: boolean;
 };
 
 export type TrainerNavSection = {
@@ -69,6 +71,7 @@ export const TRAINER_NAV: TrainerNavSection[] = [
         icon: "solar:magic-stick-3-linear",
         href: "/trainer/dashboard/nutrition-update",
         requiresNutritionV2: true,
+        hideWhenNutritionV2Live: true,
       },
     ],
   },
@@ -113,14 +116,22 @@ export const TRAINER_NAV: TrainerNavSection[] = [
 
 /**
  * Remove flag-gated items the tenant can't see. Pure; drives both nav shells
- * and is unit-tested. Currently only the nutrition_v2 gate.
+ * and is unit-tested. `nutritionV2` = trainer tools on; `nutritionV2Live` =
+ * clients already switched (retires rollout-only entries like the wizard).
  */
 export function filterTrainerNav(
   sections: TrainerNavSection[],
-  flags: { nutritionV2: boolean }
+  flags: { nutritionV2: boolean; nutritionV2Live: boolean }
 ): TrainerNavSection[] {
   const keepItem = (item: TrainerNavItem): TrainerNavItem | null => {
     if (item.requiresNutritionV2 === true && flags.nutritionV2 === false) {
+      return null;
+    }
+
+    if (
+      item.hideWhenNutritionV2Live === true &&
+      flags.nutritionV2Live === true
+    ) {
       return null;
     }
 

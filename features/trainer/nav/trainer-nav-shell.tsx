@@ -5,7 +5,7 @@ import React from "react";
 
 import { filterTrainerNav, TRAINER_NAV } from "./nav-items";
 import { useActiveKey } from "./use-active-key";
-import { useNutritionV2Enabled } from "./use-nutrition-v2-flag";
+import { useNutritionV2FlagStatus } from "./use-nutrition-v2-flag";
 import { useShellMode } from "./use-shell-mode";
 import { SideShell } from "./shells/side-shell";
 import { TopShell } from "./shells/top-shell";
@@ -28,10 +28,14 @@ export function TrainerNavShell({ children }: TrainerNavShellProps) {
   const router = useRouter();
   const mode = useShellMode();
   const activeKey = useActiveKey();
-  const nutritionV2Enabled = useNutritionV2Enabled();
+  const { trainerEnabled, enabled } = useNutritionV2FlagStatus();
   const sections = React.useMemo(
-    () => filterTrainerNav(TRAINER_NAV, { nutritionV2: nutritionV2Enabled }),
-    [nutritionV2Enabled]
+    () =>
+      filterTrainerNav(TRAINER_NAV, {
+        nutritionV2: trainerEnabled,
+        nutritionV2Live: enabled,
+      }),
+    [trainerEnabled, enabled]
   );
 
   const [session, setSession] = React.useState<TrainerSession | null>(null);

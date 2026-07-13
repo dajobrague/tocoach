@@ -29,25 +29,10 @@ async function fetchNutritionV2Flags(): Promise<NutritionV2Flags> {
 }
 
 /**
- * Whether the trainer-side nutrition-v2 tools are enabled for the current
- * tenant (drives the nav's Recetas entry and the v2 builder surfaces).
- * Defaults to `false` until resolved, so flagged-off UI never flashes.
- */
-export function useNutritionV2Enabled(): boolean {
-  const { data } = useQuery({
-    queryKey: ["nutrition-v2-flag"],
-    queryFn: fetchNutritionV2Flags,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  return data?.trainerEnabled === true;
-}
-
-/**
  * Full flag status incl. loading, for callers that must not flash the
- * flagged-off UI while resolving. Shares the same query/cache — no extra
- * fetch. `prepareMode` = trainer tools on while clients are still on legacy
- * (the migration window).
+ * flagged-off UI while resolving (nav, banners, tab switches). Defaults to
+ * all-false until resolved. `prepareMode` = trainer tools on while clients
+ * are still on legacy (the migration window).
  */
 export function useNutritionV2FlagStatus(): {
   enabled: boolean;

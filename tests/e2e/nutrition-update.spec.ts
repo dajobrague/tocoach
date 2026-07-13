@@ -193,6 +193,38 @@ test("visiting the wizard enables prepare mode in the tenant row", async ({
   expect((await tenantFlags()).trainerEnabled).toBe(true);
 });
 
+test("metricas banner follows the rollout state", async ({ context, page }) => {
+  await addTrainerAuthCookie(context);
+
+  let flags = { enabled: false, trainerEnabled: false };
+
+  await page.route("**/api/nutrition/flag", (route) =>
+    route.fulfill({ json: flags })
+  );
+
+  // Not started — full announcement linking to the wizard.
+  await page.goto("/trainer/dashboard/metricas");
+  await expect(page.getByText("Nutrición 2.0 ya está aquí")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Empezar la actualización" })
+  ).toHaveAttribute("href", WIZARD_PATH);
+
+  // Prepare mode — continuation copy, and the wizard entry is in the nav.
+  flags = { enabled: false, trainerEnabled: true };
+  await page.reload();
+  await expect(
+    page.getByText("Continúa tu actualización a Nutrición 2.0")
+  ).toBeVisible();
+  await expect(page.getByText("Nutrición 2.0", { exact: true })).toBeVisible();
+
+  // Live — nothing left to announce, and the nav entry retires too.
+  flags = { enabled: true, trainerEnabled: true };
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Metricas" })).toBeVisible();
+  await expect(page.getByText("ya está aquí")).toHaveCount(0);
+  await expect(page.getByText("Nutrición 2.0", { exact: true })).toHaveCount(0);
+});
+
 test("activate and rollback write the client-facing flag", async ({
   context,
 }) => {
