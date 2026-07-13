@@ -8,7 +8,9 @@ import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle
 import {
   attachDayGoals,
   buildClientWeek,
+  type ClientDietFallback,
 } from "@/lib/nutrition/cycles/client-week";
+import { getClientDietPdf } from "@/lib/nutrition/diet-fallback";
 import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { ClientGoalsService } from "@/lib/nutrition/goals/client-goals-service";
@@ -73,7 +75,7 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseClient();
     const tree = await getActiveCycleTreeForClient(supabase, clientId);
 
-    const [overrides, logs, selections, goals, presetsById, choices] =
+    const [overrides, logs, selections, goals, presets, choices, dietPdf] =
       await Promise.all([
         tree === null
           ? Promise.resolve([])
@@ -84,12 +86,14 @@ export async function GET(request: NextRequest) {
         getMealLogs(supabase, clientId, weekStart, weekEnd),
         getClientSelections(supabase, clientId),
         new ClientGoalsService(supabase).get(tenant?.host ?? "", clientId),
-        new GoalPresetsService(supabase).mapByIdForClient(
-          tenant?.host ?? "",
-          clientId
-        ),
+        new GoalPresetsService(supabase).list(tenant?.host ?? "", clientId),
         getMenuChoices(supabase, clientId, weekStart, weekEnd),
+        // The PDF rung of the delivery ladder only matters without a plan.
+        tree === null
+          ? getClientDietPdf(supabase, tenant?.host ?? "", clientId)
+          : Promise.resolve(null),
       ]);
+    const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
 
     // Only choices made against THIS plan count; a stale row from an older
     // (archived) cycle silently falls back to the recommendation.
@@ -117,7 +121,29 @@ export async function GET(request: NextRequest) {
       goals
     );
 
-    return NextResponse.json({ success: true, data: { ...week, goals } });
+    // No active plan → tell the client page what to fall back to (delivery
+    // ladder: PDF diet, else goals-only when goals or presets exist).
+    const fallback: ClientDietFallback | undefined =
+      tree === null
+        ? {
+            pdf: dietPdf,
+            presets: presets.map(
+              ({ id, name, kcal, protein_g, carbs_g, fat_g }) => ({
+                id,
+                name,
+                kcal,
+                protein_g,
+                carbs_g,
+                fat_g,
+              })
+            ),
+          }
+        : undefined;
+
+    return NextResponse.json({
+      success: true,
+      data: { ...week, goals, ...(fallback !== undefined ? { fallback } : {}) },
+    });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
       correlationId,

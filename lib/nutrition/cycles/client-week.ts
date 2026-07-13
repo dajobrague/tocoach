@@ -84,6 +84,23 @@ export interface ClientWeekMenu {
   images: ClientWeekMenuImage[];
 }
 
+/** A named daily objective, as exposed to the client (goals-only view). */
+export interface ClientDietPreset extends NutritionGoals {
+  id: string;
+  name: string;
+}
+
+/**
+ * What the client's Nutrición page falls back to when there is NO active meal
+ * plan: a PDF diet, or the goals-only view fed by `presets` + the week's
+ * `goals`. Attached by the week route only when `cycle` is null, so plan
+ * responses carry no extra weight.
+ */
+export interface ClientDietFallback {
+  pdf: { url: string; name: string } | null;
+  presets: ClientDietPreset[];
+}
+
 /** A week of the client's plan, resolved per date. */
 export interface ClientWeek {
   weekStart: string;
@@ -99,6 +116,9 @@ export interface ClientWeek {
    * pure over the cycle tree); drives the client's "Nutrición del día" card.
    */
   goals?: NutritionGoals | null;
+  /** No-plan delivery fallback (PDF / goals-only). Route-attached, and only
+   *  when `cycle` is null. */
+  fallback?: ClientDietFallback;
 }
 
 /**

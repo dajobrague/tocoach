@@ -10,6 +10,8 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DaySummaryCard } from "@/components/client-dashboard/meal-cycle/day-summary-card";
+import { GoalsOnlyView } from "@/components/client-dashboard/meal-cycle/goals-only-view";
+import { PdfDietView } from "@/components/client-dashboard/meal-cycle/pdf-diet-view";
 import { dayPlannedTotals } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { MealCycleDayPanel } from "@/components/client-dashboard/meal-cycle/meal-cycle-day-panel";
 import {
@@ -146,15 +148,26 @@ export function MealCycleContent() {
     );
   }
 
-  // `null` (flag off) or no active cycle (cycle === null) → empty state.
+  // No active plan → walk the delivery ladder the route resolved: a PDF diet,
+  // then goals-only (default goals and/or named objectives), then empty.
   if (data === undefined || data === null || data.cycle === null) {
+    const pdf = data?.fallback?.pdf ?? null;
+    const presets = data?.fallback?.presets ?? [];
+    const goals = data?.goals ?? null;
+
     return (
       <MealCycleShell>
-        <CenteredState
-          icon="solar:plate-linear"
-          subtitle="Tu entrenador aún no te ha asignado un plan de comidas."
-          title="Sin plan activo"
-        />
+        {pdf !== null ? (
+          <PdfDietView name={pdf.name} url={pdf.url} />
+        ) : goals !== null || presets.length > 0 ? (
+          <GoalsOnlyView goals={goals} presets={presets} />
+        ) : (
+          <CenteredState
+            icon="solar:plate-linear"
+            subtitle="Tu entrenador aún no te ha asignado un plan de comidas."
+            title="Sin plan activo"
+          />
+        )}
       </MealCycleShell>
     );
   }
