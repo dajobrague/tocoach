@@ -63,6 +63,13 @@ export const TRAINER_NAV: TrainerNavSection[] = [
         href: "/trainer/dashboard/recipes",
         requiresNutritionV2: true,
       },
+      {
+        key: "nutrition-update",
+        title: "Nutrición 2.0",
+        icon: "solar:magic-stick-3-linear",
+        href: "/trainer/dashboard/nutrition-update",
+        requiresNutritionV2: true,
+      },
     ],
   },
   {

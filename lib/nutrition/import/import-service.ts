@@ -38,9 +38,20 @@ export class RecipeImportService {
     this.ingredients = new RecipeIngredientService(client);
   }
 
-  /** Review-ready candidates for the tenant (junk already skipped). */
+  /** Review-ready candidates for the tenant (junk already skipped), each
+   *  marked `alreadyImported` when its name already exists in the library —
+   *  the same normalized-name key `approve` dedupes on. */
   async preview(tenantHost: string): Promise<RecipeCandidate[]> {
-    return this.scanner.scan(tenantHost);
+    const [candidates, existingNames] = await Promise.all([
+      this.scanner.scan(tenantHost),
+      this.existingNameKeys(tenantHost),
+    ]);
+
+    return candidates.map((candidate) =>
+      existingNames.has(nameKey(candidate.name))
+        ? { ...candidate, alreadyImported: true }
+        : candidate
+    );
   }
 
   /** Import the approved candidates (by legacy option id) for the tenant. */

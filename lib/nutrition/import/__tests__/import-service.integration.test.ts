@@ -177,6 +177,25 @@ describe("RecipeImportService (integration, local DB)", () => {
     expect(Number(recipe?.protein_g)).toBeCloseTo(25, 1);
   });
 
+  it("preview marks already-imported candidates so the mark survives revisits", async () => {
+    seeded = await seedLegacyNutrition(client);
+
+    await service.approve(TEST_TENANT_HOST, TEST_TRAINER_ID, [
+      seeded.goodOptionId,
+    ]);
+
+    const candidates = await service.preview(TEST_TENANT_HOST);
+    const good = candidates.find(
+      (c) => c.legacyOptionId === seeded.goodOptionId
+    );
+    const untouched = candidates.find(
+      (c) => c.legacyOptionId === seeded.prodOptionId
+    );
+
+    expect(good?.alreadyImported).toBe(true);
+    expect(untouched?.alreadyImported).toBeUndefined();
+  });
+
   it("is idempotent — re-approving the same options skips duplicates", async () => {
     seeded = await seedLegacyNutrition(client);
 

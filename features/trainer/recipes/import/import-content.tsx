@@ -21,8 +21,13 @@ export function RecipeImportContent() {
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState<string | null>(null);
 
+  // Session imports + names already in the library (server-computed) — the
+  // "Importada" mark survives reloads, so re-running never looks pending.
+  const isImported = (candidate: (typeof candidates)[number]): boolean =>
+    importedIds.has(candidate.legacyOptionId) ||
+    candidate.alreadyImported === true;
   const selectable = candidates.filter(
-    (candidate) => importedIds.has(candidate.legacyOptionId) === false
+    (candidate) => isImported(candidate) === false
   );
   const allSelected =
     selectable.length > 0 &&
@@ -130,7 +135,7 @@ export function RecipeImportContent() {
               <CandidateCard
                 key={candidate.legacyOptionId}
                 candidate={candidate}
-                imported={importedIds.has(candidate.legacyOptionId)}
+                imported={isImported(candidate)}
                 selected={selected.has(candidate.legacyOptionId)}
                 onToggle={toggle}
               />

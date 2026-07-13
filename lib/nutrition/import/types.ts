@@ -118,6 +118,10 @@ export interface RecipeCandidate {
   name: string;
   ingredients: CandidateIngredient[];
   macrosSource: CandidateMacroSource;
+  /** True when a library recipe with this (normalized) name already exists —
+   *  the card stays marked "Importada" across visits, so re-running the
+   *  importer can never look like it needs redoing. Set by preview only. */
+  alreadyImported?: boolean;
   /** Combined instructions + recipe notes, when present. */
   steps?: string;
   /** What the old plan stated for this option, verbatim (for the review card). */
