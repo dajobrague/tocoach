@@ -209,12 +209,20 @@ function mapServing(record: Record<string, unknown>): {
   // (a beverage's package is ml too); grams only as the last resort.
   const explicitUnit = normalizeServingUnit(record["serving_quantity_unit"]);
   const packageUnit = normalizeServingUnit(record["product_quantity_unit"]);
-  const servingQuantityUnit = explicitUnit ?? packageUnit ?? "g";
+  let servingQuantityUnit = explicitUnit ?? packageUnit ?? "g";
 
   let servingQuantity = toPositiveNumber(record["serving_quantity"]);
 
   if (servingQuantity === null && servingSize !== null) {
-    servingQuantity = parseWeightFromText(servingSize);
+    const parsed = parseWeightFromText(servingSize);
+
+    servingQuantity = parsed?.weight ?? null;
+
+    // "1 vaso (250 ml)" carries its own unit — trust it over the g default
+    // when no explicit serving/package unit was present.
+    if (parsed !== null && explicitUnit === null && packageUnit === null) {
+      servingQuantityUnit = parsed.unit;
+    }
   }
 
   if (servingQuantity === null) {
@@ -262,15 +270,24 @@ function normalizeServingUnit(value: unknown): "g" | "ml" | null {
   return null;
 }
 
-/** First "<number> g|gr|ml" in a serving text; comma decimals accepted. */
-function parseWeightFromText(text: string): number | null {
-  const match = /(\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\b/i.exec(text);
+/** First "<number> g|gr|ml" in a serving text (comma decimals accepted),
+ *  with the unit it was written in. */
+function parseWeightFromText(
+  text: string
+): { weight: number; unit: "g" | "ml" } | null {
+  const match = /(\d+(?:[.,]\d+)?)\s*(g|gr|ml)\b/i.exec(text);
 
-  if (match === null || match[1] === undefined) {
+  if (match === null || match[1] === undefined || match[2] === undefined) {
     return null;
   }
 
-  return toPositiveNumber(Number(match[1].replace(",", ".")));
+  const weight = toPositiveNumber(Number(match[1].replace(",", ".")));
+
+  if (weight === null) {
+    return null;
+  }
+
+  return { weight, unit: match[2].toLowerCase() === "ml" ? "ml" : "g" };
 }
 
 /** Coerce to a positive finite number (strings accepted); anything else → null. */

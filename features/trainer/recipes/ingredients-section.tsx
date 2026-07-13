@@ -93,8 +93,12 @@ export function IngredientsSection({
 
   const addFood = (food: FoodSearchResult) => {
     const draft = draftFromFood(food);
+    const next = [...ingredients, draft];
 
-    onChange([...ingredients, draft]);
+    onChange(next);
+    // The ref only refreshes on re-render; sync it now so a fast (cached)
+    // serving lookup can't resolve against a list that lacks the new draft.
+    ingredientsRef.current = next;
 
     // Upgrade the line to the product's native unit once OFF answers: drinks
     // become their serving in ml, solids 1 u × the serving weight. Only while

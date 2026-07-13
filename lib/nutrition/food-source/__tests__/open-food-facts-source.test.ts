@@ -430,4 +430,14 @@ describe("OpenFoodFactsSource — serving mapping (v2 product API)", () => {
 
     expect(result?.servingQuantityUnit).toBe("ml");
   });
+
+  it("takes the unit from the serving text when no unit field exists", async () => {
+    const result = await lookup({
+      ...base,
+      serving_size: "1 vaso (250 ml)",
+    });
+
+    expect(result?.servingQuantity).toBe(250);
+    expect(result?.servingQuantityUnit).toBe("ml");
+  });
 });
