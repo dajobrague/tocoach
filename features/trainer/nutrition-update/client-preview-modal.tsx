@@ -15,11 +15,10 @@ interface ClientPreviewModalProps {
 }
 
 /**
- * "Así lo verá tu cliente" — the wizard's phone-frame preview. Renders the
- * REAL client components (PdfDietView / GoalsOnlyView) with the client's real
- * data inside a device mock: what the trainer sees here is literally what the
- * client gets after the switch. plan_v2/none verdicts get a text explanation
- * instead (the plan view needs live week data; the empty state is obvious).
+ * "Así lo verá tu cliente" — the wizard's preview. Renders the REAL client
+ * components (PdfDietView / GoalsOnlyView / the empty state) with the
+ * client's real data, framed as a plain labelled panel on the trainer side.
+ * Every verdict shows actual content — never a bare explanation.
  */
 export function ClientPreviewModal({
   client,
@@ -29,7 +28,7 @@ export function ClientPreviewModal({
     <Modal
       isOpen={client !== null}
       scrollBehavior="inside"
-      size="xl"
+      size="2xl"
       onClose={onClose}
     >
       <ModalContent>
@@ -39,18 +38,13 @@ export function ClientPreviewModal({
               <span className="text-sm font-semibold">
                 Así verá {client.name} su sección de Nutrición
               </span>
-              <span className="text-xs font-normal text-default-500">
-                Vista previa con sus datos reales, tal como la verá tras el
-                cambio.
+              <span className="text-xs font-normal text-gray-500">
+                Vista con sus datos reales, tal como quedará tras el cambio.
               </span>
             </ModalHeader>
-            <ModalBody className="items-center pb-6">
-              <div className="w-[380px] max-w-full overflow-hidden rounded-[2.4rem] border-8 border-slate-900 bg-background shadow-2xl">
-                {/* Device chrome: a quiet notch bar sells the "their phone" frame. */}
-                <div className="flex justify-center bg-background pb-1 pt-2">
-                  <span className="h-1.5 w-20 rounded-full bg-slate-900/80" />
-                </div>
-                <div className="h-[62vh] overflow-y-auto px-3 pb-4 pt-2">
+            <ModalBody className="pb-6">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="mx-auto w-full max-w-xl">
                   <PreviewBody client={client} />
                 </div>
               </div>
@@ -76,29 +70,46 @@ function PreviewBody({ client }: { client: ClientReadiness }) {
     );
   }
 
+  if (client.verdict === "plan_v2") {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white px-6 py-10 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-green-600 text-white">
+          <Icon icon="solar:clipboard-check-linear" width={24} />
+        </span>
+        <p className="text-base font-semibold text-black">
+          Verá su plan de comidas nuevo
+        </p>
+        <p className="max-w-sm text-sm text-gray-500">
+          Este cliente ya tiene un plan v2 activo: verá sus menús del día,
+          alternativas y objetivos — igual que en su pestaña de Nutrición actual
+          del panel.
+        </p>
+      </div>
+    );
+  }
+
+  // none / at_risk — render the SAME empty state the client page shows, so
+  // the trainer sees literally what the client will get.
   return (
-    <div className="flex flex-col items-center gap-3 px-4 py-16 text-center">
-      <Icon
-        className="text-default-300"
-        icon={
-          client.verdict === "plan_v2"
-            ? "solar:clipboard-check-linear"
-            : "solar:plate-linear"
-        }
-        width={40}
-      />
-      <p className="text-sm font-semibold text-foreground">
-        {client.verdict === "plan_v2"
-          ? "Verá su plan de comidas nuevo"
-          : "Verá el estado vacío"}
-      </p>
-      <p className="text-xs text-default-500">
-        {client.verdict === "plan_v2"
-          ? "Este cliente ya tiene un plan v2 activo — su vista es el plan completo con menús y alternativas."
-          : client.verdict === "at_risk"
-            ? "Su plan estructurado antiguo no se muestra en la nueva versión. Crea su plan v2 (o súbele un PDF) antes de activar."
-            : "“Tu entrenador aún no te ha asignado un plan de comidas.”"}
-      </p>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white px-6 py-12 text-center">
+        <Icon className="text-gray-300" icon="solar:plate-linear" width={44} />
+        <p className="text-lg font-semibold text-black">Sin plan activo</p>
+        <p className="max-w-sm text-sm text-gray-500">
+          Tu entrenador aún no te ha asignado un plan de comidas.
+        </p>
+      </div>
+      {client.verdict === "at_risk" ? (
+        <p className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 p-3 text-xs text-warning-700">
+          <Icon
+            className="mt-0.5 shrink-0"
+            icon="solar:danger-triangle-bold"
+            width={14}
+          />
+          Su plan estructurado antiguo no se muestra en la nueva versión. Créale
+          un plan v2 o súbele un PDF antes de activar el cambio.
+        </p>
+      ) : null}
     </div>
   );
 }
