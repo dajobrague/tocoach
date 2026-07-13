@@ -346,3 +346,88 @@ describe("OpenFoodFactsSource.getByBarcode / getByRef", () => {
     expect(result?.sourceRef).toBe("888");
   });
 });
+
+describe("OpenFoodFactsSource — serving mapping (v2 product API)", () => {
+  const base = {
+    code: "111",
+    product_name: "Pan de molde",
+    nutriments: { "energy-kcal_100g": 250 },
+  };
+
+  async function lookup(product: Record<string, unknown>) {
+    const { fetchFn } = stubFetch({ status: 1, product });
+    const source = new OpenFoodFactsSource(fetchFn, "https://stub.test");
+
+    return source.getByRef("111");
+  }
+
+  it("maps a clean serving (number + unit + label)", async () => {
+    const result = await lookup({
+      ...base,
+      serving_size: "2 rebanadas (60 g)",
+      serving_quantity: 60,
+      serving_quantity_unit: "g",
+    });
+
+    expect(result?.servingQuantity).toBe(60);
+    expect(result?.servingQuantityUnit).toBe("g");
+    expect(result?.servingSize).toBe("2 rebanadas (60 g)");
+  });
+
+  it("coerces a string-encoded serving_quantity and keeps ml units", async () => {
+    const result = await lookup({
+      ...base,
+      serving_quantity: "330",
+      serving_quantity_unit: "ml",
+    });
+
+    expect(result?.servingQuantity).toBe(330);
+    expect(result?.servingQuantityUnit).toBe("ml");
+  });
+
+  it("discards the literal 'null' serving_size and parses no weight from it", async () => {
+    const result = await lookup({ ...base, serving_size: "null" });
+
+    expect(result?.servingSize).toBeUndefined();
+    expect(result?.servingQuantity).toBeUndefined();
+  });
+
+  it("parses the weight out of free serving text when serving_quantity is missing", async () => {
+    const result = await lookup({
+      ...base,
+      serving_size: "1 loncha (22,5 g)",
+    });
+
+    expect(result?.servingQuantity).toBe(22.5);
+    expect(result?.servingQuantityUnit).toBe("g");
+    expect(result?.servingSize).toBe("1 loncha (22,5 g)");
+  });
+
+  it("back-computes the serving weight from the kcal ratio as a last resort", async () => {
+    const result = await lookup({
+      ...base,
+      nutriments: { "energy-kcal_100g": 42, "energy-kcal_serving": 139 },
+    });
+
+    // 139 / 42 × 100 ≈ 331
+    expect(result?.servingQuantity).toBe(331);
+  });
+
+  it("returns no serving fields when the product has no serving data", async () => {
+    const result = await lookup(base);
+
+    expect(result?.servingQuantity).toBeUndefined();
+    expect(result?.servingQuantityUnit).toBeUndefined();
+    expect(result?.servingSize).toBeUndefined();
+  });
+
+  it("falls back to the package unit (ml) when serving unit is absent", async () => {
+    const result = await lookup({
+      ...base,
+      product_quantity_unit: "ml",
+      serving_quantity: 250,
+    });
+
+    expect(result?.servingQuantityUnit).toBe("ml");
+  });
+});

@@ -21,6 +21,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { enrichFood } from "./cycle-api";
 import { MultiplierField } from "./multiplier-field";
 import { useFoodSearch } from "./use-cycles";
 
@@ -107,6 +108,38 @@ export function PickerDrawer({
   const recipesQuery = useRecipes({});
   const ingredientsQuery = useRecipeIngredients(selectedRecipe?.id ?? "");
   const ingredients = ingredientsQuery.data ?? [];
+
+  // Serving data lives only in the OFF product API (not the search index), so
+  // it's hydrated once per selection: server-side the result is cached on the
+  // ingredient row, so this fires a real OFF call at most once per product.
+  useEffect(() => {
+    const food = selectedFood;
+
+    if (food?.id === undefined || food.servingQuantity !== undefined) {
+      return;
+    }
+
+    const foodId = food.id;
+    let cancelled = false;
+
+    enrichFood(foodId)
+      .then((enriched) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSelectedFood((current) =>
+          current?.id === foodId ? { ...current, ...enriched } : current
+        );
+      })
+      .catch(() => {
+        // Enrichment is best-effort; the grams flow works without it.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFood?.id]);
 
   // Reset everything when the drawer closes.
   useEffect(() => {
@@ -926,6 +959,9 @@ function FoodsPanel({
           name={selectedFood.name}
           per100Kcal={selectedFood.nutrientsPer100g.kcal ?? 0}
           preview={preview}
+          servingQuantity={selectedFood.servingQuantity}
+          servingQuantityUnit={selectedFood.servingQuantityUnit}
+          servingSize={selectedFood.servingSize}
           onBack={onBack}
           onFoodGrams={onFoodGrams}
           {...(dayTotals !== undefined ? { dayTotals } : {})}
@@ -948,6 +984,9 @@ function FoodDetail({
   onFoodGrams,
   preview,
   dayTotals,
+  servingSize,
+  servingQuantity,
+  servingQuantityUnit,
   onBack,
 }: {
   name: string;
@@ -959,9 +998,31 @@ function FoodDetail({
   onFoodGrams: (value: string) => void;
   preview: Macros | null;
   dayTotals?: MacroTotals;
+  servingSize?: string | undefined;
+  servingQuantity?: number | undefined;
+  servingQuantityUnit?: "g" | "ml" | undefined;
   onBack: () => void;
 }) {
   const grams = Number(foodGrams) || 0;
+  // "1 ración = 30 g" line — weight, label text, or both when they differ.
+  const servingWeight =
+    servingQuantity !== undefined
+      ? `${servingQuantity} ${servingQuantityUnit ?? "g"}`
+      : null;
+  const servingText =
+    servingSize !== undefined && servingSize !== servingWeight
+      ? servingSize
+      : null;
+  const servingLine =
+    servingWeight !== null || servingText !== null
+      ? [
+          "1 ración:",
+          servingWeight,
+          servingText !== null ? `(${servingText})` : null,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(" ")
+      : null;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 border-t border-gray-100 pt-4">
@@ -1002,6 +1063,11 @@ function FoodDetail({
           <p className="mt-0.5 text-xs text-default-400 tabular-nums">
             {formatKcal(per100Kcal)} / 100 g
           </p>
+          {servingLine !== null && (
+            <p className="mt-0.5 text-xs text-default-500 tabular-nums">
+              {servingLine}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1028,6 +1094,18 @@ function FoodDetail({
                 variant="bordered"
                 onValueChange={onFoodGrams}
               />
+              {servingQuantity !== undefined && (
+                <Button
+                  className={
+                    grams === servingQuantity ? "bg-blue-600 text-white" : ""
+                  }
+                  size="sm"
+                  variant={grams === servingQuantity ? "solid" : "bordered"}
+                  onPress={() => onFoodGrams(String(servingQuantity))}
+                >
+                  1 ración ({servingQuantity} {servingQuantityUnit ?? "g"})
+                </Button>
+              )}
               {GRAM_CHIPS.map((value) => (
                 <Button
                   key={value}

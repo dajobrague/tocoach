@@ -31,6 +31,9 @@ function makeRow(overrides: Partial<IngredientRow> = {}): IngredientRow {
     fiber_g: 10.6,
     sat_fat_g: 1.2,
     sodium_mg: 2,
+    serving_size: null,
+    serving_quantity: null,
+    serving_quantity_unit: null,
     nutrient_extra: {},
     created_by: null,
     created_at: "2026-06-02T00:00:00Z",
@@ -65,6 +68,8 @@ function makeRepo(
 ): IngredientRepository {
   return {
     findCachedByQuery: vi.fn(async () => []),
+    findById: vi.fn(async () => null),
+    updateServing: vi.fn(async () => null),
     findCachedByRef: vi.fn(async () => null),
     insertResolved: vi.fn(async () => []),
     insertManual: vi.fn(async () => makeRow({ source: "manual" })),
@@ -366,5 +371,112 @@ describe("FoodLookupService.createManual", () => {
     expect(result.source).toBe("manual");
     expect(result.sourceRef).toBeNull();
     expect(result.name).toBe("Manual Item");
+  });
+});
+
+describe("FoodLookupService.enrichServing", () => {
+  it("hydrates serving data from the source and persists it", async () => {
+    const row = makeRow({ source: "off", source_ref: "111" });
+    const updated = makeRow({
+      source: "off",
+      source_ref: "111",
+      serving_size: "2 rebanadas (60 g)",
+      serving_quantity: 60,
+      serving_quantity_unit: "g",
+    });
+    const repo = makeRepo({
+      findById: vi.fn(async () => row),
+      updateServing: vi.fn(async () => updated),
+    });
+    const source = new MockFoodSource({
+      byRef: {
+        "111": makeResult({
+          sourceRef: "111",
+          servingSize: "2 rebanadas (60 g)",
+          servingQuantity: 60,
+          servingQuantityUnit: "g",
+        }),
+      },
+    });
+    const service = new FoodLookupService({ repo, source });
+
+    const result = await service.enrichServing(TENANT, row.id);
+
+    expect(repo.updateServing).toHaveBeenCalledWith(TENANT, row.id, {
+      serving_size: "2 rebanadas (60 g)",
+      serving_quantity: 60,
+      serving_quantity_unit: "g",
+    });
+    expect(result?.servingQuantity).toBe(60);
+    expect(result?.servingSize).toBe("2 rebanadas (60 g)");
+  });
+
+  it("marks a no-data product as checked so it is never re-fetched", async () => {
+    const row = makeRow({ source: "off", source_ref: "111" });
+    const repo = makeRepo({
+      findById: vi.fn(async () => row),
+      updateServing: vi.fn(async () =>
+        makeRow({
+          source: "off",
+          source_ref: "111",
+          serving_quantity_unit: "none",
+        })
+      ),
+    });
+    // Source knows the product but has no serving data.
+    const source = new MockFoodSource({
+      byRef: { "111": makeResult({ sourceRef: "111" }) },
+    });
+    const service = new FoodLookupService({ repo, source });
+
+    const result = await service.enrichServing(TENANT, row.id);
+
+    expect(repo.updateServing).toHaveBeenCalledWith(TENANT, row.id, {
+      serving_size: null,
+      serving_quantity: null,
+      serving_quantity_unit: "none",
+    });
+    expect(result?.servingQuantity).toBeUndefined();
+  });
+
+  it("skips the network entirely for an already-checked row", async () => {
+    const row = makeRow({
+      source: "off",
+      source_ref: "111",
+      serving_quantity_unit: "none",
+    });
+    const repo = makeRepo({ findById: vi.fn(async () => row) });
+    const source = new MockFoodSource();
+    const getRefSpy = vi.spyOn(source, "getByRef");
+    const service = new FoodLookupService({ repo, source });
+
+    await service.enrichServing(TENANT, row.id);
+
+    expect(getRefSpy).not.toHaveBeenCalled();
+    expect(repo.updateServing).not.toHaveBeenCalled();
+  });
+
+  it("degrades to the cached row when the source fails", async () => {
+    const row = makeRow({ source: "off", source_ref: "111" });
+    const repo = makeRepo({ findById: vi.fn(async () => row) });
+    const source = new MockFoodSource();
+
+    vi.spyOn(source, "getByRef").mockRejectedValue(new Error("503"));
+    const service = new FoodLookupService({ repo, source });
+
+    const result = await service.enrichServing(TENANT, row.id);
+
+    expect(result?.name).toBe(row.name);
+    expect(repo.updateServing).not.toHaveBeenCalled();
+  });
+
+  it("returns null for an unknown id (cross-tenant safe)", async () => {
+    const repo = makeRepo({ findById: vi.fn(async () => null) });
+    const service = new FoodLookupService({
+      repo,
+      source: new MockFoodSource(),
+    });
+
+    expect(await service.enrichServing(TENANT, "nope")).toBeNull();
   });
 });

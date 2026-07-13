@@ -21,6 +21,11 @@ export interface IngredientRow {
   fiber_g: number;
   sat_fat_g: number;
   sodium_mg: number;
+  /** Serving label/weight from OFF (migration 20260713110000); all null until
+   *  the row is enriched via the v2 product API (search results carry none). */
+  serving_size: string | null;
+  serving_quantity: number | null;
+  serving_quantity_unit: string | null;
   nutrient_extra: Record<string, unknown>;
   created_by: string | null;
   created_at: string;
@@ -44,6 +49,9 @@ export interface IngredientInsert {
   fiber_g: number;
   sat_fat_g: number;
   sodium_mg: number;
+  serving_size?: string;
+  serving_quantity?: number;
+  serving_quantity_unit?: string;
 }
 
 /** Caller-supplied data for a manual (non-source) ingredient. */
@@ -82,6 +90,18 @@ export function rowToFoodResult(row: IngredientRow): FoodResult {
     result.imageUrl = row.image_url;
   }
 
+  if (row.serving_size !== null && row.serving_size !== undefined) {
+    result.servingSize = row.serving_size;
+  }
+
+  const servingQuantity = Number(row.serving_quantity);
+
+  if (Number.isFinite(servingQuantity) && servingQuantity > 0) {
+    result.servingQuantity = servingQuantity;
+    result.servingQuantityUnit =
+      row.serving_quantity_unit === "ml" ? "ml" : "g";
+  }
+
   return result;
 }
 
@@ -116,7 +136,23 @@ export function foodResultToInsert(
     insert.image_url = r.imageUrl;
   }
 
+  if (r.servingSize !== undefined) {
+    insert.serving_size = r.servingSize;
+  }
+
+  if (r.servingQuantity !== undefined) {
+    insert.serving_quantity = r.servingQuantity;
+    insert.serving_quantity_unit = r.servingQuantityUnit ?? "g";
+  }
+
   return insert;
+}
+
+/** Serving fields written by the lazy OFF enrichment (nulls = "none found"). */
+export interface ServingPatch {
+  serving_size: string | null;
+  serving_quantity: number | null;
+  serving_quantity_unit: string | null;
 }
 
 /** Persistence boundary for cached ingredients. Always tenant-scoped. */
@@ -125,6 +161,13 @@ export interface IngredientRepository {
     tenantHost: string,
     query: string
   ): Promise<IngredientRow[]>;
+  findById(tenantHost: string, id: string): Promise<IngredientRow | null>;
+  /** Persist serving data on a cached row; returns the updated row or null. */
+  updateServing(
+    tenantHost: string,
+    id: string,
+    patch: ServingPatch
+  ): Promise<IngredientRow | null>;
   findCachedByRef(
     tenantHost: string,
     source: IngredientRow["source"],
@@ -168,6 +211,44 @@ export class SupabaseIngredientRepository implements IngredientRepository {
     }
 
     return (data ?? []) as IngredientRow[];
+  }
+
+  async findById(
+    tenantHost: string,
+    id: string
+  ): Promise<IngredientRow | null> {
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(`findById failed: ${error.message}`);
+    }
+
+    return (data as IngredientRow | null) ?? null;
+  }
+
+  async updateServing(
+    tenantHost: string,
+    id: string,
+    patch: ServingPatch
+  ): Promise<IngredientRow | null> {
+    const { data, error } = await this.client
+      .from(TABLE)
+      .update(patch)
+      .eq("tenant_host", tenantHost)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(`updateServing failed: ${error.message}`);
+    }
+
+    return (data as IngredientRow | null) ?? null;
   }
 
   async findCachedByRef(

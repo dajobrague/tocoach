@@ -293,6 +293,23 @@ export function searchFoods(
   return getData<FoodSearchResult[]>(`/api/foods/search?${params.toString()}`);
 }
 
+/** Serving data for a cached food, lazily hydrated from OFF (see the enrich
+ *  route). Only the fields relevant to the "u" grams-per-piece prefill. */
+export interface FoodServingInfo {
+  servingQuantity?: number;
+  servingQuantityUnit?: "g" | "ml";
+  servingSize?: string;
+}
+
+/** Fill a cached food's serving data from OFF (idempotent, cached server-side). */
+export function enrichFoodServing(
+  ingredientId: string
+): Promise<FoodServingInfo> {
+  return sendJson<FoodServingInfo>("/api/foods/enrich", "POST", {
+    id: ingredientId,
+  });
+}
+
 export function addIngredientFromFood(
   recipeId: string,
   args: AddFromFoodArgs

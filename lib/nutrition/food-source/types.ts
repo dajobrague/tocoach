@@ -35,6 +35,16 @@ export interface FoodResult {
   brand?: string;
   /** Optional product thumbnail URL; absent (not `undefined`) when none. */
   imageUrl?: string;
+  /**
+   * Human serving label as printed on the package ("2 rebanadas (60 g)").
+   * Free text, localized, unreliable — display-only, never parsed for math.
+   */
+  servingSize?: string;
+  /** One serving in {@link servingQuantityUnit} (30 → "30 g"). Only present
+   *  when a positive numeric weight could be established. */
+  servingQuantity?: number;
+  /** Unit of {@link servingQuantity}: grams for foods, ml for beverages. */
+  servingQuantityUnit?: "g" | "ml";
   /** Quantities are always expressed in grams for v2. */
   defaultUnit: "g";
   nutrientsPer100g: NutrientsPer100g;

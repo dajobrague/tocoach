@@ -6,9 +6,10 @@ import type { Selection } from "@heroui/react";
 
 import { Input, Select, SelectItem } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DeleteConfirmButton } from "./delete-confirm-button";
+import { enrichFoodServing } from "./recipe-api";
 import { formatKcal } from "./recipe-format";
 
 import {
@@ -77,6 +78,10 @@ export function IngredientRow({
   const [gpu, setGpu] = useState(
     item.grams_per_unit !== null ? String(item.grams_per_unit) : ""
   );
+  // Live draft mirror so async callbacks never act on a stale value.
+  const gpuRef = useRef(gpu);
+
+  gpuRef.current = gpu;
   // Per-100g macro corrections: expanded editor with its own draft values.
   const [macrosOpen, setMacrosOpen] = useState(false);
   const [macroDraft, setMacroDraft] = useState<Record<string, string>>({});
@@ -171,6 +176,41 @@ export function IngredientRow({
       patch.gramsPerUnit = null;
     }
     onUpdate(patch);
+
+    // The product's real serving weight beats the generic 100 g seed. It's
+    // hydrated lazily from OFF (cached server-side); the follow-up patch only
+    // lands while the seeded default is still untouched, so a trainer edit in
+    // between always wins.
+    if (
+      next === "u" &&
+      item.grams_per_unit === null &&
+      item.ingredient_id !== null
+    ) {
+      enrichFoodServing(item.ingredient_id)
+        .then((serving) => {
+          const weight = serving.servingQuantity;
+          // Only land while the seeded default is still untouched (the ref
+          // reads the live draft, not this closure's stale copy).
+          const untouched =
+            gpuRef.current === "" ||
+            gpuRef.current === String(DEFAULT_GRAMS_PER_UNIT);
+
+          if (
+            weight === undefined ||
+            weight <= 0 ||
+            weight === DEFAULT_GRAMS_PER_UNIT ||
+            untouched === false
+          ) {
+            return;
+          }
+
+          setGpu(String(weight));
+          onUpdate({ ingredientRowId: item.id, gramsPerUnit: weight });
+        })
+        .catch(() => {
+          // Best-effort: the 100 g seed stays if OFF has nothing.
+        });
+    }
   };
 
   return (

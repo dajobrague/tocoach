@@ -218,6 +218,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
     expect(frozen.ingredients).toEqual([
       {
         name: "Avena",
+        brand: null,
         quantity: 200,
         unit: "g",
         gramsPerUnit: null,
@@ -255,6 +256,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
     expect(snap2.ingredients).toEqual([
       {
         name: "Avena",
+        brand: null,
         quantity: 50,
         unit: "g",
         gramsPerUnit: null,
@@ -292,6 +294,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
     expect(frozen.ingredients).toEqual([
       {
         name: "Huevo",
+        brand: null,
         quantity: 2,
         unit: "u",
         gramsPerUnit: 60,
@@ -327,6 +330,7 @@ describe("MealSlotOptionService snapshot immutability (§4.1, local DB)", () => 
     expect(frozen.ingredients).toEqual([
       {
         name: "Plátano",
+        brand: null,
         quantity: 120,
         unit: "g",
         gramsPerUnit: null,

@@ -117,6 +117,63 @@ export class FoodLookupService {
     return this.lookupByRef(tenantHost, code, (c) => this.source.getByRef(c));
   }
 
+  /**
+   * Lazily fill an OFF-backed cache row's serving data (label + weight) from
+   * the v2 product API — the search index doesn't carry serving fields, so
+   * they're hydrated once, when a trainer actually selects the food. Rows
+   * already checked (any serving column set, including an explicit
+   * empty-string marker for "OFF has nothing") are returned as-is with no
+   * network call, which keeps us far under OFF's 15 req/min product limit.
+   * A source failure degrades to the cached row unchanged.
+   */
+  async enrichServing(
+    tenantHost: string,
+    ingredientId: string
+  ): Promise<FoodResult | null> {
+    const row = await this.repo.findById(tenantHost, ingredientId);
+
+    if (row === null) {
+      return null;
+    }
+
+    const alreadyChecked =
+      row.serving_size !== null ||
+      row.serving_quantity !== null ||
+      row.serving_quantity_unit !== null;
+
+    if (
+      row.source !== "off" ||
+      row.source_ref === null ||
+      alreadyChecked === true
+    ) {
+      return rowToFoodResult(row);
+    }
+
+    let fresh: FoodResult | null = null;
+
+    try {
+      fresh = await this.source.getByRef(row.source_ref);
+    } catch (error) {
+      console.warn("[FoodLookupService] serving enrichment failed:", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return rowToFoodResult(row);
+    }
+
+    // Mark the row as checked even when OFF has no serving data (unit set,
+    // quantity/size null) so the next selection doesn't re-hit the API.
+    const updated = await this.repo.updateServing(tenantHost, ingredientId, {
+      serving_size: fresh?.servingSize ?? null,
+      serving_quantity: fresh?.servingQuantity ?? null,
+      serving_quantity_unit:
+        fresh?.servingQuantityUnit ??
+        (fresh?.servingQuantity !== undefined ? "g" : "none"),
+    });
+
+    return rowToFoodResult(updated ?? row);
+  }
+
   /** Create a manual ingredient, persist it, and return the mapped result. */
   async createManual(
     tenantHost: string,

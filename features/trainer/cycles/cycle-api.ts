@@ -81,6 +81,11 @@ export interface FoodHit {
   name: string;
   brand?: string;
   imageUrl?: string;
+  /** Serving label from the package ("2 rebanadas (60 g)"); display-only. */
+  servingSize?: string;
+  /** One serving in {@link servingQuantityUnit}; absent until enriched. */
+  servingQuantity?: number;
+  servingQuantityUnit?: "g" | "ml";
   nutrientsPer100g: Record<string, number>;
 }
 
@@ -551,6 +556,11 @@ export function assignDayTarget(
 
 export function searchRecipes(query: string): Promise<RecipeHit[]> {
   return getJson<RecipeHit[]>(`/api/recipes?q=${encodeURIComponent(query)}`);
+}
+
+/** Fill a cached food's serving data (label + weight) from OFF, once. */
+export function enrichFood(id: string): Promise<FoodHit> {
+  return sendJson<FoodHit>("/api/foods/enrich", "POST", { id });
 }
 
 export function searchFoods(query: string, brand?: string): Promise<FoodHit[]> {

@@ -172,7 +172,112 @@ function mapProduct(
     result.imageUrl = imageUrl;
   }
 
+  const serving = mapServing(record);
+
+  if (serving.servingSize !== null) {
+    result.servingSize = serving.servingSize;
+  }
+
+  if (serving.servingQuantity !== null) {
+    result.servingQuantity = serving.servingQuantity;
+    result.servingQuantityUnit = serving.servingQuantityUnit;
+  }
+
   return result;
+}
+
+/**
+ * Extract serving data from an OFF product, defensively (see the OFF data
+ * pitfalls: only the v2 product API carries these fields — the
+ * Search-a-licious index does not — `serving_quantity` is sometimes a string,
+ * `serving_size` is free text that can literally be `"null"`, and beverages
+ * are in ml, not g).
+ *
+ * The numeric weight is established in priority order:
+ * 1. `serving_quantity` (coerced; must be a positive finite number),
+ * 2. a number parsed from the `serving_size` text ("2 rebanadas (60 g)" → 60),
+ * 3. back-computed from `energy-kcal_serving / energy-kcal_100g × 100`.
+ */
+function mapServing(record: Record<string, unknown>): {
+  servingSize: string | null;
+  servingQuantity: number | null;
+  servingQuantityUnit: "g" | "ml";
+} {
+  const servingSize = sanitizeServingText(record["serving_size"]);
+
+  // Unit: prefer the explicit serving unit; fall back to the package unit
+  // (a beverage's package is ml too); grams only as the last resort.
+  const explicitUnit = normalizeServingUnit(record["serving_quantity_unit"]);
+  const packageUnit = normalizeServingUnit(record["product_quantity_unit"]);
+  const servingQuantityUnit = explicitUnit ?? packageUnit ?? "g";
+
+  let servingQuantity = toPositiveNumber(record["serving_quantity"]);
+
+  if (servingQuantity === null && servingSize !== null) {
+    servingQuantity = parseWeightFromText(servingSize);
+  }
+
+  if (servingQuantity === null) {
+    const nutriments = asRecord(record["nutriments"]);
+    const per100 = toPositiveNumber(nutriments["energy-kcal_100g"]);
+    const perServing = toPositiveNumber(nutriments["energy-kcal_serving"]);
+
+    if (per100 !== null && perServing !== null) {
+      servingQuantity = Math.round((perServing / per100) * 100);
+    }
+  }
+
+  return { servingSize, servingQuantity, servingQuantityUnit };
+}
+
+/** Serving text is contributor free text; discard placeholders ("null",
+ *  "serving", lone dashes) that OFF itself flags as data-quality errors. */
+function sanitizeServingText(value: unknown): string | null {
+  const text = asNonEmptyString(value);
+
+  if (text === null) {
+    return null;
+  }
+
+  const lowered = text.toLowerCase();
+
+  if (lowered === "null" || lowered === "serving" || /^[-–—.]+$/.test(text)) {
+    return null;
+  }
+
+  return text;
+}
+
+function normalizeServingUnit(value: unknown): "g" | "ml" | null {
+  const unit = asNonEmptyString(value)?.toLowerCase() ?? null;
+
+  if (unit === "g" || unit === "gr") {
+    return "g";
+  }
+
+  if (unit === "ml") {
+    return "ml";
+  }
+
+  return null;
+}
+
+/** First "<number> g|gr|ml" in a serving text; comma decimals accepted. */
+function parseWeightFromText(text: string): number | null {
+  const match = /(\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\b/i.exec(text);
+
+  if (match === null || match[1] === undefined) {
+    return null;
+  }
+
+  return toPositiveNumber(Number(match[1].replace(",", ".")));
+}
+
+/** Coerce to a positive finite number (strings accepted); anything else → null. */
+function toPositiveNumber(value: unknown): number | null {
+  const n = Number(value);
+
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
