@@ -556,6 +556,38 @@ export function assignDayTarget(
   );
 }
 
+/** The client's PDF diet as the trainer sees it (legacy = read-only origin). */
+export interface DietPdfInfo {
+  url: string;
+  name: string;
+  source: "v2" | "legacy";
+}
+
+export function fetchDietPdf(clientId: number): Promise<DietPdfInfo | null> {
+  return getJson<DietPdfInfo | null>(`/api/diet-pdf?clientId=${clientId}`);
+}
+
+/** Upload/replace the client's PDF diet (multipart; 20MB server cap). */
+export function uploadDietPdf(
+  clientId: number,
+  file: File
+): Promise<DietPdfInfo> {
+  const body = new FormData();
+
+  body.set("clientId", String(clientId));
+  body.set("pdf", file);
+
+  return fetch("/api/diet-pdf", {
+    method: "POST",
+    credentials: "same-origin",
+    body,
+  }).then(readEnvelope<DietPdfInfo>);
+}
+
+export function deleteDietPdf(clientId: number): Promise<void> {
+  return sendJson<void>(`/api/diet-pdf?clientId=${clientId}`, "DELETE");
+}
+
 export function searchRecipes(query: string): Promise<RecipeHit[]> {
   return getJson<RecipeHit[]>(`/api/recipes?q=${encodeURIComponent(query)}`);
 }

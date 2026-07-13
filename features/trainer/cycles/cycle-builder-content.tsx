@@ -25,6 +25,7 @@ import { DEFAULT_TARGETS, dayTotals, slotComponents } from "./cycle-math";
 import { CycleSummaryCard } from "./cycle-summary-card";
 import { DayCopyModal, type DayCopyMode } from "./day-copy-modal";
 import { DaySelector } from "./day-selector";
+import { DietPdfSection } from "./diet-pdf-section";
 import { EditPortionsModal } from "./edit-portions-modal";
 import { GoalsSection } from "./goals-section";
 import { MealPlanHeader } from "./meal-plan-header";
@@ -75,7 +76,9 @@ export function CycleBuilderContent({
   const renameDayM = useRenameDay(activeId ?? "none");
   const targets = goals ?? DEFAULT_TARGETS;
 
-  const [builderTab, setBuilderTab] = useState<"plan" | "goals">("plan");
+  const [builderTab, setBuilderTab] = useState<"plan" | "goals" | "pdf">(
+    "plan"
+  );
   const [selectedDay, setSelectedDay] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{
@@ -223,7 +226,9 @@ export function CycleBuilderContent({
             }}
             selectedKey={builderTab}
             variant="light"
-            onSelectionChange={(key) => setBuilderTab(key as "plan" | "goals")}
+            onSelectionChange={(key) =>
+              setBuilderTab(key as "plan" | "goals" | "pdf")
+            }
           >
             <Tab
               key="goals"
@@ -243,11 +248,24 @@ export function CycleBuilderContent({
                 </span>
               }
             />
+            <Tab
+              key="pdf"
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Icon icon="solar:document-text-linear" width={16} />
+                  Dieta PDF
+                </span>
+              }
+            />
           </Tabs>
         )}
 
         {isLoading === false && builderTab === "goals" ? (
           <GoalsSection clientId={clientId} />
+        ) : null}
+
+        {isLoading === false && builderTab === "pdf" ? (
+          <DietPdfSection clientId={clientId} />
         ) : null}
 
         {isLoading === false && builderTab === "plan" && hasCycles === false ? (

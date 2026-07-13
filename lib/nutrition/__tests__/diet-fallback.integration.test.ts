@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { getClientDietPdf } from "../diet-fallback";
+import {
+  deleteClientDietPdf,
+  getClientDietPdf,
+  getClientDietPdfWithSource,
+  upsertClientDietPdf,
+} from "../diet-fallback";
 
 import {
   TEST_TENANT_HOST,
@@ -162,5 +167,92 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
     const result = await getClientDietPdf(db, TEST_TENANT_HOST, clientId);
 
     expect(result).not.toBeNull();
+  });
+});
+
+describe("client_diet_pdfs (v2 rung) precedence and writes", () => {
+  async function cleanV2Rows(): Promise<void> {
+    await db
+      .from("client_diet_pdfs")
+      .delete()
+      .eq("tenant_host", TEST_TENANT_HOST);
+  }
+
+  beforeEach(cleanV2Rows);
+  afterAll(cleanV2Rows);
+
+  it("a v2 upload beats the legacy pointer", async () => {
+    await seedLegacyPlan({ pdf_url: "https://cdn.test/legacy.pdf" });
+    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
+      url: "https://cdn.test/v2.pdf",
+      name: "dieta-v2.pdf",
+    });
+
+    expect(
+      await getClientDietPdfWithSource(db, TEST_TENANT_HOST, clientId)
+    ).toEqual({
+      url: "https://cdn.test/v2.pdf",
+      name: "dieta-v2.pdf",
+      source: "v2",
+    });
+  });
+
+  it("upsert replaces the previous upload and reports its url", async () => {
+    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
+      url: "https://cdn.test/first.pdf",
+      name: "primera.pdf",
+    });
+
+    const { previousUrl } = await upsertClientDietPdf(
+      db,
+      TEST_TENANT_HOST,
+      clientId,
+      { url: "https://cdn.test/second.pdf", name: "segunda.pdf" }
+    );
+
+    expect(previousUrl).toBe("https://cdn.test/first.pdf");
+
+    const current = await getClientDietPdfWithSource(
+      db,
+      TEST_TENANT_HOST,
+      clientId
+    );
+
+    expect(current?.url).toBe("https://cdn.test/second.pdf");
+  });
+
+  it("deleting the v2 row falls back to the legacy pointer", async () => {
+    await seedLegacyPlan({ pdf_url: "https://cdn.test/legacy.pdf" });
+    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
+      url: "https://cdn.test/v2.pdf",
+      name: "dieta-v2.pdf",
+    });
+
+    const { removedUrl } = await deleteClientDietPdf(
+      db,
+      TEST_TENANT_HOST,
+      clientId
+    );
+
+    expect(removedUrl).toBe("https://cdn.test/v2.pdf");
+
+    const after = await getClientDietPdfWithSource(
+      db,
+      TEST_TENANT_HOST,
+      clientId
+    );
+
+    expect(after?.source).toBe("legacy");
+    expect(after?.url).toBe("https://cdn.test/legacy.pdf");
+  });
+
+  it("deleting when nothing exists is a clean no-op", async () => {
+    const { removedUrl } = await deleteClientDietPdf(
+      db,
+      TEST_TENANT_HOST,
+      clientId
+    );
+
+    expect(removedUrl).toBeNull();
   });
 });

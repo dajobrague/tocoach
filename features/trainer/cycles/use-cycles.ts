@@ -28,9 +28,11 @@ import {
   createCycle,
   createGoalPreset,
   dayReorderMapping,
+  deleteDietPdf,
   deleteGoalPreset,
   deleteOption,
   deleteSlot,
+  fetchDietPdf,
   fetchClientGoals,
   fetchCycleTree,
   listCycles,
@@ -46,6 +48,7 @@ import {
   updateOptionIngredients,
   updateOptionPortions,
   updateSlot,
+  uploadDietPdf,
   type OptionIngredientEdit,
 } from "./cycle-api";
 
@@ -456,5 +459,35 @@ export function useFoodSearch(query: string, brand = "") {
     enabled: debounced.length >= 2,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+  });
+}
+
+const dietPdfKey = (clientId: number) => ["diet-pdf", clientId] as const;
+
+/** The client's PDF diet (v2 upload or legacy pointer), or null. */
+export function useDietPdf(clientId: number) {
+  return useQuery({
+    queryKey: dietPdfKey(clientId),
+    queryFn: () => fetchDietPdf(clientId),
+  });
+}
+
+export function useUploadDietPdf(clientId: number) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (file: File) => uploadDietPdf(clientId, file),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: dietPdfKey(clientId) }),
+  });
+}
+
+export function useDeleteDietPdf(clientId: number) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => deleteDietPdf(clientId),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: dietPdfKey(clientId) }),
   });
 }
