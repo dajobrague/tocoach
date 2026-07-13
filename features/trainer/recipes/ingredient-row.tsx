@@ -172,8 +172,25 @@ export function IngredientRow({
 
     if (next === "u") {
       patch.gramsPerUnit = item.grams_per_unit ?? DEFAULT_GRAMS_PER_UNIT;
-    } else if (item.grams_per_unit !== null) {
-      patch.gramsPerUnit = null;
+      // The old amount was grams/ml — carrying it over would read as "100
+      // pieces". Pieces restart at 1; the trainer adjusts the count from there.
+      patch.quantity = 1;
+      setQty("1");
+    } else {
+      if (item.grams_per_unit !== null) {
+        patch.gramsPerUnit = null;
+      }
+
+      // Leaving pieces: convert the line to its weight equivalent so 2 u ×
+      // 30 g becomes 60 g (or 0.06 lt) instead of a meaningless "2 g".
+      if (unit === "u") {
+        const grams = toGrams(item.quantity, "u", item.grams_per_unit);
+        const converted = next === "lt" ? grams / 1000 : grams;
+        const rounded = Math.round(converted * 100) / 100;
+
+        patch.quantity = rounded;
+        setQty(String(rounded));
+      }
     }
     onUpdate(patch);
 

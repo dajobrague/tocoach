@@ -86,6 +86,17 @@ describe("buildAddFromFoodPayload", () => {
     expect("image_url" in payload).toBe(false);
   });
 
+  it("links the line to its cache row when the food carries an id", () => {
+    const cached: FoodSearchResult = { ...food, id: "cache-row-1" };
+    const payload = buildAddFromFoodPayload({ food: cached, quantity: 50 });
+
+    expect(payload.ingredient_id).toBe("cache-row-1");
+    // A food without an id (not yet cached) sends none.
+    expect(
+      "ingredient_id" in buildAddFromFoodPayload({ food, quantity: 50 })
+    ).toBe(false);
+  });
+
   it("honors an explicit unit override", () => {
     const payload = buildAddFromFoodPayload({
       food,

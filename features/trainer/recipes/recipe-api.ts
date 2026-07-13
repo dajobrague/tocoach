@@ -64,6 +64,10 @@ export interface RecipeMediaItem {
 }
 
 export interface FoodSearchResult {
+  /** Ingredients-cache row id — always present on /api/foods/search results
+   *  (they're persisted before being returned). Links the recipe line back to
+   *  the cache so serving data can be hydrated later. */
+  id?: string;
   source: "off" | "manual" | "seed";
   sourceRef: string | null;
   name: string;
@@ -120,6 +124,9 @@ export function buildAddFromFoodPayload(
   // the ingredient is beyond its name. Omitted when the food has neither.
   if (args.food.brand !== undefined) payload.brand = args.food.brand;
   if (args.food.imageUrl !== undefined) payload.image_url = args.food.imageUrl;
+  // Link the line to its cache row — without this the serving-weight prefill
+  // (unit "u") has nothing to enrich from.
+  if (args.food.id !== undefined) payload.ingredient_id = args.food.id;
 
   return payload;
 }
