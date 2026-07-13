@@ -1,6 +1,6 @@
 "use client";
 
-import type { SlotOption } from "./cycle-api";
+import type { FoodHit, OptionIngredientEdit, SlotOption } from "./cycle-api";
 
 import {
   Button,
@@ -10,11 +10,14 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
+  Spinner,
   Textarea,
 } from "@heroui/react";
+import { Icon } from "@iconify/react";
 import { useState } from "react";
 
 import { MultiplierField } from "./multiplier-field";
+import { useFoodSearch } from "./use-cycles";
 
 import {
   RECIPE_UNIT_LABELS,
@@ -22,19 +25,19 @@ import {
 } from "@/lib/nutrition/recipes/unit-conversion";
 
 interface EditPortionsModalProps {
-  /** The option being re-portioned, or null when the modal is closed. */
+  /** The option being edited, or null when the modal is closed. */
   option: SlotOption | null;
   busy: boolean;
   onClose: () => void;
-  onSave: (quantities: number[], trainerComment: string) => void;
+  onSave: (edits: OptionIngredientEdit[], trainerComment: string) => void;
 }
 
 /**
- * Edit an assigned option's per-client portions. Reads the option's own frozen
- * snapshot (never the recipe library) and sends a new amount per ingredient, in
- * that ingredient's own unit (pieces for "u", grams for "g", …); the unit and
- * grams-per-piece are fixed by the recipe and not editable here. The server
- * re-applies the amounts and recomputes the totals (unit-aware).
+ * Per-client edit of an assigned option: re-portion the frozen snapshot's
+ * lines, REMOVE lines, and ADD raw foods — all specific to this client, never
+ * touching the recipe library. Reads only the option's own snapshot; the save
+ * sends an explicit keep/add line list and the server freezes each added food
+ * and recomputes the totals (unit-aware).
  */
 export function EditPortionsModal({
   option,
@@ -43,7 +46,7 @@ export function EditPortionsModal({
   onSave,
 }: EditPortionsModalProps) {
   return (
-    <Modal isOpen={option !== null} size="md" onClose={onClose}>
+    <Modal isOpen={option !== null} size="lg" onClose={onClose}>
       <ModalContent>
         {option !== null ? (
           <PortionsForm
@@ -59,6 +62,21 @@ export function EditPortionsModal({
   );
 }
 
+/** A row of the editor: an existing snapshot line, or a food being added. */
+type EditLine =
+  | {
+      kind: "keep";
+      /** Index of the line in the option's CURRENT snapshot. */
+      index: number;
+      name: string;
+      unit: string;
+      gramsPerUnit: number | null;
+      /** The amount the modal opened with — the ×1 multiplier reference. */
+      base: number;
+      amount: string;
+    }
+  | { kind: "add"; foodId: string; name: string; amount: string };
+
 function PortionsForm({
   option,
   busy,
@@ -68,21 +86,66 @@ function PortionsForm({
   option: SlotOption;
   busy: boolean;
   onClose: () => void;
-  onSave: (quantities: number[], trainerComment: string) => void;
+  onSave: (edits: OptionIngredientEdit[], trainerComment: string) => void;
 }) {
-  const ingredients = option.item_snapshot.ingredients;
-  // Prefill from the snapshot's current amounts (fresh per option via `key`).
-  const [amounts, setAmounts] = useState<string[]>(() =>
-    ingredients.map((ing) => String(ing.quantity))
+  // Prefill from the snapshot's current lines (fresh per option via `key`).
+  const [lines, setLines] = useState<EditLine[]>(() =>
+    option.item_snapshot.ingredients.map((ing, index) => ({
+      kind: "keep",
+      index,
+      name: ing.name,
+      unit: ing.unit,
+      gramsPerUnit: ing.gramsPerUnit,
+      base: Number(ing.quantity),
+      amount: String(ing.quantity),
+    }))
   );
   const [comment, setComment] = useState(
     () => option.item_snapshot.trainerComment ?? ""
   );
+  const [foodQuery, setFoodQuery] = useState("");
+  const foodsQuery = useFoodSearch(foodQuery);
+
+  const setAmount = (row: number, value: string) =>
+    setLines((prev) =>
+      prev.map((line, idx) => (idx === row ? { ...line, amount: value } : line))
+    );
+  const removeLine = (row: number) =>
+    setLines((prev) => prev.filter((_, idx) => idx !== row));
+  const addFood = (hit: FoodHit) => {
+    if (hit.id === undefined) return;
+    const foodId = hit.id;
+
+    setLines((prev) => [
+      ...prev,
+      { kind: "add", foodId, name: hit.name, amount: "100" },
+    ]);
+    setFoodQuery("");
+  };
+
+  // An added food with no positive amount is never a deliberate line.
+  const hasInvalidAdd = lines.some(
+    (line) => line.kind === "add" && Number(line.amount) > 0 === false
+  );
+  const canSave = busy === false && lines.length > 0 && hasInvalidAdd === false;
 
   const save = () => {
-    if (busy) return;
+    if (canSave === false) return;
     onSave(
-      ingredients.map((_, idx) => Number(amounts[idx]) || 0),
+      lines.map(
+        (line): OptionIngredientEdit =>
+          line.kind === "keep"
+            ? {
+                kind: "keep",
+                index: line.index,
+                quantity: Number(line.amount) || 0,
+              }
+            : {
+                kind: "add",
+                ingredientId: line.foodId,
+                quantity: Number(line.amount) || 0,
+              }
+      ),
       comment.trim()
     );
   };
@@ -92,54 +155,66 @@ function PortionsForm({
       <ModalHeader className="flex flex-col gap-0.5">
         <span className="text-sm font-medium">{option.item_snapshot.name}</span>
         <span className="text-xs font-normal text-default-500">
-          Cantidades para este cliente
+          Alimentos y cantidades para este cliente
         </span>
       </ModalHeader>
       <ModalBody className="gap-2">
-        {ingredients.map((ing, idx) => {
-          const unit = normalizeUnit(ing.unit);
+        {lines.length === 0 ? (
+          <p className="rounded-large bg-warning-50 px-3 py-2 text-xs text-warning-700">
+            La opción debe tener al menos un alimento. Añade uno abajo o
+            cancela.
+          </p>
+        ) : null}
+
+        {lines.map((line, row) => {
+          const unit = line.kind === "keep" ? normalizeUnit(line.unit) : "g";
           const perPiece =
+            line.kind === "keep" &&
             unit === "u" &&
-            ing.gramsPerUnit !== null &&
-            Number.isFinite(ing.gramsPerUnit)
-              ? `× ${ing.gramsPerUnit} g`
+            line.gramsPerUnit !== null &&
+            Number.isFinite(line.gramsPerUnit)
+              ? `× ${line.gramsPerUnit} g`
               : null;
           // ×1 reference is the amount the modal opened with; the multiplier
           // and the amount input stay linked both ways from there.
-          const base = Number(ing.quantity);
           const rowMultiplier =
-            base > 0
-              ? Math.round(((Number(amounts[idx]) || 0) / base) * 100) / 100
+            line.kind === "keep" && line.base > 0
+              ? Math.round(((Number(line.amount) || 0) / line.base) * 100) / 100
               : null;
 
           return (
-            <div key={`${idx}-${ing.name}`} className="flex items-center gap-3">
+            <div
+              key={line.kind === "keep" ? `keep-${line.index}` : `add-${row}`}
+              className="flex items-center gap-2"
+            >
               <span className="min-w-0 flex-1 truncate text-sm text-gray-900">
-                {ing.name}
+                {line.name}
+                {line.kind === "add" ? (
+                  <span className="ml-1.5 rounded bg-success-50 px-1 py-0.5 text-[10px] font-medium text-success-700">
+                    nuevo
+                  </span>
+                ) : null}
               </span>
               {perPiece !== null && (
                 <span className="text-[10px] text-default-400 tabular-nums">
                   {perPiece}
                 </span>
               )}
-              {rowMultiplier !== null && (
+              {rowMultiplier !== null && line.kind === "keep" && (
                 <MultiplierField
-                  ariaLabel={`Multiplicador de ${ing.name}`}
+                  ariaLabel={`Multiplicador de ${line.name}`}
                   disabled={busy}
                   value={rowMultiplier}
                   onCommit={(value) =>
-                    setAmounts((prev) => {
-                      const next = [...prev];
-
-                      next[idx] = String(Math.round(base * value * 100) / 100);
-
-                      return next;
-                    })
+                    setAmount(
+                      row,
+                      String(Math.round(line.base * value * 100) / 100)
+                    )
                   }
                 />
               )}
               <Input
-                aria-label={`Cantidad de ${ing.name}`}
+                aria-label={`Cantidad de ${line.name}`}
                 className="w-24"
                 endContent={
                   <span className="text-xs text-default-400">
@@ -149,20 +224,89 @@ function PortionsForm({
                 isDisabled={busy}
                 size="sm"
                 type="number"
-                value={amounts[idx] ?? ""}
-                onValueChange={(value) =>
-                  setAmounts((prev) => {
-                    const next = [...prev];
-
-                    next[idx] = value;
-
-                    return next;
-                  })
-                }
+                value={line.amount}
+                onValueChange={(value) => setAmount(row, value)}
               />
+              <Button
+                isIconOnly
+                aria-label={`Quitar ${line.name}`}
+                isDisabled={busy}
+                size="sm"
+                variant="light"
+                onPress={() => removeLine(row)}
+              >
+                <Icon
+                  className="text-default-400"
+                  icon="solar:trash-bin-trash-linear"
+                  width={16}
+                />
+              </Button>
             </div>
           );
         })}
+
+        <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+          <span className="text-xs font-medium text-default-600">
+            Añadir alimento
+          </span>
+          <Input
+            isClearable
+            isDisabled={busy}
+            placeholder="Buscar un alimento..."
+            size="sm"
+            startContent={
+              <Icon
+                className="text-default-400"
+                icon="solar:magnifer-linear"
+                width={14}
+              />
+            }
+            value={foodQuery}
+            variant="bordered"
+            onClear={() => setFoodQuery("")}
+            onValueChange={setFoodQuery}
+          />
+          {foodQuery.trim().length > 0 ? (
+            foodsQuery.isLoading ? (
+              <div className="flex justify-center py-3">
+                <Spinner size="sm" />
+              </div>
+            ) : (foodsQuery.data ?? []).length === 0 ? (
+              <p className="py-1 text-xs text-default-400">
+                Sin resultados para esa búsqueda.
+              </p>
+            ) : (
+              <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                {(foodsQuery.data ?? [])
+                  .filter((hit) => hit.id !== undefined)
+                  .slice(0, 8)
+                  .map((hit, idx) => (
+                    <button
+                      key={`${hit.id}-${idx}`}
+                      className="flex items-center justify-between gap-2 rounded-medium border border-gray-200 px-2.5 py-1.5 text-left hover:border-gray-300 hover:bg-gray-50"
+                      type="button"
+                      onClick={() => addFood(hit)}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-gray-900">
+                          {hit.name}
+                        </span>
+                        {hit.brand !== undefined && hit.brand.length > 0 ? (
+                          <span className="block truncate text-[10px] text-default-400">
+                            {hit.brand}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 text-xs text-default-500 tabular-nums">
+                        {Math.round(Number(hit.nutrientsPer100g.kcal) || 0)}{" "}
+                        kcal/100g
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            )
+          ) : null}
+        </div>
 
         <Textarea
           isDisabled={busy}
@@ -178,7 +322,12 @@ function PortionsForm({
         <Button isDisabled={busy} variant="light" onPress={onClose}>
           Cancelar
         </Button>
-        <Button color="primary" isLoading={busy} onPress={save}>
+        <Button
+          color="primary"
+          isDisabled={canSave === false}
+          isLoading={busy}
+          onPress={save}
+        >
           Guardar
         </Button>
       </ModalFooter>

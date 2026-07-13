@@ -17,6 +17,8 @@ const optionMocks = vi.hoisted(() => ({
   addRecipeOption: vi.fn(),
   addFoodOption: vi.fn(),
   updateOption: vi.fn(),
+  updateOptionPortions: vi.fn(),
+  updateOptionIngredients: vi.fn(),
   deleteOption: vi.fn(),
 }));
 
@@ -455,6 +457,75 @@ describe("POST options (snapshot-on-add wiring)", () => {
     const res = await optionPOST(
       jsonReq({ source_type: "recipe", recipe_id: "r1" }),
       slotCtx()
+    );
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("PATCH option — per-client ingredient rewrite", () => {
+  it("forwards keep/add lines (and the comment) to the service", async () => {
+    optionMocks.updateOptionIngredients.mockResolvedValue({ id: "o1" });
+
+    const res = await optionPATCH(
+      jsonReq(
+        {
+          ingredients: [
+            { kind: "keep", index: 0, quantity: 120 },
+            { kind: "add", ingredient_id: "i9", quantity: 150 },
+          ],
+          trainer_comment: "Sin jamón, con cecina.",
+        },
+        "PATCH"
+      ),
+      optionCtx()
+    );
+
+    expect(res.status).toBe(200);
+    expect(optionMocks.updateOptionIngredients).toHaveBeenCalledWith(
+      "acme.tenant",
+      "o1",
+      [
+        { kind: "keep", index: 0, quantity: 120 },
+        { kind: "add", ingredientId: "i9", quantity: 150 },
+      ],
+      "Sin jamón, con cecina."
+    );
+    expect(optionMocks.updateOptionPortions).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty rewrite (an option must keep ≥ 1 line)", async () => {
+    const res = await optionPATCH(
+      jsonReq({ ingredients: [] }, "PATCH"),
+      optionCtx()
+    );
+
+    expect(res.status).toBe(400);
+    expect(optionMocks.updateOptionIngredients).not.toHaveBeenCalled();
+  });
+
+  it("rejects an add line without a positive quantity", async () => {
+    const res = await optionPATCH(
+      jsonReq(
+        { ingredients: [{ kind: "add", ingredient_id: "i9", quantity: 0 }] },
+        "PATCH"
+      ),
+      optionCtx()
+    );
+
+    expect(res.status).toBe(400);
+    expect(optionMocks.updateOptionIngredients).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the option or an added food is not the tenant's", async () => {
+    optionMocks.updateOptionIngredients.mockResolvedValue(null);
+
+    const res = await optionPATCH(
+      jsonReq(
+        { ingredients: [{ kind: "keep", index: 0, quantity: 100 }] },
+        "PATCH"
+      ),
+      optionCtx()
     );
 
     expect(res.status).toBe(404);

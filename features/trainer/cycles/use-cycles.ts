@@ -43,8 +43,10 @@ import {
   searchRecipes,
   updateCycle,
   updateGoalPreset,
+  updateOptionIngredients,
   updateOptionPortions,
   updateSlot,
+  type OptionIngredientEdit,
 } from "./cycle-api";
 
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -327,6 +329,22 @@ export function useCycleMutations(cycleId: string) {
       ),
     onSuccess: invalidate,
   });
+  const updateOptionIngredientsM = useMutation({
+    mutationFn: (vars: {
+      slotId: string;
+      optionId: string;
+      edits: OptionIngredientEdit[];
+      trainerComment?: string;
+    }) =>
+      updateOptionIngredients(
+        cycleId,
+        vars.slotId,
+        vars.optionId,
+        vars.edits,
+        vars.trainerComment
+      ),
+    onSuccess: invalidate,
+  });
   const copyDayM = useMutation({
     mutationFn: (vars: { sourceDayIndex: number; targetDayIndex: number }) =>
       copyDay(cycleId, vars.sourceDayIndex, vars.targetDayIndex),
@@ -408,6 +426,7 @@ export function useCycleMutations(cycleId: string) {
     addOptionM,
     deleteOptionM,
     updateOptionPortionsM,
+    updateOptionIngredientsM,
     copyDayM,
     addDayM,
     removeDayM,

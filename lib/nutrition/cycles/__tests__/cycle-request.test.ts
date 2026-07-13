@@ -152,4 +152,53 @@ describe("parseUpdateOption", () => {
   it("rejects a body with neither position nor quantities", () => {
     expect(parseUpdateOption({}).ok).toBe(false);
   });
+
+  it("parses an ingredient rewrite (keep + add) with a trainer comment", () => {
+    const parsed = parseUpdateOption({
+      ingredients: [
+        { kind: "keep", index: 0, quantity: 120 },
+        { kind: "add", ingredient_id: " i9 ", quantity: 150 },
+      ],
+      trainer_comment: "Sin jamón.",
+    });
+
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok === false) return;
+    expect(parsed.value.ingredientEdits).toEqual([
+      { kind: "keep", index: 0, quantity: 120 },
+      { kind: "add", ingredientId: "i9", quantity: 150 },
+    ]);
+    expect(parsed.value.trainerComment).toBe("Sin jamón.");
+  });
+
+  it("rejects an empty ingredient rewrite (≥ 1 line required)", () => {
+    expect(parseUpdateOption({ ingredients: [] }).ok).toBe(false);
+  });
+
+  it("rejects malformed rewrite lines", () => {
+    // Unknown kind.
+    expect(
+      parseUpdateOption({ ingredients: [{ kind: "swap", index: 0 }] }).ok
+    ).toBe(false);
+    // keep: negative / non-integer index, negative quantity.
+    expect(
+      parseUpdateOption({
+        ingredients: [{ kind: "keep", index: -1, quantity: 100 }],
+      }).ok
+    ).toBe(false);
+    expect(
+      parseUpdateOption({
+        ingredients: [{ kind: "keep", index: 0, quantity: -5 }],
+      }).ok
+    ).toBe(false);
+    // add: missing id, zero quantity.
+    expect(
+      parseUpdateOption({ ingredients: [{ kind: "add", quantity: 100 }] }).ok
+    ).toBe(false);
+    expect(
+      parseUpdateOption({
+        ingredients: [{ kind: "add", ingredient_id: "i9", quantity: 0 }],
+      }).ok
+    ).toBe(false);
+  });
 });

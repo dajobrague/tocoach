@@ -424,6 +424,42 @@ export function updateOptionPortions(
   );
 }
 
+/** One line of a per-client ingredient rewrite: keep an existing snapshot line
+ *  (by index, possibly re-portioned) or add a raw food (grams). Lines not
+ *  listed are removed. */
+export type OptionIngredientEdit =
+  | { kind: "keep"; index: number; quantity: number }
+  | { kind: "add"; ingredientId: string; quantity: number };
+
+/** Rewrite an option's ingredient list for this client (add/remove/re-portion).
+ *  `trainerComment` (when provided) replaces the per-client note; "" clears it. */
+export function updateOptionIngredients(
+  cycleId: string,
+  slotId: string,
+  optionId: string,
+  edits: OptionIngredientEdit[],
+  trainerComment?: string
+): Promise<SlotOption> {
+  return sendJson<SlotOption>(
+    `${BASE}/${cycleId}/slots/${slotId}/options/${optionId}`,
+    "PATCH",
+    {
+      ingredients: edits.map((edit) =>
+        edit.kind === "keep"
+          ? { kind: "keep", index: edit.index, quantity: edit.quantity }
+          : {
+              kind: "add",
+              ingredient_id: edit.ingredientId,
+              quantity: edit.quantity,
+            }
+      ),
+      ...(trainerComment !== undefined
+        ? { trainer_comment: trainerComment }
+        : {}),
+    }
+  );
+}
+
 /** A client's daily nutrition targets (kcal + macros). Same shape as MacroTotals. */
 export interface NutritionGoals {
   kcal: number;

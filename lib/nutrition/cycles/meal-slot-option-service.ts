@@ -2,9 +2,12 @@ import type { OptionSnapshot, SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  applyIngredientEdits,
   applyPortions,
   buildOptionSnapshot,
+  freezeFoodIngredient,
   withTrainerComment,
+  type IngredientEdit,
 } from "./option-snapshot";
 
 import { RecipeService } from "@/lib/nutrition/recipes/recipe-service";
@@ -272,6 +275,77 @@ export class MealSlotOptionService {
     if (error !== null) {
       throw new Error(
         `MealSlotOptionService.updateOptionPortions failed: ${error.message}`
+      );
+    }
+
+    return (data as MealSlotOptionRow | null) ?? null;
+  }
+
+  /**
+   * Rewrite an option's ingredient list for this client: keep/re-portion
+   * existing lines (by index), drop the ones not listed, and append new raw
+   * foods — each add is frozen from the tenant's ingredients table at edit
+   * time, so the snapshot stays self-contained (§4.1). Returns null when the
+   * option, an added food, or a kept index is not found for the tenant.
+   */
+  async updateOptionIngredients(
+    tenantHost: string,
+    optionId: string,
+    edits: Array<
+      | { kind: "keep"; index: number; quantity: number }
+      | { kind: "add"; ingredientId: string; quantity: number }
+    >,
+    trainerComment?: string
+  ): Promise<MealSlotOptionRow | null> {
+    const option = await this.getOption(tenantHost, optionId);
+
+    if (option === null) {
+      return null;
+    }
+
+    const resolved: IngredientEdit[] = [];
+
+    for (const edit of edits) {
+      if (edit.kind === "keep") {
+        resolved.push(edit);
+        continue;
+      }
+
+      const food = await this.readIngredient(tenantHost, edit.ingredientId);
+
+      if (food === null) {
+        return null;
+      }
+
+      resolved.push({
+        kind: "add",
+        ingredient: freezeFoodIngredient({
+          name: typeof food.name === "string" ? food.name : "",
+          quantity: edit.quantity,
+          nutrientsPer100g: food,
+        }),
+      });
+    }
+
+    const rebuilt = applyIngredientEdits(option.item_snapshot, resolved);
+
+    if (rebuilt === null) {
+      return null;
+    }
+
+    const snapshot = withTrainerComment(rebuilt, trainerComment);
+
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .update({ item_snapshot: snapshot })
+      .eq("tenant_host", tenantHost)
+      .eq("id", optionId)
+      .select()
+      .maybeSingle();
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.updateOptionIngredients failed: ${error.message}`
       );
     }
 

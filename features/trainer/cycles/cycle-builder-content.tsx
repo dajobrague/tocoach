@@ -382,17 +382,17 @@ export function CycleBuilderContent({
       />
 
       <EditPortionsModal
-        busy={mutations.updateOptionPortionsM.isPending}
+        busy={mutations.updateOptionIngredientsM.isPending}
         option={editing?.option ?? null}
         onClose={() => setEditing(null)}
-        onSave={(quantities, trainerComment) => {
+        onSave={(edits, trainerComment) => {
           if (editing === null) return;
 
-          mutations.updateOptionPortionsM.mutate(
+          mutations.updateOptionIngredientsM.mutate(
             {
               slotId: editing.slotId,
               optionId: editing.option.id,
-              quantities,
+              edits,
               trainerComment,
             },
             { onSuccess: () => setEditing(null) }

@@ -133,6 +133,79 @@ export function applyPortions(
 }
 
 /**
+ * One line of a per-client ingredient rewrite (see {@link applyIngredientEdits}):
+ * `keep` carries an existing snapshot line forward (possibly re-portioned, by
+ * its index in the CURRENT snapshot), `add` appends an already-frozen line.
+ * Lines not listed are removed.
+ */
+export type IngredientEdit =
+  | { kind: "keep"; index: number; quantity: number }
+  | { kind: "add"; ingredient: SnapshotIngredient };
+
+/**
+ * Rebuild `snapshot.ingredients` from an explicit edit list — the trainer's
+ * per-client add/remove/re-portion of a frozen option (§4.1 still holds: kept
+ * lines carry their frozen per-100g nutrients; added lines arrive frozen by
+ * the caller; the library is never consulted). Totals are recomputed
+ * (unit-aware). Returns `null` when a `keep` references a line that does not
+ * exist, or when the edit list is empty (an option must keep ≥ 1 ingredient).
+ * Pure — the input snapshot is never mutated.
+ */
+export function applyIngredientEdits(
+  snapshot: OptionSnapshot,
+  edits: IngredientEdit[]
+): OptionSnapshot | null {
+  if (edits.length === 0) {
+    return null;
+  }
+
+  const ingredients: SnapshotIngredient[] = [];
+
+  for (const edit of edits) {
+    if (edit.kind === "keep") {
+      const line = snapshot.ingredients[edit.index];
+
+      if (line === undefined) {
+        return null;
+      }
+
+      // Same guard as applyPortions: only a non-negative finite amount
+      // overrides; anything else keeps the line's current quantity.
+      const quantity =
+        Number.isFinite(edit.quantity) && edit.quantity >= 0
+          ? edit.quantity
+          : line.quantity;
+
+      ingredients.push({ ...line, quantity });
+    } else {
+      ingredients.push({ ...edit.ingredient });
+    }
+  }
+
+  return { ...snapshot, ingredients, totals: totalsFrom(ingredients) };
+}
+
+/**
+ * Freeze one raw food into a snapshot ingredient line (grams-based) — the
+ * per-100g nutrients are copied so the line needs no join back to the
+ * ingredients table. Shared by the food-option freeze and per-client adds.
+ */
+export function freezeFoodIngredient(food: {
+  name: string;
+  quantity: number;
+  unit?: string | null;
+  nutrientsPer100g: Record<string, unknown>;
+}): SnapshotIngredient {
+  return {
+    name: food.name,
+    quantity: toFinite(food.quantity),
+    unit: food.unit !== null && food.unit !== undefined ? food.unit : "g",
+    gramsPerUnit: null,
+    nutrientsPer100g: pickNutrients(food.nutrientsPer100g),
+  };
+}
+
+/**
  * Return a copy of `snapshot` with the per-client trainer note replaced:
  * `undefined` keeps the current note, a string sets it (trimmed; empty clears
  * to null). Pure — the input snapshot is never mutated.
@@ -209,13 +282,7 @@ function buildRecipeSnapshot(recipe: RecipeSnapshotInput): OptionSnapshot {
 }
 
 function buildFoodSnapshot(food: FoodSnapshotInput): OptionSnapshot {
-  const ingredient: SnapshotIngredient = {
-    name: food.name,
-    quantity: toFinite(food.quantity),
-    unit: food.unit !== null && food.unit !== undefined ? food.unit : "g",
-    gramsPerUnit: null,
-    nutrientsPer100g: pickNutrients(food.nutrientsPer100g),
-  };
+  const ingredient = freezeFoodIngredient(food);
 
   const url =
     typeof food.imageUrl === "string" && food.imageUrl.length > 0

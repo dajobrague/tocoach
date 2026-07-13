@@ -31,10 +31,18 @@ export type AddOptionBody =
       trainerComment?: string;
     };
 
+/** One line of a per-client ingredient rewrite (add/remove/re-portion). */
+export type IngredientEditBody =
+  | { kind: "keep"; index: number; quantity: number }
+  | { kind: "add"; ingredientId: string; quantity: number };
+
 export interface UpdateOptionBody {
   position?: number;
   /** Per-ingredient grams (by sort order) for a per-client re-portion. */
   quantities?: number[];
+  /** Full ingredient rewrite: lines to keep (by index) and foods to add;
+   *  anything not listed is removed. */
+  ingredientEdits?: IngredientEditBody[];
   /** Trainer's per-client note; empty string clears it. */
   trainerComment?: string;
 }
@@ -531,6 +539,18 @@ export function parseUpdateOption(
 
   if (quantities !== undefined) value.quantities = quantities;
 
+  const ingredientEdits = parseIngredientEdits(record.ingredients);
+
+  if (ingredientEdits === null) {
+    return {
+      ok: false,
+      error:
+        "ingredients debe ser una lista no vacía de líneas keep/add válidas",
+    };
+  }
+
+  if (ingredientEdits !== undefined) value.ingredientEdits = ingredientEdits;
+
   const trainerComment = parseTrainerComment(record.trainer_comment);
 
   if (trainerComment === null) {
@@ -539,11 +559,87 @@ export function parseUpdateOption(
 
   if (trainerComment !== undefined) value.trainerComment = trainerComment;
 
-  if (value.position === undefined && value.quantities === undefined) {
-    return { ok: false, error: "position o quantities es obligatorio" };
+  if (
+    value.position === undefined &&
+    value.quantities === undefined &&
+    value.ingredientEdits === undefined
+  ) {
+    return {
+      ok: false,
+      error: "position, quantities o ingredients es obligatorio",
+    };
   }
 
   return { ok: true, value };
+}
+
+/**
+ * Validate an optional ingredient rewrite: `undefined` when absent, `null`
+ * when present but malformed — not an array, empty (an option must keep at
+ * least one line), or any line that isn't a valid keep/add record. Adds
+ * require a positive quantity (a 0 g food is never a deliberate add); keeps
+ * accept ≥ 0 like the quantities op.
+ */
+function parseIngredientEdits(
+  value: unknown
+): IngredientEditBody[] | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value) === false || value.length === 0) {
+    return null;
+  }
+
+  const edits: IngredientEditBody[] = [];
+
+  for (const item of value) {
+    const record = asRecord(item);
+
+    if (record === null) {
+      return null;
+    }
+
+    if (record.kind === "keep") {
+      if (
+        isInt(record.index) === false ||
+        record.index < 0 ||
+        isFiniteNumber(record.quantity) === false ||
+        record.quantity < 0
+      ) {
+        return null;
+      }
+
+      edits.push({
+        kind: "keep",
+        index: record.index,
+        quantity: record.quantity,
+      });
+      continue;
+    }
+
+    if (record.kind === "add") {
+      const ingredientId =
+        typeof record.ingredient_id === "string"
+          ? record.ingredient_id.trim()
+          : "";
+
+      if (
+        ingredientId.length === 0 ||
+        isFiniteNumber(record.quantity) === false ||
+        record.quantity <= 0
+      ) {
+        return null;
+      }
+
+      edits.push({ kind: "add", ingredientId, quantity: record.quantity });
+      continue;
+    }
+
+    return null;
+  }
+
+  return edits;
 }
 
 /**

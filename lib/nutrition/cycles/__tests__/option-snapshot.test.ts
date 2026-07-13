@@ -6,8 +6,10 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
+  applyIngredientEdits,
   applyPortions,
   buildOptionSnapshot,
+  freezeFoodIngredient,
   overlayLiveMedia,
   withTrainerComment,
 } from "../option-snapshot";
@@ -466,6 +468,59 @@ describe("buildOptionSnapshot — determinism", () => {
       "ingredients",
       "totals",
     ]);
+  });
+});
+
+describe("applyIngredientEdits", () => {
+  it("keeps, re-portions, removes and adds lines, recomputing totals", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    // Keep arroz at 100 g, drop pollo, add 100 g of plátano (89 kcal/100g).
+    const out = applyIngredientEdits(snap, [
+      { kind: "keep", index: 0, quantity: 100 },
+      {
+        kind: "add",
+        ingredient: freezeFoodIngredient({
+          name: "Plátano",
+          quantity: 100,
+          nutrientsPer100g: { kcal: 89, protein_g: 1.1 },
+        }),
+      },
+    ]);
+
+    expect(out?.ingredients.map((ing) => ing.name)).toEqual([
+      "Arroz",
+      "Plátano",
+    ]);
+    expect(out?.ingredients[0]?.quantity).toBe(100);
+    // 100g arroz: 130 kcal + 100g plátano: 89 kcal
+    expect(out?.totals.kcal).toBeCloseTo(219, 4);
+  });
+
+  it("keeps the line's current quantity when the override is not usable", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+    const out = applyIngredientEdits(snap, [
+      { kind: "keep", index: 0, quantity: Number.NaN },
+    ]);
+
+    expect(out?.ingredients[0]?.quantity).toBe(200);
+  });
+
+  it("returns null for an out-of-range keep or an empty edit list", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    expect(
+      applyIngredientEdits(snap, [{ kind: "keep", index: 9, quantity: 100 }])
+    ).toBeNull();
+    expect(applyIngredientEdits(snap, [])).toBeNull();
+  });
+
+  it("does not mutate the original snapshot", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    applyIngredientEdits(snap, [{ kind: "keep", index: 0, quantity: 1 }]);
+
+    expect(snap.ingredients).toHaveLength(2);
+    expect(snap.ingredients[0]?.quantity).toBe(200);
   });
 });
 
