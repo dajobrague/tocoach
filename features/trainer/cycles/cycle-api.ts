@@ -78,6 +78,8 @@ export interface RecipeHit {
 
 export interface FoodHit {
   id?: string;
+  /** Originating source; only "off" foods have serving data to enrich. */
+  source?: "off" | "manual" | "seed";
   name: string;
   brand?: string;
   imageUrl?: string;

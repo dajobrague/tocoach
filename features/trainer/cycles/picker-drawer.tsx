@@ -115,7 +115,13 @@ export function PickerDrawer({
   useEffect(() => {
     const food = selectedFood;
 
-    if (food?.id === undefined || food.servingQuantity !== undefined) {
+    // Same source gate as resolveNativeAdd: only OFF products carry serving
+    // data, so seed/manual selections never fire a pointless request.
+    if (
+      food?.id === undefined ||
+      food.source !== "off" ||
+      food.servingQuantity !== undefined
+    ) {
       return;
     }
 
@@ -1013,16 +1019,15 @@ function FoodDetail({
     servingSize !== undefined && servingSize !== servingWeight
       ? servingSize
       : null;
+  // "1 ración: 30 g (2 rebanadas)" / "1 ración: 30 g" / "1 ración: 2 rebanadas"
   const servingLine =
-    servingWeight !== null || servingText !== null
-      ? [
-          "1 ración:",
-          servingWeight,
-          servingText !== null ? `(${servingText})` : null,
-        ]
-          .filter((part): part is string => part !== null)
-          .join(" ")
-      : null;
+    servingWeight !== null && servingText !== null
+      ? `1 ración: ${servingWeight} (${servingText})`
+      : servingWeight !== null
+        ? `1 ración: ${servingWeight}`
+        : servingText !== null
+          ? `1 ración: ${servingText}`
+          : null;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 border-t border-gray-100 pt-4">

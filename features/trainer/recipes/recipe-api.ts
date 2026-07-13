@@ -345,15 +345,26 @@ export async function resolveNativeAdd(
   }
 
   try {
+    const pending = enrichFoodServing(food.id);
+
+    // If the timeout wins the race, the enrich promise settles later with no
+    // listener — swallow that late rejection so it never surfaces as an
+    // unhandled-rejection error (the server has cached the result anyway).
+    pending.catch(() => undefined);
+
     const serving = await Promise.race([
-      enrichFoodServing(food.id),
+      pending,
       new Promise<null>((resolve) =>
         setTimeout(() => resolve(null), NATIVE_ADD_TIMEOUT_MS)
       ),
     ]);
     const quantity = serving?.servingQuantity;
 
-    if (quantity === undefined || quantity <= 0) {
+    if (
+      quantity === undefined ||
+      Number.isFinite(quantity) === false ||
+      quantity <= 0
+    ) {
       return null;
     }
 
