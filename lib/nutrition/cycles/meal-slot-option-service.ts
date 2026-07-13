@@ -1,7 +1,11 @@
 import type { OptionSnapshot, SnapshotMedia } from "./option-snapshot";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { applyPortions, buildOptionSnapshot } from "./option-snapshot";
+import {
+  applyPortions,
+  buildOptionSnapshot,
+  withTrainerComment,
+} from "./option-snapshot";
 
 import { RecipeService } from "@/lib/nutrition/recipes/recipe-service";
 
@@ -54,7 +58,10 @@ export class MealSlotOptionService {
      *  defaults so this option's portions are specific to this client. */
     quantities?: number[],
     /** Component this option belongs to (see {@link MealSlotOptionRow}). */
-    groupIndex?: number
+    groupIndex?: number,
+    /** Trainer's note for this client about this option (shown in the client
+     *  recipe detail). Stored inside the snapshot — per-option, per-client. */
+    trainerComment?: string
   ): Promise<MealSlotOptionRow | null> {
     const slotOwned = await this.slotExists(tenantHost, slotId);
 
@@ -68,8 +75,9 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const snapshot =
+    const portioned =
       quantities !== undefined ? applyPortions(frozen, quantities) : frozen;
+    const snapshot = withTrainerComment(portioned, trainerComment);
 
     return this.insertOption(
       tenantHost,
@@ -113,6 +121,7 @@ export class MealSlotOptionService {
           id: recipe.id,
           name: recipe.name,
           instructions: recipe.instructions,
+          description: recipe.description,
           ingredients,
           media,
         },
@@ -143,7 +152,8 @@ export class MealSlotOptionService {
     ingredientId: string,
     quantity: number,
     position?: number,
-    groupIndex?: number
+    groupIndex?: number,
+    trainerComment?: string
   ): Promise<MealSlotOptionRow | null> {
     const slotOwned = await this.slotExists(tenantHost, slotId);
 
@@ -151,14 +161,14 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const snapshot = await this.freezeSource(
+    const frozen = await this.freezeSource(
       tenantHost,
       "food",
       ingredientId,
       quantity
     );
 
-    if (snapshot === null) {
+    if (frozen === null) {
       return null;
     }
 
@@ -167,7 +177,7 @@ export class MealSlotOptionService {
       slotId,
       "food",
       ingredientId,
-      snapshot,
+      withTrainerComment(frozen, trainerComment),
       position,
       groupIndex
     );
@@ -235,7 +245,9 @@ export class MealSlotOptionService {
   async updateOptionPortions(
     tenantHost: string,
     optionId: string,
-    quantities: number[]
+    quantities: number[],
+    /** When provided, replaces the per-client trainer note (empty → cleared). */
+    trainerComment?: string
   ): Promise<MealSlotOptionRow | null> {
     const option = await this.getOption(tenantHost, optionId);
 
@@ -243,7 +255,11 @@ export class MealSlotOptionService {
       return null;
     }
 
-    const snapshot = applyPortions(option.item_snapshot, quantities);
+    const portioned = applyPortions(option.item_snapshot, quantities);
+    const snapshot =
+      trainerComment !== undefined
+        ? withTrainerComment(portioned, trainerComment)
+        : portioned;
 
     const { data, error } = await this.client
       .from(OPTIONS_TABLE)

@@ -43,7 +43,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ? await service.updateOptionPortions(
             tenantHost,
             optionId,
-            parsed.value.quantities
+            parsed.value.quantities,
+            parsed.value.trainerComment
           )
         : await service.updateOption(
             tenantHost,

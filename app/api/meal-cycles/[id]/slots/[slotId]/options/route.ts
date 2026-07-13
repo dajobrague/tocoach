@@ -46,7 +46,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
             parsed.value.recipeId,
             undefined,
             parsed.value.quantities,
-            parsed.value.groupIndex
+            parsed.value.groupIndex,
+            parsed.value.trainerComment
           )
         : await service.addFoodOption(
             tenantHost,
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
             parsed.value.ingredientId,
             parsed.value.quantity,
             undefined,
-            parsed.value.groupIndex
+            parsed.value.groupIndex,
+            parsed.value.trainerComment
           );
 
     if (option === null) {

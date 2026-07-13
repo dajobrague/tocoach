@@ -15,6 +15,10 @@ export interface OptionSnapshot {
   sourceRefId: string;
   name: string;
   steps: string | null;
+  /** Recipe-wide notes frozen with the option (absent on legacy rows). */
+  description?: string | null;
+  /** Trainer's per-client note about this option (absent on legacy rows). */
+  trainerComment?: string | null;
   images: { url: string; orientation: "vertical" | "horizontal" | null }[];
   ingredients: {
     name: string;
@@ -86,12 +90,15 @@ export type OptionSelection =
       recipeId: string;
       quantities?: number[];
       groupIndex?: number;
+      /** Trainer's per-client note about this option. */
+      trainerComment?: string;
     }
   | {
       kind: "food";
       ingredientId: string;
       quantity: number;
       groupIndex?: number;
+      trainerComment?: string;
     };
 
 // ─── Pure helpers (unit-tested) ─────────────────────────────────────────────
@@ -187,6 +194,8 @@ export function buildAddOptionBody(
     // base add flow works before the group_index migration is applied.
     if (selection.groupIndex !== undefined && selection.groupIndex > 0)
       body.group_index = selection.groupIndex;
+    if (selection.trainerComment !== undefined)
+      body.trainer_comment = selection.trainerComment;
 
     return body;
   }
@@ -199,6 +208,8 @@ export function buildAddOptionBody(
 
   if (selection.groupIndex !== undefined)
     body.group_index = selection.groupIndex;
+  if (selection.trainerComment !== undefined)
+    body.trainer_comment = selection.trainerComment;
 
   return body;
 }
@@ -392,17 +403,24 @@ export function deleteOption(
   );
 }
 
-/** Re-portion an option for this client: new grams per ingredient (by order). */
+/** Re-portion an option for this client: new grams per ingredient (by order).
+ *  `trainerComment` (when provided) replaces the per-client note; "" clears it. */
 export function updateOptionPortions(
   cycleId: string,
   slotId: string,
   optionId: string,
-  quantities: number[]
+  quantities: number[],
+  trainerComment?: string
 ): Promise<SlotOption> {
   return sendJson<SlotOption>(
     `${BASE}/${cycleId}/slots/${slotId}/options/${optionId}`,
     "PATCH",
-    { quantities }
+    {
+      quantities,
+      ...(trainerComment !== undefined
+        ? { trainer_comment: trainerComment }
+        : {}),
+    }
   );
 }
 

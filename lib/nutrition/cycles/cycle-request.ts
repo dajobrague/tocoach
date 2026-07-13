@@ -20,18 +20,23 @@ export type AddOptionBody =
       recipeId: string;
       quantities?: number[];
       groupIndex?: number;
+      /** Trainer's per-client note about this option. */
+      trainerComment?: string;
     }
   | {
       sourceType: "food";
       ingredientId: string;
       quantity: number;
       groupIndex?: number;
+      trainerComment?: string;
     };
 
 export interface UpdateOptionBody {
   position?: number;
   /** Per-ingredient grams (by sort order) for a per-client re-portion. */
   quantities?: number[];
+  /** Trainer's per-client note; empty string clears it. */
+  trainerComment?: string;
 }
 
 export interface AddSlotBody {
@@ -449,10 +454,17 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
       return { ok: false, error: "group_index debe ser un entero >= 0" };
     }
 
+    const trainerComment = parseTrainerComment(record.trainer_comment);
+
+    if (trainerComment === null) {
+      return { ok: false, error: "trainer_comment debe ser un texto" };
+    }
+
     const value: AddOptionBody = { sourceType: "recipe", recipeId };
 
     if (quantities !== undefined) value.quantities = quantities;
     if (groupIndex !== undefined) value.groupIndex = groupIndex;
+    if (trainerComment !== undefined) value.trainerComment = trainerComment;
 
     return { ok: true, value };
   }
@@ -477,6 +489,12 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
       return { ok: false, error: "group_index debe ser un entero >= 0" };
     }
 
+    const trainerComment = parseTrainerComment(record.trainer_comment);
+
+    if (trainerComment === null) {
+      return { ok: false, error: "trainer_comment debe ser un texto" };
+    }
+
     const value: AddOptionBody = {
       sourceType: "food",
       ingredientId,
@@ -484,6 +502,7 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
     };
 
     if (groupIndex !== undefined) value.groupIndex = groupIndex;
+    if (trainerComment !== undefined) value.trainerComment = trainerComment;
 
     return { ok: true, value };
   }
@@ -512,11 +531,32 @@ export function parseUpdateOption(
 
   if (quantities !== undefined) value.quantities = quantities;
 
+  const trainerComment = parseTrainerComment(record.trainer_comment);
+
+  if (trainerComment === null) {
+    return { ok: false, error: "trainer_comment debe ser un texto" };
+  }
+
+  if (trainerComment !== undefined) value.trainerComment = trainerComment;
+
   if (value.position === undefined && value.quantities === undefined) {
     return { ok: false, error: "position o quantities es obligatorio" };
   }
 
   return { ok: true, value };
+}
+
+/**
+ * Validate an optional trainer comment: `undefined` when absent, `null` when
+ * present but not a string. An empty string is kept — on update it means
+ * "clear the note".
+ */
+function parseTrainerComment(value: unknown): string | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return typeof value === "string" ? value : null;
 }
 
 /**

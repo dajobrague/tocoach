@@ -48,6 +48,13 @@ export interface OptionSnapshot {
   sourceRefId: string;
   name: string;
   steps: string | null;
+  /** Recipe-wide notes (the library description), frozen like `steps`.
+   *  Absent on rows frozen before the field existed. */
+  description?: string | null;
+  /** Trainer's note for THIS client about this option — not part of the
+   *  recipe; set when the option is assigned and editable afterwards.
+   *  Absent on rows frozen before the field existed. */
+  trainerComment?: string | null;
   /** Image-only convenience subset of {@link media} (back-compat). */
   images: SnapshotImage[];
   /** All recipe media (images + vertical video), in display order, with type. */
@@ -61,6 +68,7 @@ export interface RecipeSnapshotInput {
   id: string;
   name: string;
   instructions: string | null;
+  description: string | null;
   ingredients: Array<{
     name: string;
     quantity: number | string | null;
@@ -125,6 +133,22 @@ export function applyPortions(
 }
 
 /**
+ * Return a copy of `snapshot` with the per-client trainer note replaced:
+ * `undefined` keeps the current note, a string sets it (trimmed; empty clears
+ * to null). Pure — the input snapshot is never mutated.
+ */
+export function withTrainerComment(
+  snapshot: OptionSnapshot,
+  trainerComment: string | undefined
+): OptionSnapshot {
+  if (trainerComment === undefined) {
+    return snapshot;
+  }
+
+  return { ...snapshot, trainerComment: nonEmptyOrNull(trainerComment) };
+}
+
+/**
  * Return a copy of `snapshot` with its photos/videos replaced by the recipe's
  * *current* library media, keeping every frozen field (name, steps, ingredients,
  * quantities, totals) untouched. Images are treated as cosmetic and tracked
@@ -173,6 +197,8 @@ function buildRecipeSnapshot(recipe: RecipeSnapshotInput): OptionSnapshot {
     sourceRefId: recipe.id,
     name: recipe.name,
     steps: nonEmptyOrNull(recipe.instructions),
+    description: nonEmptyOrNull(recipe.description),
+    trainerComment: null,
     images: media
       .filter((item) => item.type === "image")
       .map((item) => ({ url: item.url, orientation: item.orientation })),
@@ -207,6 +233,8 @@ function buildFoodSnapshot(food: FoodSnapshotInput): OptionSnapshot {
     sourceRefId: food.id,
     name: food.name,
     steps: null,
+    description: null,
+    trainerComment: null,
     images,
     media,
     ingredients: [ingredient],

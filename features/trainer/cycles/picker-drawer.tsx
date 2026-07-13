@@ -16,6 +16,7 @@ import {
   Spinner,
   Tab,
   Tabs,
+  Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
@@ -100,7 +101,7 @@ export function PickerDrawer({
   );
   const [selectedFood, setSelectedFood] = useState<FoodHit | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [multiplier, setMultiplier] = useState(1);
+  const [comment, setComment] = useState("");
   const [foodGrams, setFoodGrams] = useState("");
 
   const recipesQuery = useRecipes({});
@@ -117,7 +118,7 @@ export function PickerDrawer({
       setSelectedRecipe(null);
       setSelectedFood(null);
       setQuantities({});
-      setMultiplier(1);
+      setComment("");
       setFoodGrams("");
     }
   }, [isOpen]);
@@ -140,8 +141,7 @@ export function PickerDrawer({
   const amountFor = (item: RecipeIngredientItem): number =>
     // Round to 2 decimals, not integers — piece/litre lines legitimately carry
     // fractional amounts (e.g. 0.5 u, 1.5 lt) that integer rounding would lose.
-    quantities[item.id] ??
-    Math.round(Number(item.quantity) * multiplier * 100) / 100;
+    quantities[item.id] ?? Math.round(Number(item.quantity) * 100) / 100;
 
   // Grams equivalent of that amount, for the nutrition preview only.
   const gramsFor = (item: RecipeIngredientItem): number =>
@@ -164,7 +164,7 @@ export function PickerDrawer({
       },
       { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
     );
-  }, [ingredients, quantities, multiplier]);
+  }, [ingredients, quantities]);
 
   // Finite positive grams only — `Number(x) || 0` would let Infinity through.
   const parsedFoodGrams = Number(foodGrams);
@@ -188,17 +188,22 @@ export function PickerDrawer({
     }
     setSelectedRecipe(recipe);
     setQuantities({});
-    setMultiplier(1);
+    setComment("");
   };
 
   const confirmRecipe = () => {
     if (selectedRecipe === null) return;
+    const trimmedComment = comment.trim();
+
     onSelect(
       {
         kind: "recipe",
         recipeId: selectedRecipe.id,
         // Native-unit amounts (pieces/ml/lt/g); the server converts to grams.
         quantities: ingredients.map((item) => amountFor(item)),
+        ...(trimmedComment.length > 0
+          ? { trainerComment: trimmedComment }
+          : {}),
       },
       {
         name: selectedRecipe.name,
@@ -299,21 +304,18 @@ export function PickerDrawer({
           {source === "recipes" ? (
             <RecipesPanel
               amountFor={amountFor}
+              comment={comment}
               filtered={filteredRecipes}
               hasAnyPublished={published.length > 0}
               ingredients={ingredients}
               ingredientsLoading={ingredientsQuery.isLoading}
               isLoading={recipesQuery.isLoading}
-              multiplier={multiplier}
               preview={recipePreview}
               query={recipeQuery}
               selectedRecipe={selectedRecipe}
               {...(dayTotals !== undefined ? { dayTotals } : {})}
               onBack={() => setSelectedRecipe(null)}
-              onMultiplier={(value) => {
-                setMultiplier(value);
-                setQuantities({});
-              }}
+              onComment={setComment}
               onPick={pickRecipe}
               onQuantity={(id, value) =>
                 setQuantities((prev) => ({ ...prev, [id]: value }))
@@ -373,9 +375,9 @@ function RecipesPanel({
   ingredients,
   ingredientsLoading,
   amountFor,
-  multiplier,
-  onMultiplier,
   onQuantity,
+  comment,
+  onComment,
   preview,
   dayTotals,
 }: {
@@ -390,9 +392,9 @@ function RecipesPanel({
   ingredients: RecipeIngredientItem[];
   ingredientsLoading: boolean;
   amountFor: (item: RecipeIngredientItem) => number;
-  multiplier: number;
-  onMultiplier: (value: number) => void;
   onQuantity: (id: string, value: number) => void;
+  comment: string;
+  onComment: (value: string) => void;
   preview: Macros;
   dayTotals?: MacroTotals;
 }) {
@@ -471,11 +473,6 @@ function RecipesPanel({
             <div className="flex min-w-0 flex-col gap-3">
               <LockedBanner />
 
-              <MultiplierRow
-                multiplier={multiplier}
-                onMultiplier={onMultiplier}
-              />
-
               {ingredientsLoading ? (
                 <div className="flex justify-center py-6">
                   <Spinner size="sm" />
@@ -491,6 +488,15 @@ function RecipesPanel({
                   onQuantity={onQuantity}
                 />
               )}
+
+              <Textarea
+                label="Comentario para este cliente (opcional)"
+                minRows={2}
+                placeholder="Ej.: en esta comida metemos más grasa para llegar al objetivo del día."
+                value={comment}
+                variant="bordered"
+                onValueChange={onComment}
+              />
             </div>
 
             <div className="flex flex-col gap-3 md:sticky md:top-0">
@@ -597,40 +603,6 @@ function LockedBanner() {
         de los ingredientes, pero no puedes agregar ni eliminar ingredientes
         aquí.
       </p>
-    </div>
-  );
-}
-
-function MultiplierRow({
-  multiplier,
-  onMultiplier,
-}: {
-  multiplier: number;
-  onMultiplier: (value: number) => void;
-}) {
-  const options = [0.5, 1, 1.5, 2];
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-default-600">
-        Multiplicador de porción
-      </span>
-      <div className="flex flex-wrap items-center gap-2">
-        {options.map((value) => (
-          <Button
-            key={value}
-            className={multiplier === value ? "bg-blue-600 text-white" : ""}
-            size="sm"
-            variant={multiplier === value ? "solid" : "bordered"}
-            onPress={() => onMultiplier(value)}
-          >
-            {value}x
-          </Button>
-        ))}
-        <Button size="sm" variant="light" onPress={() => onMultiplier(1)}>
-          Restablecer
-        </Button>
-      </div>
     </div>
   );
 }

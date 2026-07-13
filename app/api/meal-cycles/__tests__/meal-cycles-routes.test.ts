@@ -348,6 +348,7 @@ describe("POST options (snapshot-on-add wiring)", () => {
       "r1",
       undefined,
       undefined,
+      undefined,
       undefined
     );
     expect(optionMocks.addFoodOption).not.toHaveBeenCalled();
@@ -372,6 +373,7 @@ describe("POST options (snapshot-on-add wiring)", () => {
       "r1",
       undefined,
       [100, 150],
+      undefined,
       undefined
     );
   });
@@ -391,7 +393,32 @@ describe("POST options (snapshot-on-add wiring)", () => {
       "r1",
       undefined,
       undefined,
-      2
+      2,
+      undefined
+    );
+  });
+
+  it("forwards the trainer comment when adding a recipe option", async () => {
+    optionMocks.addRecipeOption.mockResolvedValue({ id: "o1" });
+
+    const res = await optionPOST(
+      jsonReq({
+        source_type: "recipe",
+        recipe_id: "r1",
+        trainer_comment: "Más grasa hoy.",
+      }),
+      slotCtx()
+    );
+
+    expect(res.status).toBe(201);
+    expect(optionMocks.addRecipeOption).toHaveBeenCalledWith(
+      "acme.tenant",
+      "s1",
+      "r1",
+      undefined,
+      undefined,
+      undefined,
+      "Más grasa hoy."
     );
   });
 
@@ -409,6 +436,7 @@ describe("POST options (snapshot-on-add wiring)", () => {
       "s1",
       "i1",
       120,
+      undefined,
       undefined,
       undefined
     );

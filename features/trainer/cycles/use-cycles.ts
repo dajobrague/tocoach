@@ -316,12 +316,14 @@ export function useCycleMutations(cycleId: string) {
       slotId: string;
       optionId: string;
       quantities: number[];
+      trainerComment?: string;
     }) =>
       updateOptionPortions(
         cycleId,
         vars.slotId,
         vars.optionId,
-        vars.quantities
+        vars.quantities,
+        vars.trainerComment
       ),
     onSuccess: invalidate,
   });

@@ -58,6 +58,9 @@ describe("normalizeOptionSnapshot", () => {
     expect(result.totals.kcal).toBe(380);
     expect(result.name).toBe("Avena con leche");
     expect(result.sourceType).toBe("recipe");
+    // Fields added after this row was frozen → safe nulls.
+    expect(result.description).toBeNull();
+    expect(result.trainerComment).toBeNull();
   });
 
   it("returns fully safe defaults for a null/undefined snapshot", () => {
@@ -67,6 +70,8 @@ describe("normalizeOptionSnapshot", () => {
       sourceType: "recipe",
       name: "",
       steps: null,
+      description: null,
+      trainerComment: null,
       images: [],
       media: [],
       ingredients: [],

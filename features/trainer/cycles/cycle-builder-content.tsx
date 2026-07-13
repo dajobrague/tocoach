@@ -226,20 +226,20 @@ export function CycleBuilderContent({
             onSelectionChange={(key) => setBuilderTab(key as "plan" | "goals")}
           >
             <Tab
-              key="plan"
-              title={
-                <span className="flex items-center gap-1.5">
-                  <Icon icon="solar:clipboard-list-linear" width={16} />
-                  Plan de comidas
-                </span>
-              }
-            />
-            <Tab
               key="goals"
               title={
                 <span className="flex items-center gap-1.5">
                   <Icon icon="solar:target-linear" width={16} />
                   Objetivos
+                </span>
+              }
+            />
+            <Tab
+              key="plan"
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Icon icon="solar:clipboard-list-linear" width={16} />
+                  Plan de comidas
                 </span>
               }
             />
@@ -385,7 +385,7 @@ export function CycleBuilderContent({
         busy={mutations.updateOptionPortionsM.isPending}
         option={editing?.option ?? null}
         onClose={() => setEditing(null)}
-        onSave={(quantities) => {
+        onSave={(quantities, trainerComment) => {
           if (editing === null) return;
 
           mutations.updateOptionPortionsM.mutate(
@@ -393,6 +393,7 @@ export function CycleBuilderContent({
               slotId: editing.slotId,
               optionId: editing.option.id,
               quantities,
+              trainerComment,
             },
             { onSuccess: () => setEditing(null) }
           );

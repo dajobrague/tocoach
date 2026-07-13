@@ -9,6 +9,7 @@ import {
   applyPortions,
   buildOptionSnapshot,
   overlayLiveMedia,
+  withTrainerComment,
 } from "../option-snapshot";
 
 function recipe(over: Partial<RecipeSnapshotInput> = {}): RecipeSnapshotInput {
@@ -16,6 +17,7 @@ function recipe(over: Partial<RecipeSnapshotInput> = {}): RecipeSnapshotInput {
     id: "recipe-1",
     name: "Pollo con arroz",
     instructions: "Hervir el arroz.",
+    description: null,
     media: [
       { type: "image", url: "https://cdn/x.jpg", orientation: "horizontal" },
     ],
@@ -173,6 +175,27 @@ describe("buildOptionSnapshot — recipe", () => {
     expect(snap.images).toEqual([
       { url: "https://cdn/photo.jpg", orientation: "horizontal" },
     ]);
+  });
+
+  it("freezes the recipe description (trimmed; empty → null)", () => {
+    expect(
+      buildOptionSnapshot({
+        type: "recipe",
+        recipe: recipe({ description: "Batido para llevar." }),
+      }).description
+    ).toBe("Batido para llevar.");
+    expect(
+      buildOptionSnapshot({
+        type: "recipe",
+        recipe: recipe({ description: "   " }),
+      }).description
+    ).toBeNull();
+  });
+
+  it("starts with no trainer comment (per-client, set at assignment)", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    expect(snap.trainerComment).toBeNull();
   });
 
   it("maps null/empty instructions to null steps", () => {
@@ -436,10 +459,43 @@ describe("buildOptionSnapshot — determinism", () => {
       "sourceRefId",
       "name",
       "steps",
+      "description",
+      "trainerComment",
       "images",
       "media",
       "ingredients",
       "totals",
     ]);
+  });
+});
+
+describe("withTrainerComment", () => {
+  it("sets a trimmed note, and an empty string clears it to null", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    expect(withTrainerComment(snap, "  Más grasa hoy.  ").trainerComment).toBe(
+      "Más grasa hoy."
+    );
+    expect(withTrainerComment(snap, "").trainerComment).toBeNull();
+    expect(withTrainerComment(snap, "   ").trainerComment).toBeNull();
+  });
+
+  it("keeps the current note when the value is undefined", () => {
+    const snap = withTrainerComment(
+      buildOptionSnapshot({ type: "recipe", recipe: recipe() }),
+      "Nota previa"
+    );
+
+    expect(withTrainerComment(snap, undefined).trainerComment).toBe(
+      "Nota previa"
+    );
+  });
+
+  it("does not mutate the original snapshot", () => {
+    const snap = buildOptionSnapshot({ type: "recipe", recipe: recipe() });
+
+    withTrainerComment(snap, "Nota");
+
+    expect(snap.trainerComment).toBeNull();
   });
 });

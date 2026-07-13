@@ -10,6 +10,7 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
+  Textarea,
 } from "@heroui/react";
 import { useState } from "react";
 
@@ -25,7 +26,7 @@ interface EditPortionsModalProps {
   option: SlotOption | null;
   busy: boolean;
   onClose: () => void;
-  onSave: (quantities: number[]) => void;
+  onSave: (quantities: number[], trainerComment: string) => void;
 }
 
 /**
@@ -67,17 +68,23 @@ function PortionsForm({
   option: SlotOption;
   busy: boolean;
   onClose: () => void;
-  onSave: (quantities: number[]) => void;
+  onSave: (quantities: number[], trainerComment: string) => void;
 }) {
   const ingredients = option.item_snapshot.ingredients;
   // Prefill from the snapshot's current amounts (fresh per option via `key`).
   const [amounts, setAmounts] = useState<string[]>(() =>
     ingredients.map((ing) => String(ing.quantity))
   );
+  const [comment, setComment] = useState(
+    () => option.item_snapshot.trainerComment ?? ""
+  );
 
   const save = () => {
     if (busy) return;
-    onSave(ingredients.map((_, idx) => Number(amounts[idx]) || 0));
+    onSave(
+      ingredients.map((_, idx) => Number(amounts[idx]) || 0),
+      comment.trim()
+    );
   };
 
   return (
@@ -156,6 +163,16 @@ function PortionsForm({
             </div>
           );
         })}
+
+        <Textarea
+          isDisabled={busy}
+          label="Comentario para este cliente (opcional)"
+          minRows={2}
+          placeholder="Nota que el cliente verá junto a esta receta."
+          value={comment}
+          variant="bordered"
+          onValueChange={setComment}
+        />
       </ModalBody>
       <ModalFooter>
         <Button isDisabled={busy} variant="light" onPress={onClose}>

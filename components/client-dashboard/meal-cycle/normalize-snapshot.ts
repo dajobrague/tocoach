@@ -23,6 +23,10 @@ export interface NormalizedSnapshot {
   sourceType: "recipe" | "food";
   name: string;
   steps: string | null;
+  /** Recipe-wide notes (frozen library description); null on legacy rows. */
+  description: string | null;
+  /** Trainer's note for this client about this option; null on legacy rows. */
+  trainerComment: string | null;
   images: SnapshotImage[];
   media: SnapshotMedia[];
   ingredients: SnapshotIngredient[];
@@ -45,6 +49,8 @@ export function normalizeOptionSnapshot(
     sourceType: snapshot?.sourceType === "food" ? "food" : "recipe",
     name: snapshot?.name ?? "",
     steps: snapshot?.steps ?? null,
+    description: snapshot?.description ?? null,
+    trainerComment: snapshot?.trainerComment ?? null,
     images: snapshot?.images ?? [],
     media: snapshot?.media ?? [],
     ingredients: snapshot?.ingredients ?? [],
