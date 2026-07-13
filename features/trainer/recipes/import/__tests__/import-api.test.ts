@@ -12,10 +12,11 @@ import {
 describe("computeCandidateMacros", () => {
   it("sums per-100g snapshots scaled by grams (server-equivalent rollup)", () => {
     const macros = computeCandidateMacros([
-      { name: "Arroz", grams: 200 }, // no nutrients -> contributes 0
+      { name: "Arroz", amount: 200, unit: "g" }, // no nutrients -> contributes 0
       {
         name: "Pollo",
-        grams: 150,
+        amount: 150,
+        unit: "g",
         nutrients: { protein_g: 30, carbs_g: 6, fat_g: 4, kcal: 166.6667 },
       },
     ]);
@@ -27,12 +28,28 @@ describe("computeCandidateMacros", () => {
   });
 
   it("is all zeros when no ingredient carries macros", () => {
-    expect(computeCandidateMacros([{ name: "Arroz", grams: 200 }])).toEqual({
+    expect(
+      computeCandidateMacros([{ name: "Arroz", amount: 200, unit: "g" }])
+    ).toEqual({
       kcal: 0,
       protein_g: 0,
       carbs_g: 0,
       fat_g: 0,
     });
+  });
+
+  it("weighs piece lines by pieces × piece weight (u × 100 g)", () => {
+    const macros = computeCandidateMacros([
+      {
+        name: "Huevo",
+        amount: 2,
+        unit: "u",
+        gramsPerUnit: 100,
+        nutrients: { kcal: 100 },
+      },
+    ]);
+
+    expect(macros.kcal).toBeCloseTo(200, 4);
   });
 });
 

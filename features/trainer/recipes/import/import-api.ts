@@ -24,15 +24,19 @@ export interface MacroQuad {
 /**
  * The macros the imported recipe WILL compute, derived client-side from the
  * candidate's ingredient snapshots with the same rollup the server runs on
- * approve. This is 0 until the legacy lines carry usable macros — which is
- * exactly why it is shown distinctly from the legacy "stated" number.
+ * approve. With the stated-totals distribution this matches the legacy plan's
+ * figure exactly for production-shaped data; it is 0 only when the option had
+ * no nutrition anywhere (macrosSource "none").
  */
 export function computeCandidateMacros(
   ingredients: CandidateIngredient[]
 ): MacroQuad {
   const totals = rollupRecipeTotals(
     ingredients.map((line) => ({
-      quantityGrams: line.grams ?? 0,
+      quantityGrams:
+        line.unit === "u"
+          ? (line.amount ?? 0) * (line.gramsPerUnit ?? 100)
+          : (line.amount ?? 0),
       nutrientsPer100g: line.nutrients ?? {},
     }))
   );

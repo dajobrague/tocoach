@@ -2,20 +2,27 @@ import type {
   CandidateIngredient,
   LegacyIngredientRow,
   LegacyMealOptionInput,
+  LegacyStatedMacros,
   RecipeCandidate,
 } from "./types";
 import type { NutrientsPer100g } from "@/lib/nutrition/food-source";
 
 /**
  * Pure, best-effort mapping from legacy `nutrition_*` rows to review-ready
- * recipe candidates. Never throws on a malformed row: junk/empty options return
- * `null` (the caller skips them) and unusable ingredient lines are dropped.
+ * recipe candidates. Never throws on a malformed row.
  *
- * Quantity handling: legacy quantities are free text with the unit usually
- * embedded ("200gr", "15ml"). {@link parseQuantityToGrams} normalizes to grams
- * best-effort — gram/millilitre/bare/unknown units are treated 1:1 and
- * kilo/litre units are scaled ×1000. The trainer reviews every candidate before
- * import, so an over-eager guess is corrected, never silently trusted.
+ * Grounded in the PRODUCTION data shape (profiled 2026-07-13):
+ * - 0 of 4,273 legacy ingredient rows carry macros; 935 of 945 options carry
+ *   them as option-level totals. So when no line has its own macros, the
+ *   option's stated totals are DISTRIBUTED across the lines (uniform density,
+ *   weighted by effective grams) — the imported recipe's computed total then
+ *   equals the old plan's stated total exactly. Lines are flagged `estimated`.
+ * - Quantities are free text ("200gr", "2 unidades", "al gusto", ""). Gram
+ *   and millilitre amounts map 1:1, kilo/litre ×1000, and unidad/pieza lines
+ *   become real "u" lines with the editor's 100 g piece-weight convention
+ *   (legacy never stored one; the trainer corrects it after import).
+ * - Options with stated macros but NO ingredient rows (37 in production) get
+ *   a single whole-dish line instead of being silently dropped.
  */
 
 const KG_UNITS = new Set([
@@ -27,14 +34,44 @@ const KG_UNITS = new Set([
   "kilogramos",
 ]);
 const LITRE_UNITS = new Set(["l", "lt", "lts", "litro", "litros"]);
+const PIECE_UNITS = new Set([
+  "u",
+  "ud",
+  "uds",
+  "un",
+  "und",
+  "unds",
+  "unidad",
+  "unidades",
+  "pieza",
+  "piezas",
+  "pza",
+  "pzas",
+  "unit",
+  "units",
+  "piece",
+  "pieces",
+]);
+
+/** Editor convention for a piece weight nobody recorded (see ingredient-row). */
+const DEFAULT_PIECE_GRAMS = 100;
+
+/** Name for the synthetic line of an option that had no ingredient rows. */
+const WHOLE_DISH_LINE = "Plato completo (del plan anterior)";
 
 /** Generic placeholder names the legacy UI auto-assigned (e.g. "Opción 1"). */
 const GENERIC_NAME = /^opci[oó]n\s*\d+$/i;
 
-export function parseQuantityToGrams(
+/** A parsed legacy quantity: pieces for "u", grams otherwise. */
+export interface ParsedQuantity {
+  amount: number;
+  unit: "g" | "u";
+}
+
+export function parseQuantity(
   quantity: string | null | undefined,
   unit: string | null | undefined
-): number | undefined {
+): ParsedQuantity | undefined {
   const text = `${quantity ?? ""}`.trim().toLowerCase();
   const match = text.match(/-?\d+(?:[.,]\d+)?/);
 
@@ -55,12 +92,32 @@ export function parseQuantityToGrams(
       : text.slice((match.index ?? 0) + match[0].length);
   const token = rawUnit.toLowerCase().replace(/[^a-záéíóúü]/g, "");
 
+  if (PIECE_UNITS.has(token)) {
+    return { amount: round(value), unit: "u" };
+  }
+
   if (KG_UNITS.has(token) || LITRE_UNITS.has(token)) {
-    return round(value * 1000);
+    return { amount: round(value * 1000), unit: "g" };
   }
 
   // Grams, millilitres, bare numbers, and unknown units: treated 1:1.
-  return round(value);
+  return { amount: round(value), unit: "g" };
+}
+
+/** Kept for callers/tests that only need the gram reading of a quantity. */
+export function parseQuantityToGrams(
+  quantity: string | null | undefined,
+  unit: string | null | undefined
+): number | undefined {
+  const parsed = parseQuantity(quantity, unit);
+
+  if (parsed === undefined) {
+    return undefined;
+  }
+
+  return parsed.unit === "u"
+    ? round(parsed.amount * DEFAULT_PIECE_GRAMS)
+    : parsed.amount;
 }
 
 export function toRecipeCandidate(
@@ -70,18 +127,44 @@ export function toRecipeCandidate(
   const rows = Array.isArray(input.ingredients) ? input.ingredients : [];
 
   const name = resolveName(option.name, input.mealLabel);
-  const ingredients = rows
+
+  if (name === null) {
+    return null;
+  }
+
+  const statedMacros = resolveStatedMacros(option);
+  let ingredients = rows
     .map(toCandidateIngredient)
     .filter((line): line is CandidateIngredient => line !== null);
 
-  if (name === null || ingredients.length === 0) {
+  // An option with stated totals but no ingredient rows (37 in production) is
+  // still a real dish — represent it as one whole-dish line instead of
+  // dropping it invisibly.
+  if (ingredients.length === 0 && statedMacros !== undefined) {
+    ingredients = [wholeDishLine(statedMacros)];
+  }
+
+  if (ingredients.length === 0) {
     return null;
   }
+
+  const hasOwnLineMacros = ingredients.some(
+    (line) => line.nutrients !== undefined && line.estimated !== true
+  );
+  const distributed =
+    hasOwnLineMacros === false && statedMacros !== undefined
+      ? distributeStatedMacros(ingredients, statedMacros)
+      : ingredients;
 
   const candidate: RecipeCandidate = {
     legacyOptionId: option.id,
     name,
-    ingredients,
+    ingredients: distributed,
+    macrosSource: hasOwnLineMacros
+      ? "lines"
+      : statedMacros !== undefined
+        ? "stated"
+        : "none",
   };
 
   const steps = resolveSteps(option.instructions, option.recipe_notes);
@@ -90,13 +173,93 @@ export function toRecipeCandidate(
     candidate.steps = steps;
   }
 
-  const statedMacros = resolveStatedMacros(option);
-
   if (statedMacros !== undefined) {
     candidate.legacyStatedMacros = statedMacros;
   }
 
   return candidate;
+}
+
+/**
+ * Spread the option's stated totals over the lines so the recipe's computed
+ * total equals the stated total exactly:
+ *
+ * - Weighted by each line's effective grams (pieces × 100 g for "u" lines),
+ *   i.e. a uniform-density assumption — the same per-100g profile on every
+ *   weighted line. Amount-less lines ("al gusto") get no share.
+ * - When NO line has a usable amount, the whole total lands on the first line
+ *   as 1 piece × 100 g, so nothing is lost and the trainer has one obvious
+ *   place to refine.
+ *
+ * Pure — returns new line objects; every touched line is flagged `estimated`.
+ */
+export function distributeStatedMacros(
+  lines: CandidateIngredient[],
+  stated: LegacyStatedMacros
+): CandidateIngredient[] {
+  const totalGrams = lines.reduce((sum, line) => sum + effectiveGrams(line), 0);
+
+  if (totalGrams <= 0) {
+    return lines.map((line, index) =>
+      index === 0
+        ? {
+            ...line,
+            amount: 1,
+            unit: "u",
+            gramsPerUnit: DEFAULT_PIECE_GRAMS,
+            nutrients: statedAsPer100g(stated, DEFAULT_PIECE_GRAMS),
+            estimated: true,
+          }
+        : { ...line }
+    );
+  }
+
+  // Same density everywhere: per-100g = stated ÷ totalGrams × 100.
+  const per100 = statedAsPer100g(stated, totalGrams);
+
+  return lines.map((line) =>
+    effectiveGrams(line) > 0
+      ? { ...line, nutrients: per100, estimated: true }
+      : { ...line }
+  );
+}
+
+/** Grams this line will weigh in the v2 editor (u → pieces × piece weight). */
+function effectiveGrams(line: CandidateIngredient): number {
+  if (line.amount === undefined || line.amount <= 0) {
+    return 0;
+  }
+
+  return line.unit === "u"
+    ? line.amount * (line.gramsPerUnit ?? DEFAULT_PIECE_GRAMS)
+    : line.amount;
+}
+
+/** Stated totals expressed as per-100g of `grams` total weight. */
+function statedAsPer100g(
+  stated: LegacyStatedMacros,
+  grams: number
+): Partial<NutrientsPer100g> {
+  const factor = 100 / grams;
+  const nutrients: Partial<NutrientsPer100g> = {};
+
+  scaleInto(nutrients, "kcal", stated.kcal, factor);
+  scaleInto(nutrients, "protein_g", stated.protein_g, factor);
+  scaleInto(nutrients, "carbs_g", stated.carbs_g, factor);
+  scaleInto(nutrients, "fat_g", stated.fat_g, factor);
+
+  return nutrients;
+}
+
+function wholeDishLine(stated: LegacyStatedMacros): CandidateIngredient {
+  return {
+    name: WHOLE_DISH_LINE,
+    amount: 1,
+    unit: "u",
+    gramsPerUnit: DEFAULT_PIECE_GRAMS,
+    nutrients: statedAsPer100g(stated, DEFAULT_PIECE_GRAMS),
+    estimated: true,
+  };
 }
 
 /**
@@ -135,8 +298,8 @@ function resolveSteps(
 
 function resolveStatedMacros(
   option: LegacyMealOptionInput["option"]
-): RecipeCandidate["legacyStatedMacros"] | undefined {
-  const macros: NonNullable<RecipeCandidate["legacyStatedMacros"]> = {};
+): LegacyStatedMacros | undefined {
+  const macros: LegacyStatedMacros = {};
 
   assignFinite(macros, "kcal", option.calories);
   assignFinite(macros, "protein_g", option.protein);
@@ -160,12 +323,19 @@ function toCandidateIngredient(
   }
 
   const line: CandidateIngredient = { name };
-  const grams = parseQuantityToGrams(row.quantity, row.unit);
+  const parsed = parseQuantity(row.quantity, row.unit);
 
-  if (grams !== undefined) {
-    line.grams = grams;
+  if (parsed !== undefined) {
+    line.amount = parsed.amount;
+    line.unit = parsed.unit;
 
-    const nutrients = perQuantityToPer100g(row, grams);
+    if (parsed.unit === "u") {
+      line.gramsPerUnit = DEFAULT_PIECE_GRAMS;
+    }
+
+    // Per-line macros — the ideal path, kept for the rare/future rows that
+    // have them (production currently has none).
+    const nutrients = perQuantityToPer100g(row, effectiveGrams(line));
 
     if (nutrients !== undefined) {
       line.nutrients = nutrients;
@@ -192,15 +362,15 @@ function perQuantityToPer100g(
   const factor = 100 / grams;
   const nutrients: Partial<NutrientsPer100g> = {};
 
-  scalePer100g(nutrients, "kcal", row.calories, factor);
-  scalePer100g(nutrients, "protein_g", row.protein, factor);
-  scalePer100g(nutrients, "carbs_g", row.carbs, factor);
-  scalePer100g(nutrients, "fat_g", row.fats, factor);
+  scaleInto(nutrients, "kcal", row.calories, factor);
+  scaleInto(nutrients, "protein_g", row.protein, factor);
+  scaleInto(nutrients, "carbs_g", row.carbs, factor);
+  scaleInto(nutrients, "fat_g", row.fats, factor);
 
   return Object.keys(nutrients).length > 0 ? nutrients : undefined;
 }
 
-function scalePer100g(
+function scaleInto(
   target: Partial<NutrientsPer100g>,
   key: keyof NutrientsPer100g,
   total: number | null | undefined,

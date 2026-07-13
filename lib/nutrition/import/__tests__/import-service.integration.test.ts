@@ -57,7 +57,12 @@ describe("RecipeImportService (integration, local DB)", () => {
     const candidates = await service.preview(TEST_TENANT_HOST);
 
     expect(candidates.map((c) => c.legacyOptionId).sort()).toEqual(
-      [seeded.goodOptionId, seeded.genericOptionId].sort()
+      [
+        seeded.goodOptionId,
+        seeded.genericOptionId,
+        seeded.prodOptionId,
+        seeded.statedEmptyOptionId,
+      ].sort()
     );
   });
 
@@ -115,6 +120,61 @@ describe("RecipeImportService (integration, local DB)", () => {
     expect(lines[0]?.name_snapshot).toBe("Aceite de oliva");
     expect(Number(lines[0]?.quantity)).toBe(15);
     expect(lines[0]?.nutrient_snapshot).toEqual({});
+  });
+
+  it("PRODUCTION shape: option-level macros only → recipe totals equal the stated totals exactly", async () => {
+    seeded = await seedLegacyNutrition(client);
+
+    const result = await service.approve(TEST_TENANT_HOST, TEST_TRAINER_ID, [
+      seeded.prodOptionId,
+    ]);
+    const created = result.created[0];
+
+    expect(created).toBeDefined();
+
+    const lines = await ingredientRows(created!.recipeId);
+
+    expect(lines.map((l) => l.name_snapshot)).toEqual([
+      "Pan integral",
+      "Huevo",
+      "Sal",
+    ]);
+    // "1 Unidad" lands as a real piece line with the 100 g convention.
+    expect(lines[1]?.unit).toBe("u");
+    expect(Number(lines[1]?.quantity)).toBe(1);
+    // "al gusto" keeps the line, weighs nothing.
+    expect(Number(lines[2]?.quantity)).toBe(0);
+
+    // THE invariant: computed totals == what the old plan stated (500 kcal,
+    // 30P / 40C / 20G) — this is exactly what was broken before (always 0).
+    const recipe = await recipes.getById(TEST_TENANT_HOST, created!.recipeId);
+
+    expect(Number(recipe?.kcal)).toBeCloseTo(500, 1);
+    expect(Number(recipe?.protein_g)).toBeCloseTo(30, 1);
+    expect(Number(recipe?.carbs_g)).toBeCloseTo(40, 1);
+    expect(Number(recipe?.fat_g)).toBeCloseTo(20, 1);
+  });
+
+  it("imports a stated-macros option with no ingredient rows as a whole-dish recipe", async () => {
+    seeded = await seedLegacyNutrition(client);
+
+    const result = await service.approve(TEST_TENANT_HOST, TEST_TRAINER_ID, [
+      seeded.statedEmptyOptionId,
+    ]);
+    const created = result.created[0];
+
+    expect(created).toBeDefined();
+    expect(created?.name).toBe(seeded.statedEmptyOptionName);
+
+    const lines = await ingredientRows(created!.recipeId);
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.unit).toBe("u");
+
+    const recipe = await recipes.getById(TEST_TENANT_HOST, created!.recipeId);
+
+    expect(Number(recipe?.kcal)).toBeCloseTo(300, 1);
+    expect(Number(recipe?.protein_g)).toBeCloseTo(25, 1);
   });
 
   it("is idempotent — re-approving the same options skips duplicates", async () => {

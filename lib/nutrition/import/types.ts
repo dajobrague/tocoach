@@ -53,10 +53,19 @@ export interface LegacyMealOptionInput {
 /** A normalized ingredient line of a recipe candidate. */
 export interface CandidateIngredient {
   name: string;
-  /** Best-effort grams; absent when the legacy quantity had no number. */
-  grams?: number;
-  /** Per-100g nutrients; absent when the legacy line had no usable macros. */
+  /** Amount in {@link unit} — grams for "g" (ml 1:1, kg/l ×1000), pieces for
+   *  "u". Absent when the legacy quantity had no number ("al gusto"). */
+  amount?: number;
+  /** "g" (default) or "u" for unidad/pieza legacy lines. */
+  unit?: "g" | "u";
+  /** Piece weight for "u" lines. Legacy never stored one, so imports seed the
+   *  editor's 100 g convention; the trainer corrects it after import. */
+  gramsPerUnit?: number;
+  /** Per-100g nutrients; absent when nothing usable existed for the line. */
   nutrients?: Partial<NutrientsPer100g>;
+  /** True when {@link nutrients} was distributed from the option's stated
+   *  totals (uniform density) rather than read from the line itself. */
+  estimated?: boolean;
 }
 
 /** A recipe created by an import run. */
@@ -81,13 +90,26 @@ export interface ImportResult {
 
 /**
  * The macro totals the trainer originally stated on the legacy meal option,
- * read verbatim from `nutrition_meal_options`. Display-only: it documents what
- * the old plan claimed and is NEVER used to set the imported recipe's computed
- * macros (those come from the ingredient snapshots via recompute).
+ * read verbatim from `nutrition_meal_options`.
+ *
+ * In production this is the ONLY nutrition data that exists (all 4,273 legacy
+ * ingredient rows carry null macros), so when no line has its own macros these
+ * totals are distributed across the lines (uniform density, weighted by
+ * grams) — making the imported recipe's computed total exactly match what the
+ * old plan stated. Lines built this way are flagged `estimated`.
  */
 export type LegacyStatedMacros = Partial<
   Pick<NutrientsPer100g, "kcal" | "protein_g" | "carbs_g" | "fat_g">
 >;
+
+/** Where a candidate's nutrition came from (drives the review-card labels). */
+export type CandidateMacroSource =
+  /** Per-line macros existed on the legacy ingredients (rare/ideal). */
+  | "lines"
+  /** Distributed from the option's stated totals (the production norm). */
+  | "stated"
+  /** Nothing usable anywhere — the recipe imports macro-less. */
+  | "none";
 
 /** A best-effort recipe ready for trainer review before import. */
 export interface RecipeCandidate {
@@ -95,8 +117,9 @@ export interface RecipeCandidate {
   legacyOptionId: string;
   name: string;
   ingredients: CandidateIngredient[];
+  macrosSource: CandidateMacroSource;
   /** Combined instructions + recipe notes, when present. */
   steps?: string;
-  /** What the old plan stated for this option (display-only — see type docs). */
+  /** What the old plan stated for this option, verbatim (for the review card). */
   legacyStatedMacros?: LegacyStatedMacros;
 }

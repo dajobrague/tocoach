@@ -111,12 +111,19 @@ export class RecipeImportService {
     for (const [index, line] of candidate.ingredients.entries()) {
       const input: AddIngredientInput = {
         name: line.name,
-        quantity: line.grams ?? 0,
-        unit: "g",
+        quantity: line.amount ?? 0,
+        unit: line.unit ?? "g",
         sortOrder: index,
       };
 
-      // Manual-entry snapshot only when the legacy line had usable macros.
+      // Piece lines carry their weight (the mapper seeds the 100 g
+      // convention) — without it a "u" line weighs 0 in every rollup.
+      if (line.unit === "u") {
+        input.gramsPerUnit = line.gramsPerUnit ?? 100;
+      }
+
+      // Per-line snapshot: real legacy line macros, or the mapper's
+      // distribution of the option's stated totals (flagged estimated).
       if (line.nutrients !== undefined) {
         input.nutrientsPer100g = line.nutrients;
       }

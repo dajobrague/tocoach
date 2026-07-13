@@ -26,8 +26,14 @@ export interface SeededLegacyNutrition {
   /** A generic-named option with one ingredient (-> name-enriched candidate). */
   genericOptionId: string;
   genericCandidateName: string;
-  /** An option with no ingredients (-> skipped as junk). */
+  /** An option with no ingredients AND no macros (-> skipped as junk). */
   emptyOptionId: string;
+  /** PRODUCTION shape: stated option macros, ZERO line macros, messy units. */
+  prodOptionId: string;
+  prodOptionName: string;
+  /** Stated macros but no ingredient rows (-> whole-dish candidate). */
+  statedEmptyOptionId: string;
+  statedEmptyOptionName: string;
 }
 
 async function insert(
@@ -95,6 +101,27 @@ export async function seedLegacyNutrition(
     name: "Opción 3",
     option_order: 3,
   });
+  // The PRODUCTION shape (all 4,273 real ingredient rows have null macros;
+  // 935/945 options carry stated totals): macros at the option level only,
+  // with the real-world unit mess ("Unidad", "al gusto").
+  const prodOptionName = "Tostadas con huevo";
+  const prodOptionId = await insert(client, "nutrition_meal_options", {
+    meal_id: mealId,
+    name: prodOptionName,
+    option_order: 4,
+    protein: 30,
+    carbs: 40,
+    fats: 20,
+    calories: 500,
+  });
+  const statedEmptyOptionName = "Batido de la casa";
+  const statedEmptyOptionId = await insert(client, "nutrition_meal_options", {
+    meal_id: mealId,
+    name: statedEmptyOptionName,
+    option_order: 5,
+    protein: 25,
+    calories: 300,
+  });
 
   // Good option: two lines, one carrying per-quantity macros.
   await insert(client, "nutrition_ingredients", {
@@ -131,6 +158,35 @@ export async function seedLegacyNutrition(
     ingredient_order: 0,
   });
 
+  // Production-shaped lines: NO macros anywhere, units as free text.
+  await insert(client, "nutrition_ingredients", {
+    nutrition_meal_id: mealId,
+    option_id: prodOptionId,
+    tenant_host: TEST_TENANT_HOST,
+    name: "Pan integral",
+    quantity: "100",
+    unit: "GRAMOS ",
+    ingredient_order: 0,
+  });
+  await insert(client, "nutrition_ingredients", {
+    nutrition_meal_id: mealId,
+    option_id: prodOptionId,
+    tenant_host: TEST_TENANT_HOST,
+    name: "Huevo",
+    quantity: "1",
+    unit: "Unidad",
+    ingredient_order: 1,
+  });
+  await insert(client, "nutrition_ingredients", {
+    nutrition_meal_id: mealId,
+    option_id: prodOptionId,
+    tenant_host: TEST_TENANT_HOST,
+    name: "Sal",
+    quantity: "al gusto",
+    unit: "",
+    ingredient_order: 2,
+  });
+
   return {
     planId,
     mealId,
@@ -140,6 +196,10 @@ export async function seedLegacyNutrition(
     genericOptionId,
     genericCandidateName: `${mealLabel} — Opción 3`,
     emptyOptionId,
+    prodOptionId,
+    prodOptionName,
+    statedEmptyOptionId,
+    statedEmptyOptionName,
   };
 }
 

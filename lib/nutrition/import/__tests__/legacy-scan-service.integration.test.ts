@@ -47,13 +47,16 @@ describe("LegacyNutritionScanService (integration, local DB)", () => {
 
     const candidates = await service.scan(TEST_TENANT_HOST);
 
-    // Good + generic options become candidates; the empty option is skipped.
-    expect(candidates).toHaveLength(2);
+    // Good/generic/prod-shaped/stated-empty become candidates; only the option
+    // with neither ingredients nor stated macros is junk.
+    expect(candidates).toHaveLength(4);
 
     const names = candidates.map((c) => c.name);
 
     expect(names).toContain(seeded.goodOptionName);
     expect(names).toContain(seeded.genericCandidateName);
+    expect(names).toContain(seeded.prodOptionName);
+    expect(names).toContain(seeded.statedEmptyOptionName);
     expect(
       candidates.some((c) => c.legacyOptionId === seeded.emptyOptionId)
     ).toBe(false);
@@ -69,14 +72,16 @@ describe("LegacyNutritionScanService (integration, local DB)", () => {
 
     expect(good).toBeDefined();
     expect(good?.ingredients).toEqual([
-      { name: "Arroz", grams: 200 },
+      { name: "Arroz", amount: 200, unit: "g" },
       // 150g contributing 45g protein / 9g carbs / 6g fat / 250 kcal -> per-100g.
       {
         name: "Pollo",
-        grams: 150,
+        amount: 150,
+        unit: "g",
         nutrients: { protein_g: 30, carbs_g: 6, fat_g: 4, kcal: 166.6667 },
       },
     ]);
+    expect(good?.macrosSource).toBe("lines");
     expect(good?.steps).toBe(
       "Hervir el arroz y cocinar el pollo.\n\nServir caliente."
     );

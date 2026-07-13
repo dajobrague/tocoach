@@ -6,7 +6,12 @@ import type {
 
 import { describe, expect, it } from "vitest";
 
-import { parseQuantityToGrams, toRecipeCandidate } from "../legacy-mapper";
+import {
+  distributeStatedMacros,
+  parseQuantity,
+  parseQuantityToGrams,
+  toRecipeCandidate,
+} from "../legacy-mapper";
 
 function option(over: Partial<LegacyMealOptionRow> = {}): LegacyMealOptionRow {
   return {
@@ -112,7 +117,10 @@ describe("toRecipeCandidate", () => {
     expect(candidate).not.toBeNull();
     expect(candidate?.legacyOptionId).toBe("opt-1");
     expect(candidate?.name).toBe("Pollo con arroz");
-    expect(candidate?.ingredients).toEqual([{ name: "Arroz", grams: 100 }]);
+    expect(candidate?.ingredients).toEqual([
+      { name: "Arroz", amount: 100, unit: "g" },
+    ]);
+    expect(candidate?.macrosSource).toBe("none");
   });
 
   it("combines instructions and recipe notes into steps", () => {
@@ -162,6 +170,7 @@ describe("toRecipeCandidate", () => {
       fat_g: 5,
       kcal: 330,
     });
+    expect(candidate?.macrosSource).toBe("lines");
   });
 
   it("omits nutrients when grams are unknown even if macros exist", () => {
@@ -179,7 +188,7 @@ describe("toRecipeCandidate", () => {
     );
 
     expect(candidate?.ingredients[0]).toEqual({ name: "Sal" });
-    expect(candidate?.ingredients[0]?.grams).toBeUndefined();
+    expect(candidate?.ingredients[0]?.amount).toBeUndefined();
     expect(candidate?.ingredients[0]?.nutrients).toBeUndefined();
   });
 
@@ -240,7 +249,9 @@ describe("toRecipeCandidate", () => {
       })
     );
 
-    expect(candidate?.ingredients).toEqual([{ name: "Arroz", grams: 100 }]);
+    expect(candidate?.ingredients).toEqual([
+      { name: "Arroz", amount: 100, unit: "g" },
+    ]);
   });
 
   it("skips an option with an empty name and no meal label (junk)", () => {
@@ -252,7 +263,7 @@ describe("toRecipeCandidate", () => {
     ).toBeNull();
   });
 
-  it("skips an option with no usable ingredients (junk)", () => {
+  it("skips an option with no ingredients AND no stated macros (junk)", () => {
     expect(toRecipeCandidate(input({ ingredients: [] }))).toBeNull();
     expect(
       toRecipeCandidate(input({ ingredients: [ingredient({ name: "   " })] }))
@@ -271,5 +282,156 @@ describe("toRecipeCandidate", () => {
     expect(() => toRecipeCandidate(malformed)).not.toThrow();
     // No name + no usable ingredients -> skipped, not crashed.
     expect(toRecipeCandidate(malformed)).toBeNull();
+  });
+});
+
+describe("parseQuantity — piece units (production 'Unidad' variants)", () => {
+  it("maps unidad variants to real pieces, not grams", () => {
+    expect(parseQuantity("2", "Unidad")).toEqual({ amount: 2, unit: "u" });
+    expect(parseQuantity("2", "UNIDAD ")).toEqual({ amount: 2, unit: "u" });
+    expect(parseQuantity("3 unidades", null)).toEqual({ amount: 3, unit: "u" });
+    expect(parseQuantity("1 pieza", null)).toEqual({ amount: 1, unit: "u" });
+  });
+
+  it("reads pieces as 100 g each in the gram view", () => {
+    expect(parseQuantityToGrams("2", "Unidad")).toBe(200);
+  });
+});
+
+describe("stated-macros distribution (the production data shape)", () => {
+  // The real prod shape: option-level macros, ZERO line-level macros.
+  const PROD_OPTION = option({
+    protein: 46,
+    carbs: 92,
+    fats: 16,
+    calories: 687,
+  });
+
+  it("distributes the option totals so the computed total is exact", () => {
+    const candidate = toRecipeCandidate(
+      input({
+        option: PROD_OPTION,
+        ingredients: [
+          ingredient({ id: "a", name: "Arroz", quantity: "150gr" }),
+          ingredient({ id: "b", name: "Pollo", quantity: "50 g" }),
+        ],
+      })
+    );
+
+    expect(candidate?.macrosSource).toBe("stated");
+
+    // Uniform density: every weighted line shares the same per-100g profile.
+    const lines = candidate?.ingredients ?? [];
+    const total = lines.reduce(
+      (sum, line) =>
+        sum + ((line.nutrients?.kcal ?? 0) * (line.amount ?? 0)) / 100,
+      0
+    );
+
+    expect(total).toBeCloseTo(687, 2);
+    expect(lines.every((line) => line.estimated === true)).toBe(true);
+  });
+
+  it("gives amount-less lines no share but keeps them in the recipe", () => {
+    const candidate = toRecipeCandidate(
+      input({
+        option: PROD_OPTION,
+        ingredients: [
+          ingredient({ id: "a", name: "Arroz", quantity: "200gr" }),
+          ingredient({ id: "b", name: "Sal", quantity: "al gusto" }),
+        ],
+      })
+    );
+
+    const [arroz, sal] = candidate?.ingredients ?? [];
+
+    expect(arroz?.nutrients?.kcal).toBeCloseTo(343.5, 1); // 687 per 200 g → 343.5/100g
+    expect(sal?.nutrients).toBeUndefined();
+  });
+
+  it("weights piece lines by their 100 g convention", () => {
+    const candidate = toRecipeCandidate(
+      input({
+        option: option({ calories: 300 }),
+        ingredients: [
+          ingredient({ id: "a", name: "Huevo", quantity: "2", unit: "Unidad" }),
+          ingredient({ id: "b", name: "Pan", quantity: "100gr" }),
+        ],
+      })
+    );
+
+    const [huevo, pan] = candidate?.ingredients ?? [];
+
+    // 300 kcal over 300 effective grams → 100 kcal / 100 g everywhere.
+    expect(huevo?.unit).toBe("u");
+    expect(huevo?.gramsPerUnit).toBe(100);
+    expect(huevo?.nutrients?.kcal).toBeCloseTo(100, 4);
+    expect(pan?.nutrients?.kcal).toBeCloseTo(100, 4);
+  });
+
+  it("puts everything on the first line when no amount is parseable", () => {
+    const candidate = toRecipeCandidate(
+      input({
+        option: option({ calories: 500, protein: 30 }),
+        ingredients: [
+          ingredient({ id: "a", name: "Guiso", quantity: "al gusto" }),
+          ingredient({ id: "b", name: "Pan", quantity: null }),
+        ],
+      })
+    );
+
+    const [guiso, pan] = candidate?.ingredients ?? [];
+
+    expect(guiso).toMatchObject({
+      amount: 1,
+      unit: "u",
+      gramsPerUnit: 100,
+      estimated: true,
+    });
+    expect(guiso?.nutrients?.kcal).toBe(500);
+    expect(guiso?.nutrients?.protein_g).toBe(30);
+    expect(pan?.nutrients).toBeUndefined();
+  });
+
+  it("prefers real line macros over distribution when they exist", () => {
+    const candidate = toRecipeCandidate(
+      input({
+        option: PROD_OPTION,
+        ingredients: [
+          ingredient({ quantity: "200gr", calories: 660, protein: 50 }),
+        ],
+      })
+    );
+
+    expect(candidate?.macrosSource).toBe("lines");
+    expect(candidate?.ingredients[0]?.estimated).toBeUndefined();
+    expect(candidate?.ingredients[0]?.nutrients?.kcal).toBe(330);
+  });
+
+  it("surfaces an ingredient-less option as a whole-dish candidate", () => {
+    const candidate = toRecipeCandidate(
+      input({ option: PROD_OPTION, ingredients: [] })
+    );
+
+    expect(candidate).not.toBeNull();
+    expect(candidate?.macrosSource).toBe("stated");
+    expect(candidate?.ingredients).toHaveLength(1);
+    expect(candidate?.ingredients[0]).toMatchObject({
+      amount: 1,
+      unit: "u",
+      gramsPerUnit: 100,
+      estimated: true,
+    });
+    expect(candidate?.ingredients[0]?.nutrients?.kcal).toBe(687);
+  });
+});
+
+describe("distributeStatedMacros — purity", () => {
+  it("does not mutate the input lines", () => {
+    const lines = [{ name: "Arroz", amount: 100, unit: "g" as const }];
+
+    distributeStatedMacros(lines, { kcal: 200 });
+
+    expect(lines[0]).toEqual({ name: "Arroz", amount: 100, unit: "g" });
   });
 });

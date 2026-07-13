@@ -70,13 +70,32 @@ export function CandidateCard({
             {ingredientCount === 1 ? "ingrediente" : "ingredientes"}
           </p>
 
-          {/* New recipe's computed total — may be 0 until lines carry macros. */}
+          {/* The total the imported recipe will carry. */}
           <p className="text-xs font-medium text-gray-900">
-            Total calculado: {formatCompactMacros(computed)}
+            Total: {formatCompactMacros(computed)}
+            {candidate.macrosSource === "stated" ? (
+              <span className="ml-1.5 font-normal text-default-400">
+                (del plan original · reparto por ingrediente estimado)
+              </span>
+            ) : null}
           </p>
 
-          {/* Original plan figure — display-only, visually muted + labelled. */}
-          {hasStatedMacros(candidate.legacyStatedMacros) ? (
+          {candidate.macrosSource === "none" ? (
+            <p className="flex items-center gap-1 text-xs text-warning-600">
+              <Icon
+                aria-hidden
+                icon="solar:danger-triangle-linear"
+                width={13}
+              />
+              El plan antiguo no tenía macros para esta receta — añádelos tras
+              importar.
+            </p>
+          ) : null}
+
+          {/* Original plan figure, when it differs from what we computed —
+              with the distribution they normally match exactly. */}
+          {candidate.macrosSource === "lines" &&
+          hasStatedMacros(candidate.legacyStatedMacros) ? (
             <p className="flex items-center gap-1 text-xs italic text-default-400">
               <Icon aria-hidden icon="solar:document-text-linear" width={13} />
               Plan original: {formatCompactMacros(candidate.legacyStatedMacros)}
