@@ -124,7 +124,7 @@ export function NutritionUpdateContent() {
     setCurrentStep((step) => Math.min(STEPS.length, step + 1));
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6 lg:p-8">
       <div className="rounded-xl border border-gray-200 bg-white">
         {/* Header — title + progress, setup-wizard style. */}
         <div className="border-b border-gray-200 px-6 py-4">
