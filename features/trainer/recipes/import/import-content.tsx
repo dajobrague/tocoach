@@ -171,7 +171,7 @@ function Header({ onBack }: { onBack: () => void }) {
 
 function HelperNote() {
   return (
-    <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+    <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-gray-700">
       <Icon
         aria-hidden
         className="mt-0.5 shrink-0 text-amber-500"
