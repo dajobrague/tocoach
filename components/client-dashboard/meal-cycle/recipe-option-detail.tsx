@@ -256,8 +256,16 @@ export function RecipeOptionDetail({
                           >
                             <span className="flex min-w-0 items-center gap-2.5">
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-default-300" />
-                              <span className="truncate text-sm text-foreground">
-                                {ing.name}
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm text-foreground">
+                                  {ing.name}
+                                </span>
+                                {typeof ing.brand === "string" &&
+                                ing.brand.length > 0 ? (
+                                  <span className="block truncate text-xs text-default-400">
+                                    {ing.brand}
+                                  </span>
+                                ) : null}
                               </span>
                             </span>
                             <span className="shrink-0 text-sm font-medium text-default-500 tabular-nums">

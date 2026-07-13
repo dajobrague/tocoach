@@ -100,6 +100,7 @@ describe("buildOptionSnapshot — recipe", () => {
     expect(snap.ingredients).toEqual([
       {
         name: "Arroz",
+        brand: null,
         quantity: 200,
         unit: "g",
         gramsPerUnit: null,
@@ -107,6 +108,7 @@ describe("buildOptionSnapshot — recipe", () => {
       },
       {
         name: "Pollo",
+        brand: null,
         quantity: 150,
         unit: "g",
         gramsPerUnit: null,
@@ -138,6 +140,7 @@ describe("buildOptionSnapshot — recipe", () => {
 
     expect(snap.ingredients[0]).toEqual({
       name: "Sal",
+      brand: null,
       quantity: 5,
       unit: "g",
       gramsPerUnit: null,
@@ -192,6 +195,35 @@ describe("buildOptionSnapshot — recipe", () => {
         recipe: recipe({ description: "   " }),
       }).description
     ).toBeNull();
+  });
+
+  it("freezes each line's brand (empty → null)", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Queso gouda",
+            brand: "Hacendado",
+            quantity: 30,
+            unit: "g",
+            gramsPerUnit: null,
+            nutrientSnapshot: { kcal: 356 },
+          },
+          {
+            name: "Arroz",
+            brand: "  ",
+            quantity: 100,
+            unit: "g",
+            gramsPerUnit: null,
+            nutrientSnapshot: { kcal: 130 },
+          },
+        ],
+      }),
+    });
+
+    expect(snap.ingredients[0]?.brand).toBe("Hacendado");
+    expect(snap.ingredients[1]?.brand).toBeNull();
   });
 
   it("starts with no trainer comment (per-client, set at assignment)", () => {
@@ -254,6 +286,7 @@ describe("buildOptionSnapshot — units", () => {
 
     expect(snap.ingredients[0]).toEqual({
       name: "Huevo",
+      brand: null,
       quantity: 2,
       unit: "u",
       gramsPerUnit: 60,
@@ -345,6 +378,7 @@ describe("buildOptionSnapshot — food", () => {
     expect(snap.ingredients).toEqual([
       {
         name: "Plátano",
+        brand: null,
         quantity: 120,
         unit: "g",
         gramsPerUnit: null,

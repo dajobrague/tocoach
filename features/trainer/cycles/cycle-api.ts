@@ -22,6 +22,8 @@ export interface OptionSnapshot {
   images: { url: string; orientation: "vertical" | "horizontal" | null }[];
   ingredients: {
     name: string;
+    /** Frozen product brand; null/absent for raw or legacy lines. */
+    brand?: string | null;
     quantity: number;
     unit: string;
     /** Grams per piece for `unit === "u"`; null for g/ml/lt. */

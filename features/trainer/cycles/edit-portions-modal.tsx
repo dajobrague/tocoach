@@ -69,6 +69,7 @@ type EditLine =
       /** Index of the line in the option's CURRENT snapshot. */
       index: number;
       name: string;
+      brand: string | null;
       unit: string;
       gramsPerUnit: number | null;
       /** The amount the modal opened with — the ×1 multiplier reference. */
@@ -94,6 +95,7 @@ function PortionsForm({
       kind: "keep",
       index,
       name: ing.name,
+      brand: ing.brand ?? null,
       unit: ing.unit,
       gramsPerUnit: ing.gramsPerUnit,
       base: Number(ing.quantity),
@@ -187,11 +189,20 @@ function PortionsForm({
               key={line.kind === "keep" ? `keep-${line.index}` : `add-${row}`}
               className="flex items-center gap-2"
             >
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-900">
-                {line.name}
-                {line.kind === "add" ? (
-                  <span className="ml-1.5 rounded bg-success-50 px-1 py-0.5 text-[10px] font-medium text-success-700">
-                    nuevo
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-gray-900">
+                  {line.name}
+                  {line.kind === "add" ? (
+                    <span className="ml-1.5 rounded bg-success-50 px-1 py-0.5 text-[10px] font-medium text-success-700">
+                      nuevo
+                    </span>
+                  ) : null}
+                </span>
+                {line.kind === "keep" &&
+                typeof line.brand === "string" &&
+                line.brand.length > 0 ? (
+                  <span className="block truncate text-[10px] text-default-400">
+                    {line.brand}
                   </span>
                 ) : null}
               </span>

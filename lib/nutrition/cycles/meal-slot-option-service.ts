@@ -142,6 +142,7 @@ export class MealSlotOptionService {
       food: {
         id: sourceRefId,
         name: typeof food.name === "string" ? food.name : "",
+        brand: typeof food.brand === "string" ? food.brand : null,
         quantity,
         imageUrl: typeof food.image_url === "string" ? food.image_url : null,
         nutrientsPer100g: food,
@@ -321,6 +322,7 @@ export class MealSlotOptionService {
         kind: "add",
         ingredient: freezeFoodIngredient({
           name: typeof food.name === "string" ? food.name : "",
+          brand: typeof food.brand === "string" ? food.brand : null,
           quantity: edit.quantity,
           nutrientsPer100g: food,
         }),
@@ -493,7 +495,7 @@ export class MealSlotOptionService {
     const { data, error } = await this.client
       .from(RECIPE_INGREDIENTS_TABLE)
       .select(
-        "name_snapshot, quantity, unit, grams_per_unit, nutrient_snapshot"
+        "name_snapshot, brand, quantity, unit, grams_per_unit, nutrient_snapshot"
       )
       .eq("recipe_id", recipeId)
       .order("sort_order", { ascending: true });
@@ -506,6 +508,7 @@ export class MealSlotOptionService {
 
     return (data ?? []).map((row) => ({
       name: (row as { name_snapshot: string }).name_snapshot,
+      brand: (row as { brand: string | null }).brand,
       quantity: (row as { quantity: number | string | null }).quantity,
       unit: (row as { unit: string | null }).unit,
       gramsPerUnit: (row as { grams_per_unit: number | null }).grams_per_unit,
@@ -550,7 +553,7 @@ export class MealSlotOptionService {
     const { data, error } = await this.client
       .from(INGREDIENTS_TABLE)
       .select(
-        "name, image_url, kcal, protein_g, carbs_g, fat_g, sugar_g, fiber_g, sat_fat_g, sodium_mg"
+        "name, brand, image_url, kcal, protein_g, carbs_g, fat_g, sugar_g, fiber_g, sat_fat_g, sodium_mg"
       )
       .eq("tenant_host", tenantHost)
       .eq("id", ingredientId)

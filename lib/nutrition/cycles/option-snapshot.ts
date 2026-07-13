@@ -34,6 +34,9 @@ export interface SnapshotMedia {
 
 export interface SnapshotIngredient {
   name: string;
+  /** Product brand frozen with the line ("Hacendado") so the client knows the
+   *  exact product; null for raw/unbranded foods. Absent on legacy rows. */
+  brand?: string | null;
   /** Amount of this line, expressed in {@link unit} (e.g. 2 for "2 u"). */
   quantity: number;
   unit: string;
@@ -71,6 +74,7 @@ export interface RecipeSnapshotInput {
   description: string | null;
   ingredients: Array<{
     name: string;
+    brand?: string | null;
     quantity: number | string | null;
     unit: string | null;
     /** Weight of one piece, in grams — only meaningful when `unit === "u"`. */
@@ -85,6 +89,7 @@ export interface RecipeSnapshotInput {
 export interface FoodSnapshotInput {
   id: string;
   name: string;
+  brand?: string | null;
   quantity: number;
   unit?: string | null;
   /** Product thumbnail (e.g. Open Food Facts) frozen with the option; null/absent
@@ -192,12 +197,14 @@ export function applyIngredientEdits(
  */
 export function freezeFoodIngredient(food: {
   name: string;
+  brand?: string | null;
   quantity: number;
   unit?: string | null;
   nutrientsPer100g: Record<string, unknown>;
 }): SnapshotIngredient {
   return {
     name: food.name,
+    brand: nonEmptyOrNull(food.brand),
     quantity: toFinite(food.quantity),
     unit: food.unit !== null && food.unit !== undefined ? food.unit : "g",
     gramsPerUnit: null,
@@ -253,6 +260,7 @@ export function overlayLiveMedia(
 function buildRecipeSnapshot(recipe: RecipeSnapshotInput): OptionSnapshot {
   const ingredients: SnapshotIngredient[] = recipe.ingredients.map((line) => ({
     name: `${line.name ?? ""}`,
+    brand: nonEmptyOrNull(line.brand),
     quantity: toFinite(line.quantity),
     unit: line.unit !== null && line.unit !== undefined ? line.unit : "g",
     gramsPerUnit: gramsPerUnitOrNull(line.gramsPerUnit),
