@@ -1,19 +1,20 @@
-/** Which view the Nutrición tab should render, given the nutrition-v2 flag. */
+/** Which view the Nutrición tab should render, given the nutrition-v2 flags. */
 export type NutritionTabView = "loading" | "cycle-builder" | "legacy";
 
 /**
- * Pure decision for the Nutrición tab: while the flag is resolving show a
- * loading state; once resolved, the new cycle builder when enabled, otherwise
- * the unchanged legacy tab. Kept pure so the flag-on/off switch is unit-tested
+ * Pure decision for the Nutrición tab: while the flags resolve show a loading
+ * state; once resolved, the v2 cycle builder when the TRAINER tools are
+ * enabled (prepare phase included — clients may still be on legacy), the
+ * unchanged legacy tab otherwise. Kept pure so the switch is unit-tested
  * without rendering the heavy builder.
  */
 export function resolveNutritionTabView(
-  enabled: boolean,
+  trainerEnabled: boolean,
   isLoading: boolean
 ): NutritionTabView {
   if (isLoading) {
     return "loading";
   }
 
-  return enabled ? "cycle-builder" : "legacy";
+  return trainerEnabled ? "cycle-builder" : "legacy";
 }

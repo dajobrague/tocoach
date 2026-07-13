@@ -11,6 +11,7 @@ const { createMock, removeMock } = vi.hoisted(() => ({
 vi.mock("@/lib/auth/session", () => ({ getTrainerSession: vi.fn() }));
 vi.mock("@/lib/nutrition/feature-flag", () => ({
   isNutritionV2Enabled: vi.fn(),
+  isNutritionV2TrainerEnabled: vi.fn(),
 }));
 vi.mock("@/lib/clients/supabase-api", () => ({
   createSupabaseClient: vi.fn(() => ({})),
@@ -27,10 +28,10 @@ vi.mock("@/lib/nutrition/recipes/recipe-media-service", () => ({
 import { DELETE as mediaDELETE, POST as mediaPOST } from "../route";
 
 import { getTrainerSession } from "@/lib/auth/session";
-import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 
 const mockedSession = vi.mocked(getTrainerSession);
-const mockedFlag = vi.mocked(isNutritionV2Enabled);
+const mockedFlag = vi.mocked(isNutritionV2TrainerEnabled);
 
 const SESSION: TrainerSession = {
   trainer_id: "trainer-1",

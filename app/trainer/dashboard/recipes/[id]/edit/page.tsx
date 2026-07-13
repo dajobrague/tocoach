@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getTrainerSession } from "@/lib/auth/session";
-import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 import { RecipeForm } from "@/features/trainer/recipes/recipe-form";
 
 // Edit flow. Same server-side flag gate as the library page.
@@ -16,7 +16,7 @@ export default async function EditRecipePage({
     notFound();
   }
 
-  const enabled = await isNutritionV2Enabled(session.tenant_host);
+  const enabled = await isNutritionV2TrainerEnabled(session.tenant_host);
 
   if (enabled === false) {
     notFound();

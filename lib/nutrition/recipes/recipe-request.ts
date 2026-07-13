@@ -14,7 +14,7 @@ import type {
 import { NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
-import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 import { pickNutrients } from "@/lib/nutrition/recipes/nutrient-snapshot";
 
 const RECIPE_STATUSES: readonly RecipeStatus[] = [
@@ -52,7 +52,7 @@ export async function guardRecipeRequest(): Promise<RecipeGuard> {
     };
   }
 
-  const enabled = await isNutritionV2Enabled(session.tenant_host);
+  const enabled = await isNutritionV2TrainerEnabled(session.tenant_host);
 
   if (enabled === false) {
     return {

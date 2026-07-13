@@ -25,6 +25,7 @@ const optionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth/session", () => ({ getTrainerSession: vi.fn() }));
 vi.mock("@/lib/nutrition/feature-flag", () => ({
   isNutritionV2Enabled: vi.fn(),
+  isNutritionV2TrainerEnabled: vi.fn(),
 }));
 vi.mock("@/lib/clients/supabase-api", () => ({
   createSupabaseClient: vi.fn(() => ({})),
@@ -73,10 +74,10 @@ import {
   ActiveCycleConflictError,
   MealCycleValidationError,
 } from "@/lib/nutrition/cycles/meal-cycle-service";
-import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 
 const mockedSession = vi.mocked(getTrainerSession);
-const mockedFlag = vi.mocked(isNutritionV2Enabled);
+const mockedFlag = vi.mocked(isNutritionV2TrainerEnabled);
 
 const SESSION: TrainerSession = {
   trainer_id: "trainer-1",

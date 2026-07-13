@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { CycleBuilderContent } from "@/features/trainer/cycles/cycle-builder-content";
-import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 
 interface PageProps {
   params: Promise<{ clientId: string }>;
@@ -17,7 +17,7 @@ export default async function ClientNutritionPage({ params }: PageProps) {
     notFound();
   }
 
-  const enabled = await isNutritionV2Enabled(session.tenant_host);
+  const enabled = await isNutritionV2TrainerEnabled(session.tenant_host);
 
   if (enabled === false) {
     notFound();
