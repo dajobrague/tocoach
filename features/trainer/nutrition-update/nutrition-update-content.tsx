@@ -429,7 +429,7 @@ function ClientReviewStep({
       count: counts.atRisk,
       label: "sin dieta visible",
       icon: "solar:danger-triangle-bold",
-      iconClass: "text-warning-600",
+      iconClass: "text-warning-500",
       hidden: counts.atRisk === 0,
     },
     {
@@ -655,7 +655,7 @@ function ActivateStep({
     <div className="flex flex-col gap-4">
       {atRisk > 0 ? (
         <div className="flex flex-col gap-2.5 rounded-lg border border-warning-200 bg-warning-50 p-4">
-          <p className="flex items-start gap-2 text-sm text-warning-700">
+          <p className="flex items-start gap-2 text-sm text-gray-700">
             <Icon
               className="mt-0.5 shrink-0"
               icon="solar:danger-triangle-bold"

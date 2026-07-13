@@ -162,7 +162,7 @@ function PortionsForm({
       </ModalHeader>
       <ModalBody className="gap-2">
         {lines.length === 0 ? (
-          <p className="rounded-large bg-warning-50 px-3 py-2 text-xs text-warning-700">
+          <p className="rounded-large bg-warning-50 px-3 py-2 text-xs text-gray-700">
             La opción debe tener al menos un alimento. Añade uno abajo o
             cancela.
           </p>

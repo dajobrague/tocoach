@@ -81,7 +81,7 @@ export function CandidateCard({
           </p>
 
           {candidate.macrosSource === "none" ? (
-            <p className="flex items-center gap-1 text-xs text-warning-600">
+            <p className="flex items-center gap-1 text-xs text-gray-600">
               <Icon
                 aria-hidden
                 icon="solar:danger-triangle-linear"

@@ -100,7 +100,7 @@ function PreviewBody({ client }: { client: ClientReadiness }) {
         </p>
       </div>
       {client.verdict === "at_risk" ? (
-        <p className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 p-3 text-xs text-warning-700">
+        <p className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 p-3 text-xs text-gray-700">
           <Icon
             className="mt-0.5 shrink-0"
             icon="solar:danger-triangle-bold"
