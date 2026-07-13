@@ -250,4 +250,11 @@ test("activate and rollback write the client-facing flag", async ({
   });
 
   expect(bogus.status()).toBe(400);
+
+  // Prototype-chain keys don't sneak past the allowlist either.
+  const proto = await context.request.post("/api/nutrition-update/flags", {
+    data: { action: "toString" },
+  });
+
+  expect(proto.status()).toBe(400);
 });

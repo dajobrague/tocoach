@@ -568,6 +568,20 @@ export function parseUpdateOption(
 
   if (trainerComment !== undefined) value.trainerComment = trainerComment;
 
+  // A comment only travels with a quantities/ingredients update — the bare
+  // position op doesn't touch the snapshot, so accepting one there would
+  // silently drop it.
+  if (
+    trainerComment !== undefined &&
+    value.quantities === undefined &&
+    value.ingredientEdits === undefined
+  ) {
+    return {
+      ok: false,
+      error: "trainer_comment solo puede enviarse con quantities o ingredients",
+    };
+  }
+
   if (
     value.position === undefined &&
     value.quantities === undefined &&
@@ -614,7 +628,8 @@ function parseIngredientEdits(
         isInt(record.index) === false ||
         record.index < 0 ||
         isFiniteNumber(record.quantity) === false ||
-        record.quantity < 0
+        record.quantity < 0 ||
+        record.quantity > MAX_QUANTITY
       ) {
         return null;
       }
@@ -636,7 +651,8 @@ function parseIngredientEdits(
       if (
         ingredientId.length === 0 ||
         isFiniteNumber(record.quantity) === false ||
-        record.quantity <= 0
+        record.quantity <= 0 ||
+        record.quantity > MAX_QUANTITY
       ) {
         return null;
       }
@@ -650,6 +666,11 @@ function parseIngredientEdits(
 
   return edits;
 }
+
+/** Upper bound for any single quantity (grams or units). Anything beyond is
+ *  a typo, and large enough values overflow the snapshot totals to Infinity,
+ *  which JSON.stringify silently turns into null. */
+const MAX_QUANTITY = 100_000;
 
 /** Hard cap on a trainer comment — the note lives inside the item_snapshot
  *  JSONB, so an unbounded string would bloat the row and every tree fetch. */
@@ -684,8 +705,9 @@ function parseGroupIndex(value: unknown): number | undefined | null {
 
 /**
  * Validate an optional array of portion amounts: `undefined` when absent,
- * `null` when present but malformed (non-array entries, NaN/Infinity, or
- * negatives) so callers reject instead of silently re-portioning to 0.
+ * `null` when present but malformed (non-array entries, NaN/Infinity,
+ * negatives, or beyond {@link MAX_QUANTITY}) so callers reject instead of
+ * silently re-portioning to 0.
  */
 function asNumberArray(value: unknown): number[] | undefined | null {
   if (value === undefined) {
@@ -696,7 +718,7 @@ function asNumberArray(value: unknown): number[] | undefined | null {
     return null;
   }
 
-  return value.every((v) => isFiniteNumber(v) && v >= 0)
+  return value.every((v) => isFiniteNumber(v) && v >= 0 && v <= MAX_QUANTITY)
     ? (value as number[])
     : null;
 }

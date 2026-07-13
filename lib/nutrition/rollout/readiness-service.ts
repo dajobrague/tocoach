@@ -63,7 +63,7 @@ export function resolveClientVerdict(input: {
 }
 
 /**
- * Resolve every client of the tenant in a fixed number of bulk queries (7),
+ * Resolve every client of the tenant in a fixed number of bulk queries (6),
  * regardless of client count — never one query per client.
  *
  * `trainerId` scopes the client list (clients.tenant carries the trainer's

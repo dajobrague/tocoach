@@ -498,7 +498,12 @@ export class MealSlotOptionService {
         "name_snapshot, brand, quantity, unit, grams_per_unit, nutrient_snapshot"
       )
       .eq("recipe_id", recipeId)
-      .order("sort_order", { ascending: true });
+      // Same total order as RecipeIngredientService.list — the drawer builds
+      // its positional portions against that list, so the freeze MUST read
+      // the lines in the identical sequence or amounts land on the wrong one.
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
 
     if (error !== null) {
       throw new Error(

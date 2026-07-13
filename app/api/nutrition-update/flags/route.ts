@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
     } | null;
     const action = body?.action;
 
-    if (typeof action !== "string" || action in ACTIONS === false) {
+    // Object.hasOwn, not `in` — the latter walks the prototype chain, so
+    // keys like "toString" would slip past the allowlist.
+    if (
+      typeof action !== "string" ||
+      Object.hasOwn(ACTIONS, action) === false
+    ) {
       return NextResponse.json(
         { success: false, error: "action inválida" },
         { status: 400 }

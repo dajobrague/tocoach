@@ -175,6 +175,29 @@ describe("parseUpdateOption", () => {
     expect(parseUpdateOption({ ingredients: [] }).ok).toBe(false);
   });
 
+  it("rejects a trainer comment without quantities or ingredients (it would be dropped)", () => {
+    expect(
+      parseUpdateOption({ position: 2, trainer_comment: "Sin sal." }).ok
+    ).toBe(false);
+    expect(parseUpdateOption({ trainer_comment: "Sin sal." }).ok).toBe(false);
+  });
+
+  it("rejects quantities beyond the sanity bound (totals would overflow)", () => {
+    expect(parseUpdateOption({ quantities: [1e308] }).ok).toBe(false);
+    expect(
+      parseUpdateOption({
+        ingredients: [{ kind: "keep", index: 0, quantity: 1e308 }],
+      }).ok
+    ).toBe(false);
+    expect(
+      parseUpdateOption({
+        ingredients: [{ kind: "add", ingredient_id: "i1", quantity: 200_000 }],
+      }).ok
+    ).toBe(false);
+    // The bound itself is inclusive.
+    expect(parseUpdateOption({ quantities: [100_000] }).ok).toBe(true);
+  });
+
   it("rejects a trainer comment over 2000 chars (JSONB bloat guard)", () => {
     expect(
       parseUpdateOption({

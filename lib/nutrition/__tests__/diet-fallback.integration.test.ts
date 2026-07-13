@@ -127,6 +127,12 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
     expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
   });
 
+  it("ignores a legacy pdf_url that is not a web url", async () => {
+    await seedLegacyPlan({ pdf_url: "javascript:alert(1)" });
+
+    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
+  });
+
   it("includes legacy rows where is_template is NULL", async () => {
     await seedLegacyPlan({ is_template: null });
 

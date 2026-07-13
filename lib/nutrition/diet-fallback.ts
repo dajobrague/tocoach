@@ -114,13 +114,18 @@ async function readLegacyDietPdf(
   return toDietPdf(data);
 }
 
-/** Normalize a pdf_url/pdf_name row to a {@link ClientDietPdf} (or null). */
+/**
+ * Normalize a pdf_url/pdf_name row to a {@link ClientDietPdf} (or null).
+ * Only web URLs pass: the legacy pdf_url column is free text and the value
+ * lands in an `<a href>`/iframe on the client's page, so a stored
+ * `javascript:` URL must never reach the DOM.
+ */
 function toDietPdf(
   data: { pdf_url?: unknown; pdf_name?: unknown } | null
 ): ClientDietPdf | null {
   const url = typeof data?.pdf_url === "string" ? data.pdf_url.trim() : "";
 
-  if (url.length === 0) {
+  if (isRenderableUrl(url) === false) {
     return null;
   }
 
@@ -128,6 +133,26 @@ function toDietPdf(
     typeof data?.pdf_name === "string" ? data.pdf_name.trim() : "";
 
   return { url, name: rawName.length > 0 ? rawName : DEFAULT_PDF_NAME };
+}
+
+/** http(s) absolute URLs and site-relative paths only — anything else
+ *  (javascript:, data:, blob:, malformed) is dropped as if there were no PDF. */
+function isRenderableUrl(url: string): boolean {
+  if (url.length === 0) {
+    return false;
+  }
+
+  if (url.startsWith("/")) {
+    return true;
+  }
+
+  try {
+    const protocol = new URL(url).protocol;
+
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 /**

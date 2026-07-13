@@ -76,7 +76,11 @@ type EditLine =
       base: number;
       amount: string;
     }
-  | { kind: "add"; foodId: string; name: string; amount: string };
+  | { kind: "add"; uid: string; foodId: string; name: string; amount: string };
+
+// Stable React keys for added rows — an array index would make React reuse
+// row state across different logical lines after a deletion above them.
+let addRowSeq = 0;
 
 function PortionsForm({
   option,
@@ -120,7 +124,13 @@ function PortionsForm({
 
     setLines((prev) => [
       ...prev,
-      { kind: "add", foodId, name: hit.name, amount: "100" },
+      {
+        kind: "add",
+        uid: String(++addRowSeq),
+        foodId,
+        name: hit.name,
+        amount: "100",
+      },
     ]);
     setFoodQuery("");
   };
@@ -186,7 +196,9 @@ function PortionsForm({
 
           return (
             <div
-              key={line.kind === "keep" ? `keep-${line.index}` : `add-${row}`}
+              key={
+                line.kind === "keep" ? `keep-${line.index}` : `add-${line.uid}`
+              }
               className="flex items-center gap-2"
             >
               <span className="min-w-0 flex-1">

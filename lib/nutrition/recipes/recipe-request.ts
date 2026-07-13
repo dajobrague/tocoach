@@ -23,6 +23,11 @@ const RECIPE_STATUSES: readonly RecipeStatus[] = [
   "archived",
 ];
 
+/** Upper bound for any ingredient quantity (grams or units). Anything beyond
+ *  is a typo, and large enough values overflow the recipe rollup to Infinity,
+ *  which JSON strips to null. Mirrors the cycle-request bound. */
+const MAX_INGREDIENT_QUANTITY = 100_000;
+
 export function isRecipeStatus(value: unknown): value is RecipeStatus {
   return (
     typeof value === "string" &&
@@ -196,11 +201,15 @@ export function parseAddIngredientInput(
     return { ok: false, error: "La cantidad es obligatoria" };
   }
 
+  if (quantity > MAX_INGREDIENT_QUANTITY) {
+    return { ok: false, error: "La cantidad es demasiado grande" };
+  }
+
   const rawIngredientId = record["ingredient_id"];
+  const trimmedIngredientId =
+    typeof rawIngredientId === "string" ? rawIngredientId.trim() : "";
   const ingredientId =
-    typeof rawIngredientId === "string" && rawIngredientId.length > 0
-      ? rawIngredientId
-      : undefined;
+    trimmedIngredientId.length > 0 ? trimmedIngredientId : undefined;
   const rawName = record["name"];
   const name = typeof rawName === "string" ? rawName.trim() : "";
 
@@ -231,7 +240,9 @@ export function parseUpdateIngredientInput(
 
   if (
     quantity !== undefined &&
-    (typeof quantity !== "number" || Number.isFinite(quantity) === false)
+    (typeof quantity !== "number" ||
+      Number.isFinite(quantity) === false ||
+      quantity > MAX_INGREDIENT_QUANTITY)
   ) {
     return { ok: false, error: "La cantidad es inválida" };
   }
@@ -286,6 +297,10 @@ export function parseReplaceIngredientsInput(
       return { ok: false, error: "La cantidad debe ser un número ≥ 0" };
     }
 
+    if (quantity > MAX_INGREDIENT_QUANTITY) {
+      return { ok: false, error: "La cantidad es demasiado grande" };
+    }
+
     const spec: ReplaceIngredientSpec = { quantity };
     const rawId = line["id"];
     const id =
@@ -301,9 +316,11 @@ export function parseReplaceIngredientsInput(
     if (name.length > 0) spec.name = name;
 
     const rawIngredientId = line["ingredient_id"];
+    const trimmedIngredientId =
+      typeof rawIngredientId === "string" ? rawIngredientId.trim() : "";
 
-    if (typeof rawIngredientId === "string" && rawIngredientId.length > 0) {
-      spec.ingredientId = rawIngredientId;
+    if (trimmedIngredientId.length > 0) {
+      spec.ingredientId = trimmedIngredientId;
     }
 
     const unit = line["unit"];
