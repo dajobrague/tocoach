@@ -14,6 +14,7 @@ import {
   addIngredientFromFood,
   addIngredientManual,
   createRecipe,
+  resolveNativeAdd,
   deleteRecipe,
   removeIngredient,
   removeMedia,
@@ -72,13 +73,25 @@ export function useAddIngredient(recipeId: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (args: AddIngredientArgs) =>
-      args.kind === "food"
-        ? addIngredientFromFood(recipeId, {
-            food: args.food,
-            quantity: args.quantity,
-          })
-        : addIngredientManual(recipeId, args.input),
+    mutationFn: async (args: AddIngredientArgs) => {
+      if (args.kind === "manual") {
+        return addIngredientManual(recipeId, args.input);
+      }
+
+      // Land the food in its native unit when OFF knows one: a beverage as
+      // its serving in ml, a solid with a serving weight as 1 u × that
+      // weight; otherwise the caller's plain-grams default.
+      const native = await resolveNativeAdd(args.food);
+
+      return addIngredientFromFood(recipeId, {
+        food: args.food,
+        quantity: native?.quantity ?? args.quantity,
+        ...(native !== null ? { unit: native.unit } : {}),
+        ...(native?.gramsPerUnit !== undefined
+          ? { gramsPerUnit: native.gramsPerUnit }
+          : {}),
+      });
+    },
     onSuccess: () => invalidateRecipe(client, recipeId),
   });
 }

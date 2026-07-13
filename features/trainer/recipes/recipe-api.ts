@@ -102,13 +102,14 @@ export interface AddFromFoodArgs {
   food: FoodSearchResult;
   quantity: number;
   unit?: string;
+  /** Grams per piece, for unit "u" adds (the product's serving weight). */
+  gramsPerUnit?: number;
 }
 
 /**
- * Add-ingredient body built from a food search result. The search API does not
- * surface the ingredients-cache row id, so we freeze the snapshot directly via
- * the free-text path (name + per-100g nutrients) — equivalent to what the cache
- * would store.
+ * Add-ingredient body built from a food search result. When the food carries a
+ * cache row id the server freezes from the tenant-scoped cache row; otherwise
+ * it falls back to the free-text path (name + per-100g nutrients).
  */
 export function buildAddFromFoodPayload(
   args: AddFromFoodArgs
@@ -127,6 +128,8 @@ export function buildAddFromFoodPayload(
   // Link the line to its cache row — without this the serving-weight prefill
   // (unit "u") has nothing to enrich from.
   if (args.food.id !== undefined) payload.ingredient_id = args.food.id;
+  if (args.gramsPerUnit !== undefined)
+    payload.grams_per_unit = args.gramsPerUnit;
 
   return payload;
 }
@@ -315,6 +318,53 @@ export function enrichFoodServing(
   return sendJson<FoodServingInfo>("/api/foods/enrich", "POST", {
     id: ingredientId,
   });
+}
+
+/** How the food should land on the recipe, in its native unit. */
+export interface NativeAddShape {
+  quantity: number;
+  unit: "u" | "ml";
+  gramsPerUnit?: number;
+}
+
+/** Cap the serving lookup so a slow OFF call never stalls the add — the
+ *  enrichment keeps running server-side and is cached for the next add. */
+const NATIVE_ADD_TIMEOUT_MS = 2500;
+
+/**
+ * Best-effort native unit for adding a food: a beverage (serving in ml) lands
+ * as its serving in ml; a solid with a known serving weight lands as
+ * 1 u × that weight; anything else (no id, no serving data, slow/failed
+ * lookup) returns null and the caller keeps the plain-grams default.
+ */
+export async function resolveNativeAdd(
+  food: FoodSearchResult
+): Promise<NativeAddShape | null> {
+  if (food.id === undefined || food.source !== "off") {
+    return null;
+  }
+
+  try {
+    const serving = await Promise.race([
+      enrichFoodServing(food.id),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), NATIVE_ADD_TIMEOUT_MS)
+      ),
+    ]);
+    const quantity = serving?.servingQuantity;
+
+    if (quantity === undefined || quantity <= 0) {
+      return null;
+    }
+
+    if (serving?.servingQuantityUnit === "ml") {
+      return { quantity, unit: "ml" };
+    }
+
+    return { quantity: 1, unit: "u", gramsPerUnit: quantity };
+  } catch {
+    return null;
+  }
 }
 
 export function addIngredientFromFood(
