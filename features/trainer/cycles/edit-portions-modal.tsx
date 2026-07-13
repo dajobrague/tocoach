@@ -311,6 +311,7 @@ function PortionsForm({
         <Textarea
           isDisabled={busy}
           label="Comentario para este cliente (opcional)"
+          maxLength={2000}
           minRows={2}
           placeholder="Nota que el cliente verá junto a esta receta."
           value={comment}

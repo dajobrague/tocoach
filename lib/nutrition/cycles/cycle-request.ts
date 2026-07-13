@@ -465,7 +465,10 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
     const trainerComment = parseTrainerComment(record.trainer_comment);
 
     if (trainerComment === null) {
-      return { ok: false, error: "trainer_comment debe ser un texto" };
+      return {
+        ok: false,
+        error: "trainer_comment debe ser un texto de máximo 2000 caracteres",
+      };
     }
 
     const value: AddOptionBody = { sourceType: "recipe", recipeId };
@@ -500,7 +503,10 @@ export function parseAddOption(body: unknown): ParseResult<AddOptionBody> {
     const trainerComment = parseTrainerComment(record.trainer_comment);
 
     if (trainerComment === null) {
-      return { ok: false, error: "trainer_comment debe ser un texto" };
+      return {
+        ok: false,
+        error: "trainer_comment debe ser un texto de máximo 2000 caracteres",
+      };
     }
 
     const value: AddOptionBody = {
@@ -554,7 +560,10 @@ export function parseUpdateOption(
   const trainerComment = parseTrainerComment(record.trainer_comment);
 
   if (trainerComment === null) {
-    return { ok: false, error: "trainer_comment debe ser un texto" };
+    return {
+      ok: false,
+      error: "trainer_comment debe ser un texto de máximo 2000 caracteres",
+    };
   }
 
   if (trainerComment !== undefined) value.trainerComment = trainerComment;
@@ -642,17 +651,23 @@ function parseIngredientEdits(
   return edits;
 }
 
+/** Hard cap on a trainer comment — the note lives inside the item_snapshot
+ *  JSONB, so an unbounded string would bloat the row and every tree fetch. */
+const TRAINER_COMMENT_MAX_LENGTH = 2000;
+
 /**
  * Validate an optional trainer comment: `undefined` when absent, `null` when
- * present but not a string. An empty string is kept — on update it means
- * "clear the note".
+ * present but not a string or longer than {@link TRAINER_COMMENT_MAX_LENGTH}.
+ * An empty string is kept — on update it means "clear the note".
  */
 function parseTrainerComment(value: unknown): string | undefined | null {
   if (value === undefined) {
     return undefined;
   }
 
-  return typeof value === "string" ? value : null;
+  return typeof value === "string" && value.length <= TRAINER_COMMENT_MAX_LENGTH
+    ? value
+    : null;
 }
 
 /**

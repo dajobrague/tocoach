@@ -491,6 +491,7 @@ function RecipesPanel({
 
               <Textarea
                 label="Comentario para este cliente (opcional)"
+                maxLength={2000}
                 minRows={2}
                 placeholder="Ej.: en esta comida metemos más grasa para llegar al objetivo del día."
                 value={comment}

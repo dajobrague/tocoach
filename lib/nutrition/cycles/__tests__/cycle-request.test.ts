@@ -175,6 +175,21 @@ describe("parseUpdateOption", () => {
     expect(parseUpdateOption({ ingredients: [] }).ok).toBe(false);
   });
 
+  it("rejects a trainer comment over 2000 chars (JSONB bloat guard)", () => {
+    expect(
+      parseUpdateOption({
+        quantities: [100],
+        trainer_comment: "x".repeat(2001),
+      }).ok
+    ).toBe(false);
+    expect(
+      parseUpdateOption({
+        quantities: [100],
+        trainer_comment: "x".repeat(2000),
+      }).ok
+    ).toBe(true);
+  });
+
   it("rejects malformed rewrite lines", () => {
     // Unknown kind.
     expect(
