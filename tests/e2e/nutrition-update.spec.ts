@@ -117,17 +117,25 @@ test("wizard renders all four steps with real candidates and verdicts", async ({
   await page.goto(WIZARD_PATH);
 
   await expect(page.getByText("Actualización a Nutrición 2.0")).toBeVisible();
-  await expect(page.getByText("Importa tus recetas")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Importa tus recetas" })
+  ).toBeVisible();
   // A seeded legacy candidate shows in step 1's embedded importer.
   await expect(page.getByText("Pollo con arroz")).toBeVisible();
 
   // Step 2: the test client appears with the PDF verdict.
-  await expect(page.getByText("Revisa a tus clientes")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Revisa a tus clientes" })
+  ).toBeVisible();
   await expect(page.getByText("Verá su PDF").first()).toBeVisible();
 
   // Steps 3 & 4 are present.
-  await expect(page.getByText("Conoce la nueva nutrición")).toBeVisible();
-  await expect(page.getByText("Activa el cambio")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conoce la nueva nutrición" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Activa el cambio" })
+  ).toBeVisible();
 });
 
 test("phone-frame preview shows the client's real PDF", async ({

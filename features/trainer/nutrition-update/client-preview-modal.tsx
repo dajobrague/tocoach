@@ -45,8 +45,12 @@ export function ClientPreviewModal({
               </span>
             </ModalHeader>
             <ModalBody className="items-center pb-6">
-              <div className="h-[68vh] w-[380px] max-w-full overflow-y-auto rounded-[2.2rem] border-8 border-gray-900 bg-background shadow-xl">
-                <div className="px-3 py-4">
+              <div className="w-[380px] max-w-full overflow-hidden rounded-[2.4rem] border-8 border-slate-900 bg-background shadow-2xl">
+                {/* Device chrome: a quiet notch bar sells the "their phone" frame. */}
+                <div className="flex justify-center bg-background pb-1 pt-2">
+                  <span className="h-1.5 w-20 rounded-full bg-slate-900/80" />
+                </div>
+                <div className="h-[62vh] overflow-y-auto px-3 pb-4 pt-2">
                   <PreviewBody client={client} />
                 </div>
               </div>
