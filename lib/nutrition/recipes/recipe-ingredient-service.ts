@@ -67,6 +67,9 @@ export interface ReplaceIngredientSpec {
   name?: string;
   brand?: string;
   imageUrl?: string;
+  /** Cache-row link for a NEW line (serving-data lookups); the snapshot is
+   *  still frozen from the provided values, never re-read from the cache. */
+  ingredientId?: string;
   quantity: number;
   unit?: string;
   gramsPerUnit?: number | null;
@@ -385,7 +388,7 @@ export class RecipeIngredientService {
       const frozen = await freezeIngredient(this.client, tenantHost, addInput);
       const { error } = await this.client.from(TABLE).insert({
         recipe_id: recipeId,
-        ingredient_id: null,
+        ingredient_id: spec.ingredientId ?? null,
         name_snapshot: frozen.name,
         brand: frozen.brand ?? null,
         image_url: frozen.imageUrl ?? null,

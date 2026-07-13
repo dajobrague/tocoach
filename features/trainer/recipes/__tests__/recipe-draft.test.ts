@@ -62,6 +62,13 @@ describe("draftFromFood", () => {
     expect(draft.grams_per_unit).toBeNull();
     expect(draft.nutrient_snapshot["kcal"]).toBe(389);
   });
+
+  it("keeps the cache-row link when the food carries an id", () => {
+    expect(draftFromFood({ ...food, id: "cache-1" }).ingredient_id).toBe(
+      "cache-1"
+    );
+    expect(draftFromFood(food).ingredient_id).toBeNull();
+  });
 });
 
 describe("draftFromManual", () => {
@@ -169,5 +176,15 @@ describe("buildReplaceIngredientsBody", () => {
       nutrients_per_100g: { kcal: 100 },
       id: "row-7",
     });
+  });
+
+  it("carries the cache-row link on new lines so serving lookups keep working", () => {
+    const body = buildReplaceIngredientsBody([
+      line({ id: "tmp-1", ingredient_id: "cache-1" }),
+      line({ id: "tmp-2", ingredient_id: null }),
+    ]);
+
+    expect(body.ingredients[0]?.ingredient_id).toBe("cache-1");
+    expect("ingredient_id" in (body.ingredients[1] ?? {})).toBe(false);
   });
 });

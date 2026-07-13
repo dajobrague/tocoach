@@ -44,7 +44,9 @@ const MANUAL_NUTRIENT_KEYS = [
 export function draftFromFood(food: FoodSearchResult): RecipeIngredientItem {
   return {
     id: makeTempId(),
-    ingredient_id: null,
+    // Keep the cache-row link — it's what lets serving data (native units,
+    // grams-per-piece) be hydrated for this line later.
+    ingredient_id: food.id ?? null,
     name_snapshot: food.name,
     brand: food.brand ?? null,
     image_url: food.imageUrl ?? null,
@@ -154,6 +156,8 @@ export function buildReplaceIngredientsBody(items: RecipeIngredientItem[]): {
         line.name = item.name_snapshot;
         if (item.brand !== null) line.brand = item.brand;
         if (item.image_url !== null) line.image_url = item.image_url;
+        if (item.ingredient_id !== null)
+          line.ingredient_id = item.ingredient_id;
       } else {
         line.id = item.id;
       }

@@ -300,6 +300,12 @@ export function parseReplaceIngredientsInput(
     if (id !== undefined) spec.id = id;
     if (name.length > 0) spec.name = name;
 
+    const rawIngredientId = line["ingredient_id"];
+
+    if (typeof rawIngredientId === "string" && rawIngredientId.length > 0) {
+      spec.ingredientId = rawIngredientId;
+    }
+
     const unit = line["unit"];
     const gramsPerUnit = line["grams_per_unit"];
     const nutrients = asRecord(line["nutrients_per_100g"]);

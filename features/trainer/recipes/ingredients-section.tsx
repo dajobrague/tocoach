@@ -1,7 +1,7 @@
 "use client";
 
 import type { IngredientPatch } from "./ingredient-row";
-import type { RecipeIngredientItem } from "./recipe-api";
+import type { FoodSearchResult, RecipeIngredientItem } from "./recipe-api";
 
 import {
   closestCenter,
@@ -22,10 +22,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { IngredientRow } from "./ingredient-row";
 import { IngredientSearch } from "./ingredient-search";
+import { LIBRARY_DEFAULT_QUANTITY, resolveNativeAdd } from "./recipe-api";
 import { draftFromFood, draftFromManual } from "./recipe-draft";
 
 /** Sortable wrapper: owns the dnd transform and hands the row its drag handle. */
@@ -83,6 +84,52 @@ export function IngredientsSection({
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Live mirror of the draft list so the async native-unit upgrade below can
+  // patch against the CURRENT list, not the one captured when the add fired.
+  const ingredientsRef = useRef(ingredients);
+
+  ingredientsRef.current = ingredients;
+
+  const addFood = (food: FoodSearchResult) => {
+    const draft = draftFromFood(food);
+
+    onChange([...ingredients, draft]);
+
+    // Upgrade the line to the product's native unit once OFF answers: drinks
+    // become their serving in ml, solids 1 u × the serving weight. Only while
+    // the line still holds the untouched 100 g default — a trainer edit wins.
+    resolveNativeAdd(food)
+      .then((native) => {
+        if (native === null) return;
+
+        const current = ingredientsRef.current;
+        const line = current.find((item) => item.id === draft.id);
+        const untouched =
+          line !== undefined &&
+          line.quantity === LIBRARY_DEFAULT_QUANTITY &&
+          line.unit === draft.unit &&
+          line.grams_per_unit === null;
+
+        if (untouched === false) return;
+
+        onChange(
+          current.map((item) =>
+            item.id === draft.id
+              ? {
+                  ...item,
+                  quantity: native.quantity,
+                  unit: native.unit,
+                  grams_per_unit: native.gramsPerUnit ?? null,
+                }
+              : item
+          )
+        );
+      })
+      .catch(() => {
+        // Best-effort: the plain-grams line stays.
+      });
+  };
 
   const applyPatch = (patch: IngredientPatch) => {
     onChange(
@@ -206,7 +253,7 @@ export function IngredientsSection({
         <div className="border-t border-gray-100 pt-4">
           <IngredientSearch
             busy={disabled}
-            onAdd={(food) => onChange([...ingredients, draftFromFood(food)])}
+            onAdd={addFood}
             onAddManual={(input) =>
               onChange([...ingredients, draftFromManual(input)])
             }
