@@ -23,9 +23,12 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.{test,spec}.{ts,tsx}"],
     // Integration tests need the local DB and run via vitest.integration.config.ts.
+    // .claude/worktrees holds parallel-session checkouts — never test those here.
     exclude: [
       "node_modules",
+      "**/node_modules/**",
       ".next",
+      ".claude/**",
       "tests/e2e/**",
       "**/*.integration.test.ts",
     ],

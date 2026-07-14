@@ -26,7 +26,7 @@ export async function PUT(
     const { data: existingClient } = await supabase
       .from("clients")
       .select("*")
-      .eq("id", clientId)
+      .eq("id", Number(clientId))
       .eq("tenant", session.trainer_id)
       .single();
 
@@ -109,7 +109,7 @@ export async function DELETE(
     const { data: existingClient } = await supabase
       .from("clients")
       .select("*")
-      .eq("id", clientId)
+      .eq("id", Number(clientId))
       .eq("tenant", session.trainer_id)
       .single();
 
@@ -142,7 +142,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from("clients")
       .delete()
-      .eq("id", clientId);
+      .eq("id", Number(clientId));
 
     if (deleteError) {
       console.error("[Delete Client API] Error deleting client:", deleteError);

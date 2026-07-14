@@ -19,7 +19,10 @@ import React from "react";
 
 import Sidebar, { type SidebarItem } from "@/components/dashboard/sidebar";
 import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
-import { TRAINER_NAV } from "@/features/trainer/nav/nav-items";
+import {
+  TRAINER_NAV,
+  type TrainerNavSection,
+} from "@/features/trainer/nav/nav-items";
 
 interface SideShellProps {
   children: React.ReactNode;
@@ -29,6 +32,7 @@ interface SideShellProps {
   trainerImage: string | undefined;
   brandLogo: string | undefined;
   unreadMessages: number;
+  sections?: TrainerNavSection[];
   onLogout: () => void;
 }
 
@@ -37,10 +41,13 @@ interface SideShellProps {
  * In the side shell, grouped items (e.g. Plantillas) are flattened directly
  * into the section so every child is visible without an accordion click.
  */
-function buildSidebarItems(unreadMessages: number): SidebarItem[] {
+function buildSidebarItems(
+  unreadMessages: number,
+  sections: TrainerNavSection[]
+): SidebarItem[] {
   const out: SidebarItem[] = [];
 
-  for (const section of TRAINER_NAV) {
+  for (const section of sections) {
     const sectionItems: SidebarItem[] = [];
 
     for (const item of section.items) {
@@ -99,6 +106,7 @@ export function SideShell({
   trainerImage,
   brandLogo,
   unreadMessages,
+  sections = TRAINER_NAV,
   onLogout,
 }: SideShellProps) {
   const router = useRouter();
@@ -108,15 +116,15 @@ export function SideShell({
   React.useEffect(() => setLogoError(false), [brandLogo]);
 
   const sidebarItems = React.useMemo(
-    () => buildSidebarItems(unreadMessages),
-    [unreadMessages]
+    () => buildSidebarItems(unreadMessages, sections),
+    [unreadMessages, sections]
   );
 
   const onSidebarSelect = (key: string) => {
     drawer.onClose();
     let href: string | undefined;
 
-    for (const section of TRAINER_NAV) {
+    for (const section of sections) {
       for (const item of section.items) {
         if (item.key === key) {
           href = item.href;

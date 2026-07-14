@@ -1,3 +1,7 @@
+import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
+import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
@@ -111,6 +115,38 @@ async function fetchNutritionPlan() {
   return data.data && data.data.length > 0 ? data.data : null;
 }
 
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // Very old browsers without Intl — fall back to UTC (charts convention).
+    return "UTC";
+  }
+}
+
+async function fetchMealCycle(): Promise<ClientCycleView | null> {
+  // Pass the client's IANA tz so "today" is computed in their local day,
+  // exactly how the charts API receives it.
+  const tz = browserTimeZone();
+  const response = await clientFetch(
+    `/api/client/meal-cycle?tz=${encodeURIComponent(tz)}`
+  );
+
+  // Flag off (or route hidden) → 404. Treat as "no plan available", a clean
+  // empty result, not an error — the view renders its empty state.
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientCycleView;
+}
+
 async function fetchSupplements() {
   const response = await clientFetch("/api/client/supplements");
   const data = await response.json();
@@ -182,6 +218,218 @@ export function useNutritionPlan() {
   return useQuery({
     queryKey: ["client", "nutrition"],
     queryFn: fetchNutritionPlan,
+  });
+}
+
+/**
+ * The client's active meal cycle (nutrition-v2). Returns `null` when there is
+ * no active cycle or the feature is off (404) — both render as an empty state.
+ */
+export function useClientMealCycle() {
+  return useQuery({
+    queryKey: ["client", "meal-cycle"],
+    queryFn: fetchMealCycle,
+  });
+}
+
+export const MEAL_CYCLE_KEY = ["client", "meal-cycle"] as const;
+export const MEAL_CYCLE_WEEK_KEY = ["client", "meal-cycle-week"] as const;
+
+async function fetchMealCycleWeek(
+  weekStart: string,
+  tz: string
+): Promise<ClientWeek | null> {
+  const response = await clientFetch(
+    `/api/client/meal-cycle/week?weekStart=${encodeURIComponent(weekStart)}&tz=${encodeURIComponent(tz)}`
+  );
+
+  // Flag off (or route hidden) → 404 → clean empty result (same as the
+  // single-date fetch).
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientWeek;
+}
+
+/**
+ * The client's active cycle laid out over the week containing `weekStart`
+ * (Monday), each day resolved (swaps + notes) with a `canLog` flag. `null` when
+ * there is no active cycle or the feature is off (404).
+ */
+export function useClientMealCycleWeek(weekStart: string, tz: string) {
+  return useQuery({
+    queryKey: [...MEAL_CYCLE_WEEK_KEY, weekStart, tz],
+    queryFn: () => fetchMealCycleWeek(weekStart, tz),
+    enabled: weekStart.length > 0,
+  });
+}
+
+/** The merged shopping list for a `[from, to]` range, as the API returns it. */
+export interface ClientShoppingList {
+  from: string;
+  to: string;
+  items: ShoppingListItem[];
+}
+
+async function fetchShoppingList(
+  from: string,
+  to: string
+): Promise<ClientShoppingList | null> {
+  const response = await clientFetch(
+    `/api/client/shopping-list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+  );
+
+  // Flag off (or route hidden) → 404. Treat as "no list available", a clean
+  // empty result, not an error — same convention as the meal-cycle fetch.
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error ?? `request_failed (${response.status})`);
+  }
+
+  return data.data as ClientShoppingList;
+}
+
+/**
+ * The merged shopping list for the authed client's active cycle over a
+ * `[from, to]` range. Returns `null` when the feature is off (404) — rendered
+ * as the empty state. Disabled until both bounds are set.
+ */
+export function useClientShoppingList(from: string, to: string) {
+  return useQuery({
+    queryKey: ["client", "shopping-list", from, to],
+    queryFn: () => fetchShoppingList(from, to),
+    enabled: from.length > 0 && to.length > 0,
+  });
+}
+
+async function postMealCycleSelection(input: {
+  slotId: string;
+  optionId: string;
+}): Promise<void> {
+  const response = await clientFetch("/api/client/meal-cycle/selection", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error ?? `request_failed (${response.status})`);
+  }
+}
+
+/**
+ * Persist the client's option choice for a meal slot, optimistically marking it
+ * in the cached meal-cycle view so the UI updates instantly. Rolls back on
+ * error and re-syncs from the server on settle.
+ */
+export function useSetMealCycleSelection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: postMealCycleSelection,
+    onMutate: async ({ slotId, optionId }) => {
+      await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_KEY });
+      await queryClient.cancelQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
+
+      const previous = queryClient.getQueryData<ClientCycleView | null>(
+        MEAL_CYCLE_KEY
+      );
+
+      if (previous) {
+        queryClient.setQueryData<ClientCycleView | null>(MEAL_CYCLE_KEY, {
+          ...previous,
+          selections: { ...previous.selections, [slotId]: optionId },
+        });
+      }
+
+      // Mirror the choice into every cached week so the week view updates
+      // instantly too (it carries a week-global selections map).
+      const previousWeeks = queryClient.getQueriesData<ClientWeek | null>({
+        queryKey: MEAL_CYCLE_WEEK_KEY,
+      });
+
+      for (const [key, week] of previousWeeks) {
+        if (week) {
+          queryClient.setQueryData<ClientWeek | null>(key, {
+            ...week,
+            selections: { ...week.selections, [slotId]: optionId },
+          });
+        }
+      }
+
+      return { previous, previousWeeks };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(MEAL_CYCLE_KEY, context.previous);
+      }
+      for (const [key, week] of context?.previousWeeks ?? []) {
+        queryClient.setQueryData(key, week);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
+    },
+  });
+}
+
+async function putMenuChoice(input: {
+  date: string;
+  dayIndex: number | null;
+}): Promise<void> {
+  // The route validates "today or later" in the client's timezone.
+  let tz = "UTC";
+
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // Keep UTC.
+  }
+
+  const response = await clientFetch(
+    `/api/client/meal-cycle/menu-choice?tz=${encodeURIComponent(tz)}`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date: input.date, day_index: input.dayIndex }),
+    }
+  );
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error ?? `request_failed (${response.status})`);
+  }
+}
+
+/**
+ * Pick which plan menu (day) to follow on a date — `dayIndex: null` goes back
+ * to the rotation's recommendation. The chosen day's slots live server-side,
+ * so there is no optimistic patch: the week refetches on settle and the picker
+ * shows its pending state meanwhile.
+ */
+export function useSetMenuChoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: putMenuChoice,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
+      void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
+    },
   });
 }
 

@@ -7,7 +7,7 @@ import AccessTab from "./tabs/access-tab";
 import ChartsTab from "./tabs/charts-tab";
 import FormsTab from "./tabs/forms-tab";
 import NeatTab from "./tabs/neat-tab";
-import NutritionTab from "./tabs/nutrition-tab";
+import { NutritionTabSwitch } from "./tabs/nutrition-tab-switch";
 import SupplementsTab from "./tabs/supplements-tab";
 import TrainingTabs from "./tabs/training-tabs";
 import { useUrlEnum } from "./use-url-state";
@@ -100,7 +100,9 @@ export default function ClientProfileTabs({
             <TrainingTabs clientId={clientId} clientName={clientName ?? ""} />
           )}
           {selectedTab === "neat" && <NeatTab clientId={clientId} />}
-          {selectedTab === "nutrition" && <NutritionTab clientId={clientId} />}
+          {selectedTab === "nutrition" && (
+            <NutritionTabSwitch clientId={clientId} />
+          )}
           {selectedTab === "supplements" && (
             <SupplementsTab clientId={clientId} />
           )}

@@ -5,6 +5,10 @@ export type TrainerNavItem = {
   icon: string;
   href?: string;
   items?: TrainerNavItem[];
+  /** Only show when the tenant's nutrition_v2 flag is enabled. */
+  requiresNutritionV2?: boolean;
+  /** Hide once the client-facing cutover is live (rollout-only entries). */
+  hideWhenNutritionV2Live?: boolean;
 };
 
 export type TrainerNavSection = {
@@ -54,6 +58,21 @@ export const TRAINER_NAV: TrainerNavSection[] = [
         icon: "solar:box-linear",
         href: "/trainer/dashboard/inventory",
       },
+      {
+        key: "recipes",
+        title: "Recetas",
+        icon: "solar:chef-hat-linear",
+        href: "/trainer/dashboard/recipes",
+        requiresNutritionV2: true,
+      },
+      {
+        key: "nutrition-update",
+        title: "Nutrición 2.0",
+        icon: "solar:magic-stick-3-linear",
+        href: "/trainer/dashboard/nutrition-update",
+        requiresNutritionV2: true,
+        hideWhenNutritionV2Live: true,
+      },
     ],
   },
   {
@@ -94,6 +113,46 @@ export const TRAINER_NAV: TrainerNavSection[] = [
     ],
   },
 ];
+
+/**
+ * Remove flag-gated items the tenant can't see. Pure; drives both nav shells
+ * and is unit-tested. `nutritionV2` = trainer tools on; `nutritionV2Live` =
+ * clients already switched (retires rollout-only entries like the wizard).
+ */
+export function filterTrainerNav(
+  sections: TrainerNavSection[],
+  flags: { nutritionV2: boolean; nutritionV2Live: boolean }
+): TrainerNavSection[] {
+  const keepItem = (item: TrainerNavItem): TrainerNavItem | null => {
+    if (item.requiresNutritionV2 === true && flags.nutritionV2 === false) {
+      return null;
+    }
+
+    if (
+      item.hideWhenNutritionV2Live === true &&
+      flags.nutritionV2Live === true
+    ) {
+      return null;
+    }
+
+    if (item.items !== undefined) {
+      const kept = item.items
+        .map(keepItem)
+        .filter((child): child is TrainerNavItem => child !== null);
+
+      return { ...item, items: kept };
+    }
+
+    return item;
+  };
+
+  return sections.map((section) => ({
+    ...section,
+    items: section.items
+      .map(keepItem)
+      .filter((item): item is TrainerNavItem => item !== null),
+  }));
+}
 
 /** Flatten leaf items (those with `href`) for active-key matching. */
 export function flattenLeaves(

@@ -125,7 +125,7 @@ function SetupWizardContent() {
                     }`}
                   >
                     {state.currentStep > step.key ? (
-                      <Icon className="text-xs" icon="solar:check-linear" />
+                      <Icon className="text-xs" icon="solar:unread-linear" />
                     ) : (
                       step.key
                     )}
@@ -170,7 +170,7 @@ function SetupWizardContent() {
                     }`}
                   >
                     {state.currentStep > step.key ? (
-                      <Icon className="text-xs" icon="solar:check-linear" />
+                      <Icon className="text-xs" icon="solar:unread-linear" />
                     ) : (
                       step.key
                     )}

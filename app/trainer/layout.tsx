@@ -16,45 +16,24 @@ export default function TrainerLayout({
   const useShell = SHELL_PATH_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
+  // HeroUI resolves --heroui-* variables inside hsl(), so the values MUST be
+  // HSL channel triples. Writing the slate palette as RGB triples here turned
+  // every primary-tinted surface (checkboxes, progress bars, flat chips) into
+  // hsl(15 23% 42%) — a brown that exists nowhere in the design system.
   const trainerThemeCss = `
     .trainer-app {
-      --heroui-primary-50: 248 250 252 !important;
-      --heroui-primary-100: 241 245 249 !important;
-      --heroui-primary-200: 226 232 240 !important;
-      --heroui-primary-300: 203 213 225 !important;
-      --heroui-primary-400: 148 163 184 !important;
-      --heroui-primary-500: 100 116 139 !important;
-      --heroui-primary-600: 71 85 105 !important;
-      --heroui-primary-700: 51 65 85 !important;
-      --heroui-primary-800: 30 41 59 !important;
-      --heroui-primary-900: 15 23 42 !important;
-      --heroui-primary: 15 23 42 !important;
-      --heroui-primary-foreground: 255 255 255 !important;
-    }
-    .trainer-app [data-color="primary"],
-    .trainer-app .bg-primary,
-    .trainer-app button[data-color="primary"],
-    .trainer-app [class*="primary"] {
-      --tw-bg-opacity: 1 !important;
-      background-color: rgb(15 23 42 / var(--tw-bg-opacity)) !important;
-      color: white !important;
-    }
-    .trainer-app button[data-color="primary"]:hover {
-      background-color: rgb(30 41 59) !important;
-    }
-    .trainer-app .heroui-button[data-color="primary"] {
-      background: rgb(15 23 42) !important;
-      color: white !important;
-    }
-    .trainer-app .heroui-button[data-color="primary"]:hover {
-      background: rgb(30 41 59) !important;
-    }
-    .trainer-app [data-color="primary"] circle {
-      stroke: rgb(15 23 42) !important;
-    }
-    .trainer-app .heroui-chip[data-color="primary"] {
-      background: rgb(15 23 42) !important;
-      color: white !important;
+      --heroui-primary-50: 210 40% 98% !important;
+      --heroui-primary-100: 210 40% 96% !important;
+      --heroui-primary-200: 214 32% 91% !important;
+      --heroui-primary-300: 213 27% 84% !important;
+      --heroui-primary-400: 215 20% 65% !important;
+      --heroui-primary-500: 215 16% 47% !important;
+      --heroui-primary-600: 215 19% 35% !important;
+      --heroui-primary-700: 215 25% 27% !important;
+      --heroui-primary-800: 217 33% 18% !important;
+      --heroui-primary-900: 222 47% 11% !important;
+      --heroui-primary: 222 47% 11% !important;
+      --heroui-primary-foreground: 0 0% 100% !important;
     }
   `;
 

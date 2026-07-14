@@ -42,6 +42,11 @@ export default function AdminDashboardLayout({
       icon: "solar:shield-user-bold-duotone",
     },
     {
+      label: "Nutrición v2",
+      href: "/admin/dashboard/nutrition-metrics",
+      icon: "solar:chart-2-bold-duotone",
+    },
+    {
       label: "Configuración",
       href: "/admin/dashboard/settings",
       icon: "solar:settings-bold-duotone",

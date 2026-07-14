@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { setSessionCookie, updateTrainerLastLogin } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 export async function POST(request: NextRequest) {
@@ -53,8 +54,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get tenant info for this trainer
-    const { data: tenant } = await supabase
+    // Get tenant info for this trainer. Use the service-role client: the
+    // post-sign-in anon client can return empty here under local RLS, which
+    // would leave tenant_host = "".
+    const { data: tenant } = await createSupabaseAdminClient()
       .from("tenants")
       .select("host, slug")
       .eq("trainer_id", authData.user.id)

@@ -550,11 +550,13 @@ export default function WorkoutsTab({
       // Only update identity fields — name, exerciseId, videoUrl.
       // All workout params (sets/reps/tempo/rest/rir/sistema) are preserved
       // so changing the selected exercise doesn't wipe values already entered.
+      // videoUrl follows the NEW exercise (cleared when it has none) — keeping
+      // the previous one would attach a stale video to the wrong exercise.
       setExerciseForm((prev) => ({
         ...prev,
         name: exercise.name,
         exerciseId: exercise.id,
-        videoUrl: exercise.video_url || prev.videoUrl,
+        videoUrl: exercise.video_url || "",
       }));
       // Keep the controlled input text in sync with the picked exercise.
       setLibraryInputValue(exercise.name);

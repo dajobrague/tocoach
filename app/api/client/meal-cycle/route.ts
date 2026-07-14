@@ -1,0 +1,145 @@
+import type { ClientSession } from "@/lib/auth/client-session";
+
+import { NextRequest, NextResponse } from "next/server";
+
+import { getClientSession } from "@/lib/auth/client-session";
+import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
+import { buildClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
+import { applyOverridesToClientView } from "@/lib/nutrition/cycles/override-client-view";
+import { OverrideService } from "@/lib/nutrition/cycles/override-service";
+import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
+import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
+import { getMealLogs } from "@/lib/nutrition/logs/meal-log-service";
+import { toYmdInTimezone } from "@/lib/forms/chart-helpers";
+import { loadTenantContext } from "@/lib/tenant/loader";
+
+const LOG_PREFIX = "[Client MealCycle API]";
+
+/**
+ * GET /api/client/meal-cycle — the authed client's own active meal cycle as a
+ * frozen-snapshot tree (cycle → days → slots → options), plus where "today"
+ * falls in the rotation.
+ *
+ * Auth boundary (§4.4): client-session only. The numeric client id comes
+ * exclusively from the verified session (never the request), so a client can
+ * fetch only their own cycle. A trainer JWT (which carries `trainer_id`, not a
+ * numeric `client_id`) is rejected with 401. Behind the nutrition-v2 flag: when
+ * off the route 404s to hide its existence. No active cycle is a clean empty
+ * result, not an error.
+ *
+ * "Today" is computed in the client's IANA timezone, passed as `?tz=` from the
+ * browser (same convention as the charts API); defaults to "UTC" when absent.
+ */
+export async function GET(request: NextRequest) {
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const session = await getClientSession();
+  const clientId = parseClientId(session);
+
+  if (clientId === null) {
+    return NextResponse.json(
+      { success: false, error: "No autorizado" },
+      { status: 401 }
+    );
+  }
+
+  try {
+    // Flag gate first (404 hides existence). The per-tenant flag keys on the
+    // tenant *host*; resolve it from the session's slug via the cached loader.
+    const tenant = await loadTenantContext(session!.tenant_slug);
+    const enabled = await isNutritionV2Enabled(tenant?.host ?? "");
+
+    if (enabled === false) {
+      return NextResponse.json(
+        { success: false, error: "No encontrado" },
+        { status: 404 }
+      );
+    }
+
+    // Client timezone from the browser (charts convention); UTC when absent.
+    const timeZone = new URL(request.url).searchParams.get("tz") || "UTC";
+    const todayIso = toYmdInTimezone(new Date(), timeZone);
+    const supabase = createSupabaseClient();
+    const [tree, selections, logs, choiceRows] = await Promise.all([
+      getActiveCycleTreeForClient(supabase, clientId),
+      getClientSelections(supabase, clientId),
+      // Today's logs only — the today view lets the client log today's meals.
+      getMealLogs(supabase, clientId, todayIso, todayIso),
+      getMenuChoices(supabase, clientId, todayIso, todayIso),
+    ]);
+    const now = new Date();
+    const view = buildClientCycleView(tree, now, timeZone, selections, logs);
+
+    // Today's menu choice (this cycle only) beats the rotation — same
+    // resolution as the week route, so both views never disagree.
+    const rawChoice =
+      tree !== null
+        ? choiceRows.find((row) => row.cycle_id === tree.id)?.day_index
+        : undefined;
+    const choice =
+      tree !== null &&
+      rawChoice !== undefined &&
+      Number.isInteger(rawChoice) &&
+      rawChoice >= 0 &&
+      rawChoice < tree.duration_days
+        ? rawChoice
+        : undefined;
+
+    // Fold trainer overrides (P7) into today's view: swaps replace their slot's
+    // options (from the frozen snapshot), and the date's notes are attached.
+    let resolved = view;
+
+    if (tree !== null) {
+      const overrides = await new OverrideService(supabase).listForCycle(
+        tree.tenant_host,
+        tree.id
+      );
+
+      resolved = applyOverridesToClientView(
+        view,
+        tree,
+        overrides,
+        now,
+        timeZone,
+        choice
+      );
+    }
+
+    if (choice !== undefined && resolved.position?.started === true) {
+      resolved = {
+        ...resolved,
+        position: { started: true, dayIndex: choice },
+      };
+    }
+
+    return NextResponse.json({ success: true, data: resolved });
+  } catch (error) {
+    console.error(`${LOG_PREFIX} fetch error:`, {
+      correlationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return NextResponse.json(
+      { success: false, error: "Error inesperado" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * The numeric `clients.id` carried by a valid client session (stored as a
+ * string — see lib/auth/client-session.ts), or `null` for an unauthenticated
+ * request, a trainer token (no `client_id`), or any malformed value.
+ */
+function parseClientId(session: ClientSession | null): number | null {
+  const raw = session?.client_id;
+
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return null;
+  }
+
+  const id = Number(raw);
+
+  return Number.isInteger(id) && id > 0 ? id : null;
+}

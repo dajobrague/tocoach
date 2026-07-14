@@ -79,12 +79,11 @@ export function CommunityContent() {
  * headers that prevent embedding. When that happens the iframe stays blank
  * and the user is stuck on a "loading…" state.
  *
- * This component:
- *   1. Always renders an "Abrir en pestaña nueva" button so the user has an
- *      escape hatch regardless of whether the iframe ends up loading.
- *   2. Starts a load timeout — if the iframe hasn't fired `onLoad` after a
- *      few seconds, we replace it with a friendly empty-state explaining
- *      what happened and pointing to the same external button.
+ * This component starts a load timeout — if the iframe hasn't fired `onLoad`
+ * after a few seconds, we replace it with a friendly empty-state explaining
+ * what happened, with an "Abrir comunidad" external link as the escape hatch.
+ * (There is deliberately NO standing open-in-new-tab button when the iframe
+ * works — removed at José Carlos's request, Jul 13 2026.)
  */
 function CommunityIframeView({
   clientId,
@@ -145,26 +144,9 @@ function CommunityIframeView({
           trainerName={trainerName}
         />
 
-        {/* External-open shortcut — always visible so the user has an exit
-            even when the iframe loads correctly but crops the content. */}
-        <div className="w-full max-w-lg mx-auto px-4 pt-3">
-          <Button
-            as="a"
-            className="w-full"
-            color="primary"
-            href={communityUrl}
-            rel="noopener noreferrer"
-            startContent={
-              <Icon icon="solar:square-top-down-linear" width={18} />
-            }
-            target="_blank"
-            variant="flat"
-          >
-            Abrir comunidad en una pestaña nueva
-          </Button>
-        </div>
-
-        {/* Embedded Community iframe (or fallback card if it never loads) */}
+        {/* Embedded Community iframe. No standing external-open button (per
+            José Carlos, Jul 13) — the fallback card below keeps one as the
+            escape hatch for platforms that refuse to be embedded. */}
         <div className="flex-1 w-full max-w-lg mx-auto pb-16 pt-3 px-4">
           {showFallback ? (
             <Card className="bg-background border border-default-200">
@@ -201,7 +183,7 @@ function CommunityIframeView({
           ) : (
             <iframe
               allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; payment"
-              className="w-full h-full min-h-[calc(100vh-220px)] border-0"
+              className="w-full h-full min-h-[calc(100vh-170px)] border-0"
               loading="lazy"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
               src={communityUrl}

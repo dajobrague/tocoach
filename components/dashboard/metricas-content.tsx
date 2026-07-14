@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from "react";
 import AddClientModal from "@/components/dashboard/add-client-modal";
 import AddExerciseLibraryModal from "@/components/dashboard/add-exercise-library-modal";
 import AddSupplementModal from "@/components/dashboard/add-supplement-modal";
+import { NutritionUpdateBanner } from "@/features/trainer/nutrition-update/nutrition-update-banner";
 
 interface ActivityEvent {
   id: string;
@@ -161,6 +162,9 @@ export default function MetricasContent() {
             compromiso de tus clientes
           </p>
         </div>
+
+        {/* Nutrición 2.0 rollout announcement — hidden once clients are switched */}
+        <NutritionUpdateBanner />
 
         {/* Key Metrics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

@@ -26,7 +26,7 @@ export async function GET(
     const { data: client, error: clientError } = (await supabase
       .from("clients")
       .select("*")
-      .eq("id", clientId)
+      .eq("id", Number(clientId))
       .eq("tenant", session.trainer_id)
       .single()) as { data: any; error: any };
 
