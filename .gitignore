@@ -127,3 +127,6 @@ supabase/local-data/
 # Local env backups (never commit — may contain prod secrets)
 *.prod-backup
 .env*.prod-backup
+
+# graphify analysis output (local artifact, never commit)
+graphify-out/
