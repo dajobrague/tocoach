@@ -14,34 +14,32 @@ import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
-import {
-  useResolvedDayPrescription,
-  type ResolvedExercise,
-} from "./hooks/use-resolved-day-prescription";
+import { collectExtraLoggedExercises } from "./extra-logged-exercises";
+import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
 import { getSessionTypeStyle } from "./session-type-style";
+import { toExerciseLike } from "./to-exercise-like";
 
-interface ExerciseLike {
+import { logMatchesSlot } from "@/lib/training/log-attribution";
+
+export interface ExerciseLike {
   order: number;
   name: string;
   imageUrl?: string;
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) que se loguea. */
+  session_exercise_id?: string;
+  /** Comentario del trainer — el modal de log lo muestra como nota. */
+  notes?: string;
   // Strength
   sets?: number;
   reps?: string;
   rest?: string;
+  /** RIR (reps in reserve) prescrito — texto libre. */
+  rir?: string;
   tempo?: string;
   trainingSystem?: string;
-  /** Uniform prescribed weight in kg. Set when the trainer overrides the day. */
+  /** Uniform prescribed weight in kg (from the session template). */
   weightKg?: number | null;
-  /**
-   * Per-set prescription (Phase 3.5 override). When present it overrides the
-   * uniform sets/reps/weightKg combo: each entry is one prescribed set.
-   */
-  prescribedSets?: Array<{
-    setNumber: number;
-    reps: string | null;
-    weightKg: number | null;
-  }>;
   /**
    * Pesos del último log finalizado del cliente para este ejercicio
    * (indexados por set position). Se usan como fallback para prellenar
@@ -63,6 +61,10 @@ interface ExerciseLike {
 
 interface ExerciseLogLike {
   exercise_id?: string;
+  /** Slot específico del plan (session_exercises.id) al que pertenece el log. */
+  session_exercise_id?: string | null;
+  /** Sesión template a la que pertenece el log (matchea AvailableSession.id). */
+  session_id?: string | null;
   training_date?: string;
   scheduled_date?: string;
   finalized_at?: string | null;
@@ -103,10 +105,11 @@ export function ActiveSessionView({
       // (session_id, exercise_id) pairs.
       //
       // When the ids match, resolved is authoritative because it carries
-      // any trainer overrides (sets/reps/weight, per-set values, cardio
-      // and coaching meta). When they don't, fall back to the program
-      // template for the picked session — that template is the truth
-      // for sessions the trainer didn't override for this date.
+      // the template-resolved session for the date (sets/reps/weight,
+      // cardio and coaching meta, last-used-weights pre-fill). When they
+      // don't match, fall back to the raw program template for the picked
+      // session — that template is the truth for sessions whose resolved
+      // slot differs from what the client tapped.
       if (
         resolved &&
         resolved.exercises.length > 0 &&
@@ -124,41 +127,26 @@ export function ActiveSessionView({
     (log) => (log.training_date ?? log.scheduled_date) === scheduledDate
   );
 
-  // Exercises logged on this date that aren't in the session template —
-  // the client trained exercises from a different session. Append them
-  // so the view shows everything that was actually done.
+  // Logs de este día que no están en el template Y pertenecen a ESTA
+  // sesión (off-template legítimo, p.ej. el trainer quitó el ejercicio
+  // después de que el cliente lo logueó). Los logs de OTRAS sesiones del
+  // mismo día NO se anexan — antes se "sumaban" a la sesión activa como
+  // si fueran prescritos y el cliente terminaba haciéndolos (ver
+  // collectExtraLoggedExercises para la historia completa).
   const templateExerciseIds = new Set(
     exercises
       .map((e) => e.exercise_id)
       .filter((id): id is string => Boolean(id))
   );
-  const extraLoggedExercises = useMemo(() => {
-    const seen = new Set<string>();
-    const extras: Array<ExerciseLike & Record<string, unknown>> = [];
-
-    for (const log of logsForDate) {
-      const eid = log.exercise_id;
-
-      if (!eid || templateExerciseIds.has(eid) || seen.has(eid)) continue;
-      seen.add(eid);
-
-      const logAny = log as Record<string, unknown>;
-      const exercisesRel = logAny.exercises as
-        | { name?: string }
-        | null
-        | undefined;
-      const name =
-        exercisesRel?.name ?? (logAny.exercise_name as string) ?? eid;
-
-      extras.push({
-        order: 1000 + extras.length,
-        name,
-        exercise_id: eid,
-      } as ExerciseLike & Record<string, unknown>);
-    }
-
-    return extras;
-  }, [logsForDate, templateExerciseIds]);
+  const extraLoggedExercises = useMemo(
+    () =>
+      collectExtraLoggedExercises(
+        logsForDate,
+        session.id,
+        templateExerciseIds
+      ) as Array<ExerciseLike & Record<string, unknown>>,
+    [logsForDate, templateExerciseIds, session.id]
+  );
 
   const allExercises = useMemo(
     () => [...exercises, ...extraLoggedExercises],
@@ -169,15 +157,16 @@ export function ActiveSessionView({
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
   );
 
-  const finalizedIds = new Set(
-    logsForDate
-      .filter((log) => Boolean(log.finalized_at))
-      .map((log) => log.exercise_id)
-      .filter((id): id is string => Boolean(id))
-  );
-  const completed = trackable.filter((e) =>
-    finalizedIds.has(e.exercise_id as string)
-  ).length;
+  // Atribución por slot: un planned exercise se considera logueado por el
+  // log que apunta a SU slot (session_exercise_id), no por cualquier log
+  // que comparta el exercise_id de la librería. Sólo cuando el log es legacy
+  // (sin session_exercise_id) caemos al match por exercise_id, y además lo
+  // acotamos a esta sesión para evitar bleed entre sesiones del mismo día.
+  const completed = trackable.filter((e) => {
+    const log = logsForDate.find((l) => logMatchesSlot(l, e, session.id));
+
+    return Boolean(log?.finalized_at);
+  }).length;
   const total = trackable.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Conteo a mostrar en el banner. Preferimos `total` (alineado con la
@@ -263,8 +252,13 @@ export function ActiveSessionView({
         <ul className="space-y-2">
           {allExercises.map((exercise) => {
             const exerciseId = exercise.exercise_id ?? "";
+            // Find the log for THIS slot (finalized or not); the status is
+            // derived from its finalized_at below. Same attribution rule as
+            // the `completed` count so banner and rows stay consistent.
             const existingLog = exerciseId
-              ? logsForDate.find((log) => log.exercise_id === exerciseId)
+              ? logsForDate.find((log) =>
+                  logMatchesSlot(log, exercise, session.id)
+                )
               : undefined;
             const status: ExerciseStatus = !existingLog
               ? "not_started"
@@ -423,52 +417,48 @@ function formatExerciseStats(
     if (parts.length === 0 && exercise.cardioType)
       parts.push(exercise.cardioType);
   } else {
-    // Per-set override (Phase 3.5) wins. Render a compact summary like
-    // "8×60kg · 8×60kg · 6×65kg" so the client sees each set immediately.
-    if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
-      const summary = exercise.prescribedSets
-        .map((s) => {
-          const r = s.reps ?? "—";
-          const w = s.weightKg != null ? `×${s.weightKg}kg` : "";
+    const sets = exercise.sets;
+    const reps = exercise.reps?.toString().trim();
 
-          return `${r}${w}`;
-        })
-        .join(" · ");
+    // Convención per-set codificada en uniform reps: "12 | 12 | 10 | 8"
+    // → render legible "12 · 12 · 10 · 8" (sin el "4 ×" delante que
+    // duplica info, y mejor que mostrar la pipe cruda en la card).
+    if (reps && reps.includes("|")) {
+      const perSet = reps
+        .split("|")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
 
-      parts.push(summary);
-    } else {
-      const sets = exercise.sets;
-      const reps = exercise.reps?.toString().trim();
-
-      // Convención per-set codificada en uniform reps: "12 | 12 | 10 | 8"
-      // → render legible "12 · 12 · 10 · 8" (sin el "4 ×" delante que
-      // duplica info, y mejor que mostrar la pipe cruda en la card).
-      if (reps && reps.includes("|")) {
-        const perSet = reps
-          .split("|")
-          .map((p) => p.trim())
-          .filter((p) => p.length > 0);
-
-        if (perSet.length > 0) parts.push(perSet.join(" · "));
-      } else if (sets && reps) {
-        parts.push(`${sets} × ${reps}`);
-      } else if (sets) {
-        parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
-      } else if (reps) {
-        parts.push(`${reps} reps`);
-      }
-      if (exercise.weightKg != null) {
-        parts.push(`${exercise.weightKg} kg`);
-      }
+      if (perSet.length > 0) parts.push(perSet.join(" · "));
+    } else if (sets && reps) {
+      parts.push(`${sets} × ${reps}`);
+    } else if (sets) {
+      parts.push(`${sets} ${sets === 1 ? "serie" : "series"}`);
+    } else if (reps) {
+      parts.push(`${reps} reps`);
+    }
+    if (exercise.weightKg != null) {
+      parts.push(`${exercise.weightKg} kg`);
     }
     const rest = exercise.rest?.toString().trim();
 
     if (rest) parts.push(`${rest} descanso`);
+
+    const rir = exercise.rir?.toString().trim();
+
+    if (rir) parts.push(`RIR ${rir}`);
   }
 
   return parts.join(" · ");
 }
 
+// ¿El log `log` corresponde al planned exercise `plannedExercise`?
+//   1. Match preciso por slot: log.session_exercise_id === slot. Aplica a los
+//      logs nuevos/backfilled que ya cargan el slot.
+//   2. Fallback legacy (sólo cuando el log NO trae session_exercise_id):
+//      mismo exercise_id de librería Y acotado a esta sesión (session_id
+//      ausente o igual al sessionId renderizado) para no contar logs de
+//      otra sesión del mismo día.
 function findExercisesForSession(
   programs: WorkoutProgram[],
   sessionId: string
@@ -482,58 +472,21 @@ function findExercisesForSession(
       const sObj = s as { id?: string; exercises?: unknown[] };
 
       if (sObj.id === sessionId && Array.isArray(sObj.exercises)) {
-        return sObj.exercises as Array<ExerciseLike & Record<string, unknown>>;
+        // Normaliza cada ejercicio del template para que exponga
+        // session_exercise_id. En el template path el slot es
+        // WorkoutExercise.id (= session_exercises.id); el cliente lo manda
+        // de vuelta al loguear para atribuir el log al slot exacto.
+        return sObj.exercises.map((we) => {
+          const weObj = we as { id?: string } & Record<string, unknown>;
+
+          return {
+            ...weObj,
+            session_exercise_id: weObj.id,
+          };
+        }) as Array<ExerciseLike & Record<string, unknown>>;
       }
     }
   }
 
   return [];
-}
-
-function toExerciseLike(r: ResolvedExercise): ExerciseLike {
-  const perSet =
-    r.prescribed_sets && r.prescribed_sets.length > 0
-      ? r.prescribed_sets.map((s) => ({
-          setNumber: s.set_number,
-          reps: s.reps,
-          weightKg: s.weight_kg,
-        }))
-      : undefined;
-
-  const out: ExerciseLike = {
-    order: r.exercise_order,
-    name: r.name,
-    category: r.category,
-  };
-
-  if (r.exercise_id) out.exercise_id = r.exercise_id;
-  if (r.sets != null) out.sets = r.sets;
-  if (r.reps != null) out.reps = r.reps;
-  if (r.weight_kg != null) out.weightKg = r.weight_kg;
-  if (r.image_url) out.imageUrl = r.image_url;
-  if (r.video_url) out.videoUrl = r.video_url;
-  if (r.duration_seconds != null) {
-    out.duration = Math.round(r.duration_seconds / 60);
-  }
-  if (r.distance_meters != null) {
-    out.distance = parseFloat((r.distance_meters / 1000).toFixed(2));
-  }
-  // Coaching meta — antes no se mapeaban y un override de cardio caía
-  // al branch de strength porque isExerciseCardio() no veía intensity
-  // ni cardio_type. También tempo/trainingSystem para que el draft
-  // signature detecte cambios cuando el trainer ajusta cadencia/sistema.
-  if (r.intensity) out.intensity = r.intensity;
-  if (r.cardio_type) out.cardioType = r.cardio_type;
-  if (r.heart_rate_min != null && r.heart_rate_max != null) {
-    out.heartRateZone = { min: r.heart_rate_min, max: r.heart_rate_max };
-  }
-  if (r.tempo) out.tempo = r.tempo;
-  if (r.training_system) out.trainingSystem = r.training_system;
-  if (r.rest_seconds != null) out.rest = `${Math.round(r.rest_seconds)}s`;
-  if (perSet) out.prescribedSets = perSet;
-  if (r.last_used_weights && r.last_used_weights.length > 0) {
-    out.lastUsedWeights = r.last_used_weights;
-  }
-
-  return out;
 }

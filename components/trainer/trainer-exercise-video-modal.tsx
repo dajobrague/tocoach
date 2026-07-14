@@ -65,7 +65,12 @@ export const TrainerExerciseVideoModal = forwardRef<
       backdrop="blur"
       classNames={{
         base: "bg-transparent shadow-none mx-2 sm:mx-6",
-        wrapper: "items-center",
+        // El modal debe quedar SIEMPRE por encima de popovers abiertos
+        // (p.ej. métricas del microciclo). OJO: react-aria posiciona el
+        // popover con z-index INLINE de 100000 (useOverlayPosition), así
+        // que cualquier valor menor deja el video tapado/cortado.
+        wrapper: "items-center z-[100050]",
+        backdrop: "z-[100040]",
         closeButton: "hidden",
       }}
       isOpen={isOpen}

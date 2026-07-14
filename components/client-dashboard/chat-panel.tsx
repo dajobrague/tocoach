@@ -49,7 +49,7 @@ export function ChatPanel({
     });
   }, []);
 
-  useRealtimeMessages({
+  const { refreshTrigger } = useRealtimeMessages({
     clientId: isOpen ? clientId : null,
     userId: clientId,
     userType: "client",
@@ -131,14 +131,23 @@ export function ChatPanel({
       // Focus input
       setTimeout(() => inputRef.current?.focus(), 300);
 
-      // Fallback poll every 60s (Realtime handles instant updates)
-      const interval = setInterval(loadMessages, 60_000);
+      // Fallback poll every 30s (Realtime handles instant updates)
+      const interval = setInterval(loadMessages, 30_000);
 
       return () => clearInterval(interval);
     }
 
     return undefined;
   }, [isOpen, clientId, tenantSlug]);
+
+  // Recarga al reconectar el realtime o al volver la pestaña a primer
+  // plano (refreshTrigger del hook) — cubre mensajes perdidos mientras el
+  // socket estuvo muerto (teléfono bloqueado, PWA en background).
+  useEffect(() => {
+    if (isOpen && refreshTrigger > 0) {
+      loadMessages();
+    }
+  }, [refreshTrigger]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

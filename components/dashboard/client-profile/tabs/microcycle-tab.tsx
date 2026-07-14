@@ -1,7 +1,8 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+
+import { useUrlEnum } from "../use-url-state";
 
 import { MetricsSection } from "./microcycle/metrics-section";
 
@@ -14,12 +15,14 @@ const SUB_TABS: { key: SubTab; label: string; icon: string }[] = [
   { key: "config", label: "Configuración", icon: "solar:settings-bold" },
 ];
 
+const MICRO_TAB_KEYS = ["metrics", "config"] as const;
+
 interface Props {
   clientId: string;
 }
 
 export default function MicrocycleTab({ clientId }: Props) {
-  const [active, setActive] = useState<SubTab>("metrics");
+  const [active, setActive] = useUrlEnum("m", MICRO_TAB_KEYS, "metrics");
 
   return (
     <div className="flex flex-col gap-4 mt-2">

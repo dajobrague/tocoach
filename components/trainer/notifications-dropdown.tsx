@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  addToast,
   Badge,
   Button,
   Dropdown,
@@ -11,10 +12,16 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useRealtimeNotifications } from "@/lib/hooks/use-realtime-notifications";
+import {
+  useRealtimeNotifications,
+  RealtimeNotification,
+} from "@/lib/hooks/use-realtime-notifications";
 import { RealtimeStatusIndicator } from "@/components/realtime-status-indicator";
+
+const MESSAGING_PATH = "/trainer/dashboard/messaging";
 
 interface Notification {
   id: string;
@@ -25,6 +32,7 @@ interface Notification {
   icon: string;
   read_at: string | null;
   created_at: string;
+  client_id?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -40,6 +48,32 @@ export function TrainerNotificationsDropdown({
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const loadNotificationsRef = useRef<() => void>();
+  const router = useRouter();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  pathnameRef.current = pathname;
+
+  // Toast al llegar una notificación en vivo (paridad con el dropdown del
+  // cliente). Se omite para mensajes de chat si el trainer ya está en la
+  // página de mensajería — ahí el hilo se actualiza en vivo.
+  const handleNewNotification = useCallback(
+    (notification: RealtimeNotification) => {
+      if (
+        notification.type === "message" &&
+        pathnameRef.current?.startsWith(MESSAGING_PATH)
+      ) {
+        return;
+      }
+
+      addToast({
+        title: notification.title,
+        description: notification.message,
+        color: "primary",
+      });
+    },
+    []
+  );
 
   const {
     isConnected: realtimeConnected,
@@ -48,6 +82,7 @@ export function TrainerNotificationsDropdown({
   } = useRealtimeNotifications({
     userId: trainerId,
     userType: "trainer",
+    onNewNotification: handleNewNotification,
     onRefreshNeeded: () => loadNotificationsRef.current?.(),
   });
 
@@ -118,6 +153,17 @@ export function TrainerNotificationsDropdown({
     if (!notification.read_at) {
       markAsRead(notification.id);
     }
+
+    // Mensajes de chat → abrir la conversación de ese cliente.
+    if (
+      notification.metadata?.action === "open_chat" &&
+      notification.client_id != null
+    ) {
+      router.push(`${MESSAGING_PATH}?client=${notification.client_id}`);
+    } else if (notification.link) {
+      router.push(notification.link);
+    }
+
     setIsOpen(false);
   };
 

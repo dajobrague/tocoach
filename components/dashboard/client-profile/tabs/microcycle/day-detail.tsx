@@ -4,10 +4,10 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
 
 import { formatPercent } from "./adherence";
-import { DayEditor } from "./day-editor";
+import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
+import { buildLoggedExerciseGroups, countLoggedSets } from "./logged-view";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -164,11 +164,14 @@ function ExecutedSetRow({
 function PrescribedRow({
   prescribed,
   logs,
+  allTimeLogs,
   isFuture,
   onPlayVideo,
 }: {
   prescribed: PrescribedExercise;
   logs: ExerciseLog[];
+  /** Historial completo del ejercicio para el popover de métricas. */
+  allTimeLogs: ExerciseLog[];
   isFuture: boolean;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
@@ -221,28 +224,16 @@ function PrescribedRow({
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900">{prescribed.name}</p>
-          {prescribed.perSet && prescribed.perSet.length > 0 ? (
-            <div className="text-[11px] text-gray-500 mt-0.5 tabular-nums space-y-0.5">
-              <p className="text-gray-600 font-medium">Prescrito por serie</p>
-              {prescribed.perSet.map((s) => (
-                <p key={s.setNumber}>
-                  <span className="text-gray-400">Set {s.setNumber}:</span>{" "}
-                  <span className="text-gray-700">
-                    {s.reps ?? "—"} reps
-                    {s.weightKg != null ? ` × ${s.weightKg} kg` : ""}
-                  </span>
-                </p>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-              Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
-              {prescribed.prescribedReps ?? "—"}
-              {prescribed.prescribedWeightKg != null
-                ? ` @ ${prescribed.prescribedWeightKg} kg`
-                : ""}
-            </p>
-          )}
+          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
+            Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
+            {prescribed.prescribedReps ?? "—"}
+            {prescribed.prescribedWeightKg != null
+              ? ` @ ${prescribed.prescribedWeightKg} kg`
+              : ""}
+            {prescribed.prescribedRir
+              ? ` · RIR ${prescribed.prescribedRir}`
+              : ""}
+          </p>
 
           {!isFuture && prescribedSets > 0 ? (
             <div className="mt-1.5">
@@ -257,6 +248,15 @@ function PrescribedRow({
               <ProgressBar value={stats.series} />
             </div>
           ) : null}
+        </div>
+
+        <div className="shrink-0">
+          <ExerciseMetricsPopover
+            category={prescribed.category}
+            exerciseName={prescribed.name}
+            logs={allTimeLogs}
+            onPlayVideo={onPlayVideo}
+          />
         </div>
       </div>
 
@@ -308,10 +308,18 @@ function PrescribedRow({
 function LoggedExerciseRow({
   exerciseName,
   logs,
+  allTimeLogs,
+  category,
+  offPlan,
   onPlayVideo,
 }: {
   exerciseName: string;
   logs: ExerciseLog[];
+  /** Historial completo del ejercicio para el popover de métricas. */
+  allTimeLogs: ExerciseLog[];
+  category: string | undefined;
+  /** True when the client logged this exercise but it wasn't prescribed. */
+  offPlan?: boolean;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   const allSets = logs.flatMap((l) => l.sets ?? []);
@@ -334,11 +342,27 @@ function LoggedExerciseRow({
         </span>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
+            {offPlan ? (
+              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                Fuera de plan
+              </span>
+            ) : null}
+          </div>
           <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
             {totalSets}{" "}
             {totalSets === 1 ? "serie ejecutada" : "series ejecutadas"}
           </p>
+        </div>
+
+        <div className="shrink-0">
+          <ExerciseMetricsPopover
+            category={category}
+            exerciseName={exerciseName}
+            logs={allTimeLogs}
+            onPlayVideo={onPlayVideo}
+          />
         </div>
       </div>
 
@@ -378,104 +402,44 @@ function LoggedExerciseRow({
   );
 }
 
-function groupLogsByExercise(
-  logs: ExerciseLog[]
-): Array<{ name: string; exerciseId: string; logs: ExerciseLog[] }> {
-  const map = new Map<string, { name: string; logs: ExerciseLog[] }>();
-
-  for (const log of logs) {
-    const id = log.exercise_id ?? "unknown";
-    const entry = map.get(id) ?? {
-      name: log.exercises?.name ?? "Ejercicio",
-      logs: [],
-    };
-
-    entry.logs.push(log);
-    map.set(id, entry);
-  }
-
-  return Array.from(map.entries()).map(([exerciseId, v]) => ({
-    exerciseId,
-    ...v,
-  }));
-}
-
 // ─── Single-session card ─────────────────────────────────────────────────────
 
 interface SessionCardProps {
-  clientId: string;
-  date: string;
   entry: SessionEntry;
-  editable: boolean;
-  onCommitted: () => void;
+  /** Historial all-time por ejercicio (popover de métricas). */
+  getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
 
 function SessionCard({
-  clientId,
-  date,
   entry,
-  editable,
-  onCommitted,
+  getLogsForExercise,
   onPlayVideo,
 }: SessionCardProps) {
-  const [mode, setMode] = useState<"read" | "edit">("read");
-
-  // Reset to read when the date changes (trainer navigated to another day).
-  useEffect(() => {
-    setMode("read");
-  }, [date]);
-
-  const hasExistingOverride =
-    (entry.scheduledSession.override_exercises?.length ?? 0) > 0;
   const showFuture = entry.classification === "future";
   const totalSetsLogged = entry.adherence.loggedSetsTotal;
   const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
 
-  // Decide rendering mode: if the client logged exercises, check whether
-  // they match the prescription. If they don't, render logged exercises
-  // as the primary view instead of the prescription.
+  // Actuals-first: whenever the client logged anything for this session, show
+  // what they ACTUALLY did (the prescription drops to a reference line),
+  // mirroring the client app. Previously this only triggered when the logs
+  // FULLY diverged from the prescription; on partial overlap (client did the
+  // session but swapped/added exercises) we rendered the prescription and
+  // silently hid the off-plan work — so the trainer saw exercises the client
+  // never did and missed the ones they actually logged.
   const hasLogs = entry.logs.length > 0;
-  const prescriptionMatch =
-    hasLogs &&
-    entry.prescribed.length > 0 &&
-    entry.prescribed.some((p) =>
-      entry.logs.some((l) => l.exercise_id === p.exerciseId)
-    );
-  const showLoggedView = hasLogs && !prescriptionMatch && !showFuture;
-
-  if (mode === "edit") {
-    return (
-      <DayEditor
-        key={`${date}-${entry.scheduledSession.id}`}
-        clientId={clientId}
-        hasExistingOverride={hasExistingOverride}
-        initialPrescribed={entry.prescribed}
-        initialSessionId={entry.scheduledSession.session?.id ?? null}
-        scheduledDate={date}
-        onClose={() => setMode("read")}
-        onCommitted={onCommitted}
-      />
-    );
-  }
+  const showLoggedView = hasLogs && !showFuture;
+  const loggedGroups = buildLoggedExerciseGroups(entry.prescribed, entry.logs);
+  const offPlanCount = loggedGroups.filter((g) => g.offPlan).length;
+  const loggedSetsActual = countLoggedSets(entry.logs);
 
   return (
     <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
       <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-gray-900">
             {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
           </p>
-          <button
-            aria-label={`Editar sesión ${entry.scheduledSession.session?.name ?? date}`}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            disabled={!editable}
-            title={editable ? "Editar día" : "Día con registros — solo lectura"}
-            type="button"
-            onClick={() => setMode("edit")}
-          >
-            <Icon icon="solar:pen-linear" width={16} />
-          </button>
         </div>
         {entry.scheduledSession.originally_prescribed_session ? (
           <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
@@ -501,15 +465,19 @@ function SessionCard({
           <div className="grid grid-cols-2 gap-2">
             <StatChip
               accent="green"
-              hint={`${entry.adherence.completedExercises} ejercicios`}
+              hint={
+                offPlanCount > 0
+                  ? `${offPlanCount} fuera de plan`
+                  : "ejercicios"
+              }
               label="Ejercicios realizados"
-              value={String(entry.adherence.completedExercises)}
+              value={String(loggedGroups.length)}
             />
             <StatChip
               accent="green"
               hint="series totales"
               label="Series ejecutadas"
-              value={String(totalSetsLogged)}
+              value={String(loggedSetsActual)}
             />
           </div>
         ) : (
@@ -541,11 +509,14 @@ function SessionCard({
             </div>
           ) : null}
           <ul className="divide-y divide-gray-100">
-            {groupLogsByExercise(entry.logs).map((g) => (
+            {loggedGroups.map((g) => (
               <LoggedExerciseRow
                 key={g.exerciseId}
+                allTimeLogs={getLogsForExercise(g.exerciseId)}
+                category={g.logs[0]?.exercises?.category}
                 exerciseName={g.name}
                 logs={g.logs}
+                offPlan={g.offPlan}
                 onPlayVideo={onPlayVideo}
               />
             ))}
@@ -556,6 +527,7 @@ function SessionCard({
           {entry.prescribed.map((p) => (
             <PrescribedRow
               key={p.exerciseId}
+              allTimeLogs={getLogsForExercise(p.exerciseId)}
               isFuture={showFuture}
               logs={entry.logs}
               prescribed={p}
@@ -565,11 +537,14 @@ function SessionCard({
         </ul>
       ) : hasLogs ? (
         <ul className="divide-y divide-gray-100">
-          {groupLogsByExercise(entry.logs).map((g) => (
+          {loggedGroups.map((g) => (
             <LoggedExerciseRow
               key={g.exerciseId}
+              allTimeLogs={getLogsForExercise(g.exerciseId)}
+              category={g.logs[0]?.exercises?.category}
               exerciseName={g.name}
               logs={g.logs}
+              offPlan={g.offPlan}
               onPlayVideo={onPlayVideo}
             />
           ))}
@@ -585,19 +560,16 @@ interface Props {
   clientId: string;
   day: DayMetrics;
   orphanLogs: ExerciseLog[];
-  /** True when editor entry is allowed (today/future or past with no logs). */
-  editable: boolean;
-  /** Called after a successful save / reset so MetricsSection can refetch. */
-  onCommitted: () => void;
+  /** Historial all-time por ejercicio (popover de métricas en cada fila). */
+  getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo?: ((url: string, name: string) => void) | undefined;
 }
 
 export function DayDetail({
-  clientId,
+  clientId: _clientId,
   day,
   orphanLogs: _orphanLogs,
-  editable,
-  onCommitted,
+  getLogsForExercise,
   onPlayVideo,
 }: Props) {
   // Rest day: no sessions in either direction.
@@ -635,11 +607,8 @@ export function DayDetail({
       {day.sessions.map((entry) => (
         <SessionCard
           key={entry.scheduledSession.id}
-          clientId={clientId}
-          date={day.date}
-          editable={editable}
           entry={entry}
-          onCommitted={onCommitted}
+          getLogsForExercise={getLogsForExercise}
           onPlayVideo={onPlayVideo}
         />
       ))}

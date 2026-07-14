@@ -16,6 +16,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
   ClientSupplementAssignment,
   SupplementInventoryItem,
@@ -118,11 +119,13 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
         setIsAssignmentModalOpen(false);
         setSelectedSupplement(null);
       } else {
-        alert(`Error: ${result.error}`);
+        await alertAfterPress(`Error: ${result.error}`);
       }
     } catch (error) {
       console.error("Error creating assignment:", error);
-      alert("Error al asignar suplemento. Por favor intenta de nuevo.");
+      await alertAfterPress(
+        "Error al asignar suplemento. Por favor intenta de nuevo."
+      );
     }
   };
 
@@ -155,16 +158,22 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
         fetchAssignments();
         setEditingAssignment(null);
       } else {
-        alert(`Error: ${result.error}`);
+        await alertAfterPress(`Error: ${result.error}`);
       }
     } catch (error) {
       console.error("Error updating assignment:", error);
-      alert("Error al actualizar asignación. Por favor intenta de nuevo.");
+      await alertAfterPress(
+        "Error al actualizar asignación. Por favor intenta de nuevo."
+      );
     }
   };
 
   const handleDeleteAssignment = async (assignmentId: string) => {
-    if (!confirm("¿Estás seguro de que quieres eliminar esta asignación?")) {
+    if (
+      !(await confirmAfterPress(
+        "¿Estás seguro de que quieres eliminar esta asignación?"
+      ))
+    ) {
       return;
     }
 
@@ -181,11 +190,13 @@ export default function SupplementsTab({ clientId }: SupplementsTabProps) {
       if (result.success) {
         fetchAssignments();
       } else {
-        alert(`Error: ${result.error}`);
+        await alertAfterPress(`Error: ${result.error}`);
       }
     } catch (error) {
       console.error("Error deleting assignment:", error);
-      alert("Error al eliminar asignación. Por favor intenta de nuevo.");
+      await alertAfterPress(
+        "Error al eliminar asignación. Por favor intenta de nuevo."
+      );
     }
   };
 

@@ -8,7 +8,8 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+
+import { useUrlEnum } from "../use-url-state";
 
 import CardioTab from "./cardio-tab";
 import MicrocycleTab from "./microcycle-tab";
@@ -26,13 +27,15 @@ const SUB_TABS: { key: SubTabKey; label: string; icon: string }[] = [
   { key: "cardio", label: "Cardio", icon: "solar:heart-pulse-bold" },
 ];
 
+const SUB_TAB_KEYS = ["microcycle", "workouts", "cardio"] as const;
+
 interface Props {
   clientId: string;
   clientName: string;
 }
 
 export default function TrainingTabs({ clientId, clientName }: Props) {
-  const [active, setActive] = useState<SubTabKey>("microcycle");
+  const [active, setActive] = useUrlEnum("sub", SUB_TAB_KEYS, "microcycle");
 
   return (
     <div className="flex flex-col gap-4 mt-2">

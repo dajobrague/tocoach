@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { healThemeJson } from "@/lib/theme/heal";
 
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
         .update({
           slug: normalizedSlug,
           host: normalizedSlug, // Keep host in sync with slug for now
-          theme_json: themeJson,
+          theme_json: healThemeJson(themeJson),
           status: "active",
           onboarding_completed: true,
           updated_at: new Date().toISOString(),
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
           slug: normalizedSlug,
           host: normalizedSlug, // Keep host in sync with slug for now
           theme_slug: "custom",
-          theme_json: themeJson,
+          theme_json: healThemeJson(themeJson),
           trainer_id: session.trainer_id,
           status: "active",
           onboarding_completed: true,

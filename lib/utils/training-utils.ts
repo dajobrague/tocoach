@@ -18,7 +18,13 @@ type WeekdayAbbr = WorkoutSession["dayOfWeek"][number];
 /** Resolve coaching fields from session row + library exercise (handles split storage paths). */
 function resolveStrengthCoachingFields(
   se: SessionExercise & { exercise?: Record<string, unknown> | null }
-): { tempo: string; rest: string; trainingSystem: string; notes?: string } {
+): {
+  tempo: string;
+  rest: string;
+  rir: string;
+  trainingSystem: string;
+  notes?: string;
+} {
   const meta =
     se.metadata && typeof se.metadata === "object"
       ? (se.metadata as Record<string, unknown>)
@@ -26,13 +32,12 @@ function resolveStrengthCoachingFields(
 
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-  const tempo = str(meta.tempo) || str(se.exercise?.default_tempo) || "";
+  const tempo = str(meta.tempo) || "";
+
+  const rir = str(meta.rir) || "";
 
   const trainingSystem =
-    str(meta.training_system) ||
-    str(meta.trainingSystem) ||
-    str(se.exercise?.default_training_system) ||
-    "";
+    str(meta.training_system) || str(meta.trainingSystem) || "";
 
   let rest = str(meta.rest_description) || str(meta.restDescription) || "";
 
@@ -44,14 +49,6 @@ function resolveStrengthCoachingFields(
     }
   }
 
-  if (!rest) {
-    const def = se.exercise?.default_rest_seconds;
-
-    if (typeof def === "number" && def > 0) {
-      rest = formatRestTime(def);
-    }
-  }
-
   const fromColumn = str(se.notes);
   const fromMeta = str(meta.notes);
   const notesCombined = fromColumn || fromMeta;
@@ -59,6 +56,7 @@ function resolveStrengthCoachingFields(
   return {
     tempo,
     rest,
+    rir,
     trainingSystem,
     ...(notesCombined ? { notes: notesCombined } : {}),
   };
@@ -335,6 +333,7 @@ export function transformToWorkoutProgram(
             reps: se.reps || "0",
             tempo: coaching.tempo,
             rest: coaching.rest,
+            rir: coaching.rir,
             trainingSystem: coaching.trainingSystem,
             description: se.exercise?.description || undefined,
             notes: coaching.notes,

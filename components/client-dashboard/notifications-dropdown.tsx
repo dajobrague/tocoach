@@ -38,6 +38,10 @@ interface NotificationsDropdownProps {
   tenantSlug: string;
   onOpenWeeklyForm?: () => void;
   onOpenDailyForm?: () => void;
+  /** Abre el panel de chat (notificaciones de mensajes). */
+  onOpenChat?: () => void;
+  /** Cuando el chat ya está abierto se omite el toast de mensajes nuevos. */
+  isChatOpen?: boolean;
 }
 
 export function NotificationsDropdown({
@@ -45,6 +49,8 @@ export function NotificationsDropdown({
   tenantSlug,
   onOpenWeeklyForm,
   onOpenDailyForm,
+  onOpenChat,
+  isChatOpen,
 }: NotificationsDropdownProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -54,8 +60,15 @@ export function NotificationsDropdown({
   const pathname = usePathname();
   const loadNotificationsRef = useRef<() => void>();
 
+  const isChatOpenRef = useRef(isChatOpen);
+
+  isChatOpenRef.current = isChatOpen;
+
   const handleNewNotification = useCallback(
     (notification: RealtimeNotification) => {
+      // Con el chat abierto el mensaje ya se ve en el panel — sin toast.
+      if (notification.type === "message" && isChatOpenRef.current) return;
+
       addToast({
         title: notification.title,
         description: notification.message,
@@ -153,9 +166,17 @@ export function NotificationsDropdown({
       markAsRead(notification.id);
     }
 
-    // Check if it's a form notification (metadata contains form_type)
     const notif = notification as any;
 
+    // Chat message → open the chat panel directly
+    if (notif.metadata?.action === "open_chat") {
+      onOpenChat?.();
+      setIsOpen(false);
+
+      return;
+    }
+
+    // Check if it's a form notification (metadata contains form_type)
     if (notif.metadata?.action === "open_form") {
       const formType = notif.metadata?.form_type;
 

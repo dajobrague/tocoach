@@ -220,7 +220,11 @@ export interface ClientChartsData {
 export function useClientCharts(clientId: number | string) {
   return useQuery({
     queryKey: ["charts", "client", String(clientId)],
-    queryFn: () => apiGet<ClientChartsData>(`/api/charts/clients/${clientId}`),
+    // `as=trainer` requests the unfiltered (trainer-only included) view.
+    // These hooks are trainer-surface only; the client portal never uses
+    // them, so it never receives trainer_only charts. See resolveAudience.
+    queryFn: () =>
+      apiGet<ClientChartsData>(`/api/charts/clients/${clientId}?as=trainer`),
     enabled: clientId !== "" && clientId !== 0,
   });
 }
@@ -322,8 +326,9 @@ export function useClientSnapshot(
         // browsers muy viejos sin Intl — fallback a UTC.
       }
 
+      // `as=trainer` → unfiltered trainer preview. Trainer surface only.
       return apiGet<SnapshotData>(
-        `/api/charts/clients/${clientId}/snapshot?range=${range}&tz=${encodeURIComponent(tz)}`
+        `/api/charts/clients/${clientId}/snapshot?range=${range}&tz=${encodeURIComponent(tz)}&as=trainer`
       );
     },
     enabled: clientId !== "" && clientId !== 0,

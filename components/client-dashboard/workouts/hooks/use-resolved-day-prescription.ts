@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
-export interface ResolvedSet {
-  set_number: number;
-  reps: string | null;
-  weight_kg: number | null;
-}
-
 export interface ResolvedExercise {
+  /**
+   * Slot específico del plan (session_exercises.id). El cliente lo manda
+   * de vuelta al loguear para que el log se atribuya al slot exacto y no
+   * a otro que comparta el mismo exercise_id en la misma sesión.
+   */
+  session_exercise_id: string | null;
   exercise_id: string;
   name: string;
   category: string;
@@ -23,16 +23,22 @@ export interface ResolvedExercise {
   duration_seconds: number | null;
   distance_meters: number | null;
   rest_seconds: number | null;
+  /**
+   * Descanso como texto libre (metadata.rest_description). El flujo de
+   * add/edit en la página del cliente lo guarda SOLO aquí; tiene
+   * precedencia sobre rest_seconds al renderizar.
+   */
+  rest_description: string | null;
   notes: string | null;
   /** Cardio coaching meta — antes el endpoint los dropeaba y override de cardio se renderizaba como strength. */
   intensity: string | null;
   cardio_type: string | null;
   heart_rate_min: number | null;
   heart_rate_max: number | null;
-  /** Strength coaching meta (tempo, sistema de entrenamiento). */
+  /** Strength coaching meta (tempo, sistema de entrenamiento, RIR). */
   tempo: string | null;
   training_system: string | null;
-  prescribed_sets: ResolvedSet[];
+  rir: string | null;
   /**
    * Pesos del último log finalizado del mismo ejercicio (indexados por
    * posición de set, 0..N-1). El form de log usa estos valores para
@@ -44,7 +50,7 @@ export interface ResolvedExercise {
 
 export interface ResolvedDay {
   date: string;
-  source: "override" | "session" | "template" | "rest";
+  source: "session" | "template" | "rest";
   session: { id: string; name: string } | null;
   exercises: ResolvedExercise[];
   /**
@@ -83,9 +89,9 @@ async function fetchResolvedDay(date: string): Promise<ResolvedDay> {
 
 /**
  * Fetches the resolved prescription for a date from
- * GET /api/client/scheduled-sessions/[date]. Used to surface trainer
- * overrides (sets, reps, weight, per-set values) to the active session
- * view without disturbing the template-cache flow when no override exists.
+ * GET /api/client/scheduled-sessions/[date]. Used to surface the
+ * template-resolved session (sets, reps, weight, coaching meta) to the
+ * active session view for the date.
  *
  * Backed por React Query con cache compartido por `date`. Antes el hook
  * usaba useState/useEffect aislado por instancia, así que workouts-content

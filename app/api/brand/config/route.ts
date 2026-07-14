@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { clearTenantCache } from "@/lib/tenant/loader";
+import { healThemeJson } from "@/lib/theme/heal";
+import { validateTheme } from "@/lib/theme/schema";
 
 // GET: Fetch current brand configuration
 export async function GET(request: NextRequest) {
@@ -162,9 +164,32 @@ export async function PATCH(request: NextRequest) {
       }),
     };
 
+    // Sanea el theme resultante para que SIEMPRE pase la validación del
+    // generador de CSS. Sin esto, un theme_json sembrado incompleto (p.ej.
+    // por /api/auth/register) seguía inválido tras guardar colores y el
+    // cliente veía silenciosamente el tema default — "guardé mis colores
+    // y el fondo no cambia".
+    const healedTheme = healThemeJson(updatedTheme);
+    const validation = validateTheme(healedTheme, tenantData.slug);
+
+    if (!validation.success) {
+      // No debería ocurrir (heal garantiza forma válida), pero si pasa,
+      // mejor un error explícito que persistir un theme que el generador
+      // de CSS va a descartar en silencio.
+      console.error(
+        "[Brand Config] Healed theme still invalid:",
+        validation.errors
+      );
+
+      return NextResponse.json(
+        { error: "La configuración de tema resultante no es válida." },
+        { status: 422 }
+      );
+    }
+
     // Build the update payload
     const updatePayload: Record<string, any> = {
-      theme_json: updatedTheme,
+      theme_json: healedTheme,
     };
 
     // Also update top-level logo_url if provided
@@ -187,8 +212,14 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Clear server-side tenant metadata cache so next CSS request gets fresh theme
-    clearTenantCache(tenantData.host ?? tenantData.slug);
+    // Clear server-side tenant metadata cache so next CSS request gets
+    // fresh theme. The cache is keyed by whatever loadTenantContext()
+    // received — today that's the SLUG (the `host` param name is legacy),
+    // so clearing only by host left the stale entry alive. Clear both.
+    clearTenantCache(tenantData.slug);
+    if (tenantData.host && tenantData.host !== tenantData.slug) {
+      clearTenantCache(tenantData.host);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

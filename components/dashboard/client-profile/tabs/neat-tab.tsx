@@ -21,6 +21,8 @@ import { useEffect, useState } from "react";
 
 import { ClientStepsSection } from "./neat/client-steps-section";
 
+import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
+
 interface NeatTabProps {
   clientId: string;
 }
@@ -118,7 +120,7 @@ export default function NeatTab({ clientId }: NeatTabProps) {
   // Handle save new card
   const handleSaveCard = async () => {
     if (!cardForm.label.trim()) {
-      alert("El nombre del día es requerido");
+      await alertAfterPress("El nombre del día es requerido");
 
       return;
     }
@@ -145,11 +147,13 @@ export default function NeatTab({ clientId }: NeatTabProps) {
         await fetchCards();
         handleCloseAddModal();
       } else {
-        alert(`Error al guardar: ${result.error || "Error desconocido"}`);
+        await alertAfterPress(
+          `Error al guardar: ${result.error || "Error desconocido"}`
+        );
       }
     } catch (err) {
       console.error("[NeatTab] Error saving card:", err);
-      alert("Error al guardar tarjeta NEAT");
+      await alertAfterPress("Error al guardar tarjeta NEAT");
     } finally {
       setIsSaving(false);
     }
@@ -184,7 +188,7 @@ export default function NeatTab({ clientId }: NeatTabProps) {
     if (!editingCard) return;
 
     if (!cardForm.label.trim()) {
-      alert("El nombre del día es requerido");
+      await alertAfterPress("El nombre del día es requerido");
 
       return;
     }
@@ -214,11 +218,13 @@ export default function NeatTab({ clientId }: NeatTabProps) {
         await fetchCards();
         handleCloseEditModal();
       } else {
-        alert(`Error al actualizar: ${result.error || "Error desconocido"}`);
+        await alertAfterPress(
+          `Error al actualizar: ${result.error || "Error desconocido"}`
+        );
       }
     } catch (err) {
       console.error("[NeatTab] Error updating card:", err);
-      alert("Error al actualizar tarjeta NEAT");
+      await alertAfterPress("Error al actualizar tarjeta NEAT");
     } finally {
       setIsSaving(false);
     }
@@ -227,9 +233,9 @@ export default function NeatTab({ clientId }: NeatTabProps) {
   // Handle delete card
   const handleDeleteCard = async (card: ClientNeatCard) => {
     if (
-      !confirm(
+      !(await confirmAfterPress(
         `¿Estás seguro de eliminar "${card.label}"? Esta acción no se puede deshacer.`
-      )
+      ))
     )
       return;
 
@@ -243,11 +249,13 @@ export default function NeatTab({ clientId }: NeatTabProps) {
       if (result.success) {
         await fetchCards();
       } else {
-        alert(`Error al eliminar: ${result.error || "Error desconocido"}`);
+        await alertAfterPress(
+          `Error al eliminar: ${result.error || "Error desconocido"}`
+        );
       }
     } catch (err) {
       console.error("[NeatTab] Error deleting card:", err);
-      alert("Error al eliminar tarjeta NEAT");
+      await alertAfterPress("Error al eliminar tarjeta NEAT");
     }
   };
 

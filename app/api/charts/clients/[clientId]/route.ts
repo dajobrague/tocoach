@@ -23,7 +23,10 @@ import {
   filterUnusableCharts,
   loadTenantQuestions,
 } from "@/lib/charts/server/resolvability";
-import { filterChartsForAudience } from "@/lib/charts/server/visibility";
+import {
+  filterChartsForAudience,
+  resolveAudience,
+} from "@/lib/charts/server/visibility";
 import { validateDocumentWithRegistry } from "@/lib/charts/registry";
 import { chartsDocumentSchema } from "@/lib/charts/validation";
 
@@ -43,7 +46,7 @@ async function resolveClientTrainerId(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
 ): Promise<NextResponse> {
   const supabase = createSupabaseClient();
@@ -96,12 +99,16 @@ export async function GET(
       { logContext: `client=${auth.clientIdBigint}` }
     );
 
-    // Drop trainer-only charts when the caller is a client session.
-    // Trainers always see the full doc (they own the config).
-    const visibleCharts = filterChartsForAudience(
-      resolvableCharts,
-      auth.actor.kind
+    // Drop trainer-only charts unless this is a genuine trainer explicitly
+    // requesting the trainer view (?as=trainer). Defaults to the client
+    // audience so a trainer cookie attached to a client-portal request can't
+    // widen visibility. (Today only the trainer surface calls this route, but
+    // defaulting to client audience keeps it safe if a client ever does.)
+    const audience = resolveAudience(
+      auth.actor.kind,
+      new URL(request.url).searchParams
     );
+    const visibleCharts = filterChartsForAudience(resolvableCharts, audience);
 
     return NextResponse.json(
       {

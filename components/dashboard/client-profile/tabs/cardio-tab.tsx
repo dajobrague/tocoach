@@ -51,6 +51,7 @@ import { useClientExerciseLogs } from "./workouts/use-client-exercise-logs";
 import { useExerciseExpandedState } from "./workouts/use-exercise-expanded-state";
 
 import SaveAsTemplateModal from "@/components/dashboard/save-as-template-modal";
+import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
   TrainerExerciseVideoModal,
   type TrainerExerciseVideoHandle,
@@ -203,6 +204,26 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   });
   const [libraryExercises, setLibraryExercises] = useState<any[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  // Controlled input text for the library Autocomplete. We own the input
+  // value instead of letting React Aria auto-sync it from `selectedKey` —
+  // otherwise pre-selecting an exercise on edit makes the combobox sync its
+  // input to the item label, fire onInputChange, flip `items` away from the
+  // selected item, and loop ("Maximum update depth exceeded"). Controlling
+  // inputValue is the HeroUI/React-Aria controlled-combobox pattern.
+  const [libraryInputValue, setLibraryInputValue] = useState("");
+  // Server-side search state. The initial fetch caps the browse list, but
+  // trainers with bigger libraries were missing items because the
+  // Autocomplete filters `defaultItems` client-side and never re-queried.
+  // We now debounce a server-search on `onInputChange` so anything in the
+  // cardio library is discoverable regardless of size.
+  const [librarySearchTerm, setLibrarySearchTerm] = useState("");
+  const [librarySearchResults, setLibrarySearchResults] = useState<any[]>([]);
+  const [isSearchingLibrary, setIsSearchingLibrary] = useState(false);
+  // Remembers the library exercise the Edit modal opened with, so we can
+  // detect a swap (new exerciseId !== original) and warn when the client
+  // already logged the original exercise.
+  const [editOriginalExerciseId, setEditOriginalExerciseId] =
+    useState<string>("");
   const [programForm, setProgramForm] = useState({
     name: "",
     type: "",
@@ -276,6 +297,44 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   useEffect(() => {
     fetchPrograms();
   }, [clientId]);
+
+  // Debounced server-side library search. Empty input falls back to the
+  // initial `libraryExercises` browse list; non-empty input replaces it
+  // with `?search=` results (scoped to the cardio category) so libraries
+  // beyond the initial fetch cap are still searchable. 250ms keeps it
+  // responsive without spamming the API.
+  useEffect(() => {
+    const term = librarySearchTerm.trim();
+
+    if (!term) {
+      setLibrarySearchResults([]);
+
+      return;
+    }
+
+    setIsSearchingLibrary(true);
+    const handle = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          category: "cardio",
+          search: term,
+          limit: "50",
+        });
+        const res = await fetch(`/api/exercises?${params.toString()}`);
+        const data = await res.json();
+
+        if (data.success) {
+          setLibrarySearchResults(data.exercises || []);
+        }
+      } catch (err) {
+        console.error("Error searching cardio library:", err);
+      } finally {
+        setIsSearchingLibrary(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [librarySearchTerm]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -431,14 +490,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     });
   };
 
-  const handleOpenAddExercise = async (sessionId: string) => {
-    setSelectedSessionId(sessionId);
-    setIsAddExerciseModalOpen(true);
-
-    // Fetch library exercises (cardio category only)
+  // Fetch the cardio library browse list. Shared by both the Add and Edit
+  // modals so each has items to render (the Edit modal needs them to display
+  // its pre-selected entry). Bumped to 500 — comfortably above any current
+  // library size — and the live `?search=` effect covers anything beyond it.
+  const loadLibraryExercises = async () => {
     setIsLoadingLibrary(true);
     try {
-      const response = await fetch("/api/exercises?category=cardio&limit=100");
+      const response = await fetch("/api/exercises?category=cardio&limit=500");
       const result = await response.json();
 
       if (result.success) {
@@ -451,23 +510,41 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     }
   };
 
+  const handleOpenAddExercise = async (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setIsAddExerciseModalOpen(true);
+    setLibraryInputValue("");
+    setLibrarySearchTerm("");
+
+    await loadLibraryExercises();
+  };
+
   const handleSelectLibraryExercise = (exerciseId: string) => {
-    const exercise = libraryExercises.find((ex) => ex.id === exerciseId);
+    // Look in both the initial browse list and the live search results —
+    // a trainer can pick from either depending on whether they were typing.
+    const exercise =
+      libraryExercises.find((ex) => ex.id === exerciseId) ??
+      librarySearchResults.find((ex) => ex.id === exerciseId);
 
     if (exercise) {
       // Only update identity fields — name and exerciseId.
-      // All other params (type/duration/intensity/notes) are preserved.
+      // All other params (type/duration/intensity/notes) are preserved
+      // so changing the selected exercise doesn't wipe values already entered.
       setExerciseForm((prev) => ({
         ...prev,
         name: exercise.name,
         exerciseId: exercise.id,
       }));
+      // Keep the controlled input text in sync with the picked exercise.
+      setLibraryInputValue(exercise.name);
     }
   };
 
   const handleCloseAddExercise = () => {
     setIsAddExerciseModalOpen(false);
     setSelectedSessionId(null);
+    setLibraryInputValue("");
+    setLibrarySearchTerm("");
     setExerciseForm({
       name: "",
       type: "",
@@ -484,6 +561,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
   const handleSaveExercise = async () => {
     if (!selectedSessionId || !selectedProgramId) return;
+
+    // The API now requires a library exercise to anchor the slot.
+    if (!exerciseForm.exerciseId) {
+      await alertAfterPress("Selecciona un ejercicio de tu biblioteca");
+
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -511,13 +595,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddExercise();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al guardar ejercicio: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving exercise:", err);
-      alert("Error al guardar ejercicio");
+      await alertAfterPress("Error al guardar ejercicio");
     } finally {
       setIsSaving(false);
     }
@@ -616,13 +700,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditProgram();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating program:", err);
-      alert("Error al actualizar programa");
+      await alertAfterPress("Error al actualizar programa");
     } finally {
       setIsSaving(false);
     }
@@ -632,7 +716,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     programId: string,
     programName: string
   ) => {
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro que deseas eliminar el programa "${programName}"?\n\n` +
         "Esto eliminará permanentemente:\n" +
         "• Todas las sesiones del programa\n" +
@@ -658,13 +742,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting program:", err);
-      alert("Error al eliminar programa");
+      await alertAfterPress("Error al eliminar programa");
     } finally {
       setIsSaving(false);
     }
@@ -672,13 +756,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
   const handleSaveProgram = async () => {
     if (!programForm.name.trim()) {
-      alert("El nombre del programa es obligatorio");
+      await alertAfterPress("El nombre del programa es obligatorio");
 
       return;
     }
 
     if (!programForm.startDate) {
-      alert("La fecha de inicio es obligatoria");
+      await alertAfterPress("La fecha de inicio es obligatoria");
 
       return;
     }
@@ -701,13 +785,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddProgram();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al crear programa: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving program:", err);
-      alert("Error al crear programa");
+      await alertAfterPress("Error al crear programa");
     } finally {
       setIsSaving(false);
     }
@@ -751,11 +835,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseAddSession();
       } else {
-        alert("Error al crear sesión: " + (data.error || "Error desconocido"));
+        await alertAfterPress(
+          "Error al crear sesión: " + (data.error || "Error desconocido")
+        );
       }
     } catch (err) {
       console.error("[CardioTab] Error saving session:", err);
-      alert("Error al crear sesión");
+      await alertAfterPress("Error al crear sesión");
     } finally {
       setIsSaving(false);
     }
@@ -815,13 +901,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditSession();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar sesión: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating session:", err);
-      alert("Error al actualizar sesión");
+      await alertAfterPress("Error al actualizar sesión");
     } finally {
       setIsSaving(false);
     }
@@ -834,7 +920,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
     if (!session) return;
 
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro de que deseas eliminar la sesión "${session.name}"? Esta acción no se puede deshacer.`
     );
 
@@ -854,17 +940,17 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar sesión: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting session:", err);
-      alert("Error al eliminar sesión");
+      await alertAfterPress("Error al eliminar sesión");
     }
   };
 
-  const handleEditExercise = (sessionId: string, exercise: any) => {
+  const handleEditExercise = async (sessionId: string, exercise: any) => {
     // Find the program that contains this session
     const program = activePrograms.find((p: any) =>
       p.sessions.some((s: any) => s.id === sessionId)
@@ -872,7 +958,8 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
     if (!program) return;
 
-    // Populate form with exercise data
+    // Populate form with exercise data. Pre-select the slot's current
+    // library exercise so the Edit modal's Autocomplete opens on it.
     setExerciseForm({
       name: exercise.name,
       type: exercise.cardioType || "",
@@ -882,12 +969,20 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       minHeartRate: exercise.heartRateZone?.min?.toString() || "",
       maxHeartRate: exercise.heartRateZone?.max?.toString() || "",
       notes: exercise.notes || "",
-      exerciseId: "",
+      exerciseId: exercise.exercise_id ?? "",
     });
+    setEditOriginalExerciseId(exercise.exercise_id ?? "");
     setSelectedExerciseId(exercise.id);
     setSelectedSessionId(sessionId);
     setSelectedProgramId(program.programId);
+    setLibrarySearchTerm("");
+    // Show the current exercise's name in the controlled input; the
+    // Autocomplete renders the pre-selected entry without re-syncing.
+    setLibraryInputValue(exercise.name ?? "");
     setIsEditExerciseModalOpen(true);
+
+    // Load the browse list so the pre-selected entry has an item to render.
+    await loadLibraryExercises();
   };
 
   const handleCloseEditExercise = () => {
@@ -895,6 +990,9 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     setSelectedExerciseId(null);
     setSelectedSessionId(null);
     setSelectedProgramId(null);
+    setEditOriginalExerciseId("");
+    setLibrarySearchTerm("");
+    setLibraryInputValue("");
     setExerciseForm({
       name: "",
       type: "",
@@ -910,6 +1008,32 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
 
   const handleSaveEditExercise = async () => {
     if (!selectedExerciseId || !selectedSessionId || !selectedProgramId) return;
+
+    // The edit now swaps the slot's library exercise. Require an explicit
+    // pick so we never PUT an empty exerciseId.
+    if (!exerciseForm.exerciseId) {
+      await alertAfterPress("Selecciona un ejercicio de tu biblioteca");
+
+      return;
+    }
+
+    // Warn before a swap that orphans existing logs. The client's logs are
+    // already loaded at tab scope (useClientExerciseLogs); a non-empty result
+    // for the original exercise means switching will leave those logs tied to
+    // the previous exercise.
+    if (
+      exerciseForm.exerciseId !== editOriginalExerciseId &&
+      editOriginalExerciseId &&
+      getLogsForExercise(editOriginalExerciseId).length > 0
+    ) {
+      const proceed = await confirmAfterPress(
+        "Este cliente ya registró entrenamientos del ejercicio anterior. Esos registros quedarán ligados al ejercicio anterior; los nuevos serán del ejercicio nuevo. ¿Continuar?"
+      );
+
+      if (!proceed) {
+        return;
+      }
+    }
 
     setIsSaving(true);
     try {
@@ -931,14 +1055,14 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         await fetchPrograms();
         handleCloseEditExercise();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al actualizar ejercicio: " +
             (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error updating exercise:", err);
-      alert("Error al actualizar ejercicio");
+      await alertAfterPress("Error al actualizar ejercicio");
     } finally {
       setIsSaving(false);
     }
@@ -947,7 +1071,7 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
   const handleDeleteExercise = async (sessionId: string, exercise: any) => {
     if (!activeProgram) return;
 
-    const confirmed = confirm(
+    const confirmed = await confirmAfterPress(
       `¿Estás seguro de que deseas eliminar el ejercicio "${exercise.name}"? Esta acción no se puede deshacer.`
     );
 
@@ -969,13 +1093,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
         // Refresh programs to show updated list
         await fetchPrograms();
       } else {
-        alert(
+        await alertAfterPress(
           "Error al eliminar ejercicio: " + (data.error || "Error desconocido")
         );
       }
     } catch (err) {
       console.error("[CardioTab] Error deleting exercise:", err);
-      alert("Error al eliminar ejercicio");
+      await alertAfterPress("Error al eliminar ejercicio");
     }
   };
 
@@ -1471,19 +1595,28 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                     icon="solar:folder-with-files-linear"
                     width={18}
                   />
-                  Biblioteca de Ejercicios (Opcional)
+                  Biblioteca de Ejercicios
                 </h4>
                 <Autocomplete
                   classNames={{
                     base: "w-full",
                   }}
-                  defaultItems={libraryExercises}
                   inputProps={{
                     classNames: {
                       inputWrapper: "h-12",
                     },
                   }}
-                  isLoading={isLoadingLibrary}
+                  // Switch between the initial browse list (empty input)
+                  // and live server-search results (non-empty input). HeroUI
+                  // skips its built-in client-side filter when `items` is
+                  // controlled, so we own filtering via the API.
+                  inputValue={libraryInputValue}
+                  isLoading={isLoadingLibrary || isSearchingLibrary}
+                  items={
+                    librarySearchTerm.trim().length > 0
+                      ? librarySearchResults
+                      : libraryExercises
+                  }
                   label="Buscar ejercicio en tu biblioteca"
                   placeholder="Escribe para buscar..."
                   selectedKey={exerciseForm.exerciseId || null}
@@ -1494,6 +1627,13 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                       width={20}
                     />
                   }
+                  onInputChange={(value) => {
+                    // We own the input text (controlled). Only genuine user
+                    // typing reaches here now — never the selectedKey→label
+                    // auto-sync — so updating the search term can't loop.
+                    setLibraryInputValue(value);
+                    setLibrarySearchTerm(value);
+                  }}
                   onSelectionChange={(key) => {
                     if (key) {
                       handleSelectLibraryExercise(key as string);
@@ -1538,69 +1678,16 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                 </Autocomplete>
                 <p className="text-xs text-gray-500 mt-2">
                   Selecciona un ejercicio de tu biblioteca para auto-completar
-                  los campos, o completa manualmente para crear uno nuevo.
+                  los campos.
                 </p>
-              </div>
-
-              {/* Información Básica */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Icon
-                    className="text-slate-700"
-                    icon="solar:running-bold"
-                    width={18}
-                  />
-                  Información del Ejercicio
-                </h4>
-                <div className="space-y-4">
-                  <Input
-                    isRequired
-                    label="Nombre del Ejercicio"
-                    placeholder="Ej: Carrera Continua"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clipboard-text-linear"
-                        width={18}
-                      />
-                    }
-                    value={exerciseForm.name}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, name: value })
-                    }
-                  />
-                  <Select
-                    isRequired
-                    label="Tipo de Actividad"
-                    placeholder="Selecciona el tipo"
-                    selectedKeys={exerciseForm.type ? [exerciseForm.type] : []}
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:heart-pulse-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setExerciseForm({ ...exerciseForm, type: value });
-                    }}
-                  >
-                    <SelectItem key="Running">Running (Correr)</SelectItem>
-                    <SelectItem key="Cycling">Cycling (Ciclismo)</SelectItem>
-                    <SelectItem key="Swimming">Swimming (Natación)</SelectItem>
-                    <SelectItem key="Walking">Walking (Caminar)</SelectItem>
-                    <SelectItem key="Rowing">Rowing (Remo)</SelectItem>
-                    <SelectItem key="HIIT">HIIT</SelectItem>
-                    <SelectItem key="Elliptical">
-                      Elliptical (Elíptica)
-                    </SelectItem>
-                    <SelectItem key="Stairmaster">
-                      Stairmaster (Escaladora)
-                    </SelectItem>
-                  </Select>
-                </div>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
               </div>
 
               {/* Duración y Distancia */}
@@ -1815,65 +1902,107 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
           </ModalHeader>
           <ModalBody>
             <div className="flex flex-col gap-6">
-              {/* Same structure as Add Exercise Modal */}
+              {/* Exercise Library Selection */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Icon
                     className="text-slate-700"
-                    icon="solar:running-bold"
+                    icon="solar:folder-with-files-linear"
                     width={18}
                   />
-                  Información del Ejercicio
+                  Biblioteca de Ejercicios
                 </h4>
-                <div className="space-y-4">
-                  <Input
-                    isRequired
-                    label="Nombre del Ejercicio"
-                    placeholder="Ej: Carrera Continua"
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:clipboard-text-linear"
-                        width={18}
-                      />
+                <Autocomplete
+                  classNames={{
+                    base: "w-full",
+                  }}
+                  inputProps={{
+                    classNames: {
+                      inputWrapper: "h-12",
+                    },
+                  }}
+                  // Switch between the initial browse list (empty input)
+                  // and live server-search results (non-empty input). HeroUI
+                  // skips its built-in client-side filter when `items` is
+                  // controlled, so we own filtering via the API.
+                  inputValue={libraryInputValue}
+                  isLoading={isLoadingLibrary || isSearchingLibrary}
+                  items={
+                    librarySearchTerm.trim().length > 0
+                      ? librarySearchResults
+                      : libraryExercises
+                  }
+                  label="Buscar ejercicio en tu biblioteca"
+                  placeholder="Escribe para buscar..."
+                  selectedKey={exerciseForm.exerciseId || null}
+                  startContent={
+                    <Icon
+                      className="text-gray-400"
+                      icon="solar:book-linear"
+                      width={20}
+                    />
+                  }
+                  onInputChange={(value) => {
+                    // We own the input text (controlled). Only genuine user
+                    // typing reaches here now — never the selectedKey→label
+                    // auto-sync — so updating the search term can't loop.
+                    setLibraryInputValue(value);
+                    setLibrarySearchTerm(value);
+                  }}
+                  onSelectionChange={(key) => {
+                    if (key) {
+                      handleSelectLibraryExercise(key as string);
                     }
-                    value={exerciseForm.name}
-                    onValueChange={(value) =>
-                      setExerciseForm({ ...exerciseForm, name: value })
-                    }
-                  />
-                  <Select
-                    isRequired
-                    label="Tipo de Actividad"
-                    placeholder="Selecciona el tipo"
-                    selectedKeys={exerciseForm.type ? [exerciseForm.type] : []}
-                    startContent={
-                      <Icon
-                        className="text-gray-400"
-                        icon="solar:heart-pulse-linear"
-                        width={18}
-                      />
-                    }
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as string;
-
-                      setExerciseForm({ ...exerciseForm, type: value });
-                    }}
-                  >
-                    <SelectItem key="Running">Running (Correr)</SelectItem>
-                    <SelectItem key="Cycling">Cycling (Ciclismo)</SelectItem>
-                    <SelectItem key="Swimming">Swimming (Natación)</SelectItem>
-                    <SelectItem key="Walking">Walking (Caminar)</SelectItem>
-                    <SelectItem key="Rowing">Rowing (Remo)</SelectItem>
-                    <SelectItem key="HIIT">HIIT</SelectItem>
-                    <SelectItem key="Elliptical">
-                      Elliptical (Elíptica)
-                    </SelectItem>
-                    <SelectItem key="Stairmaster">
-                      Stairmaster (Escaladora)
-                    </SelectItem>
-                  </Select>
-                </div>
+                  }}
+                >
+                  {(exercise: any) => (
+                    <AutocompleteItem
+                      key={exercise.id}
+                      startContent={
+                        exercise.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            alt={exercise.name}
+                            className="w-10 h-10 rounded-md object-cover"
+                            src={exercise.image_url}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-red-100 flex items-center justify-center">
+                            <Icon
+                              className="text-red-600"
+                              icon="solar:heart-pulse-bold"
+                              width={20}
+                            />
+                          </div>
+                        )
+                      }
+                      textValue={exercise.name}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold">
+                          {exercise.name}
+                        </span>
+                        {exercise.description && (
+                          <span className="text-xs text-gray-500 line-clamp-1">
+                            {exercise.description}
+                          </span>
+                        )}
+                      </div>
+                    </AutocompleteItem>
+                  )}
+                </Autocomplete>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selecciona un ejercicio de tu biblioteca para auto-completar
+                  los campos.
+                </p>
+                <a
+                  className="text-xs text-primary hover:underline"
+                  href="/trainer/dashboard/exercise-library"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ¿No está en tu biblioteca? Gestiona tus ejercicios
+                </a>
               </div>
 
               <div>

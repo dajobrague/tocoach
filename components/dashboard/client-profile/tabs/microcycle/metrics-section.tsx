@@ -4,6 +4,8 @@ import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useClientExerciseLogs } from "../workouts/use-client-exercise-logs";
+
 import { DayDetail } from "./day-detail";
 import { useWeekMetrics } from "./use-week-metrics";
 import { WeekNavigator } from "./week-navigator";
@@ -47,10 +49,12 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     getLocalYmd(new Date())
   );
-  const { data, loading, error, refetch, invalidate } = useWeekMetrics(
-    clientId,
-    weekStart
-  );
+  const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
+
+  // Historial all-time de logs por ejercicio — un solo fetch a nivel de
+  // sección (igual que en Entrenamiento/Cardio) compartido por todos los
+  // popovers de métricas del detalle del día.
+  const { getLogsForExercise } = useClientExerciseLogs(clientId);
 
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
   const openVideo = useCallback(
@@ -99,20 +103,6 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     () => data?.days.find((d) => d.date === selectedDate) ?? null,
     [data, selectedDate]
   );
-
-  // Recalculado cada render para que el flag `editable` no quede stale
-  // cuando la pestaña permanece abierta cruzando medianoche. El costo es
-  // negligible (un format de Date local). Si llega a ser caliente, usar un
-  // interval que invalide a las 00:00 local.
-  const todayYmd = getLocalYmd(new Date());
-  const editable =
-    !!selectedDay &&
-    (selectedDay.date >= todayYmd ||
-      selectedDay.sessions.every((s) => s.logs.length === 0));
-
-  const handleCommitted = useCallback(() => {
-    invalidate(getLocalYmd(weekStart));
-  }, [invalidate, weekStart]);
 
   // "No prescription anywhere this week" is the trigger for the empty-state
   // banner. We don't try to detect a missing client_program globally — if the
@@ -167,9 +157,8 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
             <DayDetail
               clientId={clientId}
               day={selectedDay}
-              editable={editable}
+              getLogsForExercise={getLogsForExercise}
               orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
-              onCommitted={handleCommitted}
               onPlayVideo={openVideo}
             />
           ) : null}

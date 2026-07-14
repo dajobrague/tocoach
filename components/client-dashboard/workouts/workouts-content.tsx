@@ -388,6 +388,13 @@ export function WorkoutsContent() {
         existingLog={selectedExercise?.existingLog ?? null}
         isOpen={isLogModalOpen}
         scheduledDate={selectedExercise?.scheduledDate ?? ""}
+        sessionExerciseId={
+          (
+            selectedExercise?.exercise as
+              | { session_exercise_id?: string }
+              | undefined
+          )?.session_exercise_id ?? null
+        }
         sessionId={selectedExercise?.sessionId ?? ""}
         onClose={handleLogModalClose}
         onSuccess={handleLogModalSuccess}

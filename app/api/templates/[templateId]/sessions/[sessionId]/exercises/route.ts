@@ -29,8 +29,7 @@ export async function POST(
     const { templateId, sessionId } = await params;
     const body = await request.json();
     const {
-      name,
-      exerciseId, // If provided, use existing exercise from library
+      exerciseId, // Required: the library exercise to anchor this slot
       sets,
       reps,
       tempo,
@@ -74,77 +73,38 @@ export async function POST(
       );
     }
 
-    // First, create or find the exercise in the exercise library
-    let finalExerciseId: string;
-
-    // If exerciseId is provided, use it (selected from library)
-    if (exerciseId) {
-      finalExerciseId = exerciseId;
-      console.log(
-        "[Template Exercises API] Using exercise from library:",
-        finalExerciseId
+    // The ADD picker is library-only: an exerciseId is always required.
+    if (!exerciseId) {
+      return NextResponse.json(
+        { success: false, error: "Selecciona un ejercicio de tu biblioteca" },
+        { status: 400 }
       );
+    }
 
-      // If a videoUrl was provided, update the library exercise so the
-      // video is available everywhere this exercise is referenced.
-      if (videoUrl) {
-        await supabase
-          .from("exercises")
-          .update({ video_url: videoUrl })
-          .eq("id", exerciseId);
-      }
-    } else {
-      // Check if an exercise with this name already exists for this trainer
-      const { data: existingExercise } = await supabase
+    // Validate the library exercise belongs to this trainer.
+    const { data: libraryExercise, error: libraryError } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("id", exerciseId)
+      .eq("trainer_id", session.trainer_id)
+      .single();
+
+    if (libraryError || !libraryExercise) {
+      return NextResponse.json(
+        { success: false, error: "Ejercicio no encontrado en tu biblioteca" },
+        { status: 404 }
+      );
+    }
+
+    const finalExerciseId: string = exerciseId;
+
+    // If a videoUrl was provided, update the library exercise so the video
+    // is available everywhere this exercise is referenced.
+    if (videoUrl) {
+      await supabase
         .from("exercises")
-        .select("id")
-        .eq("name", name)
-        .eq("trainer_id", session.trainer_id)
-        .maybeSingle();
-
-      if (existingExercise) {
-        finalExerciseId = existingExercise.id;
-        console.log(
-          "[Template Exercises API] Using existing exercise:",
-          finalExerciseId
-        );
-      } else {
-        // Create new exercise
-        const exerciseCategory =
-          sessionData.session_type === "cardio" ? "cardio" : "strength";
-
-        const { data: newExercise, error: exerciseError } = await supabase
-          .from("exercises")
-          .insert({
-            tenant_host: sessionData.tenant_host,
-            trainer_id: session.trainer_id,
-            name,
-            category: exerciseCategory,
-            video_url: videoUrl || null,
-            is_public: false,
-            metadata: {},
-          })
-          .select()
-          .single();
-
-        if (exerciseError || !newExercise) {
-          console.error(
-            "[Template Exercises API] Error creating exercise:",
-            exerciseError
-          );
-
-          return NextResponse.json(
-            { success: false, error: "Error al crear ejercicio" },
-            { status: 500 }
-          );
-        }
-
-        finalExerciseId = newExercise.id;
-        console.log(
-          "[Template Exercises API] Created new exercise:",
-          finalExerciseId
-        );
-      }
+        .update({ video_url: videoUrl })
+        .eq("id", exerciseId);
     }
 
     // Get the current max exercise_order for this session
@@ -258,6 +218,7 @@ export async function PUT(
 
     const {
       sessionExerciseId,
+      exerciseId,
       name,
       sets,
       reps,
@@ -295,7 +256,29 @@ export async function PUT(
     // Step 2: Build session_exercises update payload — only touch provided fields
     const updatePayload: Record<string, any> = {};
 
-    if (name !== undefined) {
+    // The UI now swaps the slot's library exercise instead of writing a
+    // free-text name. When exerciseId is provided, validate it belongs to
+    // this trainer, then point the slot at it and clear any custom_name —
+    // the display name comes from the library exercise.
+    if (exerciseId !== undefined && exerciseId !== null && exerciseId !== "") {
+      const { data: libraryExercise, error: libraryError } = await supabase
+        .from("exercises")
+        .select("id")
+        .eq("id", exerciseId)
+        .eq("trainer_id", session.trainer_id)
+        .single();
+
+      if (libraryError || !libraryExercise) {
+        return NextResponse.json(
+          { success: false, error: "Ejercicio no encontrado en tu biblioteca" },
+          { status: 404 }
+        );
+      }
+
+      updatePayload.exercise_id = exerciseId;
+      updatePayload.custom_name = null;
+    } else if (name !== undefined) {
+      // Backward-compat fallback: only used when no exerciseId is supplied.
       updatePayload.custom_name = name && name.trim() ? name.trim() : null;
     }
 

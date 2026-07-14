@@ -31,6 +31,7 @@ import {
   validateCheckinScheduleDraft,
 } from "@/components/trainer/checkin-schedule-editor";
 import { countAnswerKeys, normalizeFormAnswers } from "@/lib/forms";
+import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
   DEFAULT_CHECKIN_CONFIG,
   DEFAULT_HABIT_CONFIG,
@@ -105,35 +106,39 @@ export default function FormsTab({
 
   // Guard function: warns user before losing unsaved changes
   const guardUnsaved = useCallback(
-    (action: () => void) => {
+    async (action: () => void) => {
       const dirty =
         isConfigDirty || (selectedFormType === "checkins" && isScheduleDirty);
 
-      if (dirty) {
-        if (
-          window.confirm(
-            "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
-          )
-        ) {
-          setIsConfigDirty(false);
-          onConfigDirtyChange?.(false);
-          pendingConfigRef.current = null;
-          if (
-            selectedFormType === "checkins" &&
-            isScheduleDirty &&
-            checkinScheduleBaseline
-          ) {
-            setCheckinScheduleDraft({ ...checkinScheduleBaseline });
-            setScheduleEditorRevision((r) => r + 1);
-          }
-          void queryClient.invalidateQueries({
-            queryKey: ["trainer", "checkin-schedule", clientId],
-          });
-          action();
-        }
-      } else {
+      if (!dirty) {
         action();
+
+        return;
       }
+
+      if (
+        !(await confirmAfterPress(
+          "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
+        ))
+      ) {
+        return;
+      }
+
+      setIsConfigDirty(false);
+      onConfigDirtyChange?.(false);
+      pendingConfigRef.current = null;
+      if (
+        selectedFormType === "checkins" &&
+        isScheduleDirty &&
+        checkinScheduleBaseline
+      ) {
+        setCheckinScheduleDraft({ ...checkinScheduleBaseline });
+        setScheduleEditorRevision((r) => r + 1);
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ["trainer", "checkin-schedule", clientId],
+      });
+      action();
     },
     [
       isConfigDirty,
@@ -353,15 +358,18 @@ export default function FormsTab({
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleDiscardChanges = useCallback(() => {
+  const handleDiscardChanges = useCallback(async () => {
     const hasUnsaved =
       isConfigDirty || (selectedFormType === "checkins" && isScheduleDirty);
 
+    if (!hasUnsaved) {
+      return;
+    }
+
     if (
-      !hasUnsaved ||
-      !window.confirm(
+      !(await confirmAfterPress(
         "Tienes cambios sin guardar en la configuración. ¿Quieres descartarlos?"
-      )
+      ))
     ) {
       return;
     }
@@ -599,9 +607,9 @@ export default function FormsTab({
   };
 
   // Add custom question
-  const handleAddCustomQuestion = () => {
+  const handleAddCustomQuestion = async () => {
     if (!newQuestion.label || !newQuestion.fullQuestion) {
-      alert("Por favor completa la etiqueta y la pregunta");
+      await alertAfterPress("Por favor completa la etiqueta y la pregunta");
 
       return;
     }
@@ -638,7 +646,9 @@ export default function FormsTab({
     });
     setIsAddQuestionModalOpen(false);
 
-    alert("Pregunta agregada. No olvides guardar la configuración.");
+    await alertAfterPress(
+      "Pregunta agregada. No olvides guardar la configuración."
+    );
   };
 
   // Get default icon based on question type
@@ -658,14 +668,18 @@ export default function FormsTab({
   };
 
   // Delete custom question
-  const handleDeleteCustomQuestion = (questionId: string) => {
+  const handleDeleteCustomQuestion = async (questionId: string) => {
     if (!questionId.startsWith("custom_")) {
-      alert("Solo puedes eliminar preguntas personalizadas");
+      await alertAfterPress("Solo puedes eliminar preguntas personalizadas");
 
       return;
     }
 
-    if (!confirm("¿Seguro que quieres eliminar esta pregunta personalizada?")) {
+    if (
+      !(await confirmAfterPress(
+        "¿Seguro que quieres eliminar esta pregunta personalizada?"
+      ))
+    ) {
       return;
     }
 
@@ -675,7 +689,9 @@ export default function FormsTab({
       setHabitQuestions(habitQuestions.filter((q) => q.id !== questionId));
     }
 
-    alert("Pregunta eliminada. No olvides guardar la configuración.");
+    await alertAfterPress(
+      "Pregunta eliminada. No olvides guardar la configuración."
+    );
   };
 
   const toggleHabitRequired = (questionId: string, parentId?: string) => {

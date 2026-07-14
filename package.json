@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build && npm run copy-standalone",
-    "copy-standalone": "cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "copy-standalone": "node scripts/copy-standalone.mjs",
     "start": "next start",
     "lint": "eslint --fix .",
     "lint:check": "eslint .",

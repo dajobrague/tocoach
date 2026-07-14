@@ -14,12 +14,6 @@ export function formatExerciseForDisplay(exercise: Exercise) {
     movementPattern: exercise.movement_pattern || "N/A",
     muscleGroupsText: exercise.muscle_groups?.join(", ") || "N/A",
     equipmentText: exercise.equipment?.join(", ") || "Ninguno",
-    hasDefaults:
-      exercise.default_sets ||
-      exercise.default_reps ||
-      exercise.default_tempo ||
-      exercise.default_rest_seconds ||
-      exercise.default_training_system,
   };
 }
 
@@ -61,11 +55,6 @@ export function getDifficultyLabel(difficulty?: string): string {
 export function validateExerciseLibraryForm(form: {
   name: string;
   category: string;
-  default_sets?: string;
-  default_reps?: string;
-  default_tempo?: string;
-  default_rest_seconds?: string;
-  default_training_system?: string;
 }): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
@@ -76,25 +65,6 @@ export function validateExerciseLibraryForm(form: {
 
   if (!form.category || form.category.trim() === "") {
     errors.push("La categoría es requerida");
-  }
-
-  // Validate numeric fields if provided
-  if (
-    form.default_sets &&
-    form.default_sets.trim() !== "" &&
-    (parseInt(form.default_sets, 10) < 1 ||
-      isNaN(parseInt(form.default_sets, 10)))
-  ) {
-    errors.push("Las series deben ser un número mayor a 0");
-  }
-
-  if (
-    form.default_rest_seconds &&
-    form.default_rest_seconds.trim() !== "" &&
-    (parseInt(form.default_rest_seconds, 10) < 0 ||
-      isNaN(parseInt(form.default_rest_seconds, 10)))
-  ) {
-    errors.push("El descanso debe ser un número mayor o igual a 0");
   }
 
   return {

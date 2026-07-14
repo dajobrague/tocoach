@@ -10,6 +10,7 @@ import {
   normalizeFormAnswers,
   validateFormResponse,
 } from "@/lib/forms";
+import { relaxStepsRequirement } from "@/lib/forms/neat-steps";
 
 /**
  * GET /api/forms/responses/[clientId]?form_type=checkins|habits&start_date=&end_date=
@@ -418,9 +419,30 @@ export async function POST(
       );
     }
 
+    // El cliente OCULTA la pregunta de pasos cuando no hay NEAT cards (ver
+    // `visibleQuestions` en dynamic-form-modal.tsx), así que aquí no podemos
+    // exigirla: el cliente nunca pudo contestarla. Sin esta paridad, un
+    // "pasos" required + 0 NEAT cards bloqueaba el envío para siempre con un
+    // error sobre un campo invisible. Si la query falla, fail-open (se
+    // mantiene el required) — mismo criterio que el cliente.
+    let effectiveQuestionsArray = questionsArray;
+
+    if (form_type === "habits") {
+      const { count: neatCount, error: neatError } = await supabase
+        .from("client_neat_cards")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", clientId);
+
+      if (!neatError && (neatCount ?? 0) === 0) {
+        effectiveQuestionsArray = relaxStepsRequirement(questionsArray);
+      }
+    }
+
     const validation = validateFormResponse(
       { ...body, answers: cleanedAnswers },
-      questionsConfig
+      isStructuredConfig(questionsConfig)
+        ? { ...questionsConfig, questions: effectiveQuestionsArray }
+        : effectiveQuestionsArray
     );
 
     if (!validation.valid) {

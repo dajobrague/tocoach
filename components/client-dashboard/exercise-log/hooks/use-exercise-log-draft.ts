@@ -32,6 +32,14 @@ interface UseExerciseLogDraftReturn {
   formData: ExerciseLogFormDraft;
   setFormData: React.Dispatch<React.SetStateAction<ExerciseLogFormDraft>>;
   draftKey: string;
+  /**
+   * Signature (JSON.stringify) del último estado aplicado por la
+   * hidratación. El autosave compara contra esto para distinguir
+   * "form prellenado intacto" de "el cliente registró algo" — el
+   * prellenado (reps de prescripción, peso de lastUsedWeights) NUNCA
+   * debe persistirse solo porque el cliente tocó un input.
+   */
+  hydratedSigRef: React.MutableRefObject<string>;
 }
 
 export function useExerciseLogDraft(
@@ -194,5 +202,5 @@ export function useExerciseLogDraft(
     };
   }, [isOpen, exercise, draftKey, prescriptionSignature]);
 
-  return { formData, setFormData, draftKey };
+  return { formData, setFormData, draftKey, hydratedSigRef: lastHydrateSigRef };
 }

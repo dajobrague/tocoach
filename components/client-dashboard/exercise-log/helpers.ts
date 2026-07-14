@@ -16,14 +16,8 @@ export interface ExerciseShape {
   tempo?: string;
   rest?: string;
   trainingSystem?: string;
-  /** Uniform prescribed weight (Phase 3 override). */
+  /** Uniform prescribed weight (from the session template). */
   weightKg?: number | null;
-  /** Per-set prescription (Phase 3.5 override). Wins over uniform when present. */
-  prescribedSets?: Array<{
-    setNumber: number;
-    reps: string | null;
-    weightKg: number | null;
-  }>;
   /**
    * Pesos del último log finalizado del cliente para este ejercicio
    * (indexados por set position). El form los usa para prellenar inputs
@@ -42,6 +36,52 @@ export function isExerciseCardio(exercise: ExerciseShape): boolean {
     exercise.category === "cardio" ||
     !!(exercise.duration || exercise.distance || exercise.cardioType)
   );
+}
+
+// Decide si vale la pena disparar autosave. Si el cliente abrió el
+// modal pero todavía no tipeó nada significativo, no creamos un log
+// vacío en BD.
+export function hasMeaningfulFormData(
+  formData: ExerciseLogFormDraft,
+  isCardio: boolean
+): boolean {
+  if (isCardio) {
+    return Boolean(
+      formData.durationCompleted ||
+        formData.distanceCompleted ||
+        formData.intensityCompleted ||
+        formData.avgHeartRate ||
+        formData.notes
+    );
+  }
+
+  return formData.sets.some(
+    (s) =>
+      (s.reps && s.reps.trim().length > 0) ||
+      (s.weight && s.weight.trim().length > 0) ||
+      Boolean(s.videoUrl)
+  );
+}
+
+// Gate completo del autosave. Además de "hay contenido", exige que el
+// form DIFIERA de su baseline de hidratación (JSON.stringify del estado
+// que el hook aplicó al abrir). El form se hidrata PRELLENADO — reps de
+// la prescripción, peso de lastUsedWeights — así que contenido ≠ input
+// del cliente: sin esta comparación, un cliente que entraba a mirar un
+// ejercicio por curiosidad y rozaba cualquier input creaba un log
+// fantasma "En curso" con los valores prescritos, que luego aparecía
+// solapado en otras sesiones del día y como sesión a medias para el
+// trainer.
+export function shouldAutosaveDraft(
+  formData: ExerciseLogFormDraft,
+  isCardio: boolean,
+  isDirty: boolean,
+  hydratedSig: string
+): boolean {
+  if (!isDirty) return false;
+  if (!hasMeaningfulFormData(formData, isCardio)) return false;
+
+  return JSON.stringify(formData) !== hydratedSig;
 }
 
 /**
@@ -136,15 +176,9 @@ export function buildBaseFormData(
       if (m) reps = m[0];
     }
     sets = Array.from({ length: count }, () => ({ reps, weight: "" }));
-  } else if (exercise.prescribedSets && exercise.prescribedSets.length > 0) {
-    // Per-set trainer override: prefill each row with its prescribed values.
-    sets = exercise.prescribedSets.map((s) => ({
-      reps: s.reps != null ? String(s.reps) : "",
-      weight: s.weightKg != null ? String(s.weightKg) : "",
-    }));
   } else {
-    // Uniform prescription: build N empty rows, prefilled with the trainer's
-    // uniform reps/weight when present (Phase 3 override). Cuando reps lleva
+    // Uniform prescription: build N empty rows, prefilled with the uniform
+    // reps/weight from the session template when present. Cuando reps lleva
     // formato pipe-separated ("12 | 12 | 10 | 8") cada set toma su valor
     // individual; sin pipe, los N sets comparten el mismo reps.
     const count = exercise.sets || 1;

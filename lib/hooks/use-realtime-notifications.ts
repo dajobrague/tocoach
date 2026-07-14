@@ -87,6 +87,15 @@ export function useRealtimeNotifications({
         (payload) => {
           const notification = payload.new as RealtimeNotification;
 
+          // Las filas de chat llevan client_id Y trainer_id, así que ambas
+          // suscripciones las reciben; metadata.audience scope-a qué campana
+          // puede mostrarlas (filas legacy sin audience pasan siempre).
+          const audience = (
+            notification.metadata as { audience?: string } | null
+          )?.audience;
+
+          if (audience && audience !== userType) return;
+
           setLatestNotification(notification);
           if (!notification.read_at) {
             setUnreadCount((prev) => prev + 1);
@@ -106,6 +115,11 @@ export function useRealtimeNotifications({
         (payload) => {
           const updated = payload.new as RealtimeNotification;
           const old = payload.old as Partial<RealtimeNotification>;
+
+          const audience = (updated.metadata as { audience?: string } | null)
+            ?.audience;
+
+          if (audience && audience !== userType) return;
 
           // Notification was just marked as read from another device/tab
           if (updated.read_at && !old.read_at) {

@@ -3,6 +3,7 @@
 import type { ThemeProviderProps } from "next-themes";
 
 import { HeroUIProvider } from "@heroui/system";
+import { ToastProvider } from "@heroui/toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { useRouter } from "next/navigation";
@@ -61,6 +62,12 @@ export function Providers({ children, themeProps }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <HeroUIProvider navigate={router.push}>
+        {/* Sin ToastProvider montado, TODOS los addToast() de la app eran
+            no-ops silenciosos: ningún error de envío de formularios llegaba
+            a verse ("mando enviar y no pasa nada"). La región de toasts usa
+            z-[100] (sobre el z-50 de los modales), así que los toasts se ven
+            incluso con un modal abierto. */}
+        <ToastProvider />
         <NextThemesProvider {...themeProps}>{children}</NextThemesProvider>
       </HeroUIProvider>
     </QueryClientProvider>

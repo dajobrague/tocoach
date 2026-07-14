@@ -136,11 +136,7 @@ export async function POST(request: NextRequest) {
       image_url,
       instructions,
       tips,
-      default_sets,
-      default_reps,
-      default_tempo,
-      default_rest_seconds,
-      default_training_system,
+      cardio_type,
     } = body;
 
     console.log("[Exercise Library API] Creating exercise:", body);
@@ -167,6 +163,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reject duplicate names (case-insensitive) for this trainer.
+    // No DB unique constraint exists, so this is the only guard.
+    const { data: existing } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("trainer_id", session.trainer_id)
+      .ilike("name", name.trim())
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Ya existe un ejercicio con ese nombre en tu biblioteca. Usa un nombre diferente o edita el existente.",
+        },
+        { status: 409 }
+      );
+    }
+
     // Create the exercise
     const { data: exercise, error: exerciseError } = await supabase
       .from("exercises")
@@ -185,15 +201,7 @@ export async function POST(request: NextRequest) {
         instructions: instructions || [],
         tips: tips || [],
         is_public: false,
-        // Default training parameters
-        default_sets: default_sets ? parseInt(default_sets, 10) : null,
-        default_reps: default_reps || null,
-        default_tempo: default_tempo || null,
-        default_rest_seconds: default_rest_seconds
-          ? parseInt(default_rest_seconds, 10)
-          : null,
-        default_training_system: default_training_system || null,
-        metadata: {},
+        metadata: category === "cardio" && cardio_type ? { cardio_type } : {},
       })
       .select()
       .single();

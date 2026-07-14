@@ -39,6 +39,7 @@ function StrengthPrescriptionRow({
         </span>
       )}
       {prescribed.rest && <span className="ml-2">· {prescribed.rest}</span>}
+      {prescribed.rir && <span className="ml-2">· RIR {prescribed.rir}</span>}
       {prescribed.trainingSystem && (
         <span className="ml-2">· {prescribed.trainingSystem}</span>
       )}

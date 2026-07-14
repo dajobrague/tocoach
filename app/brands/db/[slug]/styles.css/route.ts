@@ -344,9 +344,13 @@ export async function GET(
     return new NextResponse(css, {
       headers: {
         "Content-Type": "text/css",
+        // max-age corto: cuando el trainer guarda colores, los clientes
+        // deben verlos en ~1 min, no hasta 1h despues (y el SWR de un dia
+        // entero hacia que "guarde y no cambia nada" fuera la norma).
+        // Generar este CSS es barato (lookup de tenant cacheado 60s).
         "Cache-Control": isDev
           ? "no-store"
-          : "public, max-age=3600, stale-while-revalidate=86400",
+          : "public, max-age=60, stale-while-revalidate=300",
         Vary: "Accept-Encoding",
       },
     });

@@ -11,6 +11,7 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -52,6 +53,13 @@ export default function MessagingContent() {
   const [tenantHost, setTenantHost] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadConversationsRef = useRef<() => void>();
+
+  // Deep-link desde la campana: /trainer/dashboard/messaging?client=<id>
+  // selecciona esa conversación en cuanto la lista carga.
+  const searchParams = useSearchParams();
+  const requestedClientId = searchParams.get("client");
+  const router = useRouter();
+  const pathname = usePathname();
 
   // Fetch trainer session to get trainerId + tenantHost for realtime
   useEffect(() => {
@@ -121,8 +129,13 @@ export default function MessagingContent() {
 
         setConversations(data.conversations || []);
 
-        // Auto-select first conversation if none selected
-        if (!selectedConversation && data.conversations.length > 0) {
+        // Auto-select first conversation if none selected (skip when a
+        // deep-link ?client= is present — the effect below selects it).
+        if (
+          !selectedConversation &&
+          !requestedClientId &&
+          data.conversations.length > 0
+        ) {
           setSelectedConversation(data.conversations[0]);
         }
       }
@@ -220,6 +233,26 @@ export default function MessagingContent() {
       loadMessages(selectedConversation.id);
     }
   }, [selectedConversation?.id]);
+
+  // Deep-link: selecciona la conversación de ?client= cuando la lista ya
+  // cargó y CONSUME el param (replace sin query). Sin esto, el poll de
+  // conversaciones (60s) re-dispara el efecto y devuelve al trainer a la
+  // conversación del deep-link aunque haya cambiado manualmente a otra.
+  // Consumirlo también permite re-click de la campana con el mismo cliente.
+  useEffect(() => {
+    if (!requestedClientId || conversations.length === 0) return;
+
+    const target = conversations.find(
+      (c) => String(c.id) === requestedClientId
+    );
+
+    if (target) {
+      if (target.id !== selectedConversation?.id) {
+        setSelectedConversation(target);
+      }
+      router.replace(pathname, { scroll: false });
+    }
+  }, [requestedClientId, conversations]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

@@ -18,6 +18,8 @@ export interface ExerciseLog {
   };
   scheduled_date: string;
   session_id?: string | null;
+  /** Slot específico del plan (session_exercises.id) al que pertenece el log. */
+  session_exercise_id?: string | null;
   completed_at: string;
   sets: ExerciseLogSet[];
   video_url: string | null;

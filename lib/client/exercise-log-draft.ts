@@ -111,11 +111,6 @@ export function buildPrescriptionSignature(input: {
   sets?: number | null;
   reps?: string | null;
   weightKg?: number | null;
-  prescribedSets?: Array<{
-    setNumber: number;
-    reps: string | null;
-    weightKg: number | null;
-  }>;
   duration?: number | null;
   distance?: number | null;
   intensity?: string | null;
@@ -142,14 +137,6 @@ export function buildPrescriptionSignature(input: {
     hrz,
     input.trainingSystem ?? "",
   ].join(":");
-
-  if (input.prescribedSets && input.prescribedSets.length > 0) {
-    const flat = input.prescribedSets
-      .map((s) => `${s.setNumber}:${s.reps ?? ""}:${s.weightKg ?? ""}`)
-      .join("|");
-
-    return `ps:${flat}|t:${tail}`;
-  }
 
   return [
     "u",
