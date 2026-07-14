@@ -43,6 +43,9 @@ const CLIENT_SESSION: ClientSession = {
 
 const SLOT_ID = "11111111-1111-4111-8111-111111111111";
 const OPTION_ID = "22222222-2222-4222-8222-222222222222";
+// Recent, always-in-window date so these auth/success tests don't age out of
+// the 30-day log window (the window itself is covered by its own describe).
+const RECENT = toYmdInTimezone(new Date(), "UTC");
 
 function row(over: Partial<MealLogRow> = {}): MealLogRow {
   return {
@@ -149,7 +152,7 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
     mockedSet.mockResolvedValue(null);
 
     const res = await POST(
-      postReq({ slot_id: SLOT_ID, log_date: "2026-06-03", status: "skipped" })
+      postReq({ slot_id: SLOT_ID, log_date: RECENT, status: "skipped" })
     );
 
     expect(res.status).toBe(404);
@@ -163,7 +166,7 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
     const res = await POST(
       postReq({
         slot_id: SLOT_ID,
-        log_date: "2026-06-03",
+        log_date: RECENT,
         status: "eaten_planned",
         option_id: OPTION_ID,
         comment: "rico",
@@ -175,7 +178,7 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
     expect(res.status).toBe(201);
     expect(mockedSet).toHaveBeenCalledWith(expect.anything(), 999000001, {
       slotId: SLOT_ID,
-      logDate: "2026-06-03",
+      logDate: RECENT,
       status: "eaten_planned",
       optionId: OPTION_ID,
       comment: "rico",
@@ -191,7 +194,7 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
         await POST(
           postReq({
             slot_id: SLOT_ID,
-            log_date: "2026-06-03",
+            log_date: RECENT,
             status: "eaten_other",
           })
         )
@@ -204,7 +207,7 @@ describe("POST /api/client/meal-logs — auth boundary (§4.4)", () => {
         await POST(
           postReq({
             slot_id: SLOT_ID,
-            log_date: "2026-06-03",
+            log_date: RECENT,
             status: "skipped",
           })
         )
