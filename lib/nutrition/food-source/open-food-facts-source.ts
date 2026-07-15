@@ -10,8 +10,14 @@ const DEFAULT_SEARCH_LANG = "es";
  * and low-quality entries ahead of the products users actually scan.
  */
 const SEARCH_SORT_BY = "-unique_scans_n";
-/** Abort slow OFF calls so the UI never hangs behind the external API. */
-const REQUEST_TIMEOUT_MS = 8000;
+/**
+ * Abort slow OFF calls so the UI never hangs behind the external API.
+ * Temporarily raised from 8s to 20s while diagnosing datacenter-egress
+ * latency: OFF's search host answers home connections in 1.5-4s but was
+ * timing out (>8s) from Railway. The [OFF fetch] logs below record the real
+ * elapsed time + status so we can pick the right permanent value / endpoint.
+ */
+const REQUEST_TIMEOUT_MS = 20000;
 /** OFF asks API consumers to identify themselves. */
 const USER_AGENT = "TopCoach/1.0 (https://app.topcoach.io)";
 /** Trim the search payload to what mapProduct reads (~5KB vs ~700KB). */
@@ -123,16 +129,47 @@ export class OpenFoodFactsSource implements FoodSource {
   }
 
   private async fetchJson(url: string): Promise<unknown> {
-    const response = await this.fetchFn(url, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: { "User-Agent": USER_AGENT },
-    });
+    const startedAt = Date.now();
+    // Diagnostic: record which OFF host/path we hit, the HTTP status, and how
+    // long it took. Distinguishes a fast reject (blocked → status 5xx) from a
+    // slow-lane (times out at REQUEST_TIMEOUT_MS) when running from Railway's
+    // datacenter egress vs a home connection.
+    let target = url;
 
-    if (response.ok === false) {
-      return null;
+    try {
+      const parsed = new URL(url);
+
+      target = `${parsed.host}${parsed.pathname}`;
+    } catch {
+      target = url;
     }
 
-    return (await response.json()) as unknown;
+    try {
+      const response = await this.fetchFn(url, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { "User-Agent": USER_AGENT },
+      });
+
+      console.log("[OFF fetch]", {
+        target,
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+      });
+
+      if (response.ok === false) {
+        return null;
+      }
+
+      return (await response.json()) as unknown;
+    } catch (error) {
+      console.error("[OFF fetch] failed", {
+        target,
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      throw error;
+    }
   }
 }
 
