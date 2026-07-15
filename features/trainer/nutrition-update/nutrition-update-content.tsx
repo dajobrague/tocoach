@@ -305,7 +305,6 @@ export function NutritionUpdateContent() {
                 live={live}
                 onAcknowledge={setAcknowledged}
                 onActivate={() => action.mutate("activate_clients")}
-                onRollback={() => action.mutate("deactivate_clients")}
               />
             </StepPanel>
           ) : null}
@@ -616,7 +615,6 @@ function ActivateStep({
   busy,
   onAcknowledge,
   onActivate,
-  onRollback,
 }: {
   live: boolean;
   atRisk: number;
@@ -624,7 +622,6 @@ function ActivateStep({
   busy: boolean;
   onAcknowledge: (value: boolean) => void;
   onActivate: () => void;
-  onRollback: () => void;
 }) {
   if (live) {
     return (
@@ -636,28 +633,17 @@ function ActivateStep({
           Nutrición 2.0 activa para tus clientes
         </p>
         <p className="max-w-sm text-xs text-gray-500">
-          Volver no borra nada: tus recetas, planes y PDFs se conservan y puedes
-          reactivar cuando quieras.
+          El cambio está hecho. Empieza por tu biblioteca de recetas.
         </p>
-        <div className="mt-1 flex flex-col items-center gap-2 sm:flex-row">
-          <Button
-            as={Link}
-            className="bg-slate-900 text-white"
-            color="primary"
-            href="/trainer/dashboard/recipes"
-            startContent={<Icon icon="solar:chef-hat-linear" width={16} />}
-          >
-            Ir a mis recetas
-          </Button>
-          <Button
-            isLoading={busy}
-            size="sm"
-            variant="light"
-            onPress={onRollback}
-          >
-            Volver a la versión anterior
-          </Button>
-        </div>
+        <Button
+          as={Link}
+          className="mt-1 bg-slate-900 text-white"
+          color="primary"
+          href="/trainer/dashboard/recipes"
+          startContent={<Icon icon="solar:chef-hat-linear" width={16} />}
+        >
+          Ir a mis recetas
+        </Button>
       </div>
     );
   }
@@ -711,9 +697,16 @@ function ActivateStep({
         >
           Activar Nutrición 2.0 para mis clientes
         </Button>
-        <p className="text-xs text-gray-500">
-          Puedes volver a la versión anterior cuando quieras — no se pierde
-          nada.
+        <p className="flex items-start gap-1.5 text-xs text-gray-500">
+          <Icon
+            className="mt-0.5 shrink-0"
+            icon="solar:info-circle-linear"
+            width={14}
+          />
+          <span>
+            Este cambio es definitivo: una vez actives, tus clientes pasan a
+            Nutrición 2.0 y no se vuelve a la versión anterior.
+          </span>
         </p>
       </div>
     </div>
