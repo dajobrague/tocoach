@@ -639,14 +639,25 @@ function ActivateStep({
           Volver no borra nada: tus recetas, planes y PDFs se conservan y puedes
           reactivar cuando quieras.
         </p>
-        <Button
-          isLoading={busy}
-          size="sm"
-          variant="bordered"
-          onPress={onRollback}
-        >
-          Volver a la versión anterior
-        </Button>
+        <div className="mt-1 flex flex-col items-center gap-2 sm:flex-row">
+          <Button
+            as={Link}
+            className="bg-slate-900 text-white"
+            color="primary"
+            href="/trainer/dashboard/recipes"
+            startContent={<Icon icon="solar:chef-hat-linear" width={16} />}
+          >
+            Ir a mis recetas
+          </Button>
+          <Button
+            isLoading={busy}
+            size="sm"
+            variant="light"
+            onPress={onRollback}
+          >
+            Volver a la versión anterior
+          </Button>
+        </div>
       </div>
     );
   }
