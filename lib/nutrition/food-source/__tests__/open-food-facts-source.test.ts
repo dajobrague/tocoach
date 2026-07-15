@@ -274,6 +274,143 @@ describe("OpenFoodFactsSource.search", () => {
   });
 });
 
+/** A fake fetch that returns a different canned response per URL substring. */
+function stubFetchRouted(
+  routes: Array<{ match: string; payload: unknown; status?: number }>
+) {
+  const calls: string[] = [];
+  const fetchFn: typeof fetch = async (input) => {
+    const url = String(input);
+
+    calls.push(url);
+
+    const route = routes.find((r) => url.includes(r.match));
+
+    return new Response(JSON.stringify(route?.payload ?? {}), {
+      status: route?.status ?? (route ? 200 : 404),
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  return { fetchFn, calls };
+}
+
+// Legacy cgi/search.pl response: results under `products`, brands as a string.
+const legacyPayload = {
+  products: [
+    {
+      code: "9999",
+      product_name: "Queso Manchego",
+      brands: "Hacendado",
+      nutriments: { "energy-kcal_100g": 390, proteins_100g: 26 },
+    },
+  ],
+};
+
+describe("OpenFoodFactsSource.search — legacy fallback", () => {
+  const SAL = "search.stub.test/search";
+  const LEGACY = "product.stub.test/cgi/search.pl";
+
+  const build = (
+    routes: Array<{ match: string; payload: unknown; status?: number }>
+  ) => {
+    const { fetchFn, calls } = stubFetchRouted(routes);
+
+    return {
+      calls,
+      source: new OpenFoodFactsSource(
+        fetchFn,
+        "https://product.stub.test",
+        "https://search.stub.test"
+      ),
+    };
+  };
+
+  it("falls back to legacy cgi/search.pl when Search-a-licious is down (502)", async () => {
+    const { source, calls } = build([
+      { match: SAL, payload: {}, status: 502 },
+      { match: LEGACY, payload: legacyPayload },
+    ]);
+
+    const results = await source.search("queso", "es", "spain");
+
+    expect(calls[0] ?? "").toContain(SAL);
+    expect(calls[1] ?? "").toContain(LEGACY);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.name).toBe("Queso Manchego");
+    expect(results[0]?.brand).toBe("Hacendado");
+    expect(results[0]?.nutrientsPer100g.kcal).toBe(390);
+  });
+
+  it("passes country and brand to legacy as tag filters", async () => {
+    const { source, calls } = build([
+      { match: SAL, payload: {}, status: 502 },
+      { match: LEGACY, payload: { products: [] } },
+    ]);
+
+    await source.search("queso", "es", "spain", "hacendado");
+
+    const legacyCall = calls[1] ?? "";
+
+    expect(legacyCall).toContain("search_terms=queso");
+    expect(legacyCall).toContain("tagtype_0=countries");
+    expect(legacyCall).toContain("tag_0=spain");
+    expect(legacyCall).toContain("tagtype_1=brands");
+    expect(legacyCall).toContain("tag_1=hacendado");
+  });
+
+  it("does NOT call legacy when Search-a-licious succeeds", async () => {
+    const { source, calls } = build([
+      { match: SAL, payload: searchPayload },
+      { match: LEGACY, payload: legacyPayload },
+    ]);
+
+    const results = await source.search("yogurt");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0] ?? "").toContain(SAL);
+    expect(results[0]?.name).toBe("Greek Yogurt");
+  });
+
+  it("returns [] when BOTH endpoints are down", async () => {
+    const { source, calls } = build([
+      { match: SAL, payload: {}, status: 502 },
+      { match: LEGACY, payload: {}, status: 503 },
+    ]);
+
+    expect(await source.search("queso")).toEqual([]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("falls back when Search-a-licious throws (network/timeout)", async () => {
+    const calls: string[] = [];
+    const fetchFn: typeof fetch = async (input) => {
+      const url = String(input);
+
+      calls.push(url);
+
+      if (url.includes(SAL)) {
+        throw new Error("The operation was aborted due to timeout");
+      }
+
+      return new Response(JSON.stringify(legacyPayload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const source = new OpenFoodFactsSource(
+      fetchFn,
+      "https://product.stub.test",
+      "https://search.stub.test"
+    );
+
+    const results = await source.search("queso");
+
+    expect(calls).toHaveLength(2);
+    expect(results[0]?.name).toBe("Queso Manchego");
+  });
+});
+
 describe("OpenFoodFactsSource.getByBarcode / getByRef", () => {
   it("returns a FoodResult for a found product", async () => {
     const { fetchFn, calls } = stubFetch({
