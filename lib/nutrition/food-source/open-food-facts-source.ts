@@ -10,14 +10,9 @@ const DEFAULT_SEARCH_LANG = "es";
  * and low-quality entries ahead of the products users actually scan.
  */
 const SEARCH_SORT_BY = "-unique_scans_n";
-/**
- * Abort slow OFF calls so the UI never hangs behind the external API.
- * Temporarily raised from 8s to 20s while diagnosing datacenter-egress
- * latency: OFF's search host answers home connections in 1.5-4s but was
- * timing out (>8s) from Railway. The [OFF fetch] logs below record the real
- * elapsed time + status so we can pick the right permanent value / endpoint.
- */
-const REQUEST_TIMEOUT_MS = 20000;
+/** Abort a slow OFF call so the UI never hangs; a failed primary search falls
+ *  back to the legacy endpoint, so keep this reasonably tight. */
+const REQUEST_TIMEOUT_MS = 8000;
 /** OFF asks API consumers to identify themselves. */
 const USER_AGENT = "TopCoach/1.0 (https://app.topcoach.io)";
 /** Trim the search payload to what mapProduct reads (~5KB vs ~700KB). */
@@ -28,10 +23,12 @@ const SEARCH_FIELDS =
 /**
  * {@link FoodSource} backed by the Open Food Facts (OFF) public API.
  *
- * Search uses the modern Search-a-licious service (search.openfoodfacts.org)
- * — the legacy `cgi/search.pl` endpoint is rate-limited to ~10 req/min and
- * intermittently answers 503, which surfaced as phantom "no results" in the
- * UI. Barcode/ref lookups stay on the v2 product API.
+ * Search tries the modern Search-a-licious service (search.openfoodfacts.org)
+ * first and falls back to the legacy `cgi/search.pl` endpoint on the product
+ * host when Search-a-licious is unavailable — that service has had full
+ * outages (every path, incl. /health, answering 502) while the legacy endpoint
+ * stayed up. Legacy is only the fallback because it is rate-limited (~10
+ * req/min/IP). Barcode/ref lookups stay on the v2 product API.
  *
  * The HTTP layer is injected (`fetchFn`) so tests never touch the network.
  * OFF responses are untrusted/loosely-typed JSON, so every field is read
@@ -61,20 +58,55 @@ export class OpenFoodFactsSource implements FoodSource {
   ): Promise<FoodResult[]> {
     const langs =
       locale !== undefined && locale.length > 0 ? locale : DEFAULT_SEARCH_LANG;
-    // Fold optional Lucene filter clauses into the query: a country scope and a
-    // brand narrowing. Omitting both searches the world catalogue (prior behavior).
+    const cleanBrand = brand?.trim() ?? "";
+
+    // Primary: Search-a-licious. When it is unavailable (5xx / network /
+    // timeout) it returns null and we fall back to the legacy CGI search on the
+    // product host, which stays up when Search-a-licious is down. Legacy is only
+    // the fallback because it is rate-limited (~10 req/min/IP). Both failing
+    // yields [] — the caller's local-first layer still answers.
+    const primary = await this.searchViaSearchalicious(
+      query,
+      langs,
+      country,
+      cleanBrand
+    );
+
+    if (primary !== null) {
+      return primary;
+    }
+
+    const fallback = await this.searchViaLegacy(
+      query,
+      langs,
+      country,
+      cleanBrand
+    );
+
+    return fallback ?? [];
+  }
+
+  /**
+   * Search-a-licious (search.openfoodfacts.org). Returns mapped results on a
+   * successful response, or null when the service is unavailable (so the caller
+   * can fall back). Country/brand narrow via Lucene clauses folded into `q`.
+   */
+  private async searchViaSearchalicious(
+    query: string,
+    langs: string,
+    country: string | undefined,
+    brand: string
+  ): Promise<FoodResult[] | null> {
     const filters: string[] = [];
 
     if (country !== undefined && country.length > 0) {
       filters.push(`countries_tags:"en:${country}"`);
     }
 
-    const cleanBrand = brand?.trim() ?? "";
-
-    if (cleanBrand.length > 0) {
+    if (brand.length > 0) {
       // Escape backslashes and quotes so user text can't break out of the
       // quoted Lucene clause (e.g. a brand like `Bob "Organic"`).
-      const escaped = cleanBrand.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const escaped = brand.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
       filters.push(`brands:"${escaped}"`);
     }
@@ -85,20 +117,60 @@ export class OpenFoodFactsSource implements FoodSource {
       `&langs=${encodeURIComponent(langs)}` +
       `&page_size=${SEARCH_PAGE_SIZE}&sort_by=${SEARCH_SORT_BY}` +
       `&fields=${SEARCH_FIELDS}`;
-    const json = await this.fetchJson(url);
-    const hits = asArray(asRecord(json)["hits"]);
+    const json = await this.fetchJsonOrNull(url);
 
-    const results: FoodResult[] = [];
-
-    for (const product of hits) {
-      const mapped = mapProduct(product);
-
-      if (mapped !== null) {
-        results.push(mapped);
-      }
+    if (json === null) {
+      return null;
     }
 
-    return results;
+    return mapProducts(asArray(asRecord(json)["hits"]));
+  }
+
+  /**
+   * Legacy CGI search (world.openfoodfacts.org/cgi/search.pl) — the fallback
+   * for when Search-a-licious is down. Same fields/shape via {@link mapProduct};
+   * country and brand narrow via OFF tag filters. Returns null when unavailable.
+   */
+  private async searchViaLegacy(
+    query: string,
+    langs: string,
+    country: string | undefined,
+    brand: string
+  ): Promise<FoodResult[] | null> {
+    const params = new URLSearchParams({
+      search_terms: query,
+      search_simple: "1",
+      action: "process",
+      json: "1",
+      page_size: String(SEARCH_PAGE_SIZE),
+      fields: SEARCH_FIELDS,
+      lc: langs,
+    });
+
+    let tag = 0;
+
+    if (country !== undefined && country.length > 0) {
+      params.set(`tagtype_${tag}`, "countries");
+      params.set(`tag_contains_${tag}`, "contains");
+      params.set(`tag_${tag}`, country);
+      tag += 1;
+    }
+
+    if (brand.length > 0) {
+      params.set(`tagtype_${tag}`, "brands");
+      params.set(`tag_contains_${tag}`, "contains");
+      params.set(`tag_${tag}`, brand);
+      tag += 1;
+    }
+
+    const url = `${this.baseUrl}/cgi/search.pl?${params.toString()}`;
+    const json = await this.fetchJsonOrNull(url);
+
+    if (json === null) {
+      return null;
+    }
+
+    return mapProducts(asArray(asRecord(json)["products"]));
   }
 
   async getByBarcode(code: string): Promise<FoodResult | null> {
@@ -128,12 +200,22 @@ export class OpenFoodFactsSource implements FoodSource {
     return mapProduct(product, code);
   }
 
+  /** {@link fetchJson} but a network/timeout error becomes null (unavailable)
+   *  rather than throwing — lets the search fallback chain try the next
+   *  endpoint on any failure, not only a non-OK HTTP status. */
+  private async fetchJsonOrNull(url: string): Promise<unknown> {
+    try {
+      return await this.fetchJson(url);
+    } catch {
+      return null;
+    }
+  }
+
   private async fetchJson(url: string): Promise<unknown> {
     const startedAt = Date.now();
-    // Diagnostic: record which OFF host/path we hit, the HTTP status, and how
-    // long it took. Distinguishes a fast reject (blocked → status 5xx) from a
-    // slow-lane (times out at REQUEST_TIMEOUT_MS) when running from Railway's
-    // datacenter egress vs a home connection.
+    // Request tracing: record which OFF host/path we hit, the HTTP status, and
+    // how long it took — makes outages/rate-limits visible in prod logs and
+    // shows when the primary→legacy fallback fires.
     let target = url;
 
     try {
@@ -171,6 +253,22 @@ export class OpenFoodFactsSource implements FoodSource {
       throw error;
     }
   }
+}
+
+/** Map an array of OFF products (Search-a-licious `hits` or legacy `products`)
+ *  to results, dropping any without a usable name. */
+function mapProducts(items: unknown[]): FoodResult[] {
+  const results: FoodResult[] = [];
+
+  for (const item of items) {
+    const mapped = mapProduct(item);
+
+    if (mapped !== null) {
+      results.push(mapped);
+    }
+  }
+
+  return results;
 }
 
 /** Map a single OFF product (unknown shape) to a {@link FoodResult}. */
