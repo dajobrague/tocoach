@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { isSessionFullyCovered } from "@/lib/training/session-completion";
 
 function parseWeightKg(weight: string): number | null {
   if (!weight) return null;
@@ -587,14 +588,29 @@ export async function DELETE(
 
     // Si el scheduled_session quedó sin logs y estaba en "completed",
     // lo bajamos a "scheduled" para que el estado refleje la realidad.
+    // EXCEPTO cuando el cliente lo marcó completado a mano
+    // (metadata.completed_manually): borrar un log no retracta esa decisión.
     if (scheduledSessionId) {
-      const { data: remaining } = await supabase
-        .from("exercise_logs")
-        .select("id")
-        .eq("scheduled_session_id", scheduledSessionId)
-        .limit(1);
+      const [{ data: remaining }, { data: schedRow }] = await Promise.all([
+        supabase
+          .from("exercise_logs")
+          .select("id")
+          .eq("scheduled_session_id", scheduledSessionId)
+          .limit(1),
+        supabase
+          .from("scheduled_sessions")
+          .select("metadata")
+          .eq("id", scheduledSessionId)
+          .maybeSingle(),
+      ]);
 
-      if (!remaining || remaining.length === 0) {
+      const completedManually =
+        schedRow?.metadata !== null &&
+        typeof schedRow?.metadata === "object" &&
+        (schedRow.metadata as Record<string, unknown>).completed_manually ===
+          true;
+
+      if ((!remaining || remaining.length === 0) && !completedManually) {
         await supabase
           .from("scheduled_sessions")
           .update({ status: "scheduled", completion_date: null })
@@ -626,58 +642,14 @@ async function maybeMarkScheduledCompleted(
   clientId: number
 ) {
   try {
-    const [{ data: logs, error: logsError }, { data: tmpl, error: tmplError }] =
-      await Promise.all([
-        supabase
-          .from("exercise_logs")
-          .select("exercise_id, session_exercise_id")
-          .eq("scheduled_session_id", scheduledSessionId)
-          .eq("client_id", clientId)
-          // Solo contamos logs FINALIZADOS — autosaves a medias no deben
-          // marcar la sesión completa.
-          .not("finalized_at", "is", null),
-        supabase
-          .from("session_exercises")
-          .select("id, exercise_id")
-          .eq("session_id", sessionId),
-      ]);
-
-    if (logsError || tmplError) {
-      console.warn("[Exercise Logs API] completion check fetch failed:", {
-        logsError: logsError?.message,
-        tmplError: tmplError?.message,
-      });
-
-      return;
-    }
-
-    // Atribución por slot: cada slot del template (session_exercises.id) se
-    // cubre por un log cuyo session_exercise_id apunta a ÉL. Con slots
-    // duplicados (mismo exercise_id en dos slots) esto evita marcar la sesión
-    // completa antes de tiempo. Para logs legacy (sin session_exercise_id)
-    // caemos al match por exercise_id de librería.
-    const loggedSlotIds = new Set(
-      (logs ?? [])
-        .map((r) => r.session_exercise_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    // Atribución por slot con fallback legacy — regla compartida con el
+    // endpoint de completado manual (lib/training/session-completion).
+    const allCovered = await isSessionFullyCovered(
+      supabase,
+      scheduledSessionId,
+      sessionId,
+      clientId
     );
-    const legacyLoggedExerciseIds = new Set(
-      (logs ?? [])
-        .filter(
-          (r) =>
-            typeof r.session_exercise_id !== "string" ||
-            r.session_exercise_id.length === 0
-        )
-        .map((r) => r.exercise_id)
-    );
-    const requiredSlots = tmpl ?? [];
-    const allCovered =
-      requiredSlots.length > 0 &&
-      requiredSlots.every(
-        (slot) =>
-          loggedSlotIds.has(slot.id) ||
-          legacyLoggedExerciseIds.has(slot.exercise_id)
-      );
 
     if (!allCovered) return;
 

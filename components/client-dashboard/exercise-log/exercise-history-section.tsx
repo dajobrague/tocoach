@@ -186,6 +186,14 @@ function HistoryRow({ entry, trend }: HistoryRowProps) {
         </span>
         <span className="flex-1 text-xs font-semibold text-foreground truncate">
           {bestLabel}
+          {entry.notes != null ? (
+            <Icon
+              aria-label="Tiene comentario"
+              className="ml-1.5 inline-block align-[-2px] text-foreground/40"
+              icon="solar:chat-round-line-linear"
+              width={12}
+            />
+          ) : null}
         </span>
         <span className="w-10 shrink-0 text-xs text-center font-body text-foreground/70">
           {entry.sets.length}
@@ -219,6 +227,16 @@ function HistoryRow({ entry, trend }: HistoryRowProps) {
               ))}
             </ul>
           )}
+          {entry.notes != null ? (
+            <p className="mt-2 flex items-start gap-1.5 border-t border-default-100 pt-2 text-xs font-body text-foreground/70">
+              <Icon
+                className="mt-0.5 shrink-0 text-foreground/40"
+                icon="solar:chat-round-line-linear"
+                width={13}
+              />
+              <span className="whitespace-pre-line">{entry.notes}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
     </li>

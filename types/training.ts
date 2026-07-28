@@ -402,6 +402,8 @@ export interface ExerciseHistoryEntry {
     reps: number;
     weight_kg: number | null;
   }>;
+  /** Comentario que el cliente dejó ese día en el ejercicio; null si no hubo. */
+  notes?: string | null;
 }
 
 export interface ExerciseHistoryResponse {

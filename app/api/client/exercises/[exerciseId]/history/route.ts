@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { data: logs, error: logsError } = await supabase
       .from("exercise_logs")
       .select(
-        "id, completed_at, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg)"
+        "id, completed_at, notes, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg)"
       )
       .eq("client_id", session.client_id)
       .eq("exercise_id", exerciseId)
@@ -81,10 +81,15 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
           weight_kg: s.weight_kg ?? null,
         }));
 
+      const notes = typeof log.notes === "string" ? log.notes.trim() : "";
+
       return {
         scheduled_date: log.scheduled_sessions?.scheduled_date ?? "",
         exercise_log_id: log.id,
         sets,
+        // El comentario que el cliente dejó ese día ("me costó la última
+        // serie") — se muestra en el historial para que pueda compararse.
+        notes: notes.length > 0 ? notes : null,
       };
     });
 

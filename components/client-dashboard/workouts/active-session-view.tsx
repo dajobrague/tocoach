@@ -12,13 +12,20 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { collectExtraLoggedExercises } from "./extra-logged-exercises";
 import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
+import {
+  nowHHMM,
+  useMarkSessionCompleted,
+  useScheduledSessionState,
+  useSetStartTime,
+} from "./hooks/use-scheduled-session-state";
 import { getSessionTypeStyle } from "./session-type-style";
 import { toExerciseLike } from "./to-exercise-like";
 
+import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { logMatchesSlot } from "@/lib/training/log-attribution";
 
 export interface ExerciseLike {
@@ -91,6 +98,25 @@ export function ActiveSessionView({
 }: Props) {
   const { data: resolved, loading: resolvedLoading } =
     useResolvedDayPrescription(scheduledDate);
+  // Estado servidor de esta sesión en esta fecha: hora de inicio declarada
+  // y completado (manual o automático). Llamada del 15 Jul.
+  const schedState = useScheduledSessionState(scheduledDate, session.id);
+  const setStartTime = useSetStartTime(scheduledDate, session.id);
+  const markCompleted = useMarkSessionCompleted(scheduledDate, session.id);
+  const autoStartFired = useRef(false);
+
+  // Al entrenar HOY sin hora registrada, la registramos sola al entrar
+  // (el momento en que el cliente empieza); después puede corregirla.
+  useEffect(() => {
+    if (autoStartFired.current) return;
+    if (schedState.isSuccess === false) return;
+    if (schedState.data?.scheduled_time != null) return;
+    if (scheduledDate !== getLocalTodayYmd()) return;
+    autoStartFired.current = true;
+    setStartTime.mutate(nowHHMM());
+  }, [schedState.isSuccess, schedState.data, scheduledDate, setStartTime]);
+
+  const sessionCompleted = schedState.data?.status === "completed";
 
   const exercises: Array<ExerciseLike & Record<string, unknown>> =
     useMemo(() => {
@@ -230,6 +256,71 @@ export function ActiveSessionView({
             />
           </div>
         </div>
+      ) : null}
+
+      {/* Hora de inicio declarada por el cliente (editable — última gana). */}
+      {schedState.data !== null || scheduledDate === getLocalTodayYmd() ? (
+        <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-content1 px-3 py-2">
+          <Icon
+            className="shrink-0 text-default-400"
+            icon="solar:clock-circle-linear"
+            width={16}
+          />
+          <span className="text-xs font-body text-default-600">
+            Hora de inicio
+          </span>
+          <input
+            aria-label="Hora de inicio del entrenamiento"
+            className="ml-auto bg-transparent text-xs font-semibold text-foreground outline-none"
+            disabled={setStartTime.isPending}
+            type="time"
+            value={schedState.data?.scheduled_time ?? ""}
+            onChange={(event) => {
+              if (event.target.value) setStartTime.mutate(event.target.value);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
+          cubre también el completado automático (cobertura total). */}
+      {sessionCompleted ? (
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5">
+          <Icon
+            className="shrink-0 text-success-600"
+            icon="solar:check-circle-bold"
+            width={18}
+          />
+          <span className="flex-1 text-sm font-body font-medium text-success-700">
+            Entrenamiento completado
+          </span>
+          {schedState.data?.completedManually === true ? (
+            <Button
+              className="shrink-0"
+              isLoading={markCompleted.isPending}
+              size="sm"
+              variant="light"
+              onPress={() => markCompleted.mutate({ undo: true })}
+            >
+              Deshacer
+            </Button>
+          ) : null}
+        </div>
+      ) : total > 0 && completed < total ? (
+        <Button
+          fullWidth
+          color="success"
+          isLoading={markCompleted.isPending}
+          startContent={
+            markCompleted.isPending ? null : (
+              <Icon icon="solar:check-circle-linear" width={18} />
+            )
+          }
+          variant="flat"
+          onPress={() => markCompleted.mutate({})}
+        >
+          Marcar entrenamiento como completado
+        </Button>
       ) : null}
 
       {resolvedLoading && !resolved ? (
