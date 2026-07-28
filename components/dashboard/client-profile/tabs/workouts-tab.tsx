@@ -189,6 +189,11 @@ export default function WorkoutsTab({
     name: string;
   } | null>(null);
   const [isDuplicating, setIsDuplicating] = useState(false);
+  // Marca visual del último ejercicio duplicado — sin ella el original y la
+  // copia son indistinguibles y el trainer edita el que no era.
+  const [recentlyDuplicatedId, setRecentlyDuplicatedId] = useState<
+    string | null
+  >(null);
   const [isEditExerciseModalOpen, setIsEditExerciseModalOpen] = useState(false);
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
   const [isEditProgramModalOpen, setIsEditProgramModalOpen] = useState(false);
@@ -645,6 +650,7 @@ export default function WorkoutsTab({
 
       if (data.success) {
         setExpandedSessions((prev) => new Set(prev).add(sessionId));
+        setRecentlyDuplicatedId(data.exercise?.id ?? null);
         await fetchPrograms();
         addToast({ title: `Ejercicio "${name}" duplicado`, color: "success" });
         setDuplicateExerciseTarget(null);
@@ -1137,14 +1143,14 @@ export default function WorkoutsTab({
       return;
     }
 
-    // Warn before a swap that orphans existing logs. The client's logs are
-    // already loaded at tab scope (useClientExerciseLogs); a non-empty result
-    // for the original exercise means switching will leave those logs tied to
-    // the previous exercise.
+    // Warn before a swap that orphans existing logs — pero por SLOT, no por
+    // ejercicio de librería: una copia recién duplicada comparte exercise_id
+    // con el original (que sí tiene logs) y disparaba el aviso aunque su
+    // propio slot esté vacío. Los logs legacy (sin slot) siguen contando.
     if (
       exerciseForm.exerciseId !== editOriginalExerciseId &&
       editOriginalExerciseId &&
-      getLogsForExercise(editOriginalExerciseId).length > 0
+      getLogsForSlot(selectedExerciseId, editOriginalExerciseId).length > 0
     ) {
       const proceed = await confirmAfterPress(
         "Este cliente ya registró entrenamientos del ejercicio anterior. Esos registros quedarán ligados al ejercicio anterior; los nuevos serán del ejercicio nuevo. ¿Continuar?"
@@ -1608,6 +1614,17 @@ export default function WorkoutsTab({
                                                             />
                                                           </Button>
                                                         )}
+                                                        {exercise.id &&
+                                                        exercise.id ===
+                                                          recentlyDuplicatedId ? (
+                                                          <Chip
+                                                            color="warning"
+                                                            size="sm"
+                                                            variant="flat"
+                                                          >
+                                                            Copia
+                                                          </Chip>
+                                                        ) : null}
                                                         {exercise.id ? (
                                                           <Button
                                                             isIconOnly
