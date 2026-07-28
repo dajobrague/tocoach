@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { loadTenantContext } from "@/lib/tenant/loader";
 import { isSessionFullyCovered } from "@/lib/training/session-completion";
 
 const LOG_PREFIX = "[Client Session Complete API]";
@@ -95,13 +96,24 @@ export async function POST(
         : {};
 
     if (scheduledId === null) {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from("sessions")
-        .select("trainer_id, tenant_host")
-        .eq("id", sessionId)
-        .single();
+      const [{ data: sessionData, error: sessionError }, tenant] =
+        await Promise.all([
+          supabase
+            .from("sessions")
+            .select("trainer_id, tenant_host")
+            .eq("id", sessionId)
+            .single(),
+          loadTenantContext(session.tenant_slug),
+        ]);
 
-      if (sessionError || !sessionData) {
+      // Mismo guard de tenant que /start: nunca crear filas para sesiones
+      // de otro tenant.
+      if (
+        sessionError ||
+        !sessionData ||
+        tenant === null ||
+        sessionData.tenant_host !== tenant.host
+      ) {
         return NextResponse.json(
           { success: false, error: "Sesión no encontrada" },
           { status: 404 }

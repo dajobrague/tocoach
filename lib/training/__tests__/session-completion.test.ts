@@ -96,6 +96,37 @@ describe("isSessionFullyCovered", () => {
     ).resolves.toBe(false);
   });
 
+  it("UN log legacy no cubre DOS slots duplicados del mismo ejercicio", async () => {
+    const supabase = fakeSupabase(
+      [{ exercise_id: "ex-a", session_exercise_id: null }],
+      [
+        { id: "slot-1", exercise_id: "ex-a" },
+        { id: "slot-2", exercise_id: "ex-a" },
+      ]
+    );
+
+    await expect(
+      isSessionFullyCovered(supabase, "sched-1", "sess-1", 7)
+    ).resolves.toBe(false);
+  });
+
+  it("slot cubierto por atribución + slot duplicado cubierto por legacy → completo", async () => {
+    const supabase = fakeSupabase(
+      [
+        { exercise_id: "ex-a", session_exercise_id: "slot-1" },
+        { exercise_id: "ex-a", session_exercise_id: null },
+      ],
+      [
+        { id: "slot-1", exercise_id: "ex-a" },
+        { id: "slot-2", exercise_id: "ex-a" },
+      ]
+    );
+
+    await expect(
+      isSessionFullyCovered(supabase, "sched-1", "sess-1", 7)
+    ).resolves.toBe(true);
+  });
+
   it("false para una sesión sin slots (nada que cubrir no es 'todo hecho')", async () => {
     const supabase = fakeSupabase([], []);
 

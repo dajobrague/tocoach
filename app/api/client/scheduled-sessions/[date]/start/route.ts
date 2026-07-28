@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { loadTenantContext } from "@/lib/tenant/loader";
 
 const LOG_PREFIX = "[Client Session Start API]";
 
@@ -57,13 +58,24 @@ export async function POST(
     const supabase = createSupabaseClient();
     const clientId = parseInt(String(session.client_id), 10);
 
-    const { data: sessionData, error: sessionError } = await supabase
-      .from("sessions")
-      .select("trainer_id, tenant_host")
-      .eq("id", sessionId)
-      .single();
+    const [{ data: sessionData, error: sessionError }, tenant] =
+      await Promise.all([
+        supabase
+          .from("sessions")
+          .select("trainer_id, tenant_host")
+          .eq("id", sessionId)
+          .single(),
+        loadTenantContext(session.tenant_slug),
+      ]);
 
-    if (sessionError || !sessionData) {
+    // La sesión debe ser del MISMO tenant que el cliente autenticado — sin
+    // esto un sessionId ajeno crearía filas con tenant_host de otro tenant.
+    if (
+      sessionError ||
+      !sessionData ||
+      tenant === null ||
+      sessionData.tenant_host !== tenant.host
+    ) {
       return NextResponse.json(
         { success: false, error: "Sesión no encontrada" },
         { status: 404 }

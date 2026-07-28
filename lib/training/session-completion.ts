@@ -41,23 +41,40 @@ export async function isSessionFullyCovered(
       .map((r) => r.session_exercise_id)
       .filter((id): id is string => typeof id === "string" && id.length > 0)
   );
-  const legacyLoggedExerciseIds = new Set(
-    (logs ?? [])
-      .filter(
-        (r) =>
-          typeof r.session_exercise_id !== "string" ||
-          r.session_exercise_id.length === 0
-      )
-      .map((r) => r.exercise_id)
-  );
+
+  // Logs legacy (sin slot) se CUENTAN por ejercicio, no se usan como set:
+  // con slots duplicados (mismo exercise_id dos veces — común desde que
+  // existe "duplicar ejercicio"), un único log legacy no puede cubrir los
+  // dos slots a la vez.
+  const legacyLogCounts = new Map<string, number>();
+
+  for (const log of logs ?? []) {
+    const slotId = log.session_exercise_id;
+
+    if (typeof slotId === "string" && slotId.length > 0) continue;
+    legacyLogCounts.set(
+      log.exercise_id,
+      (legacyLogCounts.get(log.exercise_id) ?? 0) + 1
+    );
+  }
+
   const requiredSlots = tmpl ?? [];
 
-  return (
-    requiredSlots.length > 0 &&
-    requiredSlots.every(
-      (slot) =>
-        loggedSlotIds.has(slot.id) ||
-        legacyLoggedExerciseIds.has(slot.exercise_id)
-    )
+  if (requiredSlots.length === 0) {
+    return false;
+  }
+
+  const uncoveredByExercise = new Map<string, number>();
+
+  for (const slot of requiredSlots) {
+    if (loggedSlotIds.has(slot.id)) continue;
+    uncoveredByExercise.set(
+      slot.exercise_id,
+      (uncoveredByExercise.get(slot.exercise_id) ?? 0) + 1
+    );
+  }
+
+  return [...uncoveredByExercise].every(
+    ([exerciseId, needed]) => (legacyLogCounts.get(exerciseId) ?? 0) >= needed
   );
 }

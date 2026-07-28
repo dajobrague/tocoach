@@ -258,8 +258,10 @@ export function ActiveSessionView({
         </div>
       ) : null}
 
-      {/* Hora de inicio declarada por el cliente (editable — última gana). */}
-      {schedState.data !== null || scheduledDate === getLocalTodayYmd() ? (
+      {/* Hora de inicio declarada por el cliente (editable — última gana).
+          Boolean(): mientras carga, data es undefined y no debe contar como
+          "hay fila" (mostraría el input vacío en fechas pasadas sin sesión). */}
+      {Boolean(schedState.data) || scheduledDate === getLocalTodayYmd() ? (
         <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-content1 px-3 py-2">
           <Icon
             className="shrink-0 text-default-400"

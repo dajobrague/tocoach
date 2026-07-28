@@ -24,6 +24,7 @@ export async function POST(
   }
 ) {
   const supabase = createSupabaseClient();
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   try {
     const session = await getTrainerSession();
@@ -74,12 +75,26 @@ export async function POST(
 
     // Hacer hueco: las sesiones después de la original se corren +1 para que
     // la copia quede justo debajo. Descendente para no chocar órdenes.
-    const { data: toShift } = await supabase
+    const { data: toShift, error: toShiftError } = await supabase
       .from("sessions")
       .select("id, session_order")
       .eq("program_id", programId)
       .gt("session_order", sourceOrder)
       .order("session_order", { ascending: false });
+
+    // Un fallo aquí NO puede tratarse como "no hay nada que correr": el clon
+    // se insertaría con un orden ya ocupado.
+    if (toShiftError) {
+      console.error("[Duplicate Session API] shift fetch failed:", {
+        correlationId,
+        error: toShiftError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar sesiones" },
+        { status: 500 }
+      );
+    }
 
     for (const row of toShift ?? []) {
       const { error: shiftError } = await supabase
@@ -88,7 +103,10 @@ export async function POST(
         .eq("id", row.id);
 
       if (shiftError) {
-        console.error("[Duplicate Session API] shift failed:", shiftError);
+        console.error("[Duplicate Session API] shift failed:", {
+          correlationId,
+          error: shiftError.message,
+        });
 
         return NextResponse.json(
           { success: false, error: "Error al reordenar sesiones" },
@@ -119,7 +137,10 @@ export async function POST(
       .single();
 
     if (cloneError || !clone) {
-      console.error("[Duplicate Session API] clone insert failed:", cloneError);
+      console.error("[Duplicate Session API] clone insert failed:", {
+        correlationId,
+        error: cloneError?.message,
+      });
 
       return NextResponse.json(
         { success: false, error: "Error al duplicar la sesión" },
@@ -135,10 +156,10 @@ export async function POST(
       .order("exercise_order", { ascending: true });
 
     if (exercisesError) {
-      console.error(
-        "[Duplicate Session API] exercises fetch failed:",
-        exercisesError
-      );
+      console.error("[Duplicate Session API] exercises fetch failed:", {
+        correlationId,
+        error: exercisesError.message,
+      });
       await supabase.from("sessions").delete().eq("id", clone.id);
 
       return NextResponse.json(
@@ -160,10 +181,10 @@ export async function POST(
       if (insertError) {
         // Sin transacción: revertir el clon vacío para no dejar una sesión
         // a medias que el trainer confunda con la copia completa.
-        console.error(
-          "[Duplicate Session API] exercises insert failed:",
-          insertError
-        );
+        console.error("[Duplicate Session API] exercises insert failed:", {
+          correlationId,
+          error: insertError.message,
+        });
         await supabase.from("sessions").delete().eq("id", clone.id);
 
         return NextResponse.json(
@@ -174,6 +195,7 @@ export async function POST(
     }
 
     console.log("[Duplicate Session API] duplicated:", {
+      correlationId,
       source: sessionId,
       clone: clone.id,
       exercises: exercises?.length ?? 0,
@@ -185,7 +207,10 @@ export async function POST(
       exercisesCloned: exercises?.length ?? 0,
     });
   } catch (error) {
-    console.error("[Duplicate Session API] Unexpected error:", error);
+    console.error("[Duplicate Session API] Unexpected error:", {
+      correlationId,
+      error,
+    });
 
     return NextResponse.json(
       { success: false, error: "Error interno del servidor" },

@@ -3246,7 +3246,11 @@ export default function WorkoutsTab({
               value={duplicateSessionName}
               variant="bordered"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && duplicateSessionName.trim()) {
+                if (
+                  e.key === "Enter" &&
+                  !isDuplicating &&
+                  duplicateSessionName.trim()
+                ) {
                   void confirmDuplicateSession();
                 }
               }}

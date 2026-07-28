@@ -21,6 +21,7 @@ export async function POST(
   }
 ) {
   const supabase = createSupabaseClient();
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   try {
     const session = await getTrainerSession();
@@ -90,12 +91,26 @@ export async function POST(
     const sourceOrder = source.exercise_order ?? 0;
 
     // Hacer hueco debajo del original (descendente para no chocar órdenes).
-    const { data: toShift } = await supabase
+    const { data: toShift, error: toShiftError } = await supabase
       .from("session_exercises")
       .select("id, exercise_order")
       .eq("session_id", sessionId)
       .gt("exercise_order", sourceOrder)
       .order("exercise_order", { ascending: false });
+
+    // Un fallo aquí NO puede tratarse como "no hay nada que correr": el clon
+    // se insertaría con un orden ya ocupado.
+    if (toShiftError) {
+      console.error("[Duplicate Exercise API] shift fetch failed:", {
+        correlationId,
+        error: toShiftError.message,
+      });
+
+      return NextResponse.json(
+        { success: false, error: "Error al reordenar ejercicios" },
+        { status: 500 }
+      );
+    }
 
     for (const row of toShift ?? []) {
       const { error: shiftError } = await supabase
@@ -104,7 +119,10 @@ export async function POST(
         .eq("id", row.id);
 
       if (shiftError) {
-        console.error("[Duplicate Exercise API] shift failed:", shiftError);
+        console.error("[Duplicate Exercise API] shift failed:", {
+          correlationId,
+          error: shiftError.message,
+        });
 
         return NextResponse.json(
           { success: false, error: "Error al reordenar ejercicios" },
@@ -124,7 +142,10 @@ export async function POST(
       .single();
 
     if (cloneError || !clone) {
-      console.error("[Duplicate Exercise API] insert failed:", cloneError);
+      console.error("[Duplicate Exercise API] insert failed:", {
+        correlationId,
+        error: cloneError?.message,
+      });
 
       return NextResponse.json(
         { success: false, error: "Error al duplicar el ejercicio" },
@@ -133,13 +154,17 @@ export async function POST(
     }
 
     console.log("[Duplicate Exercise API] duplicated:", {
+      correlationId,
       source: sessionExerciseId,
       clone: clone.id,
     });
 
     return NextResponse.json({ success: true, exercise: clone });
   } catch (error) {
-    console.error("[Duplicate Exercise API] Unexpected error:", error);
+    console.error("[Duplicate Exercise API] Unexpected error:", {
+      correlationId,
+      error,
+    });
 
     return NextResponse.json(
       { success: false, error: "Error interno del servidor" },

@@ -109,9 +109,29 @@ export function WeekStrip({
           // de ejercicios dejó de ser el dato del selector: una sesión
           // marcada como completada con ejercicios saltados mostraba "33%"
           // pese a estar terminada. El detalle del día conserva las métricas.
+          // Con varias sesiones, "Hecho" exige TODAS completas (el borde
+          // conserva su agregación histórica de "alguna completa").
+          const nonFutureSessions = day.sessions.filter(
+            (s) => s.classification !== "future"
+          );
+          const labelClassification: DayClassification = isRest
+            ? day.isFuture
+              ? "future"
+              : "rest"
+            : nonFutureSessions.length === 0
+              ? "future"
+              : nonFutureSessions.every((s) => s.classification === "complete")
+                ? "complete"
+                : nonFutureSessions.some(
+                      (s) =>
+                        s.classification === "complete" ||
+                        s.classification === "partial"
+                    )
+                  ? "partial"
+                  : "pending";
           const statusLabel = isRest
             ? ""
-            : classificationLabel(dayClassification);
+            : classificationLabel(labelClassification);
 
           const ariaLabel = isRest
             ? `${DAY_LABELS[idx]} ${dayNumber}, día de descanso`
@@ -186,9 +206,9 @@ export function WeekStrip({
               )}
               <span
                 className={`text-[10px] font-medium min-h-[1rem] ${
-                  dayClassification === "complete"
+                  labelClassification === "complete"
                     ? "text-green-600"
-                    : dayClassification === "partial"
+                    : labelClassification === "partial"
                       ? "text-amber-600"
                       : "text-gray-500"
                 }`}

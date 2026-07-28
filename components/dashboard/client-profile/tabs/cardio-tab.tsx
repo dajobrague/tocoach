@@ -1648,7 +1648,8 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                                                           )
                                                         : false
                                                     }
-                                                    logs={getLogsForExercise(
+                                                    logs={getLogsForSlot(
+                                                      exercise.id ?? null,
                                                       exercise.exercise_id ?? ""
                                                     )}
                                                     prescribed={exercise}
@@ -3158,7 +3159,11 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
               value={duplicateSessionName}
               variant="bordered"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && duplicateSessionName.trim()) {
+                if (
+                  e.key === "Enter" &&
+                  !isDuplicating &&
+                  duplicateSessionName.trim()
+                ) {
                   void confirmDuplicateSession();
                 }
               }}
