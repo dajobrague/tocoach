@@ -215,7 +215,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
         week.loading && !week.data ? (
           <div className="grid grid-cols-7 gap-1.5">
             {Array.from({ length: 7 }, (_, i) => (
-              <Skeleton key={i} className="h-24 rounded-large" />
+              <Skeleton key={i} className="h-[4.5rem] rounded-large" />
             ))}
           </div>
         ) : week.data && !weekIsCompletelyEmpty ? (

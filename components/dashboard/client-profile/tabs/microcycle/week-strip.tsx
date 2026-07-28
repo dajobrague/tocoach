@@ -1,42 +1,18 @@
 "use client";
 
-import type { DayClassification, DayMetrics } from "./types";
+// Tira semanal de Seguimiento — misma anatomía de celda que la grilla del
+// mes (pedido de David: consistencia): número arriba a la izquierda (azul si
+// es hoy), chip de estado abajo (compartido vía DayCellChip), selección con
+// anillo azul, hover sutil. La etiqueta del día de la semana (LUN…) vive
+// dentro de la celda porque la tira no tiene fila de cabecera como el mes.
+
+import type { DayMetrics } from "./types";
 
 import { Icon } from "@iconify/react";
 
-import { classificationLabel } from "./adherence";
-import { dayLabelClassification } from "./day-label";
+import { DayCellChip, dayCellInfo } from "./day-cell-chip";
 
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
-
-function symbolFor(classification: DayClassification): string {
-  if (classification === "complete") return "●";
-  if (classification === "partial") return "◐";
-  if (classification === "pending") return "○";
-
-  return "—";
-}
-
-function colorClassFor(classification: DayClassification): string {
-  if (classification === "complete") return "text-green-600";
-  if (classification === "partial") return "text-amber-500";
-  if (classification === "pending") return "text-gray-400";
-
-  return "text-gray-300";
-}
-
-function borderClassFor(
-  classification: DayClassification,
-  isSelected: boolean
-): string {
-  if (isSelected) return "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500";
-  if (classification === "complete")
-    return "border-emerald-200 bg-white hover:border-emerald-300 hover:shadow-sm";
-  if (classification === "partial")
-    return "border-amber-200 bg-white hover:border-amber-300 hover:shadow-sm";
-
-  return "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm";
-}
 
 interface Props {
   days: DayMetrics[];
@@ -63,7 +39,7 @@ export function WeekStrip({
       {onPrevWeek ? (
         <button
           aria-label="Semana anterior"
-          className="shrink-0 w-9 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center"
+          className="flex w-9 shrink-0 items-center justify-center rounded-large border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
           type="button"
           onClick={onPrevWeek}
         >
@@ -73,51 +49,20 @@ export function WeekStrip({
 
       <div
         aria-label="Días de la semana con adherencia"
-        className="grid grid-cols-7 gap-1.5 flex-1 min-w-0"
+        className="grid min-w-0 flex-1 grid-cols-7 gap-1.5"
         role="grid"
       >
         {days.map((day, idx) => {
           const isSelected = day.date === selectedDate;
           const dayNumber = parseInt(day.date.split("-")[2] ?? "0");
           const isRest = day.sessions.length === 0;
-
-          // Derive a representative classification for the day card border/ring.
-          // If any session is complete → complete; if any partial → partial;
-          // if all future → future; else rest.
-          const dayClassification: DayClassification = isRest
-            ? day.isFuture
-              ? "future"
-              : "rest"
-            : day.sessions.some((s) => s.classification === "complete")
-              ? "complete"
-              : day.sessions.some((s) => s.classification === "partial")
-                ? "partial"
-                : day.sessions.some((s) => s.classification === "future")
-                  ? "future"
-                  : "pending";
-
-          // Session label: "Descanso" / single name / "N sesiones"
-          const sessionLabel = isRest
-            ? day.recommendedSessionName != null
-              ? `Descanso · ${day.recommendedSessionName}`
-              : "Descanso"
-            : day.sessions.length === 1
-              ? (day.sessions[0]!.scheduledSession.session?.name ?? "Sesión")
-              : `${day.sessions.length} sesiones`;
-
-          // Estado del día en palabras (Hecho / Empezado / Sin hacer) — regla
-          // compartida con la vista de mes (day-label.ts) para que ambas
-          // digan lo mismo. El detalle del día conserva las métricas.
-          const labelClassification = dayLabelClassification(day);
-          const statusLabel = isRest
-            ? ""
-            : classificationLabel(labelClassification);
+          const { statusWord, sessionName } = dayCellInfo(day);
 
           const ariaLabel = isRest
             ? `${DAY_LABELS[idx]} ${dayNumber}, día de descanso`
-            : `${DAY_LABELS[idx]} ${dayNumber}, ${sessionLabel}, ${
-                statusLabel.length > 0 ? statusLabel : "sin actividad aún"
-              }`;
+            : `${DAY_LABELS[idx]} ${dayNumber}, ${
+                sessionName ?? "sesión"
+              }, ${statusWord.length > 0 ? statusWord : "sin actividad aún"}`;
 
           return (
             <button
@@ -126,9 +71,10 @@ export function WeekStrip({
               aria-label={ariaLabel}
               aria-selected={isSelected}
               className={[
-                "relative flex flex-col items-center gap-1 rounded-large border p-2 text-left transition-all",
-                borderClassFor(dayClassification, isSelected),
-                day.isFuture ? "opacity-70" : "",
+                "relative flex h-[4.5rem] flex-col items-start gap-1 rounded-large border p-1.5 text-left transition-all",
+                isSelected
+                  ? "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500"
+                  : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm",
               ].join(" ")}
               role="gridcell"
               type="button"
@@ -144,50 +90,22 @@ export function WeekStrip({
                 }
               }}
             >
-              <span className="text-[10px] font-semibold text-gray-500 tracking-wider">
-                {DAY_LABELS[idx]}
-              </span>
-              <span
-                className={[
-                  "text-base font-semibold tabular-nums",
-                  day.isToday ? "text-blue-600" : "text-gray-900",
-                ].join(" ")}
-              >
-                {dayNumber}
-              </span>
-              <span className="text-[10px] text-gray-500 leading-tight text-center min-h-[1rem] line-clamp-1">
-                {sessionLabel}
-              </span>
-              {/* When multiple sessions, show a small stack of symbols */}
-              {day.sessions.length > 1 ? (
-                <span aria-hidden="true" className="flex gap-0.5 leading-none">
-                  {day.sessions.map((s) => (
-                    <span
-                      key={s.scheduledSession.id}
-                      className={`text-sm leading-none ${colorClassFor(s.classification)}`}
-                    >
-                      {symbolFor(s.classification)}
-                    </span>
-                  ))}
-                </span>
-              ) : (
+              <span className="flex items-baseline gap-1.5">
                 <span
-                  aria-hidden="true"
-                  className={`text-lg leading-none ${colorClassFor(dayClassification)}`}
+                  className={[
+                    "text-[11px] font-semibold tabular-nums",
+                    day.isToday ? "text-blue-600" : "text-gray-700",
+                  ].join(" ")}
                 >
-                  {symbolFor(dayClassification)}
+                  {dayNumber}
                 </span>
-              )}
-              <span
-                className={`text-[10px] font-medium min-h-[1rem] ${
-                  labelClassification === "complete"
-                    ? "text-green-600"
-                    : labelClassification === "partial"
-                      ? "text-amber-600"
-                      : "text-gray-500"
-                }`}
-              >
-                {statusLabel}
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
+                  {DAY_LABELS[idx]}
+                </span>
+              </span>
+
+              <span className="mt-auto flex w-full flex-col gap-0.5">
+                <DayCellChip day={day} />
               </span>
             </button>
           );
@@ -197,7 +115,7 @@ export function WeekStrip({
       {onNextWeek ? (
         <button
           aria-label="Semana siguiente"
-          className="shrink-0 w-9 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center"
+          className="flex w-9 shrink-0 items-center justify-center rounded-large border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
           type="button"
           onClick={onNextWeek}
         >

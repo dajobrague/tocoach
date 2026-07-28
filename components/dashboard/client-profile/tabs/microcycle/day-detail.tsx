@@ -764,21 +764,23 @@ export function DayDetail({
     );
   }
 
+  // Sin línea de fecha sobre las tarjetas (la fecha ya se ve seleccionada en
+  // la tira/grilla); el chip "Recomendado" se conserva solo cuando aplica.
+  const showRecommended =
+    day.recommendedSessionName != null &&
+    !day.sessions.some(
+      (s) => s.scheduledSession.session?.name === day.recommendedSessionName
+    );
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold capitalize text-gray-900">
-          {formatDateLong(day.date)}
-        </p>
-        {day.recommendedSessionName &&
-        !day.sessions.some(
-          (s) => s.scheduledSession.session?.name === day.recommendedSessionName
-        ) ? (
+      {showRecommended ? (
+        <div className="flex justify-end">
           <span className="whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
             Recomendado: {day.recommendedSessionName}
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {day.sessions.map((entry) => (
         <SessionCard

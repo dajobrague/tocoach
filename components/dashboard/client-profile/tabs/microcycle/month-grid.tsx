@@ -14,6 +14,7 @@ import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { classificationLabel } from "./adherence";
+import { DayCellChip } from "./day-cell-chip";
 import { dayLabelClassification } from "./day-label";
 
 import {
@@ -93,15 +94,11 @@ export function MonthGrid({
               const day = byDate?.get(cell.date) ?? null;
               const isSelected = cell.date === selectedDate;
               const isToday = cell.date === todayYmd;
-              const isFuture = cell.date > todayYmd;
               const isRest = day !== null && day.sessions.length === 0;
-              const label = day !== null ? dayLabelClassification(day) : null;
               const statusWord =
-                label !== null ? classificationLabel(label) : "";
-              const sessionName =
-                day?.sessions[0]?.scheduledSession.session?.name ??
-                day?.recommendedSessionName ??
-                null;
+                day !== null
+                  ? classificationLabel(dayLabelClassification(day))
+                  : "";
 
               return (
                 <button
@@ -129,24 +126,7 @@ export function MonthGrid({
                   </span>
 
                   <span className="mt-auto flex w-full flex-col gap-0.5">
-                    {sessionName !== null && isFuture ? (
-                      <span className="w-fit max-w-full truncate rounded-full border border-dashed border-gray-300 px-1.5 py-px text-[10px] font-semibold text-default-500 opacity-70">
-                        {sessionName}
-                      </span>
-                    ) : statusWord.length > 0 ? (
-                      <span
-                        className={[
-                          "w-fit max-w-full truncate rounded-full px-1.5 py-px text-[10px] font-semibold",
-                          label === "complete"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : label === "partial"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-gray-100 text-gray-500",
-                        ].join(" ")}
-                      >
-                        {statusWord}
-                      </span>
-                    ) : null}
+                    {day !== null ? <DayCellChip day={day} /> : null}
                   </span>
                 </button>
               );
