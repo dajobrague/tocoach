@@ -7,6 +7,7 @@ import type { MealCycleTree, MealSlotWithOptions } from "./meal-cycle-service";
 import type { ClientSelection } from "./option-selection";
 import type { OverrideRow } from "./override-types";
 import type { NutritionGoals } from "@/lib/nutrition/goals/client-goals-service";
+import type { NutritionSection } from "@/lib/nutrition/delivery-visibility";
 import type { MealLogRow } from "@/lib/nutrition/logs/meal-log-service";
 
 import { buildClientCycleView } from "./cycle-day";
@@ -120,6 +121,10 @@ export interface ClientWeek {
   /** No-plan delivery fallback (PDF / goals-only). Route-attached, and only
    *  when `cycle` is null. */
   fallback?: ClientDietFallback;
+  /** The sections this client's page shows (trainer-chosen, or the automatic
+   *  ladder's pick), in display order. Route-attached; absent on responses
+   *  from servers predating the visibility feature. */
+  sections?: NutritionSection[];
 }
 
 /**

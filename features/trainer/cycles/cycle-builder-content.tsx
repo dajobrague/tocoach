@@ -26,6 +26,7 @@ import { CycleSummaryCard } from "./cycle-summary-card";
 import { DayCopyModal, type DayCopyMode } from "./day-copy-modal";
 import { DaySelector } from "./day-selector";
 import { DietPdfSection } from "./diet-pdf-section";
+import { VisibilitySelect } from "./visibility-select";
 import { EditPortionsModal } from "./edit-portions-modal";
 import { GoalsSection } from "./goals-section";
 import { MealPlanHeader } from "./meal-plan-header";
@@ -215,49 +216,59 @@ export function CycleBuilderContent({
         ) : null}
 
         {isLoading === false && (
-          <Tabs
-            aria-label="Sección del plan"
-            classNames={{
-              tabList: "rounded-large bg-gray-100 p-1 gap-1",
-              cursor: "rounded-medium bg-white shadow-sm",
-              tab: "h-9 min-w-[11rem] px-6",
-              tabContent:
-                "font-medium text-default-500 group-data-[selected=true]:text-gray-900",
-            }}
-            selectedKey={builderTab}
-            variant="light"
-            onSelectionChange={(key) =>
-              setBuilderTab(key as "plan" | "goals" | "pdf")
-            }
-          >
-            <Tab
-              key="goals"
-              title={
-                <span className="flex items-center gap-1.5">
-                  <Icon icon="solar:target-linear" width={16} />
-                  Objetivos
-                </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <Tabs
+              aria-label="Sección del plan"
+              classNames={{
+                tabList: "rounded-large bg-gray-100 p-1 gap-1",
+                cursor: "rounded-medium bg-white shadow-sm",
+                tab: "h-9 min-w-[11rem] px-6",
+                tabContent:
+                  "font-medium text-default-500 group-data-[selected=true]:text-gray-900",
+              }}
+              selectedKey={builderTab}
+              variant="light"
+              onSelectionChange={(key) =>
+                setBuilderTab(key as "plan" | "goals" | "pdf")
+              }
+            >
+              <Tab
+                key="goals"
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <Icon icon="solar:target-linear" width={16} />
+                    Objetivos
+                  </span>
+                }
+              />
+              <Tab
+                key="plan"
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <Icon icon="solar:clipboard-list-linear" width={16} />
+                    Plan de comidas
+                  </span>
+                }
+              />
+              <Tab
+                key="pdf"
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <Icon icon="solar:document-text-linear" width={16} />
+                    Dieta PDF
+                  </span>
+                }
+              />
+            </Tabs>
+
+            <VisibilitySelect
+              clientId={clientId}
+              hasActivePlan={
+                (cycles ?? []).some((cycle) => cycle.status === "active") ===
+                true
               }
             />
-            <Tab
-              key="plan"
-              title={
-                <span className="flex items-center gap-1.5">
-                  <Icon icon="solar:clipboard-list-linear" width={16} />
-                  Plan de comidas
-                </span>
-              }
-            />
-            <Tab
-              key="pdf"
-              title={
-                <span className="flex items-center gap-1.5">
-                  <Icon icon="solar:document-text-linear" width={16} />
-                  Dieta PDF
-                </span>
-              }
-            />
-          </Tabs>
+          </div>
         )}
 
         {isLoading === false && builderTab === "goals" ? (

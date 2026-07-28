@@ -1,3 +1,5 @@
+import type { NutritionSection } from "@/lib/nutrition/delivery-visibility";
+
 // ─── Client-side shapes (mirror the meal-cycles API responses) ──────────────
 
 export type CycleStatus = "draft" | "active" | "archived";
@@ -586,6 +588,27 @@ export function uploadDietPdf(
 
 export function deleteDietPdf(clientId: number): Promise<void> {
   return sendJson<void>(`/api/diet-pdf?clientId=${clientId}`, "DELETE");
+}
+
+/** The trainer's saved visibility choice — null means "Automático". */
+export function fetchClientVisibility(
+  clientId: number
+): Promise<{ sections: NutritionSection[] | null }> {
+  return getJson<{ sections: NutritionSection[] | null }>(
+    `/api/nutrition/visibility?clientId=${clientId}`
+  );
+}
+
+/** Save which sections the client sees; null/[] returns to "Automático". */
+export function saveClientVisibility(
+  clientId: number,
+  sections: NutritionSection[] | null
+): Promise<{ sections: NutritionSection[] | null }> {
+  return sendJson<{ sections: NutritionSection[] | null }>(
+    "/api/nutrition/visibility",
+    "PUT",
+    { clientId, sections }
+  );
 }
 
 export function searchRecipes(query: string): Promise<RecipeHit[]> {

@@ -10,6 +10,10 @@ import {
   buildClientWeek,
   type ClientDietFallback,
 } from "@/lib/nutrition/cycles/client-week";
+import {
+  getClientNutritionVisibility,
+  resolveVisibleSections,
+} from "@/lib/nutrition/delivery-visibility";
 import { getClientDietPdf } from "@/lib/nutrition/diet-fallback";
 import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
@@ -73,7 +77,10 @@ export async function GET(request: NextRequest) {
     const weekEnd = shiftYmd(weekStart, 6);
     const todayIso = toYmdInTimezone(new Date(), timeZone);
     const supabase = createSupabaseClient();
-    const tree = await getActiveCycleTreeForClient(supabase, clientId);
+    const [tree, visibility] = await Promise.all([
+      getActiveCycleTreeForClient(supabase, clientId),
+      getClientNutritionVisibility(supabase, tenant?.host ?? "", clientId),
+    ]);
 
     const [overrides, logs, selections, goals, presets, choices, dietPdf] =
       await Promise.all([
@@ -88,8 +95,9 @@ export async function GET(request: NextRequest) {
         new ClientGoalsService(supabase).get(tenant?.host ?? "", clientId),
         new GoalPresetsService(supabase).list(tenant?.host ?? "", clientId),
         getMenuChoices(supabase, clientId, weekStart, weekEnd),
-        // The PDF rung of the delivery ladder only matters without a plan.
-        tree === null
+        // The PDF matters without a plan (the ladder's second rung) and
+        // whenever the trainer explicitly chose to show it.
+        tree === null || visibility?.includes("pdf") === true
           ? getClientDietPdf(supabase, tenant?.host ?? "", clientId)
           : Promise.resolve(null),
       ]);
@@ -105,9 +113,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Which sections this client sees: the trainer's explicit choice
+    // (intersected with what has data), else the automatic delivery ladder.
+    const sections = resolveVisibleSections(visibility, {
+      plan: tree !== null,
+      pdf: dietPdf !== null,
+      goals: goals !== null || presets.length > 0,
+    });
+    const planVisible = sections.includes("plan");
+
     const week = attachDayGoals(
       buildClientWeek(
-        tree,
+        // A hidden plan renders (and logs) as if there were none.
+        planVisible ? tree : null,
         overrides,
         logs,
         weekStart,
@@ -116,33 +134,41 @@ export async function GET(request: NextRequest) {
         selections,
         menuChoices
       ),
-      tree?.day_targets,
+      planVisible ? tree?.day_targets : undefined,
       presetsById,
       goals
     );
 
-    // No active plan → tell the client page what to fall back to (delivery
-    // ladder: PDF diet, else goals-only when goals or presets exist).
+    // What the non-plan sections need: the PDF and/or the named objectives.
+    // Attached whenever either section is visible — also alongside a visible
+    // plan, so the client page can stack them (e.g. plan + PDF).
     const fallback: ClientDietFallback | undefined =
-      tree === null
+      sections.includes("pdf") || sections.includes("goals") || tree === null
         ? {
-            pdf: dietPdf,
-            presets: presets.map(
-              ({ id, name, kcal, protein_g, carbs_g, fat_g }) => ({
-                id,
-                name,
-                kcal,
-                protein_g,
-                carbs_g,
-                fat_g,
-              })
-            ),
+            pdf: sections.includes("pdf") ? dietPdf : null,
+            presets: sections.includes("goals")
+              ? presets.map(
+                  ({ id, name, kcal, protein_g, carbs_g, fat_g }) => ({
+                    id,
+                    name,
+                    kcal,
+                    protein_g,
+                    carbs_g,
+                    fat_g,
+                  })
+                )
+              : [],
           }
         : undefined;
 
     return NextResponse.json({
       success: true,
-      data: { ...week, goals, ...(fallback !== undefined ? { fallback } : {}) },
+      data: {
+        ...week,
+        goals,
+        sections,
+        ...(fallback !== undefined ? { fallback } : {}),
+      },
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
