@@ -121,7 +121,10 @@ function buildWeekMetrics(
       const classification = classifyDay(
         prescribed.length > 0 || sessionLogs.length > 0,
         adherence,
-        isFuture
+        isFuture,
+        // El status de la fila manda: completado manual (con ejercicios
+        // saltados) o automático cuentan como día hecho.
+        row.status === "completed"
       );
 
       return {
@@ -168,7 +171,7 @@ function buildWeekMetrics(
         prescribed: [],
         logs: keyLogs,
         adherence,
-        classification: classifyDay(true, adherence, isFuture),
+        classification: classifyDay(true, adherence, isFuture, true),
       });
     }
 

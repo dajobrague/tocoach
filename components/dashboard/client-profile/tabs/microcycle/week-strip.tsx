@@ -4,7 +4,7 @@ import type { DayClassification, DayMetrics } from "./types";
 
 import { Icon } from "@iconify/react";
 
-import { formatPercent } from "./adherence";
+import { classificationLabel } from "./adherence";
 
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 
@@ -105,29 +105,18 @@ export function WeekStrip({
               ? (day.sessions[0]!.scheduledSession.session?.name ?? "Sesión")
               : `${day.sessions.length} sesiones`;
 
-          // Adherence % to show: aggregate across sessions when multiple.
-          const showPercent =
-            !isRest &&
-            dayClassification !== "future" &&
-            dayClassification !== "rest";
-
-          const totalPrescribed = day.sessions.reduce(
-            (acc, s) => acc + s.adherence.totalPrescribed,
-            0
-          );
-          const completedExercises = day.sessions.reduce(
-            (acc, s) => acc + s.adherence.completedExercises,
-            0
-          );
-          const agregateEjercicios =
-            totalPrescribed === 0 ? 0 : completedExercises / totalPrescribed;
+          // Estado del día en palabras (Hecho / Empezado / Sin hacer). El %
+          // de ejercicios dejó de ser el dato del selector: una sesión
+          // marcada como completada con ejercicios saltados mostraba "33%"
+          // pese a estar terminada. El detalle del día conserva las métricas.
+          const statusLabel = isRest
+            ? ""
+            : classificationLabel(dayClassification);
 
           const ariaLabel = isRest
             ? `${DAY_LABELS[idx]} ${dayNumber}, día de descanso`
             : `${DAY_LABELS[idx]} ${dayNumber}, ${sessionLabel}, ${
-                showPercent
-                  ? `${completedExercises} de ${totalPrescribed} ejercicios completados`
-                  : "sin actividad aún"
+                statusLabel.length > 0 ? statusLabel : "sin actividad aún"
               }`;
 
           return (
@@ -195,8 +184,16 @@ export function WeekStrip({
                   {symbolFor(dayClassification)}
                 </span>
               )}
-              <span className="text-[10px] tabular-nums text-gray-500 min-h-[1rem]">
-                {showPercent ? formatPercent(agregateEjercicios) : ""}
+              <span
+                className={`text-[10px] font-medium min-h-[1rem] ${
+                  dayClassification === "complete"
+                    ? "text-green-600"
+                    : dayClassification === "partial"
+                      ? "text-amber-600"
+                      : "text-gray-500"
+                }`}
+              >
+                {statusLabel}
               </span>
             </button>
           );

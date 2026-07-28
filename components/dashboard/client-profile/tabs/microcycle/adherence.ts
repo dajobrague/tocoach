@@ -182,9 +182,14 @@ export function computeAdherenceFromLogs(logs: ExerciseLog[]): DayAdherence {
 export function classifyDay(
   hasPrescribed: boolean,
   adherence: DayAdherence,
-  isFuture: boolean
+  isFuture: boolean,
+  statusCompleted = false
 ): DayClassification {
   if (isFuture) return "future";
+  // La fila scheduled_sessions dice "completed" (el cliente lo marcó a mano
+  // o cubrió todo): eso manda sobre el conteo de ejercicios. Un cliente que
+  // dio la sesión por terminada con ejercicios saltados NO es "parcial".
+  if (statusCompleted) return "complete";
   if (adherence.loggedSetsTotal > 0) {
     if (
       adherence.totalPrescribed > 0 &&
@@ -202,4 +207,22 @@ export function classifyDay(
 
 export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+/**
+ * Etiqueta de estado del día para el selector de fechas del trainer. El %
+ * dejó de ser el dato principal (una sesión marcada completa con ejercicios
+ * saltados diría "33%"): ahora se lee hecho / empezado / sin hacer.
+ */
+export function classificationLabel(classification: DayClassification): string {
+  switch (classification) {
+    case "complete":
+      return "Hecho";
+    case "partial":
+      return "Empezado";
+    case "pending":
+      return "Sin hacer";
+    default:
+      return "";
+  }
 }

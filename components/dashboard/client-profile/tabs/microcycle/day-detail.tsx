@@ -5,7 +5,7 @@ import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
 
-import { formatPercent } from "./adherence";
+import { classificationLabel, formatPercent } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
 import { buildLoggedExerciseGroups, countLoggedSets } from "./logged-view";
 
@@ -440,6 +440,19 @@ function SessionCard({
           <p className="text-sm font-semibold text-gray-900">
             {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
           </p>
+          {classificationLabel(entry.classification).length > 0 ? (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                entry.classification === "complete"
+                  ? "bg-green-100 text-green-700"
+                  : entry.classification === "partial"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {classificationLabel(entry.classification)}
+            </span>
+          ) : null}
         </div>
         {entry.scheduledSession.originally_prescribed_session ? (
           <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">

@@ -33,8 +33,7 @@ function fakeSupabase(logs: LogRow[], slots: SlotRow[]): SupabaseClient {
   };
 
   return {
-    from: (table: string) =>
-      make(table === "exercise_logs" ? logs : slots),
+    from: (table: string) => make(table === "exercise_logs" ? logs : slots),
   } as unknown as SupabaseClient;
 }
 
