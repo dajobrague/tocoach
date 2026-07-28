@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  addToast,
   Autocomplete,
   AutocompleteItem,
   Button,
@@ -171,6 +172,20 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
     }
   };
   const [isAddExerciseModalOpen, setIsAddExerciseModalOpen] = useState(false);
+  // Duplicación (Fase 2): objetivo del modal de sesión / confirm de ejercicio.
+  const [duplicateSessionTarget, setDuplicateSessionTarget] = useState<{
+    programId: string;
+    sessionId: string;
+    sourceName: string;
+  } | null>(null);
+  const [duplicateSessionName, setDuplicateSessionName] = useState("");
+  const [duplicateExerciseTarget, setDuplicateExerciseTarget] = useState<{
+    programId: string;
+    sessionId: string;
+    exerciseRowId: string;
+    name: string;
+  } | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [isEditExerciseModalOpen, setIsEditExerciseModalOpen] = useState(false);
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
   const [isEditProgramModalOpen, setIsEditProgramModalOpen] = useState(false);
@@ -537,6 +552,88 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       }));
       // Keep the controlled input text in sync with the picked exercise.
       setLibraryInputValue(exercise.name);
+    }
+  };
+
+  // ── Duplicación (Fase 2 — llamada 15 Jul) ────────────────────────────
+  const openDuplicateSession = (
+    programId: string,
+    sessionId: string,
+    sourceName: string
+  ) => {
+    setDuplicateSessionTarget({ programId, sessionId, sourceName });
+    setDuplicateSessionName(`${sourceName} (copia)`);
+  };
+
+  const confirmDuplicateSession = async () => {
+    if (!duplicateSessionTarget) return;
+    const { programId, sessionId } = duplicateSessionTarget;
+
+    setIsDuplicating(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/programs/${programId}/sessions/${sessionId}/duplicate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: duplicateSessionName.trim() }),
+        }
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchPrograms();
+        addToast({
+          title: `Sesión "${data.session?.name ?? duplicateSessionName}" duplicada`,
+          color: "success",
+        });
+        setDuplicateSessionTarget(null);
+      } else {
+        await alertAfterPress(
+          "Error al duplicar la sesión: " + (data.error || "Error desconocido")
+        );
+      }
+    } catch (err) {
+      console.error("[CardioTab] Error duplicating session:", err);
+      await alertAfterPress("Error al duplicar la sesión");
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
+  const confirmDuplicateExercise = async () => {
+    if (!duplicateExerciseTarget) return;
+    const { programId, sessionId, exerciseRowId, name } =
+      duplicateExerciseTarget;
+
+    setIsDuplicating(true);
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/programs/${programId}/sessions/${sessionId}/exercises/duplicate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionExerciseId: exerciseRowId }),
+        }
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        setExpandedSessions((prev) => new Set(prev).add(sessionId));
+        await fetchPrograms();
+        addToast({ title: `Ejercicio "${name}" duplicado`, color: "success" });
+        setDuplicateExerciseTarget(null);
+      } else {
+        await alertAfterPress(
+          "Error al duplicar el ejercicio: " +
+            (data.error || "Error desconocido")
+        );
+      }
+    } catch (err) {
+      console.error("[CardioTab] Error duplicating exercise:", err);
+      await alertAfterPress("Error al duplicar el ejercicio");
+    } finally {
+      setIsDuplicating(false);
     }
   };
 
@@ -1361,6 +1458,26 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                                       </Button>
                                       <Button
                                         isIconOnly
+                                        aria-label="Duplicar sesión"
+                                        size="sm"
+                                        variant="flat"
+                                        onPress={(e: any) => {
+                                          e?.preventDefault?.();
+                                          openDuplicateSession(
+                                            program.programId,
+                                            session.id,
+                                            session.name
+                                          );
+                                        }}
+                                      >
+                                        <Icon
+                                          className="text-gray-600"
+                                          icon="solar:copy-linear"
+                                          width={18}
+                                        />
+                                      </Button>
+                                      <Button
+                                        isIconOnly
                                         size="sm"
                                         variant="flat"
                                         onPress={(e: any) => {
@@ -1440,6 +1557,34 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
                                                   <ExerciseProgressCard
                                                     actions={
                                                       <>
+                                                        {exercise.id ? (
+                                                          <Button
+                                                            isIconOnly
+                                                            aria-label="Duplicar ejercicio"
+                                                            size="sm"
+                                                            variant="light"
+                                                            onPress={() =>
+                                                              setDuplicateExerciseTarget(
+                                                                {
+                                                                  programId:
+                                                                    program.programId,
+                                                                  sessionId:
+                                                                    session.id,
+                                                                  exerciseRowId:
+                                                                    exercise.id ??
+                                                                    "",
+                                                                  name: exercise.name,
+                                                                }
+                                                              )
+                                                            }
+                                                          >
+                                                            <Icon
+                                                              className="text-gray-400 hover:text-gray-600"
+                                                              icon="solar:copy-linear"
+                                                              width={16}
+                                                            />
+                                                          </Button>
+                                                        ) : null}
                                                         <Button
                                                           isIconOnly
                                                           size="sm"
@@ -2966,6 +3111,104 @@ export default function CardioTab({ clientId, clientName }: CardioTabProps) {
       />
 
       <TrainerExerciseVideoModal ref={videoModalRef} />
+
+      {/* Duplicar sesión: confirmación con el nombre de la copia editable. */}
+      <Modal
+        isOpen={duplicateSessionTarget !== null}
+        size="md"
+        onClose={() => setDuplicateSessionTarget(null)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex items-center gap-2">
+            <Icon
+              className="text-gray-500"
+              icon="solar:copy-linear"
+              width={18}
+            />
+            Duplicar sesión
+          </ModalHeader>
+          <ModalBody className="gap-3">
+            <p className="text-sm text-gray-500">
+              Se copiarán todos los ejercicios de{" "}
+              <span className="font-semibold text-gray-700">
+                {duplicateSessionTarget?.sourceName}
+              </span>{" "}
+              con su prescripción completa. La copia quedará justo debajo.
+            </p>
+            <Input
+              autoFocus
+              label="Nombre de la nueva sesión"
+              value={duplicateSessionName}
+              variant="bordered"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && duplicateSessionName.trim()) {
+                  void confirmDuplicateSession();
+                }
+              }}
+              onValueChange={setDuplicateSessionName}
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="flat"
+              onPress={() => setDuplicateSessionTarget(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-black text-white"
+              isDisabled={duplicateSessionName.trim().length === 0}
+              isLoading={isDuplicating}
+              onPress={() => void confirmDuplicateSession()}
+            >
+              Duplicar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Duplicar ejercicio: confirmación ligera. */}
+      <Modal
+        isOpen={duplicateExerciseTarget !== null}
+        size="sm"
+        onClose={() => setDuplicateExerciseTarget(null)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex items-center gap-2">
+            <Icon
+              className="text-gray-500"
+              icon="solar:copy-linear"
+              width={18}
+            />
+            Duplicar ejercicio
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-gray-500">
+              La copia de{" "}
+              <span className="font-semibold text-gray-700">
+                {duplicateExerciseTarget?.name}
+              </span>{" "}
+              quedará justo debajo con la misma prescripción — edítala para
+              cambiar el ejercicio.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="flat"
+              onPress={() => setDuplicateExerciseTarget(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-black text-white"
+              isLoading={isDuplicating}
+              onPress={() => void confirmDuplicateExercise()}
+            >
+              Duplicar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }
