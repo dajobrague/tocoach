@@ -16,6 +16,12 @@ export interface ResolvedExercise {
   category: string;
   image_url: string | null;
   video_url: string | null;
+  /**
+   * Video subido directo a la app (bucket exercise-videos). Hermano de
+   * video_url (enlace externo); el cliente muestra el que exista, con
+   * preferencia por el subido (ver exercise-log-modal).
+   */
+  uploaded_video_url: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;

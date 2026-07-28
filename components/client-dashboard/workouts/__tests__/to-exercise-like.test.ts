@@ -13,6 +13,7 @@ const baseResolved = (
   category: "strength",
   image_url: null,
   video_url: null,
+  uploaded_video_url: null,
   exercise_order: 1,
   sets: 4,
   reps: "8-10",
@@ -49,6 +50,28 @@ describe("toExerciseLike", () => {
     const out = toExerciseLike(baseResolved());
 
     expect(out.notes).toBeUndefined();
+  });
+
+  it("maps both trainer video fields", () => {
+    // Regresión: uploaded_video_url no se mapeaba, así que los videos
+    // subidos directo a la app (sin enlace externo) nunca llegaban al
+    // cliente en el resolved path — solo via template path (programas).
+    const out = toExerciseLike(
+      baseResolved({
+        video_url: "https://youtu.be/abc123",
+        uploaded_video_url: "https://cdn.example.com/demo.mp4",
+      })
+    );
+
+    expect(out.videoUrl).toBe("https://youtu.be/abc123");
+    expect(out.uploadedVideoUrl).toBe("https://cdn.example.com/demo.mp4");
+  });
+
+  it("omits video fields when the exercise has none", () => {
+    const out = toExerciseLike(baseResolved());
+
+    expect(out.videoUrl).toBeUndefined();
+    expect(out.uploadedVideoUrl).toBeUndefined();
   });
 
   it("keeps mapping core fields", () => {
