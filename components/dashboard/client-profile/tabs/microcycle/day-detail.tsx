@@ -1,13 +1,28 @@
 "use client";
 
+// Detalle del día de Seguimiento (rediseño aprobado — mockup "mini-tabla").
+// Jerarquía: cabecera compacta (nombre + estado + hora de inicio + toggle de
+// prescripción) → franja de stats con separadores finos (receta de nutrición)
+// → una fila por ejercicio (punto de estado, prescripción como línea
+// secundaria, resumen ejecutado a la derecha, barra de progreso de 3px) →
+// series como MINI-TABLA a ancho completo (reps/kilos en columnas alineadas,
+// video como botón azul etiquetado, récord histórico con medalla, reps bajo
+// objetivo en ámbar) → nota del cliente como cita. Los ejercicios fuera de
+// plan van en su propia tarjeta punteada (punteado = no prescrito).
+//
+// Se conserva todo el comportamiento previo: modo actuals-first vs modo
+// prescripción, popover de métricas por ejercicio, video por serie + video
+// legacy de sesión, chip "Originalmente prescrito", día futuro y descanso.
+
 import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
+import { useState } from "react";
 
-import { classificationLabel, formatPercent } from "./adherence";
+import { classificationLabel } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
-import { buildLoggedExerciseGroups, countLoggedSets } from "./logged-view";
+import { buildLoggedExerciseGroups } from "./logged-view";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -17,149 +32,283 @@ function formatDateLong(date: string): string {
   });
 }
 
-function exerciseAdherence(
-  p: PrescribedExercise,
-  logs: ExerciseLog[]
-): {
-  ejercicios: number;
-  series: number;
-  loggedSets: number;
-} {
-  const sets = logs
-    .filter((l) => l.exercise_id === p.exerciseId)
-    .flatMap((l) => l.sets ?? []);
-  const loggedSets = sets.length;
-  const ejercicios = loggedSets > 0 ? 1 : 0;
-  const prescribedSets = p.prescribedSets ?? 0;
-  const series =
-    prescribedSets === 0 ? 0 : Math.min(loggedSets / prescribedSets, 1);
+/** Primer número de la prescripción de reps ("8-10" → 8); null si no parsea. */
+function minPrescribedReps(reps: string | null | undefined): number | null {
+  if (reps == null) return null;
+  const match = String(reps).match(/\d+/);
 
-  return { ejercicios, series, loggedSets };
+  if (!match) return null;
+  const parsed = parseInt(match[0], 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-// ─── Compact KPI chip (header) ───────────────────────────────────────────────
+/** Peso máximo histórico del ejercicio (todas las series de todos los logs). */
+function allTimeMaxWeight(logs: ExerciseLog[]): number {
+  let max = 0;
 
-const CHIP_ACCENTS: Record<
-  string,
-  { bg: string; border: string; label: string; value: string }
-> = {
-  green: {
-    bg: "bg-green-50",
-    border: "border-green-200",
-    label: "text-green-600",
-    value: "text-green-800",
-  },
-  amber: {
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-    label: "text-amber-600",
-    value: "text-amber-800",
-  },
-  gray: {
-    bg: "bg-gray-50",
-    border: "border-gray-200",
-    label: "text-gray-500",
-    value: "text-gray-900",
-  },
-};
+  for (const log of logs) {
+    for (const set of log.sets ?? []) {
+      if (typeof set.weight_kg === "number" && set.weight_kg > max) {
+        max = set.weight_kg;
+      }
+    }
+  }
 
-function pctAccent(pct: number): keyof typeof CHIP_ACCENTS {
-  if (pct >= 0.9) return "green";
-  if (pct >= 0.5) return "amber";
-
-  return "gray";
+  return max;
 }
 
-function StatChip({
-  label,
-  value,
-  accent,
-  hint,
-}: {
+/** Formato es-ES para kilos: 82.5 → "82,5". */
+function formatKg(value: number): string {
+  return value.toLocaleString("es-ES", { maximumFractionDigits: 2 });
+}
+
+// ─── Franja de stats (separadores de 1px, receta de nutrición) ──────────────
+
+interface StatItem {
   label: string;
   value: string;
-  accent: keyof typeof CHIP_ACCENTS;
-  hint?: string;
-}) {
-  const c = CHIP_ACCENTS[accent] ?? CHIP_ACCENTS.gray!;
+  unit?: string;
+}
 
+function StatStrip({ items }: { items: StatItem[] }) {
   return (
-    <div className={`${c.bg} rounded-md px-3 py-2 border ${c.border}`}>
-      <p
-        className={`text-[10px] font-semibold uppercase tracking-wide ${c.label}`}
-      >
-        {label}
-      </p>
-      <p className={`text-base font-bold tabular-nums ${c.value}`}>{value}</p>
-      {hint ? <p className={`text-[10px] mt-0.5 ${c.label}`}>{hint}</p> : null}
+    <div className="grid grid-cols-2 gap-px border-b border-gray-100 bg-gray-100 sm:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="bg-white px-4 py-2.5">
+          <p className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400">
+            {item.label}
+          </p>
+          <p className="text-base font-bold text-gray-900 tabular-nums">
+            {item.value}
+            {item.unit ? (
+              <span className="ml-1 text-[11px] font-medium text-gray-500">
+                {item.unit}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─── Mini progress bar ───────────────────────────────────────────────────────
+// ─── Mini-tabla de series (ancho completo) ──────────────────────────────────
 
-function ProgressBar({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  const fillClass =
-    value >= 0.9
-      ? "bg-green-500"
-      : value >= 0.5
-        ? "bg-amber-500"
-        : value > 0
-          ? "bg-gray-400"
-          : "bg-gray-300";
+function SetsTable({
+  sets,
+  exerciseName,
+  prescribedMin,
+  historicalMax,
+  onPlayVideo,
+}: {
+  sets: ExerciseLogSet[];
+  exerciseName: string;
+  /** Reps mínimas prescritas — por debajo, el número se tiñe ámbar. */
+  prescribedMin: number | null;
+  /** Peso máximo histórico del ejercicio; una serie que lo iguala lleva 🏅. */
+  historicalMax: number;
+  onPlayVideo: ((url: string, name: string) => void) | undefined;
+}) {
+  // La medalla va SOLO a la primera serie que alcanza el máximo histórico —
+  // dos series iguales no son dos récords.
+  const recordIndex =
+    historicalMax > 0
+      ? sets.findIndex((s) => s.weight_kg === historicalMax)
+      : -1;
 
   return (
-    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+    <div className="mt-2.5 overflow-hidden rounded-large border border-gray-100 bg-white">
+      {sets.map((set, index) => {
+        const isRecord = index === recordIndex;
+        const lowReps =
+          prescribedMin !== null &&
+          typeof set.reps === "number" &&
+          set.reps < prescribedMin;
+
+        return (
+          <div
+            key={set.id ?? set.set_number}
+            className={`grid grid-cols-[2.5rem_1fr_1fr_auto] items-center border-t border-gray-100 text-xs tabular-nums first:border-t-0 ${
+              isRecord ? "bg-amber-50/40" : ""
+            }`}
+          >
+            <span className="px-2.5 py-1.5 text-[10.5px] font-semibold text-gray-400">
+              S{set.set_number}
+            </span>
+            <span className="px-2.5 py-1.5 text-gray-900">
+              <b
+                className={`font-bold ${lowReps ? "text-amber-700" : ""}`}
+                title={
+                  lowReps
+                    ? `Por debajo del objetivo (${prescribedMin})`
+                    : undefined
+                }
+              >
+                {set.reps ?? "—"}
+              </b>
+              <span className="ml-1 text-[10.5px] text-gray-400">reps</span>
+            </span>
+            <span className="px-2.5 py-1.5 text-gray-900">
+              <b className="font-bold">
+                {set.weight_kg != null ? formatKg(set.weight_kg) : "—"}
+              </b>
+              <span className="ml-1 text-[10.5px] text-gray-400">kg</span>
+            </span>
+            <span className="flex items-center justify-end gap-1.5 px-2.5 py-1">
+              {isRecord ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-medium border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                  title="Mejor marca histórica de este ejercicio"
+                >
+                  🏅 Récord
+                </span>
+              ) : null}
+              {set.video_url && onPlayVideo ? (
+                <button
+                  aria-label={`Ver video de ${exerciseName} serie ${set.set_number}`}
+                  className="inline-flex items-center gap-1.5 rounded-medium border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                  type="button"
+                  onClick={() => onPlayVideo(set.video_url!, exerciseName)}
+                >
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[7px] text-white">
+                    ▶
+                  </span>
+                  Video
+                </button>
+              ) : null}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Piezas compartidas de las filas ────────────────────────────────────────
+
+function StatusDot({ tone }: { tone: "done" | "part" | "pend" }) {
+  const cls =
+    tone === "done"
+      ? "bg-emerald-500"
+      : tone === "part"
+        ? "bg-amber-500"
+        : "bg-gray-300";
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-2 w-2 shrink-0 rounded-full ${cls}`}
+    />
+  );
+}
+
+function MiniProgress({
+  value,
+  tone,
+}: {
+  value: number;
+  tone: "done" | "part";
+}) {
+  const pct = Math.round(Math.min(Math.max(value, 0), 1) * 100);
+
+  return (
+    <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-gray-100">
       <div
         aria-label={`${pct}%`}
-        className={`h-full ${fillClass} transition-all duration-200`}
+        className={`h-full rounded-full transition-all duration-200 ${
+          tone === "done" ? "bg-emerald-500" : "bg-amber-500"
+        }`}
         style={{ width: `${pct}%` }}
       />
     </div>
   );
 }
 
-// ─── Per-set row ─────────────────────────────────────────────────────────────
-
-function ExecutedSetRow({
-  set,
-  exerciseName,
-  onPlayVideo,
-}: {
-  set: ExerciseLogSet;
-  exerciseName: string;
-  onPlayVideo: ((url: string, name: string) => void) | undefined;
-}) {
+function NoteQuote({ notes }: { notes: string }) {
   return (
-    <div className="inline-flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-100 rounded-md px-1.5 py-1 w-fit">
-      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0 tabular-nums">
-        {set.set_number}
+    <div className="mt-2 flex gap-2 rounded-r-large border-l-[3px] border-gray-200 bg-gray-50 px-3 py-2">
+      <span className="shrink-0 pt-px text-[9.5px] font-bold uppercase tracking-wider text-gray-400">
+        Cliente
       </span>
-      <span className="text-gray-900 tabular-nums whitespace-nowrap">
-        <span className="font-semibold">{set.reps ?? "—"}</span>
-        <span className="text-gray-400 mx-0.5">reps</span>
-        <span className="text-gray-400 mx-0.5">×</span>
-        <span className="font-semibold">
-          {set.weight_kg != null ? set.weight_kg : "—"}
-        </span>
-        <span className="text-gray-400 ml-0.5">kg</span>
-      </span>
-      {set.video_url && onPlayVideo ? (
-        <button
-          aria-label={`Ver video de ${exerciseName} serie ${set.set_number}`}
-          className="inline-flex items-center justify-center w-6 h-6 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-100 transition-colors shrink-0 -mr-0.5"
-          type="button"
-          onClick={() => onPlayVideo(set.video_url!, exerciseName)}
-        >
-          <Icon icon="solar:play-circle-bold" width={15} />
-        </button>
-      ) : null}
+      <p className="text-xs italic leading-snug text-gray-600">
+        «{notes.trim()}»
+      </p>
     </div>
   );
 }
 
-// ─── Per-exercise prescribed row (always expanded) ──────────────────────────
+function LegacyVideoButton({
+  url,
+  name,
+  onPlayVideo,
+}: {
+  url: string;
+  name: string;
+  onPlayVideo: (url: string, name: string) => void;
+}) {
+  return (
+    <button
+      className="mt-2 inline-flex items-center gap-1.5 rounded-medium border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+      title="Video grabado para toda la sesión"
+      type="button"
+      onClick={() => onPlayVideo(url, name)}
+    >
+      <Icon icon="solar:play-circle-bold" width={13} />
+      Video de la sesión completa
+    </button>
+  );
+}
+
+/** Cabecera común de una fila de ejercicio: punto + nombre + rx + resumen. */
+function RowHeader({
+  tone,
+  name,
+  rxLine,
+  summary,
+  metricsPopover,
+}: {
+  tone: "done" | "part" | "pend";
+  name: string;
+  rxLine: string | null;
+  summary: React.ReactNode;
+  metricsPopover: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <StatusDot tone={tone} />
+      <div className="min-w-0 flex-1">
+        <p
+          className={`text-[13px] font-semibold ${
+            tone === "pend" ? "text-gray-400" : "text-gray-900"
+          }`}
+        >
+          {name}
+        </p>
+        {rxLine ? (
+          <p className="text-[11px] text-gray-500 tabular-nums">{rxLine}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {summary}
+        {metricsPopover}
+      </div>
+    </div>
+  );
+}
+
+function rxLineFor(p: PrescribedExercise): string {
+  const parts = [
+    `Prescrito ${p.prescribedSets ?? "—"} × ${p.prescribedReps ?? "—"}`,
+  ];
+
+  if (p.prescribedWeightKg != null) parts.push(`@ ${p.prescribedWeightKg} kg`);
+  if (p.prescribedRir) parts.push(`RIR ${p.prescribedRir}`);
+
+  return parts.join(" · ");
+}
+
+// ─── Fila en modo prescripción (sin logs de la sesión / día futuro) ─────────
 
 function PrescribedRow({
   prescribed,
@@ -170,7 +319,6 @@ function PrescribedRow({
 }: {
   prescribed: PrescribedExercise;
   logs: ExerciseLog[];
-  /** Historial completo del ejercicio para el popover de métricas. */
   allTimeLogs: ExerciseLog[];
   isFuture: boolean;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
@@ -178,235 +326,172 @@ function PrescribedRow({
   const exerciseLogs = logs.filter(
     (l) => l.exercise_id === prescribed.exerciseId
   );
-  const stats = exerciseAdherence(prescribed, exerciseLogs);
-  const totalSets = stats.loggedSets;
-  const prescribedSets = prescribed.prescribedSets ?? 0;
-  const status = isFuture
-    ? "future"
-    : totalSets === 0
-      ? "pending"
-      : totalSets >= prescribedSets
-        ? "complete"
-        : "partial";
-  const statusColor =
-    status === "complete"
-      ? "bg-green-100 text-green-700"
-      : status === "partial"
-        ? "bg-amber-100 text-amber-700"
-        : "bg-gray-100 text-gray-500";
-  const statusSymbol =
-    status === "complete"
-      ? "●"
-      : status === "partial"
-        ? "◐"
-        : status === "pending"
-          ? "○"
-          : "·";
-
   const allSets = exerciseLogs.flatMap((l) => l.sets ?? []);
+  const totalSets = allSets.length;
+  const prescribedSets = prescribed.prescribedSets ?? 0;
+  const tone: "done" | "part" | "pend" = isFuture
+    ? "pend"
+    : totalSets === 0
+      ? "pend"
+      : totalSets >= prescribedSets
+        ? "done"
+        : "part";
   const notes = exerciseLogs.find((l) => l.notes)?.notes ?? null;
-
-  // Legacy session-level video: surface separately when no per-set video exists.
   const anyPerSetVideo = allSets.some((s) => Boolean(s.video_url));
   const legacySessionVideo = anyPerSetVideo
     ? null
     : (exerciseLogs.find((l) => l.video_url)?.video_url ?? null);
+  const maxKg = allSets.reduce(
+    (acc, s) =>
+      typeof s.weight_kg === "number" && s.weight_kg > acc ? s.weight_kg : acc,
+    0
+  );
 
   return (
-    <li className="px-3 py-3">
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-base leading-none ${statusColor}`}
-        >
-          {statusSymbol}
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900">{prescribed.name}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-            Prescrito · {prescribed.prescribedSets ?? "—"} ×{" "}
-            {prescribed.prescribedReps ?? "—"}
-            {prescribed.prescribedWeightKg != null
-              ? ` @ ${prescribed.prescribedWeightKg} kg`
-              : ""}
-            {prescribed.prescribedRir
-              ? ` · RIR ${prescribed.prescribedRir}`
-              : ""}
-          </p>
-
-          {!isFuture && prescribedSets > 0 ? (
-            <div className="mt-1.5">
-              <p className="text-[11px] text-gray-700 mb-1 tabular-nums">
-                Series ejecutadas{" "}
-                <span className="font-semibold text-gray-900">{totalSets}</span>{" "}
-                de{" "}
-                <span className="font-semibold text-gray-900">
-                  {prescribedSets}
-                </span>
-              </p>
-              <ProgressBar value={stats.series} />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="shrink-0">
+    <li className="px-4 py-3">
+      <RowHeader
+        metricsPopover={
           <ExerciseMetricsPopover
             category={prescribed.category}
             exerciseName={prescribed.name}
             logs={allTimeLogs}
             onPlayVideo={onPlayVideo}
           />
-        </div>
-      </div>
-
-      {!isFuture ? (
-        <div className="mt-3 ml-10 space-y-2">
-          {allSets.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {allSets.map((set) => (
-                <ExecutedSetRow
-                  key={`${set.id ?? set.set_number}`}
-                  exerciseName={prescribed.name}
-                  set={set}
-                  onPlayVideo={onPlayVideo}
-                />
-              ))}
-            </div>
+        }
+        name={prescribed.name}
+        rxLine={rxLineFor(prescribed)}
+        summary={
+          isFuture ? null : totalSets === 0 ? (
+            <span className="text-[11.5px] font-medium text-gray-400">
+              sin registros
+            </span>
           ) : (
-            <p className="text-[11px] text-gray-400 italic">
-              Sin registros para esta fecha.
-            </p>
-          )}
+            <span className="text-[11.5px] font-semibold text-gray-900 tabular-nums">
+              {totalSets} {totalSets === 1 ? "serie" : "series"}
+              {maxKg > 0 ? ` · ${formatKg(maxKg)} kg máx` : ""}
+            </span>
+          )
+        }
+        tone={tone}
+      />
 
-          {legacySessionVideo && onPlayVideo ? (
-            <button
-              className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-              title="Video grabado para toda la sesión"
-              type="button"
-              onClick={() => onPlayVideo(legacySessionVideo, prescribed.name)}
-            >
-              <Icon icon="solar:play-circle-bold" width={13} />
-              Video de la sesión completa
-            </button>
-          ) : null}
-
-          {notes ? (
-            <div className="text-[11px] text-gray-600 bg-amber-50 border-l-2 border-amber-300 px-2 py-1 rounded-r leading-snug">
-              <span className="font-medium text-amber-700">Notas · </span>
-              {notes}
-            </div>
-          ) : null}
-        </div>
+      {!isFuture && prescribedSets > 0 && totalSets > 0 ? (
+        <MiniProgress
+          tone={totalSets >= prescribedSets ? "done" : "part"}
+          value={prescribedSets === 0 ? 0 : totalSets / prescribedSets}
+        />
       ) : null}
+
+      {!isFuture && totalSets > 0 ? (
+        <SetsTable
+          exerciseName={prescribed.name}
+          historicalMax={allTimeMaxWeight(allTimeLogs)}
+          prescribedMin={minPrescribedReps(prescribed.prescribedReps)}
+          sets={allSets}
+          onPlayVideo={onPlayVideo}
+        />
+      ) : null}
+
+      {legacySessionVideo && onPlayVideo ? (
+        <LegacyVideoButton
+          name={prescribed.name}
+          url={legacySessionVideo}
+          onPlayVideo={onPlayVideo}
+        />
+      ) : null}
+
+      {notes ? <NoteQuote notes={notes} /> : null}
     </li>
   );
 }
 
-// ─── Logged exercise row (renders actual work done as first-class) ──────────
+// ─── Fila en modo actuals (lo que el cliente hizo, primero) ─────────────────
 
 function LoggedExerciseRow({
   exerciseName,
   logs,
   allTimeLogs,
   category,
-  offPlan,
+  prescribedEntry,
   onPlayVideo,
 }: {
   exerciseName: string;
   logs: ExerciseLog[];
-  /** Historial completo del ejercicio para el popover de métricas. */
   allTimeLogs: ExerciseLog[];
   category: string | undefined;
-  /** True when the client logged this exercise but it wasn't prescribed. */
-  offPlan?: boolean;
+  /** Prescripción correspondiente cuando el ejercicio estaba en el plan. */
+  prescribedEntry: PrescribedExercise | null;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   const allSets = logs.flatMap((l) => l.sets ?? []);
   const totalSets = allSets.length;
   const notes = logs.find((l) => l.notes)?.notes ?? null;
-
   const anyPerSetVideo = allSets.some((s) => Boolean(s.video_url));
   const legacySessionVideo = anyPerSetVideo
     ? null
     : (logs.find((l) => l.video_url)?.video_url ?? null);
+  const maxKg = allSets.reduce(
+    (acc, s) =>
+      typeof s.weight_kg === "number" && s.weight_kg > acc ? s.weight_kg : acc,
+    0
+  );
+  const prescribedSets = prescribedEntry?.prescribedSets ?? 0;
+  const tone: "done" | "part" =
+    prescribedSets > 0 && totalSets < prescribedSets ? "part" : "done";
 
   return (
-    <li className="px-3 py-3">
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-base leading-none bg-green-100 text-green-700"
-        >
-          ●
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium text-gray-900">{exerciseName}</p>
-            {offPlan ? (
-              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                Fuera de plan
-              </span>
-            ) : null}
-          </div>
-          <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-            {totalSets}{" "}
-            {totalSets === 1 ? "serie ejecutada" : "series ejecutadas"}
-          </p>
-        </div>
-
-        <div className="shrink-0">
+    <li className="px-4 py-3">
+      <RowHeader
+        metricsPopover={
           <ExerciseMetricsPopover
             category={category}
             exerciseName={exerciseName}
             logs={allTimeLogs}
             onPlayVideo={onPlayVideo}
           />
-        </div>
-      </div>
+        }
+        name={exerciseName}
+        rxLine={prescribedEntry ? rxLineFor(prescribedEntry) : null}
+        summary={
+          <span className="text-[11.5px] font-semibold text-gray-900 tabular-nums">
+            {totalSets} {totalSets === 1 ? "serie" : "series"}
+            {maxKg > 0 ? ` · ${formatKg(maxKg)} kg máx` : ""}
+          </span>
+        }
+        tone={tone}
+      />
 
-      <div className="mt-3 ml-10 space-y-2">
-        {allSets.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {allSets.map((set) => (
-              <ExecutedSetRow
-                key={`${set.id ?? set.set_number}`}
-                exerciseName={exerciseName}
-                set={set}
-                onPlayVideo={onPlayVideo}
-              />
-            ))}
-          </div>
-        ) : null}
+      {prescribedSets > 0 ? (
+        <MiniProgress tone={tone} value={totalSets / prescribedSets} />
+      ) : null}
 
-        {legacySessionVideo && onPlayVideo ? (
-          <button
-            className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-            type="button"
-            onClick={() => onPlayVideo(legacySessionVideo, exerciseName)}
-          >
-            <Icon icon="solar:play-circle-bold" width={13} />
-            Video de la sesión completa
-          </button>
-        ) : null}
+      {totalSets > 0 ? (
+        <SetsTable
+          exerciseName={exerciseName}
+          historicalMax={allTimeMaxWeight(allTimeLogs)}
+          prescribedMin={minPrescribedReps(prescribedEntry?.prescribedReps)}
+          sets={allSets}
+          onPlayVideo={onPlayVideo}
+        />
+      ) : null}
 
-        {notes ? (
-          <div className="text-[11px] text-gray-600 bg-amber-50 border-l-2 border-amber-300 px-2 py-1 rounded-r leading-snug">
-            <span className="font-medium text-amber-700">Notas · </span>
-            {notes}
-          </div>
-        ) : null}
-      </div>
+      {legacySessionVideo && onPlayVideo ? (
+        <LegacyVideoButton
+          name={exerciseName}
+          url={legacySessionVideo}
+          onPlayVideo={onPlayVideo}
+        />
+      ) : null}
+
+      {notes ? <NoteQuote notes={notes} /> : null}
     </li>
   );
 }
 
-// ─── Single-session card ─────────────────────────────────────────────────────
+// ─── Tarjeta de sesión ──────────────────────────────────────────────────────
 
 interface SessionCardProps {
   entry: SessionEntry;
-  /** Historial all-time por ejercicio (popover de métricas). */
   getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
@@ -416,132 +501,189 @@ function SessionCard({
   getLogsForExercise,
   onPlayVideo,
 }: SessionCardProps) {
+  const [showRx, setShowRx] = useState(false);
   const showFuture = entry.classification === "future";
-  const totalSetsLogged = entry.adherence.loggedSetsTotal;
-  const totalSetsPrescribed = entry.adherence.prescribedSetsTotal;
 
   // Actuals-first: whenever the client logged anything for this session, show
-  // what they ACTUALLY did (the prescription drops to a reference line),
-  // mirroring the client app. Previously this only triggered when the logs
-  // FULLY diverged from the prescription; on partial overlap (client did the
-  // session but swapped/added exercises) we rendered the prescription and
-  // silently hid the off-plan work — so the trainer saw exercises the client
-  // never did and missed the ones they actually logged.
+  // what they ACTUALLY did (the prescription folds behind a toggle).
   const hasLogs = entry.logs.length > 0;
   const showLoggedView = hasLogs && !showFuture;
   const loggedGroups = buildLoggedExerciseGroups(entry.prescribed, entry.logs);
-  const offPlanCount = loggedGroups.filter((g) => g.offPlan).length;
-  const loggedSetsActual = countLoggedSets(entry.logs);
+  const onPlanGroups = loggedGroups.filter((g) => !g.offPlan);
+  const offPlanGroups = loggedGroups.filter((g) => g.offPlan);
+  const prescribedById = new Map(
+    entry.prescribed.map((p) => [p.exerciseId, p])
+  );
+
+  // Stats del día: volumen y peso máximo salen de las series ejecutadas.
+  const daySets = entry.logs.flatMap((l) => l.sets ?? []);
+  const volume = Math.round(
+    daySets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight_kg ?? 0), 0)
+  );
+  const maxKg = daySets.reduce(
+    (acc, s) =>
+      typeof s.weight_kg === "number" && s.weight_kg > acc ? s.weight_kg : acc,
+    0
+  );
+
+  const statusChip = classificationLabel(entry.classification);
 
   return (
-    <section className="rounded-lg bg-white border border-gray-200 overflow-hidden">
-      <header className="px-4 py-3 border-b border-gray-100 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-gray-900">
-            {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
-          </p>
-          {classificationLabel(entry.classification).length > 0 ? (
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                entry.classification === "complete"
-                  ? "bg-green-100 text-green-700"
-                  : entry.classification === "partial"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {classificationLabel(entry.classification)}
-            </span>
-          ) : null}
-          {typeof entry.scheduledSession.scheduled_time === "string" &&
-          entry.scheduledSession.scheduled_time.length > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 tabular-nums">
-              <Icon icon="solar:clock-circle-linear" width={11} />
-              Empezó {entry.scheduledSession.scheduled_time.slice(0, 5)}
-            </span>
-          ) : null}
-        </div>
-        {entry.scheduledSession.originally_prescribed_session ? (
-          <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">
-            <Icon
-              className="mt-0.5 shrink-0"
-              icon="solar:info-circle-linear"
-              width={12}
-            />
-            <span>
-              Originalmente prescrito:{" "}
-              <span className="font-semibold">
-                {entry.scheduledSession.originally_prescribed_session.name}
-              </span>
-              . El cliente cambió de sesión.
-            </span>
-          </div>
+    <section className="overflow-hidden rounded-large border border-gray-200 bg-white shadow-sm">
+      <header className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
+        <p className="text-sm font-bold text-gray-900">
+          {entry.scheduledSession.session?.name ?? "Sesión sin nombre"}
+        </p>
+        {statusChip.length > 0 ? (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              entry.classification === "complete"
+                ? "bg-emerald-100 text-emerald-700"
+                : entry.classification === "partial"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {statusChip}
+          </span>
         ) : null}
-        {showFuture ? (
-          <p className="text-xs text-gray-500">
-            Día programado — aún por entrenarse.
-          </p>
-        ) : showLoggedView ? (
-          <div className="grid grid-cols-2 gap-2">
-            <StatChip
-              accent="green"
-              hint={
-                offPlanCount > 0
-                  ? `${offPlanCount} fuera de plan`
-                  : "ejercicios"
+        {typeof entry.scheduledSession.scheduled_time === "string" &&
+        entry.scheduledSession.scheduled_time.length > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 tabular-nums">
+            <Icon icon="solar:clock-circle-linear" width={11} />
+            Empezó {entry.scheduledSession.scheduled_time.slice(0, 5)}
+          </span>
+        ) : null}
+        <span className="flex-1" />
+        {showLoggedView && entry.prescribed.length > 0 ? (
+          <button
+            aria-expanded={showRx}
+            className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-blue-600 transition-colors hover:text-blue-700"
+            type="button"
+            onClick={() => setShowRx((v) => !v)}
+          >
+            Ver prescripción
+            <Icon
+              icon={
+                showRx
+                  ? "solar:alt-arrow-up-linear"
+                  : "solar:alt-arrow-down-linear"
               }
-              label="Ejercicios realizados"
-              value={String(loggedGroups.length)}
+              width={13}
             />
-            <StatChip
-              accent="green"
-              hint="series totales"
-              label="Series ejecutadas"
-              value={String(loggedSetsActual)}
-            />
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <StatChip
-              accent={pctAccent(entry.adherence.ejercicios)}
-              hint={`${entry.adherence.completedExercises} de ${entry.adherence.totalPrescribed}`}
-              label="Ejercicios completados"
-              value={formatPercent(entry.adherence.ejercicios)}
-            />
-            <StatChip
-              accent={pctAccent(entry.adherence.series)}
-              hint={`${totalSetsLogged} de ${totalSetsPrescribed}`}
-              label="Series ejecutadas"
-              value={formatPercent(entry.adherence.series)}
-            />
-          </div>
-        )}
+          </button>
+        ) : null}
       </header>
 
+      {entry.scheduledSession.originally_prescribed_session ? (
+        <div className="flex items-start gap-1.5 border-b border-gray-100 bg-gray-50/60 px-4 py-2 text-[11px] text-gray-600">
+          <Icon
+            className="mt-0.5 shrink-0"
+            icon="solar:info-circle-linear"
+            width={12}
+          />
+          <span>
+            Originalmente prescrito:{" "}
+            <span className="font-semibold">
+              {entry.scheduledSession.originally_prescribed_session.name}
+            </span>
+            . El cliente cambió de sesión.
+          </span>
+        </div>
+      ) : null}
+
+      {showFuture ? (
+        <p className="px-4 py-3 text-xs text-gray-500">
+          Día programado — aún por entrenarse.
+        </p>
+      ) : (
+        <StatStrip
+          items={[
+            {
+              label: "Ejercicios",
+              value: showLoggedView
+                ? `${loggedGroups.length}${
+                    entry.adherence.totalPrescribed > 0
+                      ? ` de ${entry.adherence.totalPrescribed}`
+                      : ""
+                  }`
+                : `0 de ${entry.adherence.totalPrescribed}`,
+            },
+            {
+              label: "Series",
+              value: showLoggedView
+                ? `${daySets.length}${
+                    entry.adherence.prescribedSetsTotal > 0
+                      ? ` de ${entry.adherence.prescribedSetsTotal}`
+                      : ""
+                  }`
+                : `0 de ${entry.adherence.prescribedSetsTotal}`,
+            },
+            {
+              label: "Volumen",
+              value: volume > 0 ? volume.toLocaleString("es-ES") : "—",
+              ...(volume > 0 ? { unit: "kg·reps" } : {}),
+            },
+            {
+              label: "Peso máx",
+              value: maxKg > 0 ? formatKg(maxKg) : "—",
+              ...(maxKg > 0 ? { unit: "kg" } : {}),
+            },
+          ]}
+        />
+      )}
+
+      {/* Prescripción plegada (modo actuals): referencia, no protagonista. */}
+      {showLoggedView && showRx && entry.prescribed.length > 0 ? (
+        <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-2.5">
+          <ul className="flex flex-col gap-1">
+            {entry.prescribed.map((p) => (
+              <li
+                key={p.exerciseId}
+                className="text-[11px] text-gray-600 tabular-nums"
+              >
+                <span className="font-semibold text-gray-800">{p.name}</span>
+                {" — "}
+                {p.prescribedSets ?? "—"} × {p.prescribedReps ?? "—"}
+                {p.prescribedWeightKg != null
+                  ? ` @ ${p.prescribedWeightKg} kg`
+                  : ""}
+                {p.prescribedRir ? ` · RIR ${p.prescribedRir}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {showLoggedView ? (
-        <>
-          {entry.prescribed.length > 0 ? (
-            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/60">
-              <p className="text-[11px] text-gray-500 inline-flex items-center gap-1">
-                <Icon icon="solar:clipboard-list-linear" width={12} />
-                Prescrito: {entry.prescribed.map((p) => p.name).join(", ")}
-              </p>
-            </div>
-          ) : null}
-          <ul className="divide-y divide-gray-100">
-            {loggedGroups.map((g) => (
-              <LoggedExerciseRow
-                key={g.exerciseId}
-                allTimeLogs={getLogsForExercise(g.exerciseId)}
-                category={g.logs[0]?.exercises?.category}
-                exerciseName={g.name}
-                logs={g.logs}
-                offPlan={g.offPlan}
+        <ul className="divide-y divide-gray-100">
+          {onPlanGroups.map((g) => (
+            <LoggedExerciseRow
+              key={g.exerciseId}
+              allTimeLogs={getLogsForExercise(g.exerciseId)}
+              category={g.logs[0]?.exercises?.category}
+              exerciseName={g.name}
+              logs={g.logs}
+              prescribedEntry={prescribedById.get(g.exerciseId) ?? null}
+              onPlayVideo={onPlayVideo}
+            />
+          ))}
+          {/* Prescritos que el cliente no tocó — visibles también en actuals. */}
+          {entry.prescribed
+            .filter(
+              (p) => !onPlanGroups.some((g) => g.exerciseId === p.exerciseId)
+            )
+            .map((p) => (
+              <PrescribedRow
+                key={p.exerciseId}
+                allTimeLogs={getLogsForExercise(p.exerciseId)}
+                isFuture={false}
+                logs={[]}
+                prescribed={p}
                 onPlayVideo={onPlayVideo}
               />
             ))}
-          </ul>
-        </>
+        </ul>
       ) : entry.prescribed.length > 0 ? (
         <ul className="divide-y divide-gray-100">
           {entry.prescribed.map((p) => (
@@ -555,26 +697,37 @@ function SessionCard({
             />
           ))}
         </ul>
-      ) : hasLogs ? (
-        <ul className="divide-y divide-gray-100">
-          {loggedGroups.map((g) => (
-            <LoggedExerciseRow
-              key={g.exerciseId}
-              allTimeLogs={getLogsForExercise(g.exerciseId)}
-              category={g.logs[0]?.exercises?.category}
-              exerciseName={g.name}
-              logs={g.logs}
-              offPlan={g.offPlan}
-              onPlayVideo={onPlayVideo}
-            />
-          ))}
-        </ul>
+      ) : null}
+
+      {/* Fuera de plan: tarjeta punteada (punteado = no prescrito). */}
+      {showLoggedView && offPlanGroups.length > 0 ? (
+        <div className="border-t border-gray-100 px-4 py-3">
+          <div className="rounded-large border border-dashed border-amber-300/70 bg-amber-50/30">
+            <p className="flex items-center gap-1.5 px-4 pt-2.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              <Icon icon="solar:add-circle-linear" width={12} />
+              Fuera de plan
+            </p>
+            <ul className="divide-y divide-amber-100/60">
+              {offPlanGroups.map((g) => (
+                <LoggedExerciseRow
+                  key={g.exerciseId}
+                  allTimeLogs={getLogsForExercise(g.exerciseId)}
+                  category={g.logs[0]?.exercises?.category}
+                  exerciseName={g.name}
+                  logs={g.logs}
+                  prescribedEntry={null}
+                  onPlayVideo={onPlayVideo}
+                />
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
     </section>
   );
 }
 
-// ─── DayDetail (main export) ─────────────────────────────────────────────────
+// ─── DayDetail (export principal) ───────────────────────────────────────────
 
 interface Props {
   clientId: string;
@@ -592,38 +745,41 @@ export function DayDetail({
   getLogsForExercise,
   onPlayVideo,
 }: Props) {
-  // Rest day: no sessions in either direction.
+  // Día de descanso: sin sesiones en ninguna dirección.
   if (day.sessions.length === 0) {
-    const restLabel =
-      day.recommendedSessionName != null
-        ? `${formatDateLong(day.date)} — Descanso · recomendado: ${day.recommendedSessionName}`
-        : `${formatDateLong(day.date)} — día de descanso o sin sesión programada.`;
-
     return (
-      <section className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 capitalize">
-        {restLabel}
+      <section className="flex flex-col items-center gap-1.5 rounded-large border border-dashed border-gray-200 bg-gray-50/60 px-4 py-6 text-center">
+        <Icon
+          className="text-default-300"
+          icon="solar:moon-stars-linear"
+          width={22}
+        />
+        <p className="text-sm capitalize text-gray-600">
+          {formatDateLong(day.date)} — día de descanso
+          {day.recommendedSessionName != null
+            ? ` · recomendado: ${day.recommendedSessionName}`
+            : ""}
+        </p>
       </section>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Day header — date + optional trainer recommendation */}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-gray-900 capitalize">
+        <p className="text-sm font-semibold capitalize text-gray-900">
           {formatDateLong(day.date)}
         </p>
         {day.recommendedSessionName &&
         !day.sessions.some(
           (s) => s.scheduledSession.session?.name === day.recommendedSessionName
         ) ? (
-          <span className="text-[11px] text-gray-500 bg-gray-100 border border-gray-200 rounded px-2 py-0.5 whitespace-nowrap">
+          <span className="whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
             Recomendado: {day.recommendedSessionName}
           </span>
         ) : null}
       </div>
 
-      {/* One card per session entry */}
       {day.sessions.map((entry) => (
         <SessionCard
           key={entry.scheduledSession.id}
