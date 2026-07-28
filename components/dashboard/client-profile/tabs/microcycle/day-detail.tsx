@@ -453,6 +453,13 @@ function SessionCard({
               {classificationLabel(entry.classification)}
             </span>
           ) : null}
+          {typeof entry.scheduledSession.scheduled_time === "string" &&
+          entry.scheduledSession.scheduled_time.length > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 tabular-nums">
+              <Icon icon="solar:clock-circle-linear" width={11} />
+              Empezó {entry.scheduledSession.scheduled_time.slice(0, 5)}
+            </span>
+          ) : null}
         </div>
         {entry.scheduledSession.originally_prescribed_session ? (
           <div className="inline-flex items-start gap-1.5 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1">

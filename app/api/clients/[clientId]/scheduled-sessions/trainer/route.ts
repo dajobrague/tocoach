@@ -127,7 +127,7 @@ export async function GET(
     let realQuery = supabase
       .from("scheduled_sessions")
       .select(
-        `id, scheduled_date, status, completion_date,
+        `id, scheduled_date, status, completion_date, scheduled_time,
          session:sessions(
            id, name,
            session_exercises(

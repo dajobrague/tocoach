@@ -55,11 +55,17 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
     });
 }
 
-function buildWeekMetrics(
-  weekStart: Date,
+/**
+ * Deriva DayMetrics para un rango arbitrario de días (semana = 7, mes =
+ * la grilla completa). Pura sobre sus inputs — la comparten el hook de
+ * semana y el de mes para que ambos clasifiquen los días EXACTAMENTE igual.
+ */
+export function buildDayMetricsRange(
+  rangeStart: Date,
+  dayCount: number,
   scheduled: ScheduledSessionRow[],
   logs: ExerciseLog[]
-): WeekMetrics {
+): DayMetrics[] {
   // Index scheduled rows por fecha (cada fecha tiene N filas, una por
   // sesión tocada o template virtual).
   const scheduledByDate = new Map<string, ScheduledSessionRow[]>();
@@ -87,8 +93,8 @@ function buildWeekMetrics(
   const todayYmd = getLocalYmd(new Date());
   const days: DayMetrics[] = [];
 
-  for (let i = 0; i < 7; i++) {
-    const date = addDays(weekStart, i);
+  for (let i = 0; i < dayCount; i++) {
+    const date = addDays(rangeStart, i);
     const ymd = getLocalYmd(date);
     const rows = scheduledByDate.get(ymd) ?? [];
     const isFuture = ymd > todayYmd;
@@ -193,9 +199,20 @@ function buildWeekMetrics(
     });
   }
 
+  return days;
+}
+
+function buildWeekMetrics(
+  weekStart: Date,
+  scheduled: ScheduledSessionRow[],
+  logs: ExerciseLog[]
+): WeekMetrics {
   const orphansByDate = new Map<string, ExerciseLog[]>();
 
-  return { days, orphansByDate };
+  return {
+    days: buildDayMetricsRange(weekStart, 7, scheduled, logs),
+    orphansByDate,
+  };
 }
 
 // Bounded LRU on top of Map insertion order. Browsing many weeks during a

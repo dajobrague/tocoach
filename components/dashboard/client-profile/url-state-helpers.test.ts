@@ -53,6 +53,7 @@ describe("patchWithChildrenCleared", () => {
       tab: "charts",
       sub: null,
       m: null,
+      v: null,
       nd: null,
       ndv: null,
       ft: null,

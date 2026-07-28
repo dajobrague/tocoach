@@ -1,21 +1,36 @@
 "use client";
 
+// Seguimiento (rediseño, rebanada 1): semana ⇄ mes.
+// La semana conserva toda la mecánica existente (LRU + prefetch, teclado,
+// popovers de métricas, videos); el mes es la vista nueva pedida por José.
+// Ambas comparten selección de día, el detalle de abajo y la MISMA
+// clasificación (day-label.ts + buildDayMetricsRange).
+
 import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useClientExerciseLogs } from "../workouts/use-client-exercise-logs";
+import { useUrlEnum } from "../../use-url-state";
 
 import { DayDetail } from "./day-detail";
+import { MonthGrid } from "./month-grid";
+import { useMonthMetrics } from "./use-month-metrics";
 import { useWeekMetrics } from "./use-week-metrics";
 import { WeekNavigator } from "./week-navigator";
 import { WeekStrip } from "./week-strip";
 
+import {
+  firstOfMonth,
+  shiftMonth,
+} from "@/features/trainer/cycles/calendar-helpers";
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
   TrainerExerciseVideoModal,
   type TrainerExerciseVideoHandle,
 } from "@/components/trainer/trainer-exercise-video-modal";
+
+const VIEW_KEYS = ["semana", "mes"] as const;
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -43,17 +58,26 @@ interface Props {
 }
 
 export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
+  const [view, setView] = useUrlEnum("v", VIEW_KEYS, "semana");
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(new Date())
+  );
+  const [monthYmd, setMonthYmd] = useState<string>(() =>
+    firstOfMonth(getLocalYmd(new Date()))
   );
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     getLocalYmd(new Date())
   );
-  const { data, loading, error, refetch } = useWeekMetrics(clientId, weekStart);
+  const todayYmd = getLocalYmd(new Date());
+
+  const week = useWeekMetrics(clientId, weekStart);
+  // El hook del mes solo trabaja cuando la vista es "mes" (monta condicional
+  // sería más limpio, pero el hook es barato con cache y así la vuelta
+  // semana→mes es instantánea).
+  const month = useMonthMetrics(clientId, monthYmd);
 
   // Historial all-time de logs por ejercicio — un solo fetch a nivel de
-  // sección (igual que en Entrenamiento/Cardio) compartido por todos los
-  // popovers de métricas del detalle del día.
+  // sección compartido por todos los popovers de métricas del detalle.
   const { getLogsForExercise } = useClientExerciseLogs(clientId);
 
   const videoModalRef = useRef<TrainerExerciseVideoHandle>(null);
@@ -62,10 +86,13 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     []
   );
 
-  // Reset selected date when client changes.
+  // Reset selección al cambiar de cliente.
   useEffect(() => {
-    setSelectedDate(getLocalYmd(new Date()));
-    setWeekStart(startOfWeek(new Date()));
+    const now = new Date();
+
+    setSelectedDate(getLocalYmd(now));
+    setWeekStart(startOfWeek(now));
+    setMonthYmd(firstOfMonth(getLocalYmd(now)));
   }, [clientId]);
 
   const handlePrev = useCallback(() => setWeekStart((w) => addDays(w, -7)), []);
@@ -74,77 +101,133 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
     const today = new Date();
 
     setWeekStart(startOfWeek(today));
+    setMonthYmd(firstOfMonth(getLocalYmd(today)));
     setSelectedDate(getLocalYmd(today));
   }, []);
   const handlePickDate = useCallback((ymd: string) => {
     const d = new Date(ymd + "T00:00:00");
 
     setWeekStart(startOfWeek(d));
+    setMonthYmd(firstOfMonth(ymd));
     setSelectedDate(ymd);
+  }, []);
+
+  // Al seleccionar un día del mes, la semana lo sigue — volver a "Semana"
+  // cae en la semana del día elegido, no donde quedó antes.
+  const handleSelectFromMonth = useCallback((ymd: string) => {
+    setSelectedDate(ymd);
+    setWeekStart(startOfWeek(new Date(ymd + "T00:00:00")));
   }, []);
 
   // Arrow-key navigation forwarded from WeekStrip's focused day button.
   const handleArrowNav = useCallback(
     (direction: "left" | "right") => {
-      if (!data) return;
-      const idx = data.days.findIndex((d) => d.date === selectedDate);
+      if (!week.data) return;
+      const idx = week.data.days.findIndex((d) => d.date === selectedDate);
 
       if (idx === -1) return;
       if (direction === "left" && idx > 0) {
-        setSelectedDate(data.days[idx - 1]!.date);
-      } else if (direction === "right" && idx < data.days.length - 1) {
-        setSelectedDate(data.days[idx + 1]!.date);
+        setSelectedDate(week.data.days[idx - 1]!.date);
+      } else if (direction === "right" && idx < week.data.days.length - 1) {
+        setSelectedDate(week.data.days[idx + 1]!.date);
       }
     },
-    [data, selectedDate]
+    [week.data, selectedDate]
   );
 
-  const selectedDay = useMemo(
-    () => data?.days.find((d) => d.date === selectedDate) ?? null,
-    [data, selectedDate]
-  );
+  // El detalle del día sale de la vista activa; el mes cubre semanas
+  // completas así que un día seleccionado fuera del mes visible igual
+  // resuelve.
+  const selectedDay = useMemo(() => {
+    if (view === "mes") {
+      return month.byDate?.get(selectedDate) ?? null;
+    }
 
-  // "No prescription anywhere this week" is the trigger for the empty-state
-  // banner. We don't try to detect a missing client_program globally — if the
-  // week has no scheduled sessions and no orphans either, we surface the
-  // empty state instead of an empty strip of dashes.
+    return week.data?.days.find((d) => d.date === selectedDate) ?? null;
+  }, [view, month.byDate, week.data, selectedDate]);
+
   const weekIsCompletelyEmpty =
-    !!data &&
-    data.days.every((d) => d.sessions.length === 0) &&
-    data.orphansByDate.size === 0;
+    !!week.data &&
+    week.data.days.every((d) => d.sessions.length === 0) &&
+    week.data.orphansByDate.size === 0;
+
+  const activeError = view === "mes" ? month.error : week.error;
+  const activeRefetch = view === "mes" ? month.refetch : week.refetch;
 
   return (
     <section className="flex flex-col gap-4">
-      <WeekNavigator
-        weekStartYmd={getLocalYmd(weekStart)}
-        onPickDate={handlePickDate}
-        onToday={handleToday}
-      />
+      {/* Header: navegación de la vista activa + toggle Semana/Mes. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {view === "semana" ? (
+          <WeekNavigator
+            weekStartYmd={getLocalYmd(weekStart)}
+            onPickDate={handlePickDate}
+            onToday={handleToday}
+          />
+        ) : (
+          <div />
+        )}
 
-      {error ? (
-        <div className="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 flex items-center justify-between gap-3">
-          <span>{error}</span>
-          <Button size="sm" variant="flat" onPress={refetch}>
+        <div
+          aria-label="Vista de seguimiento"
+          className="flex self-start rounded-large bg-gray-100 p-1"
+          role="tablist"
+        >
+          {(
+            [
+              { key: "semana", label: "Semana", icon: "solar:list-linear" },
+              { key: "mes", label: "Mes", icon: "solar:calendar-linear" },
+            ] as const
+          ).map((t) => {
+            const isActive = view === t.key;
+
+            return (
+              <button
+                key={t.key}
+                aria-selected={isActive}
+                className={`flex items-center gap-1.5 rounded-medium px-3 py-1.5 text-sm transition ${
+                  isActive
+                    ? "bg-white font-medium text-gray-900 shadow-sm"
+                    : "font-normal text-default-500 hover:text-default-700"
+                }`}
+                role="tab"
+                type="button"
+                onClick={() => setView(t.key)}
+              >
+                <Icon icon={t.icon} width={15} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeError ? (
+        <div className="flex items-center justify-between gap-3 rounded-large border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+          <span>{activeError}</span>
+          <Button size="sm" variant="flat" onPress={activeRefetch}>
             Reintentar
           </Button>
         </div>
       ) : null}
 
-      {loading && !data ? (
-        <div className="grid grid-cols-7 gap-1.5">
-          {Array.from({ length: 7 }, (_, i) => (
-            <Skeleton key={i} className="h-24 rounded-lg" />
-          ))}
-        </div>
-      ) : data && !weekIsCompletelyEmpty ? (
-        <>
+      {view === "semana" ? (
+        week.loading && !week.data ? (
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: 7 }, (_, i) => (
+              <Skeleton key={i} className="h-24 rounded-large" />
+            ))}
+          </div>
+        ) : week.data && !weekIsCompletelyEmpty ? (
           <div
             className={
-              loading ? "opacity-50 transition-opacity" : "transition-opacity"
+              week.loading
+                ? "opacity-50 transition-opacity"
+                : "transition-opacity"
             }
           >
             <WeekStrip
-              days={data.days}
+              days={week.data.days}
               selectedDate={selectedDate}
               onArrowNav={handleArrowNav}
               onNextWeek={handleNext}
@@ -152,43 +235,65 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
               onSelect={setSelectedDate}
             />
           </div>
+        ) : null
+      ) : month.loading && !month.byDate ? (
+        <Skeleton className="h-[26rem] rounded-large" />
+      ) : month.byDate ? (
+        <div
+          className={
+            month.loading
+              ? "opacity-50 transition-opacity"
+              : "transition-opacity"
+          }
+        >
+          <MonthGrid
+            byDate={month.byDate}
+            monthYmd={monthYmd}
+            selectedDate={selectedDate}
+            todayYmd={todayYmd}
+            onNextMonth={() => setMonthYmd((m) => shiftMonth(m, 1))}
+            onPrevMonth={() => setMonthYmd((m) => shiftMonth(m, -1))}
+            onSelect={handleSelectFromMonth}
+            onToday={handleToday}
+          />
+        </div>
+      ) : null}
 
-          {selectedDay ? (
-            <DayDetail
-              clientId={clientId}
-              day={selectedDay}
-              getLogsForExercise={getLogsForExercise}
-              orphanLogs={data.orphansByDate.get(selectedDate) ?? []}
-              onPlayVideo={openVideo}
-            />
-          ) : null}
-        </>
+      {selectedDay ? (
+        <DayDetail
+          clientId={clientId}
+          day={selectedDay}
+          getLogsForExercise={getLogsForExercise}
+          orphanLogs={[]}
+          onPlayVideo={openVideo}
+        />
       ) : null}
 
       <TrainerExerciseVideoModal ref={videoModalRef} />
 
-      {data && weekIsCompletelyEmpty ? (
-        <div className="rounded-lg border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800 flex items-start gap-3">
+      {view === "semana" && week.data && weekIsCompletelyEmpty ? (
+        <div className="flex flex-col items-center gap-2 rounded-large border border-dashed border-gray-200 bg-gray-50/60 py-10 text-center">
           <Icon
-            className="mt-0.5 text-warning-600"
-            icon="solar:info-circle-bold"
-            width={18}
+            className="text-default-300"
+            icon="solar:calendar-linear"
+            width={28}
           />
-          <div className="flex-1">
-            <p className="font-medium mb-1">Semana sin sesiones programadas</p>
-            <p className="text-warning-700">
-              Esta semana no tiene actividad programada ni registrada.
-            </p>
-            {onSwitchToConfig ? (
-              <button
-                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800 underline"
-                type="button"
-                onClick={onSwitchToConfig}
-              >
-                Ir a Configuración →
-              </button>
-            ) : null}
-          </div>
+          <p className="text-sm font-semibold text-gray-900">
+            Semana sin sesiones programadas
+          </p>
+          <p className="max-w-md text-sm text-default-500">
+            Esta semana no tiene actividad programada ni registrada.
+          </p>
+          {onSwitchToConfig ? (
+            <Button
+              className="mt-1"
+              size="sm"
+              variant="bordered"
+              onPress={onSwitchToConfig}
+            >
+              Configurar microciclo
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </section>

@@ -12,8 +12,20 @@ export type ParamPatch = Record<string, string | null>;
  * the follow-up per-tab plan.
  */
 export const CHILD_PARAMS: Record<string, string[]> = {
-  tab: ["sub", "m", "nd", "ndv", "ft", "fv", "ex", "hd", "modal", "modalId"],
-  sub: ["m", "ex", "hd", "modal", "modalId"],
+  tab: [
+    "sub",
+    "m",
+    "v",
+    "nd",
+    "ndv",
+    "ft",
+    "fv",
+    "ex",
+    "hd",
+    "modal",
+    "modalId",
+  ],
+  sub: ["m", "v", "ex", "hd", "modal", "modalId"],
 };
 
 /**

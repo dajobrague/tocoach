@@ -34,6 +34,9 @@ export interface ScheduledSessionRow {
   scheduled_date: string;
   status: "scheduled" | "completed" | "missed" | "cancelled" | "rescheduled";
   completion_date: string | null;
+  /** Hora de inicio declarada por el cliente ("HH:MM:SS"); ausente en filas
+   *  template-virtuales y en sesiones donde nunca la registró. */
+  scheduled_time?: string | null;
   session: SessionLite | null;
   /**
    * Sesión que el microciclo originalmente recomendaba para esta fecha.

@@ -5,6 +5,7 @@ import type { DayClassification, DayMetrics } from "./types";
 import { Icon } from "@iconify/react";
 
 import { classificationLabel } from "./adherence";
+import { dayLabelClassification } from "./day-label";
 
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 
@@ -28,14 +29,13 @@ function borderClassFor(
   classification: DayClassification,
   isSelected: boolean
 ): string {
-  if (isSelected) return "border-blue-500 bg-blue-50";
+  if (isSelected) return "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500";
   if (classification === "complete")
-    return "border-green-200 hover:bg-green-50/50";
+    return "border-emerald-200 bg-white hover:border-emerald-300 hover:shadow-sm";
   if (classification === "partial")
-    return "border-amber-200 hover:bg-amber-50/50";
-  if (classification === "pending") return "border-gray-200 hover:bg-gray-50";
+    return "border-amber-200 bg-white hover:border-amber-300 hover:shadow-sm";
 
-  return "border-gray-200 hover:bg-gray-50";
+  return "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm";
 }
 
 interface Props {
@@ -105,30 +105,10 @@ export function WeekStrip({
               ? (day.sessions[0]!.scheduledSession.session?.name ?? "Sesión")
               : `${day.sessions.length} sesiones`;
 
-          // Estado del día en palabras (Hecho / Empezado / Sin hacer). El %
-          // de ejercicios dejó de ser el dato del selector: una sesión
-          // marcada como completada con ejercicios saltados mostraba "33%"
-          // pese a estar terminada. El detalle del día conserva las métricas.
-          // Con varias sesiones, "Hecho" exige TODAS completas (el borde
-          // conserva su agregación histórica de "alguna completa").
-          const nonFutureSessions = day.sessions.filter(
-            (s) => s.classification !== "future"
-          );
-          const labelClassification: DayClassification = isRest
-            ? day.isFuture
-              ? "future"
-              : "rest"
-            : nonFutureSessions.length === 0
-              ? "future"
-              : nonFutureSessions.every((s) => s.classification === "complete")
-                ? "complete"
-                : nonFutureSessions.some(
-                      (s) =>
-                        s.classification === "complete" ||
-                        s.classification === "partial"
-                    )
-                  ? "partial"
-                  : "pending";
+          // Estado del día en palabras (Hecho / Empezado / Sin hacer) — regla
+          // compartida con la vista de mes (day-label.ts) para que ambas
+          // digan lo mismo. El detalle del día conserva las métricas.
+          const labelClassification = dayLabelClassification(day);
           const statusLabel = isRest
             ? ""
             : classificationLabel(labelClassification);
@@ -146,7 +126,7 @@ export function WeekStrip({
               aria-label={ariaLabel}
               aria-selected={isSelected}
               className={[
-                "relative flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors text-left",
+                "relative flex flex-col items-center gap-1 rounded-large border p-2 text-left transition-all",
                 borderClassFor(dayClassification, isSelected),
                 day.isFuture ? "opacity-70" : "",
               ].join(" ")}
@@ -169,18 +149,12 @@ export function WeekStrip({
               </span>
               <span
                 className={[
-                  "text-base font-semibold tabular-nums",
-                  day.isToday ? "text-blue-600" : "text-gray-900",
+                  "flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-base font-semibold tabular-nums",
+                  day.isToday ? "bg-slate-900 text-white" : "text-gray-900",
                 ].join(" ")}
               >
                 {dayNumber}
               </span>
-              {day.isToday ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-blue-500"
-                />
-              ) : null}
               <span className="text-[10px] text-gray-500 leading-tight text-center min-h-[1rem] line-clamp-1">
                 {sessionLabel}
               </span>
