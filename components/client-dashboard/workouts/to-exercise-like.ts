@@ -25,6 +25,11 @@ export function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.weight_kg != null) out.weightKg = r.weight_kg;
   if (r.image_url) out.imageUrl = r.image_url;
   if (r.video_url) out.videoUrl = r.video_url;
+  // Video subido directo a la app. Sin este mapeo, los ejercicios cuyo
+  // video es un archivo subido (no un enlace externo) mostraban el botón
+  // "Ver video" SOLO en el template path (programas) y nunca en el día
+  // resuelto — la intermitencia reportada por varios trainers.
+  if (r.uploaded_video_url) out.uploadedVideoUrl = r.uploaded_video_url;
   if (r.duration_seconds != null) {
     out.duration = Math.round(r.duration_seconds / 60);
   }

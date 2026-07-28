@@ -25,6 +25,13 @@ interface ResolvedExercise {
   image_url: string | null;
   /** Library reference/demo video (separate from per-set client uploads). */
   video_url: string | null;
+  /**
+   * Video subido directo a la app (bucket exercise-videos). Campo hermano
+   * de video_url (enlace externo): la biblioteca del trainer permite ambos
+   * y el cliente debe ver el que exista — omitirlo aquí dejaba invisibles
+   * TODOS los videos subidos (solo los enlaces externos llegaban).
+   */
+  uploaded_video_url: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;
@@ -132,7 +139,7 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
-             exercise:exercises(id, name, category, image_url, video_url)
+             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url)
            )
          )`
       )
@@ -217,7 +224,7 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
-             exercise:exercises(id, name, category, image_url, video_url)
+             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url)
            )`
         )
         .eq("id", slotMatch.sessionId)
@@ -318,6 +325,7 @@ function makeResolvedDay(
       category: string;
       image_url: string | null;
       video_url: string | null;
+      uploaded_video_url?: string | null;
     };
   }>,
   trainerRecommendedSessionId: string | null
@@ -344,6 +352,7 @@ function makeResolvedDay(
         category: r.exercise.category,
         image_url: r.exercise.image_url ?? null,
         video_url: r.exercise.video_url ?? null,
+        uploaded_video_url: r.exercise.uploaded_video_url ?? null,
         exercise_order: r.exercise_order,
         sets: r.sets,
         reps: r.reps,
