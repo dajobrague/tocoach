@@ -11,6 +11,7 @@ import {
   buildOptionSnapshot,
   freezeFoodIngredient,
   overlayLiveMedia,
+  snapshotBrand,
   withTrainerComment,
 } from "../option-snapshot";
 
@@ -586,5 +587,48 @@ describe("withTrainerComment", () => {
     withTrainerComment(snap, "Nota");
 
     expect(snap.trainerComment).toBeNull();
+  });
+});
+
+describe("snapshotBrand", () => {
+  it("returns the brand a food option froze on its ingredient line", () => {
+    const snap = buildOptionSnapshot({
+      type: "food",
+      food: food({ brand: "Hacendado" }),
+    });
+
+    expect(snapshotBrand(snap)).toBe("Hacendado");
+  });
+
+  it("returns null for recipes, even with branded lines", () => {
+    const snap = buildOptionSnapshot({
+      type: "recipe",
+      recipe: recipe({
+        ingredients: [
+          {
+            name: "Yogur griego",
+            brand: "Hacendado",
+            quantity: 250,
+            unit: "g",
+            gramsPerUnit: null,
+            nutrientSnapshot: {},
+          },
+        ],
+      }),
+    });
+
+    expect(snapshotBrand(snap)).toBeNull();
+  });
+
+  it("returns null for unbranded foods, blank brands and legacy shapes", () => {
+    expect(
+      snapshotBrand(buildOptionSnapshot({ type: "food", food: food() }))
+    ).toBeNull();
+    expect(
+      snapshotBrand({ sourceType: "food", ingredients: [{ brand: "  " }] })
+    ).toBeNull();
+    expect(snapshotBrand({ sourceType: "food" })).toBeNull();
+    expect(snapshotBrand(null)).toBeNull();
+    expect(snapshotBrand(undefined)).toBeNull();
   });
 });

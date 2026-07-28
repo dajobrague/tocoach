@@ -102,6 +102,29 @@ export type SnapshotSource =
   | { type: "recipe"; recipe: RecipeSnapshotInput }
   | { type: "food"; food: FoodSnapshotInput };
 
+/**
+ * The display brand of a frozen option ("Hacendado"), so every surface that
+ * shows the option's name can show which supermarket product it is. Only food
+ * options have one — it lives on their single ingredient line; recipes are
+ * homemade (their per-line brands are shown in the ingredient list instead).
+ * Null for recipes, unbranded foods and legacy snapshots frozen without it.
+ */
+export function snapshotBrand(
+  snapshot:
+    | {
+        sourceType?: string;
+        ingredients?: Array<{ brand?: string | null }>;
+      }
+    | null
+    | undefined
+): string | null {
+  if (snapshot?.sourceType !== "food") {
+    return null;
+  }
+
+  return nonEmptyOrNull(snapshot.ingredients?.[0]?.brand);
+}
+
 export function buildOptionSnapshot(source: SnapshotSource): OptionSnapshot {
   return source.type === "recipe"
     ? buildRecipeSnapshot(source.recipe)

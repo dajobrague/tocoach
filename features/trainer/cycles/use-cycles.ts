@@ -11,6 +11,7 @@ import type {
   RecipeHit,
   FoodHit,
 } from "./cycle-api";
+import type { NutritionSection } from "@/lib/nutrition/delivery-visibility";
 
 import {
   keepPreviousData,
@@ -32,6 +33,7 @@ import {
   deleteGoalPreset,
   deleteOption,
   deleteSlot,
+  fetchClientVisibility,
   fetchDietPdf,
   fetchClientGoals,
   fetchCycleTree,
@@ -41,6 +43,7 @@ import {
   renameDay,
   reorderDay,
   saveClientGoals,
+  saveClientVisibility,
   searchFoods,
   searchRecipes,
   updateCycle,
@@ -489,5 +492,26 @@ export function useDeleteDietPdf(clientId: number) {
     mutationFn: () => deleteDietPdf(clientId),
     onSuccess: () =>
       client.invalidateQueries({ queryKey: dietPdfKey(clientId) }),
+  });
+}
+
+const visibilityKey = (clientId: number) =>
+  ["nutrition-visibility", clientId] as const;
+
+/** The trainer's saved visibility choice — null means "Automático". */
+export function useClientVisibility(clientId: number) {
+  return useQuery({
+    queryKey: visibilityKey(clientId),
+    queryFn: () => fetchClientVisibility(clientId),
+  });
+}
+
+export function useSaveClientVisibility(clientId: number) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sections: NutritionSection[] | null) =>
+      saveClientVisibility(clientId, sections),
+    onSuccess: (saved) => client.setQueryData(visibilityKey(clientId), saved),
   });
 }

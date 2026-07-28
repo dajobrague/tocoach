@@ -17,9 +17,17 @@ import { aggregateShoppingList } from "../shopping-list";
 function ingredient(
   name: string,
   quantity: number,
-  unit = "g"
+  unit = "g",
+  brand: string | null = null
 ): SnapshotIngredient {
-  return { name, quantity, unit, gramsPerUnit: null, nutrientsPer100g: {} };
+  return {
+    name,
+    brand,
+    quantity,
+    unit,
+    gramsPerUnit: null,
+    nutrientsPer100g: {},
+  };
 }
 
 function option(
@@ -157,7 +165,9 @@ describe("aggregateShoppingList — sum across days", () => {
       to: "2026-06-07",
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 350 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 350 },
+    ]);
   });
 
   it("sums a single day (range of one) without multiplying", () => {
@@ -172,7 +182,9 @@ describe("aggregateShoppingList — sum across days", () => {
       to: "2026-06-01",
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 50 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 50 },
+    ]);
   });
 
   it("merges duplicate (name, unit) lines within and across days", () => {
@@ -189,7 +201,9 @@ describe("aggregateShoppingList — sum across days", () => {
       to: "2026-06-02",
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 160 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 160 },
+    ]);
   });
 });
 
@@ -213,8 +227,8 @@ describe("aggregateShoppingList — unit separation (never merge across units)",
 
     // Distinct units stay distinct; sorted by name then unit (g before ml).
     expect(items).toEqual([
-      { name: "Milk", unit: "g", quantity: 100 },
-      { name: "Milk", unit: "ml", quantity: 200 },
+      { name: "Milk", brand: null, unit: "g", quantity: 100 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 200 },
     ]);
   });
 
@@ -236,8 +250,55 @@ describe("aggregateShoppingList — unit separation (never merge across units)",
     });
 
     expect(items).toEqual([
-      { name: "Milk", unit: "g", quantity: 300 },
-      { name: "Milk", unit: "ml", quantity: 600 },
+      { name: "Milk", brand: null, unit: "g", quantity: 300 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 600 },
+    ]);
+  });
+});
+
+describe("aggregateShoppingList — brand separation (never merge across brands)", () => {
+  it("keeps the same name in different brands as separate lines", () => {
+    const t = tree([
+      slot("s1", 0, [
+        option("o1", 0, [
+          ingredient("Yogur griego", 250, "g", "Hacendado"),
+          ingredient("Yogur griego", 125, "g", "Danone"),
+          ingredient("Yogur griego", 125, "g"),
+        ]),
+      ]),
+    ]);
+
+    const items = aggregateShoppingList({
+      tree: t,
+      selections: NO_SELECTIONS,
+      from: "2026-06-01",
+      to: "2026-06-01",
+    });
+
+    // Unbranded first (empty brand sorts before any), then brands A→Z.
+    expect(items).toEqual([
+      { name: "Yogur griego", brand: null, unit: "g", quantity: 125 },
+      { name: "Yogur griego", brand: "Danone", unit: "g", quantity: 125 },
+      { name: "Yogur griego", brand: "Hacendado", unit: "g", quantity: 250 },
+    ]);
+  });
+
+  it("sums the same (name, brand, unit) across days", () => {
+    const t = tree([
+      slot("s1", 0, [
+        option("o1", 0, [ingredient("Yogur griego", 125, "g", "Hacendado")]),
+      ]),
+    ]);
+
+    const items = aggregateShoppingList({
+      tree: t,
+      selections: NO_SELECTIONS,
+      from: "2026-06-01",
+      to: "2026-06-02",
+    });
+
+    expect(items).toEqual([
+      { name: "Yogur griego", brand: "Hacendado", unit: "g", quantity: 250 },
     ]);
   });
 });
@@ -280,7 +341,9 @@ describe("aggregateShoppingList — selection / first-option fallback", () => {
     });
 
     // optB is first by position → Tofu, not Pollo.
-    expect(items).toEqual([{ name: "Tofu", unit: "g", quantity: 150 }]);
+    expect(items).toEqual([
+      { name: "Tofu", brand: null, unit: "g", quantity: 150 },
+    ]);
   });
 
   it("uses the SELECTED option when the client has chosen one", () => {
@@ -291,7 +354,9 @@ describe("aggregateShoppingList — selection / first-option fallback", () => {
       to: "2026-06-01",
     });
 
-    expect(items).toEqual([{ name: "Pollo", unit: "g", quantity: 200 }]);
+    expect(items).toEqual([
+      { name: "Pollo", brand: null, unit: "g", quantity: 200 },
+    ]);
   });
 
   it("falls back to the first option when the selection points to a missing option", () => {
@@ -303,7 +368,9 @@ describe("aggregateShoppingList — selection / first-option fallback", () => {
       to: "2026-06-01",
     });
 
-    expect(items).toEqual([{ name: "Tofu", unit: "g", quantity: 150 }]);
+    expect(items).toEqual([
+      { name: "Tofu", brand: null, unit: "g", quantity: 150 },
+    ]);
   });
 
   it("ignores a selection that targets a different slot", () => {
@@ -315,7 +382,9 @@ describe("aggregateShoppingList — selection / first-option fallback", () => {
     });
 
     // Selection is for another slot → first option of s1 wins.
-    expect(items).toEqual([{ name: "Tofu", unit: "g", quantity: 150 }]);
+    expect(items).toEqual([
+      { name: "Tofu", brand: null, unit: "g", quantity: 150 },
+    ]);
   });
 });
 
@@ -336,7 +405,9 @@ describe("aggregateShoppingList — dates before cycle start contribute nothing"
     });
 
     // Only 2026-06-05, -06, -07 count (3 days) → 150g, not 350g.
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 150 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 150 },
+    ]);
   });
 
   it("returns [] when the whole range is before the cycle start", () => {
@@ -378,8 +449,8 @@ describe("aggregateShoppingList — multi-day rotation", () => {
     });
 
     expect(items).toEqual([
-      { name: "Oats", unit: "g", quantity: 100 },
-      { name: "Rice", unit: "g", quantity: 160 },
+      { name: "Oats", brand: null, unit: "g", quantity: 100 },
+      { name: "Rice", brand: null, unit: "g", quantity: 160 },
     ]);
   });
 });
@@ -405,7 +476,9 @@ describe("aggregateShoppingList — menu choices beat the rotation", () => {
       menuChoices: { "2026-06-02": 0 },
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 100 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 100 },
+    ]);
   });
 
   it("ignores an out-of-range choice and falls back to the rotation", () => {
@@ -423,7 +496,9 @@ describe("aggregateShoppingList — menu choices beat the rotation", () => {
       menuChoices: { "2026-06-01": 9 },
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 50 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 50 },
+    ]);
   });
 });
 
@@ -463,6 +538,8 @@ describe("aggregateShoppingList — sorting & name normalization", () => {
       to: "2026-06-01",
     });
 
-    expect(items).toEqual([{ name: "Oats", unit: "g", quantity: 75 }]);
+    expect(items).toEqual([
+      { name: "Oats", brand: null, unit: "g", quantity: 75 },
+    ]);
   });
 });

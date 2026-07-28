@@ -104,6 +104,12 @@ function OptionCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
             {snapshot.name}
+            {snapshot.brand !== null && (
+              <span className="font-normal text-default-400">
+                {" · "}
+                {snapshot.brand}
+              </span>
+            )}
           </p>
           {showMacros ? (
             <MacroDotsLine
@@ -217,6 +223,12 @@ function CarouselOptionCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
             {snapshot.name}
+            {snapshot.brand !== null && (
+              <span className="font-normal text-default-400">
+                {" · "}
+                {snapshot.brand}
+              </span>
+            )}
           </p>
           {showMacros ? (
             <p className="text-xs text-default-500 tabular-nums">

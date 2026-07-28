@@ -19,6 +19,8 @@ import { PickerDrawer } from "./picker-drawer";
 /** A recipe ingredient line the trainer can re-portion (native-unit amount). */
 export interface CartIngredient {
   name: string;
+  /** Frozen product brand for display; null/absent for unbranded lines. */
+  brand?: string | null;
   unit: string;
   quantity: number;
 }
@@ -27,6 +29,8 @@ export interface CartIngredient {
 export interface MealCartItem {
   selection: OptionSelection;
   name: string;
+  /** Product brand for food items ("Hacendado"); null/absent for recipes. */
+  brand?: string | null;
   image: string | null;
   /** Recipe ingredient lines — present for recipes, edited per-ingredient. */
   ingredients?: CartIngredient[];
@@ -35,10 +39,16 @@ export interface MealCartItem {
 /** Internal, editable form — foods edit grams, recipes edit each ingredient. */
 interface EditItem {
   name: string;
+  brand: string | null;
   image: string | null;
   kind: "recipe" | "food";
   refId: string;
-  ingredients: { name: string; unit: string; quantity: string }[];
+  ingredients: {
+    name: string;
+    brand: string | null;
+    unit: string;
+    quantity: string;
+  }[];
   grams: string;
 }
 
@@ -46,11 +56,13 @@ function toEditItem(item: MealCartItem): EditItem {
   if (item.selection.kind === "recipe") {
     return {
       name: item.name,
+      brand: null,
       image: item.image,
       kind: "recipe",
       refId: item.selection.recipeId,
       ingredients: (item.ingredients ?? []).map((line) => ({
         name: line.name,
+        brand: line.brand ?? null,
         unit: line.unit,
         quantity: String(line.quantity),
       })),
@@ -60,6 +72,7 @@ function toEditItem(item: MealCartItem): EditItem {
 
   return {
     name: item.name,
+    brand: item.brand ?? null,
     image: item.image,
     kind: "food",
     refId: item.selection.ingredientId,
@@ -196,6 +209,12 @@ export function MealOverrideDrawer({
                       )}
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
                         {item.name}
+                        {item.brand !== null && (
+                          <span className="font-normal text-default-400">
+                            {" · "}
+                            {item.brand}
+                          </span>
+                        )}
                       </span>
                       {item.kind === "food" ? (
                         <Input
@@ -234,6 +253,12 @@ export function MealOverrideDrawer({
                           >
                             <span className="min-w-0 flex-1 truncate text-xs text-default-600">
                               {line.name}
+                              {line.brand !== null && (
+                                <span className="text-default-400">
+                                  {" · "}
+                                  {line.brand}
+                                </span>
+                              )}
                             </span>
                             <Input
                               aria-label={`Cantidad de ${line.name}`}

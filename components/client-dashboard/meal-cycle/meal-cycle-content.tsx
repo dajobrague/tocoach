@@ -148,19 +148,34 @@ export function MealCycleContent() {
     );
   }
 
-  // No active plan → walk the delivery ladder the route resolved: a PDF diet,
-  // then goals-only (default goals and/or named objectives), then empty.
+  // No plan section → show what the trainer chose (sections stack: goals
+  // first — "los objetivos son lo importante" — then the PDF). Responses
+  // without `sections` (older server) walk the automatic ladder as before:
+  // PDF, else goals-only, else empty.
   if (data === undefined || data === null || data.cycle === null) {
     const pdf = data?.fallback?.pdf ?? null;
     const presets = data?.fallback?.presets ?? [];
     const goals = data?.goals ?? null;
+    const sections = data?.sections;
+    const hasGoalsData = goals !== null || presets.length > 0;
+    const showGoals =
+      sections !== undefined
+        ? sections.includes("goals") && hasGoalsData
+        : pdf === null && hasGoalsData;
+    const showPdf =
+      pdf !== null && (sections === undefined || sections.includes("pdf"));
 
     return (
       <MealCycleShell>
-        {pdf !== null ? (
-          <PdfDietView name={pdf.name} url={pdf.url} />
-        ) : goals !== null || presets.length > 0 ? (
-          <GoalsOnlyView goals={goals} presets={presets} />
+        {showGoals || showPdf ? (
+          <div className="flex flex-col gap-6">
+            {showGoals ? (
+              <GoalsOnlyView goals={goals} presets={presets} />
+            ) : null}
+            {showPdf && pdf !== null ? (
+              <PdfDietView name={pdf.name} url={pdf.url} />
+            ) : null}
+          </div>
         ) : (
           <CenteredState
             icon="solar:plate-linear"
@@ -265,6 +280,16 @@ export function MealCycleContent() {
             )}
           </>
         )}
+
+        {/* Trainer chose plan + PDF → the document rides along under the plan. */}
+        {data.sections?.includes("pdf") === true &&
+        data.fallback?.pdf !== null &&
+        data.fallback?.pdf !== undefined ? (
+          <PdfDietView
+            name={data.fallback.pdf.name}
+            url={data.fallback.pdf.url}
+          />
+        ) : null}
       </div>
 
       <RecipeOptionDetail

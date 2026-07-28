@@ -39,6 +39,7 @@ import {
 } from "./use-overrides";
 
 import { currentCycleDayIndex } from "@/lib/nutrition/cycles/cycle-day";
+import { snapshotBrand } from "@/lib/nutrition/cycles/option-snapshot";
 import {
   overrideAppliesToDate,
   resolveOverridesForDate,
@@ -128,7 +129,21 @@ function sumPrimaryKcal(options: KcalOption[]): number {
 interface ProductOption {
   id?: string;
   group_index?: number;
-  item_snapshot: { name: string; images?: { url: string }[] };
+  item_snapshot: {
+    name: string;
+    sourceType?: string;
+    images?: { url: string }[];
+    ingredients?: { brand?: string | null }[];
+  };
+}
+
+/** The display name of an option, with the food's brand when it has one. */
+function productName(option: ProductOption): string {
+  const brand = snapshotBrand(option.item_snapshot);
+
+  return brand === null
+    ? option.item_snapshot.name
+    : `${option.item_snapshot.name} (${brand})`;
 }
 
 interface MealProduct {
@@ -167,14 +182,14 @@ function groupProducts(
 
       if (chosen !== undefined) {
         return {
-          name: chosen.item_snapshot.name,
+          name: productName(chosen),
           image: chosen.item_snapshot.images?.[0]?.url ?? null,
           chosen: true,
         };
       }
 
       return {
-        name: opts.map((option) => option.item_snapshot.name).join(" o "),
+        name: opts.map((option) => productName(option)).join(" o "),
         image: opts[0]?.item_snapshot.images?.[0]?.url ?? null,
       };
     });
@@ -223,7 +238,12 @@ interface CartSnapshot {
   sourceRefId: string;
   name: string;
   images?: { url: string }[];
-  ingredients: { name: string; unit: string; quantity: number }[];
+  ingredients: {
+    name: string;
+    brand?: string | null;
+    unit: string;
+    quantity: number;
+  }[];
 }
 
 /** A snapshot → cart entry, carrying recipe ingredient lines for per-ingredient
@@ -232,11 +252,13 @@ function snapshotToCartItem(snapshot: CartSnapshot): MealCartItem {
   return {
     selection: snapshotToSelection(snapshot),
     name: snapshot.name,
+    brand: snapshotBrand(snapshot),
     image: snapshot.images?.[0]?.url ?? null,
     ...(snapshot.sourceType === "recipe"
       ? {
           ingredients: snapshot.ingredients.map((line) => ({
             name: line.name,
+            brand: line.brand ?? null,
             unit: line.unit,
             quantity: line.quantity,
           })),
@@ -268,10 +290,15 @@ function snapshotsKcal(snapshots: { totals: { kcal?: number } }[]): number {
 
 /** Product rows (name + image) for a swap's frozen snapshots. */
 function swapProducts(
-  snapshots: { name: string; images?: { url: string }[] }[]
+  snapshots: {
+    name: string;
+    sourceType?: string;
+    images?: { url: string }[];
+    ingredients?: { brand?: string | null }[];
+  }[]
 ): MealProduct[] {
   return snapshots.map((snap) => ({
-    name: snap.name,
+    name: productName({ item_snapshot: snap }),
     image: snap.images?.[0]?.url ?? null,
   }));
 }

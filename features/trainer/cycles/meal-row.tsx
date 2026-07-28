@@ -18,6 +18,8 @@ import { mealVisual } from "./cycle-format";
 import { slotComponents, slotTotals } from "./cycle-math";
 import { MacroLine } from "./macro-line";
 
+import { snapshotBrand } from "@/lib/nutrition/cycles/option-snapshot";
+
 interface MealRowProps {
   slot: CycleSlot;
   disabled: boolean;
@@ -225,6 +227,12 @@ function ComponentBlock({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-gray-900">
             {primary.item_snapshot.name}
+            {snapshotBrand(primary.item_snapshot) !== null && (
+              <span className="font-normal text-default-400">
+                {" · "}
+                {snapshotBrand(primary.item_snapshot)}
+              </span>
+            )}
           </p>
           <MacroLine
             hideKcal
@@ -308,6 +316,12 @@ function ComponentBlock({
               </span>
               <span className="min-w-0 flex-1 truncate text-gray-700">
                 {alt.item_snapshot.name}
+                {snapshotBrand(alt.item_snapshot) !== null && (
+                  <span className="text-default-400">
+                    {" · "}
+                    {snapshotBrand(alt.item_snapshot)}
+                  </span>
+                )}
               </span>
               <span className="shrink-0 text-default-500 tabular-nums">
                 {optionKcal(alt)} kcal

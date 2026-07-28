@@ -69,6 +69,7 @@ describe("normalizeOptionSnapshot", () => {
     expect(result).toEqual({
       sourceType: "recipe",
       name: "",
+      brand: null,
       steps: null,
       description: null,
       trainerComment: null,
@@ -77,5 +78,43 @@ describe("normalizeOptionSnapshot", () => {
       ingredients: [],
       totals: EMPTY_TOTALS,
     });
+  });
+
+  it("surfaces the food's brand from its ingredient line", () => {
+    const result = normalizeOptionSnapshot({
+      sourceType: "food",
+      name: "Yogur griego ligero",
+      ingredients: [
+        {
+          name: "Yogur griego ligero",
+          brand: "Hacendado",
+          quantity: 250,
+          unit: "g",
+          gramsPerUnit: null,
+          nutrientsPer100g: {},
+        },
+      ],
+    });
+
+    expect(result.brand).toBe("Hacendado");
+  });
+
+  it("keeps brand null for recipes even when lines are branded", () => {
+    const result = normalizeOptionSnapshot({
+      sourceType: "recipe",
+      name: "Bol de yogur",
+      ingredients: [
+        {
+          name: "Yogur griego",
+          brand: "Hacendado",
+          quantity: 250,
+          unit: "g",
+          gramsPerUnit: null,
+          nutrientsPer100g: {},
+        },
+      ],
+    });
+
+    expect(result.brand).toBeNull();
   });
 });
