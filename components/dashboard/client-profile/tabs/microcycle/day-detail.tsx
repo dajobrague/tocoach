@@ -18,7 +18,7 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { classificationLabel } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
@@ -118,25 +118,31 @@ function SetsTable({
       : -1;
 
   return (
-    <div className="mt-2.5 overflow-hidden rounded-large border border-gray-100 bg-white">
+    // UNA sola grilla para toda la tabla (las filas son `Fragment`s): así el
+    // ancho de la columna de acciones se calcula una vez para todas las filas
+    // y los kilos quedan alineados aunque solo una serie tenga badge. Con una
+    // grilla por fila, la fila con "Récord" encogía sus columnas y movía el
+    // número a la izquierda.
+    <div className="mt-2.5 grid grid-cols-[2.5rem_1fr_1fr_auto] overflow-hidden rounded-large border border-gray-100 bg-white text-xs tabular-nums">
       {sets.map((set, index) => {
         const isRecord = index === recordIndex;
         const lowReps =
           prescribedMin !== null &&
           typeof set.reps === "number" &&
           set.reps < prescribedMin;
+        // Borde y fondo van por CELDA: el contenedor de fila ya no existe.
+        const cell = `flex items-center ${index === 0 ? "" : "border-t border-gray-100"} ${
+          isRecord ? "bg-amber-50/40" : ""
+        }`;
 
         return (
-          <div
-            key={set.id ?? set.set_number}
-            className={`grid grid-cols-[2.5rem_1fr_1fr_auto] items-center border-t border-gray-100 text-xs tabular-nums first:border-t-0 ${
-              isRecord ? "bg-amber-50/40" : ""
-            }`}
-          >
-            <span className="px-2.5 py-1.5 text-[10.5px] font-semibold text-gray-400">
+          <Fragment key={set.id ?? set.set_number}>
+            <span
+              className={`${cell} px-2.5 py-1.5 text-[10.5px] font-semibold text-gray-400`}
+            >
               S{set.set_number}
             </span>
-            <span className="px-2.5 py-1.5 text-gray-900">
+            <span className={`${cell} px-2.5 py-1.5 text-gray-900`}>
               <b
                 className={`font-bold ${lowReps ? "text-amber-700" : ""}`}
                 title={
@@ -149,16 +155,16 @@ function SetsTable({
               </b>
               <span className="ml-1 text-[10.5px] text-gray-400">reps</span>
             </span>
-            <span className="px-2.5 py-1.5 text-gray-900">
+            <span className={`${cell} px-2.5 py-1.5 text-gray-900`}>
               <b className="font-bold">
                 {set.weight_kg != null ? formatKg(set.weight_kg) : "—"}
               </b>
               <span className="ml-1 text-[10.5px] text-gray-400">kg</span>
             </span>
-            <span className="flex items-center justify-end gap-1.5 px-2.5 py-1">
+            <span className={`${cell} justify-end gap-1.5 px-2.5 py-1`}>
               {isRecord ? (
                 <span
-                  className="inline-flex items-center gap-1 rounded-medium border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                  className="inline-flex items-center gap-1 whitespace-nowrap rounded-medium border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
                   title="Mejor marca histórica de este ejercicio"
                 >
                   🏅 Récord
@@ -167,7 +173,7 @@ function SetsTable({
               {set.video_url && onPlayVideo ? (
                 <button
                   aria-label={`Ver video de ${exerciseName} serie ${set.set_number}`}
-                  className="inline-flex items-center gap-1.5 rounded-medium border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-medium border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
                   type="button"
                   onClick={() => onPlayVideo(set.video_url!, exerciseName)}
                 >
@@ -178,7 +184,7 @@ function SetsTable({
                 </button>
               ) : null}
             </span>
-          </div>
+          </Fragment>
         );
       })}
     </div>
