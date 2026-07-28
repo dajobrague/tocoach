@@ -149,8 +149,8 @@ export function WeekStrip({
               </span>
               <span
                 className={[
-                  "flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-base font-semibold tabular-nums",
-                  day.isToday ? "bg-slate-900 text-white" : "text-gray-900",
+                  "text-base font-semibold tabular-nums",
+                  day.isToday ? "text-blue-600" : "text-gray-900",
                 ].join(" ")}
               >
                 {dayNumber}

@@ -3,7 +3,7 @@
 // Vista de MES de Seguimiento (rediseño, rebanada 1 — pedido de José:
 // "una vista de calendario podría tener más sentido").
 // Receta visual del calendario de nutrición (calendar-section): celdas
-// 4.5rem redondeadas, pip slate-900 para hoy, fuera-de-mes al 40%, futuro
+// 4.5rem redondeadas, número azul para hoy, fuera-de-mes al 40%, futuro
 // atenuado con chip punteado ("recomendación, no hecho"), leyenda con los
 // chips reales. Semántica de estado del training: Hecho / Empezado /
 // Sin hacer (misma clasificación que la semana — comparten derivación).
@@ -121,8 +121,8 @@ export function MonthGrid({
                 >
                   <span
                     className={[
-                      "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums",
-                      isToday ? "bg-slate-900 text-white" : "text-gray-700",
+                      "text-[11px] font-semibold tabular-nums",
+                      isToday ? "text-blue-600" : "text-gray-700",
                     ].join(" ")}
                   >
                     {dayNumber(cell.date)}
