@@ -276,8 +276,8 @@ describe("GET /api/client/shopping-list — aggregation", () => {
     expect(res.status).toBe(200);
     // 3 days × optB → Oats 150g and Milk 600ml (units stay separate).
     expect(body.data.items).toEqual([
-      { name: "Milk", unit: "ml", quantity: 600 },
-      { name: "Oats", unit: "g", quantity: 150 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 600 },
+      { name: "Oats", brand: null, unit: "g", quantity: 150 },
     ]);
   });
 
@@ -292,7 +292,7 @@ describe("GET /api/client/shopping-list — aggregation", () => {
 
     // optA selected → Pollo 200g × 2 days = 400g.
     expect(body.data.items).toEqual([
-      { name: "Pollo", unit: "g", quantity: 400 },
+      { name: "Pollo", brand: null, unit: "g", quantity: 400 },
     ]);
   });
 });

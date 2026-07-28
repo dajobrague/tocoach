@@ -77,7 +77,11 @@ function dayLabel(ymd: string): string {
 }
 
 function optionName(option: MealSlotOptionRow): string {
-  return normalizeOptionSnapshot(option.item_snapshot).name;
+  const snapshot = normalizeOptionSnapshot(option.item_snapshot);
+
+  return snapshot.brand === null
+    ? snapshot.name
+    : `${snapshot.name} (${snapshot.brand})`;
 }
 
 function MealRow({

@@ -89,6 +89,7 @@ export function aggregatePickedMeals(
     for (const ingredient of option.item_snapshot.ingredients ?? []) {
       lines.push({
         name: ingredient.name,
+        brand: ingredient.brand ?? null,
         unit: ingredient.unit,
         quantity: ingredient.quantity,
       });

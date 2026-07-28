@@ -6,6 +6,8 @@ import type {
 } from "@/lib/nutrition/cycles/option-snapshot";
 import type { NutrientTotals } from "@/lib/nutrition/recipes/macro-rollup";
 
+import { snapshotBrand } from "@/lib/nutrition/cycles/option-snapshot";
+
 /** A zeroed totals object — the safe default when a snapshot lacks totals. */
 export const EMPTY_TOTALS: NutrientTotals = {
   kcal: 0,
@@ -22,6 +24,9 @@ export const EMPTY_TOTALS: NutrientTotals = {
 export interface NormalizedSnapshot {
   sourceType: "recipe" | "food";
   name: string;
+  /** Product brand for food options ("Hacendado"); null for recipes,
+   *  unbranded foods and legacy snapshots. See {@link snapshotBrand}. */
+  brand: string | null;
   steps: string | null;
   /** Recipe-wide notes (frozen library description); null on legacy rows. */
   description: string | null;
@@ -48,6 +53,7 @@ export function normalizeOptionSnapshot(
   return {
     sourceType: snapshot?.sourceType === "food" ? "food" : "recipe",
     name: snapshot?.name ?? "",
+    brand: snapshotBrand(snapshot),
     steps: snapshot?.steps ?? null,
     description: snapshot?.description ?? null,
     trainerComment: snapshot?.trainerComment ?? null,

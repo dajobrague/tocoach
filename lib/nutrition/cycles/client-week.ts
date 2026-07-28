@@ -11,6 +11,7 @@ import type { MealLogRow } from "@/lib/nutrition/logs/meal-log-service";
 
 import { buildClientCycleView } from "./cycle-day";
 import { normalizeDayTargets } from "./day-targets";
+import { snapshotBrand } from "./option-snapshot";
 import { applyOverridesToClientView } from "./override-client-view";
 
 import { isWithinLogWindow } from "@/lib/nutrition/logs/log-window";
@@ -273,21 +274,18 @@ function buildMenus(
         const url = optionImage(option);
 
         if (url !== null && images.some((img) => img.url === url) === false) {
-          images.push({
-            url,
-            name:
-              typeof option.item_snapshot?.name === "string"
-                ? option.item_snapshot.name
-                : "",
-          });
+          images.push({ url, name: optionDisplayName(option.item_snapshot) });
         }
       }
 
-      const first = slot.options[0];
+      const firstName =
+        slot.options[0] === undefined
+          ? ""
+          : optionDisplayName(slot.options[0].item_snapshot);
 
       return {
         label: slot.label.trim().length > 0 ? slot.label : "Comida",
-        primaryName: first?.item_snapshot?.name ?? null,
+        primaryName: firstName === "" ? null : firstName,
         optionCount: slot.options.length,
       };
     });
@@ -309,6 +307,24 @@ function optionImage(option: {
   const url = option.item_snapshot?.images?.[0]?.url;
 
   return typeof url === "string" && url.length > 0 ? url : null;
+}
+
+/** Display name of a frozen option — foods carry their brand ("X (Hacendado)")
+ *  so the client sees which supermarket product the menu refers to. */
+function optionDisplayName(
+  snapshot:
+    | {
+        name?: unknown;
+        sourceType?: string;
+        ingredients?: Array<{ brand?: string | null }>;
+      }
+    | null
+    | undefined
+): string {
+  const name = typeof snapshot?.name === "string" ? snapshot.name : "";
+  const brand = snapshotBrand(snapshot);
+
+  return brand === null || name === "" ? name : `${name} (${brand})`;
 }
 
 /**

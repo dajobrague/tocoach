@@ -136,6 +136,11 @@ export function RecipeOptionDetail({
                     <h2 className="text-lg font-bold leading-tight text-white">
                       {snapshot.name}
                     </h2>
+                    {snapshot.brand !== null && (
+                      <p className="text-xs font-medium text-white/75">
+                        {snapshot.brand}
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -113,6 +113,9 @@ export function RecipePreviewModal({
                   >
                     <span className="h-1 w-1 flex-shrink-0 rounded-full bg-default-300" />
                     {item.name_snapshot}
+                    {item.brand !== null && item.brand.length > 0 && (
+                      <span className="text-default-400">{item.brand}</span>
+                    )}
                   </li>
                 ))}
               </ul>

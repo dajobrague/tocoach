@@ -181,8 +181,8 @@ describe("shopping-list aggregation (integration, local DB)", () => {
     const items = await shoppingListForRange("2026-06-01", "2026-06-04");
 
     expect(items).toEqual([
-      { name: "Milk", unit: "ml", quantity: 800 },
-      { name: "Oats", unit: "g", quantity: 200 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 800 },
+      { name: "Oats", brand: null, unit: "g", quantity: 200 },
     ]);
   });
 
@@ -204,9 +204,9 @@ describe("shopping-list aggregation (integration, local DB)", () => {
     const items = await shoppingListForRange("2026-06-01", "2026-06-04");
 
     expect(items).toEqual([
-      { name: "Milk", unit: "ml", quantity: 400 },
-      { name: "Oats", unit: "g", quantity: 100 },
-      { name: "Pollo", unit: "g", quantity: 400 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 400 },
+      { name: "Oats", brand: null, unit: "g", quantity: 100 },
+      { name: "Pollo", brand: null, unit: "g", quantity: 400 },
     ]);
   });
 

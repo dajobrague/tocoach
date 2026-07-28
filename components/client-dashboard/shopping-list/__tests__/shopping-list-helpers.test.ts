@@ -38,17 +38,33 @@ describe("formatQuantity — rounds away float noise", () => {
   });
 });
 
-describe("formatItemLine — name · qty unit", () => {
+describe("formatItemLine — name (brand) · qty unit", () => {
   it("formats a clean line", () => {
-    expect(formatItemLine({ name: "Avena", quantity: 350, unit: "g" })).toBe(
-      "Avena · 350 g"
-    );
+    expect(
+      formatItemLine({ name: "Avena", brand: null, quantity: 350, unit: "g" })
+    ).toBe("Avena · 350 g");
   });
 
   it("applies rounding to the quantity", () => {
     expect(
-      formatItemLine({ name: "Aceite", quantity: 1.4999, unit: "ml" })
+      formatItemLine({
+        name: "Aceite",
+        brand: null,
+        quantity: 1.4999,
+        unit: "ml",
+      })
     ).toBe("Aceite · 1.5 ml");
+  });
+
+  it("shows the brand in parentheses when the line has one", () => {
+    expect(
+      formatItemLine({
+        name: "Yogur griego",
+        brand: "Hacendado",
+        quantity: 250,
+        unit: "g",
+      })
+    ).toBe("Yogur griego (Hacendado) · 250 g");
   });
 });
 
@@ -61,6 +77,18 @@ describe("itemKey — identity for check state", () => {
 
   it("is stable for the same (name, unit)", () => {
     expect(itemKey({ name: "Leche", unit: "ml" })).toBe(
+      itemKey({ name: "Leche", unit: "ml" })
+    );
+  });
+
+  it("separates the same name across different brands", () => {
+    expect(itemKey({ name: "Leche", brand: "Hacendado", unit: "ml" })).not.toBe(
+      itemKey({ name: "Leche", brand: "Central Lechera", unit: "ml" })
+    );
+  });
+
+  it("treats a missing brand and an absent brand alike", () => {
+    expect(itemKey({ name: "Leche", brand: null, unit: "ml" })).toBe(
       itemKey({ name: "Leche", unit: "ml" })
     );
   });

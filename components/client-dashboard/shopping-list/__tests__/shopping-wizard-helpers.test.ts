@@ -136,8 +136,8 @@ describe("aggregatePickedMeals", () => {
     ]);
 
     expect(items).toEqual([
-      { name: "Milk", unit: "ml", quantity: 200 },
-      { name: "Oats", unit: "g", quantity: 50 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 200 },
+      { name: "Oats", brand: null, unit: "g", quantity: 50 },
     ]);
   });
 
@@ -153,8 +153,8 @@ describe("aggregatePickedMeals", () => {
 
     // Oats 50 + 50 = 100 (merged); Milk only on day 1 (units stay separate).
     expect(items).toEqual([
-      { name: "Milk", unit: "ml", quantity: 200 },
-      { name: "Oats", unit: "g", quantity: 100 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 200 },
+      { name: "Oats", brand: null, unit: "g", quantity: 100 },
     ]);
   });
 
@@ -163,7 +163,9 @@ describe("aggregatePickedMeals", () => {
       { date: "2026-06-08", slotId: "s1", optionId: "pollo" },
     ]);
 
-    expect(items).toEqual([{ name: "Chicken", unit: "g", quantity: 150 }]);
+    expect(items).toEqual([
+      { name: "Chicken", brand: null, unit: "g", quantity: 150 },
+    ]);
   });
 
   it("keeps a g and an ml line of the same name separate", () => {
@@ -182,8 +184,8 @@ describe("aggregatePickedMeals", () => {
     );
 
     expect(items).toEqual([
-      { name: "Milk", unit: "g", quantity: 100 },
-      { name: "Milk", unit: "ml", quantity: 200 },
+      { name: "Milk", brand: null, unit: "g", quantity: 100 },
+      { name: "Milk", brand: null, unit: "ml", quantity: 200 },
     ]);
   });
 
@@ -202,6 +204,8 @@ describe("aggregatePickedMeals", () => {
       { date: "2026-06-08", slotId: "s1", optionId: "stale-old-id" },
     ]);
 
-    expect(items).toEqual([{ name: "Tofu", unit: "g", quantity: 120 }]);
+    expect(items).toEqual([
+      { name: "Tofu", brand: null, unit: "g", quantity: 120 },
+    ]);
   });
 });
