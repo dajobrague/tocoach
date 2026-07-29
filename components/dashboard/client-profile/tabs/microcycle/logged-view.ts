@@ -15,6 +15,12 @@ export interface LoggedExerciseGroup {
   logs: ExerciseLog[];
   /** True when the client logged this exercise but it wasn't prescribed. */
   offPlan: boolean;
+  /**
+   * Sesión de origen cuando el cliente lo "tomó prestado" de otro día
+   * (exercise_logs.metadata.borrowed_from_session_name); null si es un
+   * fuera-de-plan genérico.
+   */
+  borrowedFrom: string | null;
 }
 
 /**
@@ -38,11 +44,17 @@ export function buildLoggedExerciseGroups(
       continue;
     }
 
+    const borrowedRaw = log.metadata?.borrowed_from_session_name;
+
     byId.set(id, {
       exerciseId: id,
       name: log.exercises?.name ?? "Ejercicio",
       logs: [log],
       offPlan: !prescribedIds.has(id),
+      borrowedFrom:
+        typeof borrowedRaw === "string" && borrowedRaw !== ""
+          ? borrowedRaw
+          : null,
     });
   }
 

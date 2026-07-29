@@ -12,8 +12,9 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { BorrowExerciseModal } from "./borrow-exercise-modal";
 import { collectExtraLoggedExercises } from "./extra-logged-exercises";
 import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
 import {
@@ -64,6 +65,12 @@ export interface ExerciseLike {
   uploadedVideoUrl?: string;
   // Categoría declarada por el trainer
   category?: string;
+  /**
+   * Nombre de la sesión de la que el cliente "tomó prestado" este ejercicio
+   * (feature 15-jul: agregar un ejercicio de otro día sobre la marcha).
+   * Viaja hasta exercise_logs.metadata para que el trainer vea de dónde salió.
+   */
+  borrowedFromSessionName?: string;
 }
 
 interface ExerciseLogLike {
@@ -174,10 +181,36 @@ export function ActiveSessionView({
     [logsForDate, templateExerciseIds, session.id]
   );
 
-  const allExercises = useMemo(
-    () => [...exercises, ...extraLoggedExercises],
-    [exercises, extraLoggedExercises]
-  );
+  // Ejercicios "prestados" de otra sesión, agregados por el cliente en esta
+  // visita (feature 15-jul). Estado local: al recargar, los que ya tienen log
+  // reaparecen solos vía extraLoggedExercises; los no logueados se pierden,
+  // lo cual está bien — nunca existieron.
+  const [borrowed, setBorrowed] = useState<
+    Array<ExerciseLike & Record<string, unknown>>
+  >([]);
+  const [isBorrowOpen, setIsBorrowOpen] = useState(false);
+
+  const allExercises = useMemo(() => {
+    // Mientras el prestado sigue en memoria, su versión gana sobre la fila
+    // derivada del log (conserva el chip de procedencia y la prescripción
+    // original de la otra sesión); el extra logueado equivalente se omite.
+    const borrowedIds = new Set(
+      borrowed
+        .map((e) => e.exercise_id)
+        .filter((id): id is string => Boolean(id))
+    );
+    const visibleBorrowed = borrowed.filter(
+      (e) => !templateExerciseIds.has(e.exercise_id ?? "")
+    );
+
+    return [
+      ...exercises,
+      ...extraLoggedExercises.filter(
+        (e) => !borrowedIds.has(e.exercise_id ?? "")
+      ),
+      ...visibleBorrowed,
+    ];
+  }, [exercises, extraLoggedExercises, borrowed, templateExerciseIds]);
 
   const trackable = allExercises.filter(
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
@@ -380,6 +413,34 @@ export function ActiveSessionView({
           })}
         </ul>
       )}
+
+      {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
+          sesiones ya completadas — el entrenamiento terminó. */}
+      {!sessionCompleted ? (
+        <button
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-default-300 bg-content1 px-3 py-2.5 text-sm text-default-500 transition-colors hover:border-default-400 hover:text-default-700 font-body"
+          type="button"
+          onClick={() => setIsBorrowOpen(true)}
+        >
+          <Icon icon="solar:add-circle-linear" width={17} />
+          Agregar ejercicio de otro día
+        </button>
+      ) : null}
+
+      <BorrowExerciseModal
+        currentSessionId={session.id}
+        excludedExerciseIds={
+          new Set(
+            allExercises
+              .map((e) => e.exercise_id)
+              .filter((id): id is string => Boolean(id))
+          )
+        }
+        isOpen={isBorrowOpen}
+        programs={programs}
+        onClose={() => setIsBorrowOpen(false)}
+        onPick={(exercise) => setBorrowed((prev) => [...prev, exercise])}
+      />
     </section>
   );
 }
@@ -428,6 +489,7 @@ function ExerciseRow({ exercise, status, onClick }: RowProps) {
   const stats = formatExerciseStats(exercise, isCardio);
   const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
   const style = STATUS_STYLE[status];
+  const borrowedFrom = exercise.borrowedFromSessionName;
 
   return (
     <button
@@ -459,6 +521,16 @@ function ExerciseRow({ exercise, status, onClick }: RowProps) {
           <p className="truncate text-xs font-body text-foreground/60">
             {stats}
           </p>
+        ) : null}
+        {borrowedFrom ? (
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-default-300 px-1.5 py-px text-[10px] font-body text-foreground/60">
+            <Icon
+              className="shrink-0"
+              icon="solar:transfer-horizontal-linear"
+              width={11}
+            />
+            <span className="truncate">De: {borrowedFrom}</span>
+          </span>
         ) : null}
         {hasVideo ? (
           <span className="inline-flex items-center gap-1 text-[11px] font-body text-foreground/60">

@@ -314,6 +314,9 @@ export function ExerciseLogModal({
       scheduledDate,
       notes: formData.notes,
       videoUrl: isCardio ? cardioVideo.videoUrl || null : null,
+      // Ejercicio prestado de otro día: la procedencia viaja en cada save
+      // (los autosaves reescriben el log entero, así que debe ir siempre).
+      borrowedFromSessionName: exercise?.borrowedFromSessionName ?? null,
     };
 
     if (isCardio) {
@@ -344,6 +347,7 @@ export function ExerciseLogModal({
     formData,
     isCardio,
     cardioVideo.videoUrl,
+    exercise?.borrowedFromSessionName,
   ]);
 
   // Persistencia compartida entre autosave (silent=true, finalize=false)
