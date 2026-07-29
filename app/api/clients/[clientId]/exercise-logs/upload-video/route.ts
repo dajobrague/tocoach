@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { buildVideoUploadNotificationRow } from "@/lib/notifications/video-upload-notification";
 import { compressVideo } from "@/lib/utils/server-video-compression";
 
 export const runtime = "nodejs";
@@ -129,6 +130,54 @@ export async function POST(
       "[Client Exercise Video API] Uploaded successfully:",
       publicUrl
     );
+
+    // Campana del trainer: "X subió un video". Va aquí y no en el guardado de
+    // logs porque la URL se acuña UNA vez en este upload (el autosave de logs
+    // reinserta la misma URL muchas veces). Si el trainer aún tiene una
+    // notificación sin leer de este cliente no apilamos otra — la cola de la
+    // página de métricas ya muestra el detalle. Fire-and-forget.
+    void (async () => {
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("id, tenant, name, last_name")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (!clientRow?.tenant) return;
+
+      const { data: unread } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("type", "video_upload")
+        .is("read_at", null)
+        .limit(1);
+
+      if (unread && unread.length > 0) return;
+
+      const { error: notifError } = await supabase.from("notifications").insert(
+        buildVideoUploadNotificationRow({
+          tenantSlug: session.tenant_slug,
+          clientId: Number(clientId),
+          trainerId: clientRow.tenant,
+          clientName: [clientRow.name, clientRow.last_name]
+            .filter(Boolean)
+            .join(" "),
+        })
+      );
+
+      if (notifError) {
+        console.error(
+          "[Client Exercise Video API] trainer notification insert failed:",
+          notifError
+        );
+      }
+    })().catch((e) => {
+      console.error(
+        "[Client Exercise Video API] trainer notification failed:",
+        e
+      );
+    });
 
     return NextResponse.json({
       success: true,

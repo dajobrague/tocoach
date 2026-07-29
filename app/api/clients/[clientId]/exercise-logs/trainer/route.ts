@@ -21,6 +21,50 @@ function buildSetsFromLegacy(log: any) {
   }));
 }
 
+// Estado de revisión de los videos, indexado por URL de video: los ids de
+// exercise_log_sets se borran y reinsertan en cada autosave del cliente, así
+// que la URL es la única clave estable para casar revisión ↔ serie.
+async function loadVideoReviews(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string
+): Promise<Record<string, { reviewed_at: string; comment: string | null }>> {
+  const { data, error } = await supabase
+    .from("exercise_video_reviews")
+    .select("video_url, reviewed_at, comment")
+    .eq("client_id", clientId);
+
+  if (error) {
+    // El código puede desplegarse antes de que la migración se aplique a mano;
+    // sin tabla, nadie ha revisado nada todavía. 42P01 = undefined_table.
+    if (error.code === "42P01") {
+      console.warn(
+        "[Trainer Exercise Logs API] exercise_video_reviews missing — returning empty review map"
+      );
+
+      return {};
+    }
+
+    console.error(
+      "[Trainer Exercise Logs API] Error fetching video reviews:",
+      error
+    );
+
+    return {};
+  }
+
+  const map: Record<string, { reviewed_at: string; comment: string | null }> =
+    {};
+
+  for (const row of data ?? []) {
+    map[row.video_url] = {
+      reviewed_at: row.reviewed_at,
+      comment: row.comment ?? null,
+    };
+  }
+
+  return map;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -135,9 +179,12 @@ export async function GET(
       };
     });
 
+    const videoReviews = await loadVideoReviews(supabase, clientId);
+
     return NextResponse.json({
       success: true,
       exerciseLogs: flattenedLogs,
+      videoReviews,
     });
   } catch (error) {
     console.error("[Trainer Exercise Logs API] Unexpected error:", error);

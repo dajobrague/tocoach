@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { data: logs, error: logsError } = await supabase
       .from("exercise_logs")
       .select(
-        "id, completed_at, notes, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg)"
+        "id, completed_at, notes, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg, video_url)"
       )
       .eq("client_id", session.client_id)
       .eq("exercise_id", exerciseId)
@@ -65,21 +65,37 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    // Comentarios del coach sobre los videos, por URL de video: los ids de
+    // exercise_log_sets se reinsertan en cada autosave, la URL no cambia.
+    const coachComments = await loadCoachComments(
+      supabase,
+      session.client_id,
+      correlationId
+    );
+
     const recent: ExerciseHistoryEntry[] = (logs ?? []).map((log: any) => {
       const setsRaw = (log.exercise_log_sets ?? []) as Array<{
         set_number: number;
         reps: number | null;
         weight_kg: number | null;
+        video_url: string | null;
       }>;
 
       const sets = setsRaw
         .filter((s) => s.reps !== null)
         .sort((a, b) => a.set_number - b.set_number)
-        .map((s) => ({
-          set_number: s.set_number,
-          reps: s.reps as number,
-          weight_kg: s.weight_kg ?? null,
-        }));
+        .map((s) => {
+          const videoUrl = s.video_url ?? null;
+
+          return {
+            set_number: s.set_number,
+            reps: s.reps as number,
+            weight_kg: s.weight_kg ?? null,
+            video_url: videoUrl,
+            coach_comment:
+              videoUrl === null ? null : (coachComments[videoUrl] ?? null),
+          };
+        });
 
       const notes = typeof log.notes === "string" ? log.notes.trim() : "";
 
@@ -127,6 +143,46 @@ function parseLimit(raw: string | null): number {
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LIMIT;
 
   return Math.min(parsed, MAX_LIMIT);
+}
+
+// Comentarios del entrenador indexados por URL de video. Solo se devuelven
+// las revisiones que llevan texto — una revisión sin comentario no aporta
+// nada al cliente. Si la tabla todavía no existe (migración pendiente de
+// aplicar a mano), el historial se sirve sin comentarios. 42P01 =
+// undefined_table.
+async function loadCoachComments(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  correlationId: string
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from("exercise_video_reviews")
+    .select("video_url, comment")
+    .eq("client_id", clientId);
+
+  if (error) {
+    if (error.code !== "42P01") {
+      console.warn(`${LOG_PREFIX} Failed to load coach comments:`, {
+        correlationId,
+        clientId,
+        error: error.message,
+      });
+    }
+
+    return {};
+  }
+
+  const map: Record<string, string> = {};
+
+  for (const row of data ?? []) {
+    const comment = typeof row.comment === "string" ? row.comment.trim() : "";
+
+    if (comment !== "") {
+      map[row.video_url] = comment;
+    }
+  }
+
+  return map;
 }
 
 // Calcula el PR sobre exercise_log_sets: set con weight_kg más alto, con

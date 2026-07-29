@@ -202,6 +202,9 @@ export interface WorkoutSession {
   dayOfWeek: ("Lun" | "Mar" | "Mie" | "Jue" | "Vie" | "Sab" | "Dom")[];
   name: string;
   completed: boolean;
+  /** Tipo de la SESIÓN (no del programa): un programa puede mezclar fuerza
+   *  y cardio. Derivado de sessions.session_type; "strength" por defecto. */
+  sessionType: "strength" | "cardio";
   exercises: WorkoutExercise[];
 }
 
@@ -401,6 +404,10 @@ export interface ExerciseHistoryEntry {
     set_number: number;
     reps: number;
     weight_kg: number | null;
+    /** Video subido por el cliente en esa serie; null/ausente si no hay. */
+    video_url?: string | null;
+    /** Comentario del coach sobre ese video (exercise_video_reviews). */
+    coach_comment?: string | null;
   }>;
   /** Comentario que el cliente dejó ese día en el ejercicio; null si no hubo. */
   notes?: string | null;

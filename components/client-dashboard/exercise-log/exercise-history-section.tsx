@@ -19,16 +19,28 @@ import { useState } from "react";
 
 import { useExerciseHistory } from "./hooks/use-exercise-history";
 
+import {
+  VideoFeedbackStoryViewer,
+  type StoryItem,
+} from "@/components/client-dashboard/video-feedback/video-feedback-story-viewer";
+
 interface Props {
   exerciseId: string | null;
   isOpen: boolean;
+  /** Nombre del ejercicio; sólo se usa en la cabecera del visor de video. */
+  exerciseName?: string;
 }
 
 const INITIAL_LIMIT = 10;
 const EXPANDED_LIMIT = 30;
 
-export function ExerciseHistorySection({ exerciseId, isOpen }: Props) {
+export function ExerciseHistorySection({
+  exerciseId,
+  isOpen,
+  exerciseName,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [story, setStory] = useState<StoryItem | null>(null);
   const limit = expanded ? EXPANDED_LIMIT : INITIAL_LIMIT;
   const { data, isLoading } = useExerciseHistory(exerciseId, {
     limit,
@@ -60,10 +72,19 @@ export function ExerciseHistorySection({ exerciseId, isOpen }: Props) {
       {data.recent.length > 0 ? (
         <RecentList
           canExpand={canExpand}
+          exerciseName={exerciseName ?? "Tu ejercicio"}
           recent={data.recent}
           onExpand={() => setExpanded(true)}
+          onOpenStory={setStory}
         />
       ) : null}
+
+      <VideoFeedbackStoryViewer
+        initialIndex={0}
+        isOpen={story !== null}
+        items={story ? [story] : []}
+        onClose={() => setStory(null)}
+      />
     </div>
   );
 }
@@ -104,11 +125,15 @@ function PrBanner({
 function RecentList({
   recent,
   canExpand,
+  exerciseName,
   onExpand,
+  onOpenStory,
 }: {
   recent: ExerciseHistoryEntry[];
   canExpand: boolean;
+  exerciseName: string;
   onExpand: () => void;
+  onOpenStory: (item: StoryItem) => void;
 }) {
   return (
     <div className="rounded-lg border border-default-200 bg-content1 overflow-hidden">
@@ -135,7 +160,9 @@ function RecentList({
             <HistoryRow
               key={entry.exercise_log_id}
               entry={entry}
+              exerciseName={exerciseName}
               trend={trend}
+              onOpenStory={onOpenStory}
             />
           );
         })}
@@ -161,14 +188,24 @@ type Trend = "improved" | "regressed" | "same" | "unknown";
 interface HistoryRowProps {
   entry: ExerciseHistoryEntry;
   trend: Trend;
+  exerciseName: string;
+  onOpenStory: (item: StoryItem) => void;
 }
 
-function HistoryRow({ entry, trend }: HistoryRowProps) {
+function HistoryRow({
+  entry,
+  trend,
+  exerciseName,
+  onOpenStory,
+}: HistoryRowProps) {
   const [expanded, setExpanded] = useState(false);
   const best = bestSet(entry);
   const bestLabel = best
     ? `${best.weight > 0 ? `${best.weight}kg` : "—"} × ${best.reps}`
     : "—";
+  const hasCoachFeedback = entry.sets.some(
+    (s) => (s.coach_comment ?? "") !== ""
+  );
 
   return (
     <li
@@ -191,6 +228,14 @@ function HistoryRow({ entry, trend }: HistoryRowProps) {
               aria-label="Tiene comentario"
               className="ml-1.5 inline-block align-[-2px] text-foreground/40"
               icon="solar:chat-round-line-linear"
+              width={12}
+            />
+          ) : null}
+          {hasCoachFeedback ? (
+            <Icon
+              aria-label="Tu coach comentó tu video"
+              className="ml-1.5 inline-block align-[-2px] text-emerald-600"
+              icon="solar:videocamera-record-broken"
               width={12}
             />
           ) : null}
@@ -222,7 +267,10 @@ function HistoryRow({ entry, trend }: HistoryRowProps) {
               {entry.sets.map((s) => (
                 <SetLine
                   key={`${entry.exercise_log_id}-${s.set_number}`}
+                  exerciseName={exerciseName}
+                  scheduledDate={entry.scheduled_date}
                   set={s}
+                  onOpenStory={onOpenStory}
                 />
               ))}
             </ul>
@@ -280,21 +328,105 @@ function TrendIcon({ trend }: { trend: Trend }) {
   return null;
 }
 
-function SetLine({ set }: { set: ExerciseHistoryEntry["sets"][number] }) {
+function SetLine({
+  set,
+  exerciseName,
+  scheduledDate,
+  onOpenStory,
+}: {
+  set: ExerciseHistoryEntry["sets"][number];
+  exerciseName: string;
+  scheduledDate: string;
+  onOpenStory: (item: StoryItem) => void;
+}) {
   const weightLabel = set.weight_kg != null ? `${set.weight_kg} kg` : "—";
+  const comment = set.coach_comment ?? "";
+  const videoUrl = set.video_url ?? "";
 
   return (
-    <li className="flex items-center gap-2 text-xs font-body">
-      <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-foreground/70">
-        S{set.set_number}
-      </span>
-      <span className="text-foreground">
-        <span className="font-semibold">{weightLabel}</span>
-        <span className="text-default-400"> × </span>
-        <span>{set.reps} reps</span>
-      </span>
+    <li className="text-xs font-body">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-foreground/70">
+          S{set.set_number}
+        </span>
+        <span className="text-foreground">
+          <span className="font-semibold">{weightLabel}</span>
+          <span className="text-default-400"> × </span>
+          <span>{set.reps} reps</span>
+        </span>
+      </div>
+
+      {comment ? (
+        <CoachComment
+          comment={comment}
+          videoUrl={videoUrl}
+          onOpen={() =>
+            onOpenStory({
+              videoUrl,
+              exerciseName,
+              scheduledDate,
+              setLabel: buildSetLabel(set),
+              comment,
+            })
+          }
+        />
+      ) : null}
     </li>
   );
+}
+
+// Cita del comentario del coach bajo la serie. Con video se vuelve un
+// botón que reabre la story (video + comentario superpuesto).
+function CoachComment({
+  comment,
+  videoUrl,
+  onOpen,
+}: {
+  comment: string;
+  videoUrl: string;
+  onOpen: () => void;
+}) {
+  const body = (
+    <span className="min-w-0 flex-1">
+      <span className="block text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+        Comentario del coach
+      </span>
+      <span className="block whitespace-pre-line text-foreground/70">
+        {comment}
+      </span>
+    </span>
+  );
+
+  if (!videoUrl) {
+    return (
+      <div className="mt-1 ml-9 border-l-2 border-emerald-500 pl-2 text-xs">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className="mt-1 ml-9 flex w-full items-start gap-1.5 border-l-2 border-emerald-500 pl-2 text-left text-xs"
+      type="button"
+      onClick={onOpen}
+    >
+      <Icon
+        aria-label="Ver video con el comentario"
+        className="mt-0.5 shrink-0 text-emerald-600"
+        icon="solar:play-circle-bold"
+        width={14}
+      />
+      {body}
+    </button>
+  );
+}
+
+function buildSetLabel(set: ExerciseHistoryEntry["sets"][number]): string {
+  const weight =
+    set.weight_kg != null && set.weight_kg > 0 ? ` × ${set.weight_kg} kg` : "";
+
+  return `Serie ${set.set_number} · ${set.reps} reps${weight}`;
 }
 
 function trendBorderClass(trend: Trend): string {

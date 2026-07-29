@@ -359,6 +359,8 @@ export function transformToWorkoutProgram(
       dayOfWeek,
       name: session.name,
       completed: isCompleted,
+      // El tipo vive en la SESIÓN: un programa puede mezclar fuerza y cardio.
+      sessionType: session.session_type === "cardio" ? "cardio" : "strength",
       exercises,
     };
   });
