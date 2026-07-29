@@ -343,7 +343,9 @@ export function SessionsCard({
                       key={option.key}
                       className={
                         addType === option.key
-                          ? "flex-1 bg-slate-900 text-white"
+                          ? option.key === "cardio"
+                            ? "flex-1 bg-rose-600 text-white"
+                            : "flex-1 bg-emerald-600 text-white"
                           : "flex-1"
                       }
                       size="sm"

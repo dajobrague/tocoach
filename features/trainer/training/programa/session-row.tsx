@@ -297,6 +297,28 @@ export function SessionRow({
                         >
                           <Icon icon="solar:hamburger-menu-linear" width={14} />
                         </button>
+                        {typeof exercise.imageUrl === "string" &&
+                        exercise.imageUrl.length > 0 ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
+                            loading="lazy"
+                            src={exercise.imageUrl}
+                          />
+                        ) : (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
+                            <Icon
+                              className="text-default-400"
+                              icon={
+                                exercise.category === "cardio"
+                                  ? "solar:heart-pulse-linear"
+                                  : "solar:dumbbell-linear"
+                              }
+                              width={16}
+                            />
+                          </span>
+                        )}
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate text-sm font-medium text-gray-900">

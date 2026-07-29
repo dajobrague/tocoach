@@ -57,6 +57,8 @@ interface SelectedExercise {
   name: string;
   imageUrl: string | null;
   subtitle: string | null;
+  /** Categoría del EJERCICIO elegido — decide qué campos pedimos. */
+  category: "strength" | "cardio";
 }
 
 /** Todos los campos como texto controlado; se parsean al guardar. */
@@ -167,29 +169,48 @@ export function ExerciseDrawer({
   onSaved,
 }: ExerciseDrawerProps): JSX.Element {
   const isEdit = exercise !== null;
-  const isCardio = sessionCategory === "cardio";
+  // Los campos siguen al EJERCICIO elegido, no a la sesión: una sesión puede
+  // mezclar fuerza y cardio (un finisher de bici en un día de empujes).
+  // Antes de elegir, el default es el tipo de la sesión.
 
   const [term, setTerm] = useState("");
+  // Filtro rápido por categoría (chips bajo el buscador); null = todas.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedExercise | null>(null);
+  const isCardio =
+    selected !== null
+      ? selected.category === "cardio"
+      : sessionCategory === "cardio";
   const [listOpen, setListOpen] = useState(true);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [swapArmed, setSwapArmed] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const library = useExerciseLibrarySearch(
-    term,
-    isCardio ? "cardio" : undefined
-  );
-  // Biblioteca acotada a la categoría de la sesión (pedido de David): en una
-  // sesión de fuerza no aparecen ejercicios de cardio y viceversa. Filtro en
-  // cliente: el endpoint no distingue "todo lo no-cardio" y los ejercicios de
-  // fuerza traen categorías variadas (pecho, pierna, etc.).
+  // Biblioteca SIN acotar (corrección de David): la sesión puede mezclar
+  // tipos, así que se puede elegir cualquier ejercicio y los campos pedidos
+  // se adaptan al elegido.
+  const library = useExerciseLibrarySearch(term, undefined);
+  // Chips de filtro: categorías presentes en el resultado, por frecuencia.
+  const availableCategories = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const item of library.exercises) {
+      if (typeof item.category === "string" && item.category.length > 0) {
+        counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+      }
+    }
+
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 7)
+      .map(([category]) => category);
+  }, [library.exercises]);
   const visibleExercises = useMemo(
     () =>
-      library.exercises.filter((item) =>
-        isCardio ? item.category === "cardio" : item.category !== "cardio"
-      ),
-    [library.exercises, isCardio]
+      categoryFilter === null
+        ? library.exercises
+        : library.exercises.filter((item) => item.category === categoryFilter),
+    [library.exercises, categoryFilter]
   );
   const { addExercise, updateExercise } = useExerciseMutations(
     clientId,
@@ -205,6 +226,7 @@ export function ExerciseDrawer({
     if (isOpen === false) return;
 
     setTerm("");
+    setCategoryFilter(null);
     setSwapArmed(false);
     setSubmitError(null);
 
@@ -217,6 +239,7 @@ export function ExerciseDrawer({
           exercise.category !== undefined
             ? (CATEGORY_LABELS[exercise.category] ?? exercise.category)
             : null,
+        category: exercise.category === "cardio" ? "cardio" : "strength",
       });
       setListOpen(false);
       setForm(formFromExercise(exercise));
@@ -238,13 +261,14 @@ export function ExerciseDrawer({
       id: item.id,
       name: item.name,
       imageUrl:
-        item.image_url !== undefined && item.image_url.length > 0
+        typeof item.image_url === "string" && item.image_url.length > 0
           ? item.image_url
           : null,
       subtitle:
         item.category !== undefined
           ? (CATEGORY_LABELS[item.category] ?? item.category)
           : (item.description ?? null),
+      category: item.category === "cardio" ? "cardio" : "strength",
     });
     setListOpen(false);
     setSwapArmed(false);
@@ -379,7 +403,7 @@ export function ExerciseDrawer({
             {isEdit ? "Editar ejercicio" : "Añadir ejercicio"}
           </h2>
           <p className="text-xs font-normal text-default-500">
-            {sessionName} · {isCardio ? "Cardio" : "Fuerza"}
+            {sessionName} · {sessionCategory === "cardio" ? "Cardio" : "Fuerza"}
           </p>
         </DrawerHeader>
 
@@ -394,7 +418,7 @@ export function ExerciseDrawer({
               <div className="flex items-center gap-3 rounded-large border border-blue-500 bg-blue-50/50 p-2.5 ring-1 ring-blue-500">
                 <ExerciseThumb
                   fallbackIcon={
-                    isCardio
+                    selected.category === "cardio"
                       ? "solar:heart-pulse-linear"
                       : "solar:dumbbell-linear"
                   }
@@ -443,6 +467,35 @@ export function ExerciseDrawer({
                   onValueChange={setTerm}
                 />
 
+                {availableCategories.length > 1 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {[null, ...availableCategories].map((cat) => {
+                      const isActive = categoryFilter === cat;
+                      const label =
+                        cat === null ? "Todos" : (CATEGORY_LABELS[cat] ?? cat);
+
+                      return (
+                        <button
+                          key={cat ?? "all"}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            isActive
+                              ? cat === "cardio"
+                                ? "border-rose-600 bg-rose-600 text-white"
+                                : "border-slate-900 bg-slate-900 text-white"
+                              : "border-gray-200 bg-white text-default-600 hover:border-gray-300 hover:text-gray-900"
+                          }`}
+                          type="button"
+                          onClick={() =>
+                            setCategoryFilter(isActive ? null : cat)
+                          }
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 {library.isLoading || library.isSearching ? (
                   <div className="flex justify-center py-6">
                     <Spinner size="sm" />
@@ -471,7 +524,7 @@ export function ExerciseDrawer({
                       <LibraryRow
                         key={item.id}
                         fallbackIcon={
-                          isCardio
+                          item.category === "cardio"
                             ? "solar:heart-pulse-linear"
                             : "solar:dumbbell-linear"
                         }
@@ -801,7 +854,7 @@ function LibraryRow({
       <ExerciseThumb
         fallbackIcon={fallbackIcon}
         imageUrl={
-          item.image_url !== undefined && item.image_url.length > 0
+          typeof item.image_url === "string" && item.image_url.length > 0
             ? item.image_url
             : null
         }
