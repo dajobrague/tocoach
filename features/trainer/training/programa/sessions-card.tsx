@@ -42,7 +42,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
-import { programCategory, sessionDayLabel } from "./programa-format";
+import { sessionDayLabel } from "./programa-format";
 import { SessionRow } from "./session-row";
 import { useSessionMutations } from "./use-training";
 
@@ -102,11 +102,12 @@ export function SessionsCard({
   onAddExercise,
   onEditExercise,
 }: SessionsCardProps) {
-  const category: ProgramCategory = programCategory(program);
   const mutations = useSessionMutations(clientId, program.programId);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [nameModal, setNameModal] = useState<NameModal | null>(null);
+  // Tipo de la NUEVA sesión (fuerza/cardio) — el programa puede mezclar ambos.
+  const [addType, setAddType] = useState<ProgramCategory>("strength");
   const [nameDraft, setNameDraft] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<WorkoutSession | null>(null);
   const [recentlyDuplicatedExerciseId, setRecentlyDuplicatedExerciseId] =
@@ -151,6 +152,7 @@ export function SessionsCard({
   };
 
   const openNameModal = (modal: NameModal) => {
+    if (modal.kind === "add") setAddType("strength");
     setError(null);
     setNameModal(modal);
     setNameDraft(
@@ -178,7 +180,7 @@ export function SessionsCard({
 
     if (nameModal.kind === "add") {
       mutations.addSession.mutate(
-        { name },
+        { name, sessionType: addType },
         { onSuccess: close, onError: fail("No se pudo crear la sesión") }
       );
     } else if (nameModal.kind === "rename") {
@@ -248,7 +250,6 @@ export function SessionsCard({
               <SortableSessionItem key={session.id} id={session.id}>
                 {({ dragHandleProps }) => (
                   <SessionRow
-                    category={category}
                     clientId={clientId}
                     dayLabel={sessionDayLabel(slotByDay, session.id)}
                     dragHandleProps={dragHandleProps}
@@ -318,6 +319,44 @@ export function SessionsCard({
               }}
               onValueChange={setNameDraft}
             />
+            {nameModal?.kind === "add" ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs font-medium text-default-600">
+                  Tipo de sesión
+                </p>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      {
+                        key: "strength",
+                        label: "Fuerza",
+                        icon: "solar:dumbbell-linear",
+                      },
+                      {
+                        key: "cardio",
+                        label: "Cardio",
+                        icon: "solar:heart-pulse-linear",
+                      },
+                    ] as const
+                  ).map((option) => (
+                    <Button
+                      key={option.key}
+                      className={
+                        addType === option.key
+                          ? "flex-1 bg-slate-900 text-white"
+                          : "flex-1"
+                      }
+                      size="sm"
+                      startContent={<Icon icon={option.icon} width={15} />}
+                      variant={addType === option.key ? "solid" : "bordered"}
+                      onPress={() => setAddType(option.key)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </ModalBody>
           <ModalFooter>
             <Button

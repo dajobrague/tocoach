@@ -7,11 +7,7 @@
 // la mutación optimista de useExerciseMutations — sin rollback local.
 
 import type { ExerciseLog } from "@/components/dashboard/client-profile/tabs/progress/types";
-import type {
-  ProgramCategory,
-  WorkoutExercise,
-  WorkoutSession,
-} from "./training-api";
+import type { WorkoutExercise, WorkoutSession } from "./training-api";
 
 import {
   closestCenter,
@@ -54,7 +50,6 @@ import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/ta
 interface SessionRowProps {
   clientId: string;
   programId: string;
-  category: ProgramCategory;
   session: WorkoutSession;
   /** "Día 1, 4" según el microciclo, o null si no está asignada. */
   dayLabel: string | null;
@@ -108,7 +103,6 @@ function SortableExerciseRow({
 export function SessionRow({
   clientId,
   programId,
-  category,
   session,
   dayLabel,
   isExpanded,
@@ -123,7 +117,8 @@ export function SessionRow({
   onEditExercise,
   onExerciseDuplicated,
 }: SessionRowProps) {
-  const visual = CATEGORY_VISUAL[category];
+  // El tipo es de la SESIÓN, no del programa (pueden mezclarse).
+  const visual = CATEGORY_VISUAL[session.sessionType];
   const mutations = useExerciseMutations(clientId, programId, session.id);
   const [deleteTarget, setDeleteTarget] = useState<WorkoutExercise | null>(
     null
@@ -203,26 +198,6 @@ export function SessionRow({
         <Chip className={`shrink-0 ${visual.square}`} size="sm" variant="flat">
           <span className="text-[10px] font-medium">{visual.label}</span>
         </Chip>
-        <Button
-          isIconOnly
-          aria-label={`Duplicar ${session.name}`}
-          size="sm"
-          title="Duplicar sesión"
-          variant="light"
-          onPress={onRequestDuplicate}
-        >
-          <Icon className="text-gray-600" icon="solar:copy-linear" width={16} />
-        </Button>
-        <Button
-          isIconOnly
-          aria-label={`Renombrar ${session.name}`}
-          size="sm"
-          title="Renombrar sesión"
-          variant="light"
-          onPress={onRequestRename}
-        >
-          <Icon className="text-gray-600" icon="solar:pen-linear" width={16} />
-        </Button>
         <Dropdown placement="bottom-end">
           <DropdownTrigger>
             <Button
@@ -241,9 +216,23 @@ export function SessionRow({
           <DropdownMenu
             aria-label="Acciones de la sesión"
             onAction={(key) => {
-              if (key === "delete") onRequestDelete();
+              if (key === "duplicate") onRequestDuplicate();
+              else if (key === "rename") onRequestRename();
+              else if (key === "delete") onRequestDelete();
             }}
           >
+            <DropdownItem
+              key="duplicate"
+              startContent={<Icon icon="solar:copy-linear" width={16} />}
+            >
+              Duplicar
+            </DropdownItem>
+            <DropdownItem
+              key="rename"
+              startContent={<Icon icon="solar:pen-linear" width={16} />}
+            >
+              Renombrar
+            </DropdownItem>
             <DropdownItem
               key="delete"
               className="text-danger"
@@ -288,7 +277,7 @@ export function SessionRow({
               strategy={verticalListSortingStrategy}
             >
               {session.exercises.map((exercise) => {
-                const line = prescriptionLine(exercise, category);
+                const line = prescriptionLine(exercise, session.sessionType);
                 const isCopy =
                   exercise.id !== undefined &&
                   exercise.id === recentlyDuplicatedExerciseId;

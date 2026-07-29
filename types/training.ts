@@ -202,6 +202,9 @@ export interface WorkoutSession {
   dayOfWeek: ("Lun" | "Mar" | "Mie" | "Jue" | "Vie" | "Sab" | "Dom")[];
   name: string;
   completed: boolean;
+  /** Tipo de la SESIÓN (no del programa): un programa puede mezclar fuerza
+   *  y cardio. Derivado de sessions.session_type; "strength" por defecto. */
+  sessionType: "strength" | "cardio";
   exercises: WorkoutExercise[];
 }
 

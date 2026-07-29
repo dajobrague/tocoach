@@ -305,13 +305,20 @@ export function saveProgramAsTemplate(
 export function addSession(
   clientId: string,
   programId: string,
-  input: { name: string; daysOfWeek?: (string | number)[] }
+  input: {
+    name: string;
+    sessionType?: ProgramCategory;
+    daysOfWeek?: (string | number)[];
+  }
 ): Promise<SessionRow> {
   return sendJson<{ session: SessionRow }>(
     `${base(clientId)}/${programId}/sessions`,
     "POST",
     {
       name: input.name,
+      ...(input.sessionType !== undefined
+        ? { sessionType: input.sessionType }
+        : {}),
       ...(input.daysOfWeek !== undefined
         ? { daysOfWeek: input.daysOfWeek }
         : {}),

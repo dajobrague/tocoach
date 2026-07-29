@@ -115,8 +115,11 @@ export function useSessionMutations(clientId: string, programId: string) {
   };
 
   const addSessionM = useMutation({
-    mutationFn: (input: { name: string; daysOfWeek?: (string | number)[] }) =>
-      addSession(clientId, programId, input),
+    mutationFn: (input: {
+      name: string;
+      sessionType?: ProgramCategory;
+      daysOfWeek?: (string | number)[];
+    }) => addSession(clientId, programId, input),
     onSuccess: invalidate,
   });
   const updateSessionM = useMutation({

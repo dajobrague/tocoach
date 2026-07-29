@@ -22,7 +22,7 @@ import {
   SaveTemplateModal,
 } from "./program-modals";
 import { ProgramSelector } from "./program-selector";
-import { programCategory, programToUpdateInput } from "./programa-format";
+import { programToUpdateInput } from "./programa-format";
 import { SessionsCard } from "./sessions-card";
 import { useProgramMutations, usePrograms } from "./use-training";
 import { useMicrocycleState } from "./use-microcycle-state";
@@ -174,11 +174,7 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
             onSaveAsTemplate={() => setTemplateOpen(true)}
           />
 
-          <MicrocycleDaysCard
-            category={programCategory(selected)}
-            sessions={selected.sessions}
-            state={microcycle}
-          />
+          <MicrocycleDaysCard sessions={selected.sessions} state={microcycle} />
 
           <SessionsCard
             clientId={clientId}
@@ -227,7 +223,7 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
           exercise={drawer.exercise}
           getLogsForSlot={logs.getLogsForSlot}
           programId={selected.programId}
-          sessionCategory={programCategory(selected)}
+          sessionCategory={drawer.session.sessionType}
           sessionId={drawer.session.id}
           sessionName={drawer.session.name}
           onClose={() => setDrawer(null)}

@@ -11,7 +11,7 @@
 // prescripciones futuras…") de la pantalla vieja.
 
 import type { MicrocycleState } from "./use-microcycle-state";
-import type { ProgramCategory, WorkoutSession } from "./training-api";
+import type { WorkoutSession } from "./training-api";
 
 import {
   Button,
@@ -38,8 +38,6 @@ interface MicrocycleDaysCardProps {
   state: MicrocycleState;
   /** Sesiones del programa seleccionado (las asignables desde el popover). */
   sessions: WorkoutSession[];
-  /** Categoría del programa seleccionado (tinta los nombres cardio en rosa). */
-  category: ProgramCategory;
 }
 
 interface ResolvedSlot {
@@ -66,7 +64,6 @@ function formatStartDate(ymd: string): string {
 export function MicrocycleDaysCard({
   state,
   sessions,
-  category,
 }: MicrocycleDaysCardProps) {
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [dateOpen, setDateOpen] = useState(false);
@@ -82,7 +79,7 @@ export function MicrocycleDaysCard({
     const own = sessions.find((session) => session.id === sessionId);
 
     if (own !== undefined) {
-      return { name: own.name, isCardio: category === "cardio" };
+      return { name: own.name, isCardio: own.sessionType === "cardio" };
     }
 
     // La asignación puede apuntar a una sesión de otro programa activo;
@@ -300,7 +297,7 @@ export function MicrocycleDaysCard({
                             </p>
                           )}
                           {sessions.map((session) => {
-                            const visual = CATEGORY_VISUAL[category];
+                            const visual = CATEGORY_VISUAL[session.sessionType];
 
                             return (
                               <button

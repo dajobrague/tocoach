@@ -52,9 +52,17 @@ export async function POST(
       );
     }
 
-    // Determine session_type based on program category
+    // El tipo lo decide la SESIÓN (un programa puede mezclar fuerza y
+    // cardio); sin sessionType en el body caemos a la categoría del programa
+    // como antes (compat con creadores viejos).
+    const requestedType = body.sessionType;
     const programCategory = program.metadata?.category;
-    const sessionType = programCategory === "cardio" ? "cardio" : "strength";
+    const sessionType =
+      requestedType === "cardio" || requestedType === "strength"
+        ? requestedType
+        : programCategory === "cardio"
+          ? "cardio"
+          : "strength";
 
     // Get the current max session_order for this program
     const { data: existingSessions } = await supabase
