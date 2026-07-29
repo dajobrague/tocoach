@@ -115,6 +115,19 @@ export function defaultSet(): SetDraft {
   // videoUrl/videoPath quedan undefined: el form los hidrata bajo demanda.
 }
 
+/**
+ * Peso en formato es-ES: coma decimal y como mucho un decimal ("97,5",
+ * "95"). Lo comparten la progresión, los chips de récord y el mensaje de
+ * celebración para que un mismo número no se vea de dos maneras.
+ */
+export function formatKg(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+
+  return new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 // Hidrata el formulario al abrir el modal: existingLog (si hay) > defaults
 // derivados del exercise (target del programa). El draft local se aplica
 // encima en el orquestador, no aquí.

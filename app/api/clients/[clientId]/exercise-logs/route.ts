@@ -1,7 +1,10 @@
+import type { NewRecord, SetInput } from "@/lib/training/e1rm";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { computeRepMaxes, diffRecords } from "@/lib/training/e1rm";
 import { isSessionFullyCovered } from "@/lib/training/session-completion";
 
 function parseWeightKg(weight: string): number | null {
@@ -303,6 +306,11 @@ export async function POST(
     // finalize=false (autosave): nunca tocamos finalized_at — preserva
     // lo que haya en BD (null si nunca finalizó, o el timestamp viejo
     // si el cliente vuelve a editar después de finalizar).
+    // Capturado ANTES de escribir: solo la PRIMERA finalización celebra
+    // récords. Re-finalizar (el cliente edita y vuelve a dar "Finalizado")
+    // no debe volver a lanzar confeti por la misma marca.
+    const wasAlreadyFinalized = Boolean(existingExerciseLog?.finalized_at);
+
     let finalizedAtForWrite: string | null | undefined;
 
     if (finalize === true) {
@@ -407,6 +415,19 @@ export async function POST(
       );
     }
 
+    // Récords: solo en la primera finalización de este log. Nunca puede tumbar
+    // el guardado — el log ya hizo commit, esto es decoración.
+    const isFirstFinalize = finalize === true && !wasAlreadyFinalized;
+    const { newRecords, firstTime } = isFirstFinalize
+      ? await detectNewRecords(
+          supabase,
+          clientId,
+          exerciseId,
+          exerciseLog.id,
+          savedSets
+        )
+      : { newRecords: null, firstTime: false };
+
     const flattenedLog: any = {
       ...exerciseLog,
       scheduled_date: scheduledDate,
@@ -433,6 +454,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       exerciseLog: flattenedLog,
+      newRecords,
+      firstTime,
     });
   } catch (error) {
     console.error("[Exercise Logs API] Unexpected error:", error);
@@ -629,6 +652,77 @@ export async function DELETE(
       { success: false, error: "Error interno del servidor" },
       { status: 500 }
     );
+  }
+}
+
+// Récords nuevos de un log recién finalizado (rebanada Progreso + 1RM).
+//
+// Los "previos" se calculan EXCLUYENDO el log actual por id: para cuando
+// llegamos acá el log ya está en la base (y sus series se borraron y
+// reinsertaron), así que filtrar por id es lo único inmune a ese timing.
+//
+// Solo cuentan los logs finalizados: un autosave a medio tipear no es una marca.
+//
+// firstTime = el cliente no tenía NINGUNA sesión computable previa de este
+// ejercicio. En ese caso todo sería "récord" y celebrarlo es ruido, así que se
+// devuelve newRecords null y el cliente se queda callado.
+//
+// Best-effort: cualquier error devuelve newRecords null. El guardado ya
+// comiteó y no se pierde nada por no celebrar.
+async function detectNewRecords(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientId: string,
+  exerciseId: string,
+  currentLogId: string,
+  currentSets: Array<{ reps: number | null; weight_kg: number | null }>
+): Promise<{ newRecords: NewRecord[] | null; firstTime: boolean }> {
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const { data, error } = await supabase
+      .from("exercise_logs")
+      .select(
+        "id, scheduled_sessions!inner(scheduled_date), exercise_log_sets(reps, weight_kg)"
+      )
+      .eq("client_id", clientId)
+      .eq("exercise_id", exerciseId)
+      .not("finalized_at", "is", null)
+      .neq("id", currentLogId)
+      .limit(2000);
+
+    if (error) throw new Error(error.message);
+
+    const priorSessions = ((data ?? []) as any[])
+      .map((log) => ({
+        date: log.scheduled_sessions?.scheduled_date ?? "",
+        sets: ((log.exercise_log_sets ?? []) as SetInput[]).map((set) => ({
+          reps: set.reps,
+          weight_kg: set.weight_kg,
+        })),
+      }))
+      .filter((session) => session.date !== "");
+
+    const priorRepMaxes = computeRepMaxes(priorSessions);
+
+    if (priorRepMaxes.length === 0) {
+      return { newRecords: null, firstTime: true };
+    }
+
+    const sets: SetInput[] = currentSets.map((set) => ({
+      reps: set.reps,
+      weight_kg: set.weight_kg,
+    }));
+
+    return { newRecords: diffRecords(priorRepMaxes, sets), firstTime: false };
+  } catch (error) {
+    console.warn("[Exercise Logs API] record detection failed:", {
+      correlationId,
+      clientId,
+      exerciseId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return { newRecords: null, firstTime: false };
   }
 }
 

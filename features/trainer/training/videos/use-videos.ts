@@ -58,6 +58,70 @@ export function useVideoFeed(clientId: string): UseVideoFeed {
   };
 }
 
+export interface LoggedExercise {
+  id: string;
+  name: string;
+  category: string | null;
+  /** Nº de logs del ejercicio en la ventana; ordena la lista. */
+  logCount: number;
+}
+
+export interface UseLoggedExercises {
+  exercises: LoggedExercise[];
+  isLoading: boolean;
+  error: unknown;
+}
+
+/**
+ * Ejercicios de FUERZA con registros del último año, derivados del mismo cache
+ * que el feed de videos (la ruta de logs del trainer devuelve todos los logs,
+ * no solo los que tienen video). Los alimenta el selector de Progreso: sin
+ * fetch extra y sin ejercicios vacíos en el desplegable.
+ *
+ * Cardio queda fuera: un 1RM estimado de una carrera no significa nada.
+ */
+export function useLoggedExercises(clientId: string): UseLoggedExercises {
+  const query = useQuery<VideoFeed>({
+    queryKey: videoFeedKey(clientId),
+    queryFn: () => fetchVideoFeed(clientId),
+    staleTime: 30_000,
+  });
+
+  const logs = query.data?.logs;
+
+  const exercises = useMemo(() => {
+    const byId = new Map<string, LoggedExercise>();
+
+    for (const log of logs ?? []) {
+      const exercise = log.exercises;
+
+      if (exercise == null) continue;
+      if (exercise.category === "cardio") continue;
+
+      const existing = byId.get(exercise.id);
+
+      if (existing === undefined) {
+        byId.set(exercise.id, {
+          id: exercise.id,
+          name: exercise.name,
+          category: exercise.category ?? null,
+          logCount: 1,
+        });
+      } else {
+        existing.logCount += 1;
+      }
+    }
+
+    return [...byId.values()].sort((a, b) =>
+      b.logCount !== a.logCount
+        ? b.logCount - a.logCount
+        : a.name.localeCompare(b.name, "es")
+    );
+  }, [logs]);
+
+  return { exercises, isLoading: query.isLoading, error: query.error };
+}
+
 /** Marca/desmarca revisado con parche optimista del mapa y rollback en error. */
 export function useVideoReviewMutation(clientId: string) {
   const qc = useQueryClient();

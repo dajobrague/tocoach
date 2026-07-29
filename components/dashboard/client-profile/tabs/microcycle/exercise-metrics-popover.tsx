@@ -17,7 +17,68 @@ import {
   StrengthStatsGrid,
 } from "../workouts/exercise-progress-stats";
 import { ExerciseVolumeChart } from "../workouts/exercise-volume-chart";
-import { computeCardioStats, computeStrengthStats } from "../workouts/helpers";
+import {
+  computeCardioStats,
+  computeStrengthStats,
+  logsToSessionSets,
+} from "../workouts/helpers";
+
+import { computeE1rmSeries, computeRepMaxes } from "@/lib/training/e1rm";
+
+/** 97.5 → "97,5 kg". */
+function formatKg(value: number): string {
+  return `${value.toLocaleString("es-ES", { maximumFractionDigits: 1 })} kg`;
+}
+
+/**
+ * Tira compacta de récords bajo la gráfica: el 1RM estimado de la última
+ * sesión + la mejor marca y unos pocos rangos de reps. El popover mide 600px y
+ * scrollea a los 520, así que esto es UNA línea — no otra tabla.
+ */
+function RecordsStrip({ logs }: { logs: ExerciseLog[] }) {
+  const sessions = logsToSessionSets(logs);
+  const repMaxes = computeRepMaxes(sessions);
+  const series = computeE1rmSeries(sessions);
+  const current = series[series.length - 1]?.e1rm ?? null;
+
+  if (repMaxes.length === 0 && current === null) return null;
+
+  // La "mejor marca" es la de mayor 1RM estimado, no la de más kilos:
+  // 100 kg × 3 supera a 105 kg × 1 y el peso suelto no lo ve.
+  const best = repMaxes.reduce<(typeof repMaxes)[number] | null>(
+    (acc, record) => (acc === null || record.e1rm > acc.e1rm ? record : acc),
+    null
+  );
+  const others = repMaxes
+    .filter((record) => record.bucket !== best?.bucket)
+    .sort((a, b) => b.weightKg - a.weightKg)
+    .slice(0, 3);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-large border border-gray-200 bg-gray-50/60 px-3 py-2 text-[11px] tabular-nums">
+      {current !== null ? (
+        <span className="font-semibold text-blue-600">
+          1RM est. {formatKg(current)}
+        </span>
+      ) : null}
+      {best !== null ? (
+        <>
+          {current !== null ? <span className="text-gray-300">·</span> : null}
+          <span className="font-semibold text-gray-900">
+            🏅 {formatKg(best.weightKg)} ({best.reps}{" "}
+            {best.reps === 1 ? "rep" : "reps"})
+          </span>
+        </>
+      ) : null}
+      {others.map((record) => (
+        <span key={record.bucket} className="text-gray-500">
+          <span className="mr-2 text-gray-300">·</span>
+          {record.bucket}×{formatKg(record.weightKg)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 interface Props {
   exerciseName: string;
@@ -83,6 +144,8 @@ export function ExerciseMetricsPopover({
               )}
 
               <ExerciseVolumeChart logs={logs} variant={variant} />
+
+              {variant === "strength" ? <RecordsStrip logs={logs} /> : null}
 
               <ExerciseHistoryTable
                 exerciseName={exerciseName}

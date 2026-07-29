@@ -20,9 +20,13 @@ import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 import { Icon } from "@iconify/react";
 import { Fragment, useState } from "react";
 
+import { allTimeMaxE1rm } from "../workouts/helpers";
+
 import { classificationLabel } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
 import { buildLoggedExerciseGroups } from "./logged-view";
+
+import { estimateOneRepMax } from "@/lib/training/e1rm";
 
 function formatDateLong(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString("es-ES", {
@@ -41,21 +45,6 @@ function minPrescribedReps(reps: string | null | undefined): number | null {
   const parsed = parseInt(match[0], 10);
 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-/** Peso máximo histórico del ejercicio (todas las series de todos los logs). */
-function allTimeMaxWeight(logs: ExerciseLog[]): number {
-  let max = 0;
-
-  for (const log of logs) {
-    for (const set of log.sets ?? []) {
-      if (typeof set.weight_kg === "number" && set.weight_kg > max) {
-        max = set.weight_kg;
-      }
-    }
-  }
-
-  return max;
 }
 
 /** Formato es-ES para kilos: 82.5 → "82,5". */
@@ -99,22 +88,31 @@ function SetsTable({
   sets,
   exerciseName,
   prescribedMin,
-  historicalMax,
+  historicalMaxE1rm,
   onPlayVideo,
 }: {
   sets: ExerciseLogSet[];
   exerciseName: string;
   /** Reps mínimas prescritas — por debajo, el número se tiñe ámbar. */
   prescribedMin: number | null;
-  /** Peso máximo histórico del ejercicio; una serie que lo iguala lleva 🏅. */
-  historicalMax: number;
+  /**
+   * Mejor 1RM estimado histórico del ejercicio; la serie que lo iguala lleva
+   * 🏅. El criterio era el peso máximo suelto, que declaraba récord a un
+   * single de 105 kg por encima de un 3×100 claramente más fuerte.
+   */
+  historicalMaxE1rm: number;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   // La medalla va SOLO a la primera serie que alcanza el máximo histórico —
-  // dos series iguales no son dos récords.
+  // dos series iguales no son dos récords. Comparación con epsilon porque el
+  // máximo sale de la misma fórmula sobre los mismos números en coma flotante.
   const recordIndex =
-    historicalMax > 0
-      ? sets.findIndex((s) => s.weight_kg === historicalMax)
+    historicalMaxE1rm > 0
+      ? sets.findIndex((s) => {
+          const e1rm = estimateOneRepMax(s.weight_kg, s.reps);
+
+          return e1rm !== null && e1rm >= historicalMaxE1rm - 1e-9;
+        })
       : -1;
 
   return (
@@ -165,7 +163,7 @@ function SetsTable({
               {isRecord ? (
                 <span
                   className="inline-flex items-center gap-1 whitespace-nowrap rounded-medium border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
-                  title="Mejor marca histórica de este ejercicio"
+                  title="Mejor serie histórica de este ejercicio (por 1RM estimado)"
                 >
                   🏅 Récord
                 </span>
@@ -391,7 +389,7 @@ function PrescribedRow({
       {!isFuture && totalSets > 0 ? (
         <SetsTable
           exerciseName={prescribed.name}
-          historicalMax={allTimeMaxWeight(allTimeLogs)}
+          historicalMaxE1rm={allTimeMaxE1rm(allTimeLogs)}
           prescribedMin={minPrescribedReps(prescribed.prescribedReps)}
           sets={allSets}
           onPlayVideo={onPlayVideo}
@@ -474,7 +472,7 @@ function LoggedExerciseRow({
       {totalSets > 0 ? (
         <SetsTable
           exerciseName={exerciseName}
-          historicalMax={allTimeMaxWeight(allTimeLogs)}
+          historicalMaxE1rm={allTimeMaxE1rm(allTimeLogs)}
           prescribedMin={minPrescribedReps(prescribedEntry?.prescribedReps)}
           sets={allSets}
           onPlayVideo={onPlayVideo}

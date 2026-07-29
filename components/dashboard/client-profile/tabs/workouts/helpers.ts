@@ -1,8 +1,59 @@
 // Pure helpers consumed by the new ExerciseProgressCard family.
-// Kept dependency-free so behavior is obvious from inspection and so they
-// can be tested in isolation if a test runner is added later.
+// Kept dependency-free (salvo el núcleo puro lib/training/e1rm) so behavior is
+// obvious from inspection and so they can be tested in isolation if a test
+// runner is added later.
 
+import type { SessionSets } from "@/lib/training/e1rm";
 import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
+
+import { computeE1rmSeries, estimateOneRepMax } from "@/lib/training/e1rm";
+
+/**
+ * Logs → entrada del núcleo de e1RM, quedándose SOLO con las sesiones
+ * finalizadas: los autosaves son texto a medio escribir y convertirían un
+ * tecleo en un récord fantasma.
+ *
+ * Excepción deliberada: si NINGÚN log trae el campo (`undefined` en todos), la
+ * respuesta simplemente no lo seleccionó — filtrar ahí dejaría la gráfica vacía
+ * por una omisión del transporte, no por los datos. `null` explícito sí filtra.
+ */
+export function logsToSessionSets(logs: ExerciseLog[]): SessionSets[] {
+  const anyFinalizedField = logs.some((l) => l.finalized_at !== undefined);
+  const usable = anyFinalizedField
+    ? logs.filter((l) => l.finalized_at != null)
+    : logs;
+
+  return usable.map((log) => ({
+    date: log.scheduled_date ?? "",
+    sets: (log.sets ?? []).map((s) => ({
+      reps: s.reps,
+      weight_kg: s.weight_kg,
+    })),
+  }));
+}
+
+/** Serie de e1RM (un punto por fecha) derivada de los logs finalizados. */
+export function buildE1rmChartData(logs: ExerciseLog[]) {
+  return computeE1rmSeries(logsToSessionSets(logs));
+}
+
+/**
+ * Mejor e1RM histórico del ejercicio. Sustituye al "peso máximo" como criterio
+ * de récord: 100 kg × 3 supera a 105 kg × 1, y el peso suelto no lo veía.
+ */
+export function allTimeMaxE1rm(logs: ExerciseLog[]): number {
+  let max = 0;
+
+  for (const session of logsToSessionSets(logs)) {
+    for (const set of session.sets) {
+      const e1rm = estimateOneRepMax(set.weight_kg, set.reps);
+
+      if (e1rm !== null && e1rm > max) max = e1rm;
+    }
+  }
+
+  return max;
+}
 
 /**
  * Session volume = sum across sets of (reps * weight_kg).

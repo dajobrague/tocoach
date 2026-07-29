@@ -21,6 +21,12 @@ export interface ExerciseLog {
   /** Slot específico del plan (session_exercises.id) al que pertenece el log. */
   session_exercise_id?: string | null;
   completed_at: string;
+  /**
+   * Sesión cerrada por el cliente. Los autosaves dejan esto en null: un "100"
+   * tecleado camino a "10" no puede contar como récord. Opcional porque no
+   * todas las rutas lo seleccionan explícitamente.
+   */
+  finalized_at?: string | null;
   sets: ExerciseLogSet[];
   video_url: string | null;
   // Legacy fields kept for backward compatibility with old data
