@@ -104,7 +104,10 @@ export function MonthGrid({
                 <button
                   key={cell.date}
                   aria-current={isToday ? "date" : undefined}
-                  aria-label={`${cell.date}${statusWord ? `, ${statusWord}` : isRest ? ", descanso" : ""}`}
+                  aria-label={`${new Date(`${cell.date}T00:00:00`).toLocaleDateString(
+                    "es-ES",
+                    { weekday: "long", day: "numeric", month: "long" }
+                  )}${statusWord ? `, ${statusWord}` : isRest ? ", descanso" : ""}`}
                   aria-pressed={isSelected}
                   className={[
                     "relative flex h-[4.5rem] flex-col items-start gap-1 rounded-large border p-1.5 text-left transition-all",

@@ -125,6 +125,20 @@ export function ActiveSessionView({
 
   const sessionCompleted = schedState.data?.status === "completed";
 
+  // Hora de inicio con borrador local: bindear el input directo al server
+  // disparaba un PUT por keystroke (y pisaba lo tecleado con el valor viejo).
+  // null = seguir mostrando el valor del server; se comitea al salir del campo.
+  const [timeDraft, setTimeDraft] = useState<string | null>(null);
+  const commitTimeDraft = () => {
+    if (timeDraft === null) return;
+    const serverTime = schedState.data?.scheduled_time ?? "";
+
+    if (/^\d{2}:\d{2}$/.test(timeDraft) && timeDraft !== serverTime) {
+      setStartTime.mutate(timeDraft);
+    }
+    setTimeDraft(null);
+  };
+
   const exercises: Array<ExerciseLike & Record<string, unknown>> =
     useMemo(() => {
       // Use the resolved prescription only when it describes the SAME
@@ -309,10 +323,9 @@ export function ActiveSessionView({
             className="ml-auto bg-transparent text-xs font-semibold text-foreground outline-none"
             disabled={setStartTime.isPending}
             type="time"
-            value={schedState.data?.scheduled_time ?? ""}
-            onChange={(event) => {
-              if (event.target.value) setStartTime.mutate(event.target.value);
-            }}
+            value={timeDraft ?? schedState.data?.scheduled_time ?? ""}
+            onBlur={commitTimeDraft}
+            onChange={(event) => setTimeDraft(event.target.value)}
           />
         </div>
       ) : null}
@@ -341,7 +354,10 @@ export function ActiveSessionView({
             </Button>
           ) : null}
         </div>
-      ) : total > 0 && completed < total ? (
+      ) : total > 0 ? (
+        // También con todo hecho pero sin estado "completed" (p.ej. el
+        // auto-completado por cobertura falló o va con retraso): sin el
+        // botón el cliente quedaría sin forma de cerrar la sesión.
         <Button
           fullWidth
           color="success"

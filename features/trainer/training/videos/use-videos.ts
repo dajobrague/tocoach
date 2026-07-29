@@ -70,6 +70,7 @@ export interface UseLoggedExercises {
   exercises: LoggedExercise[];
   isLoading: boolean;
   error: unknown;
+  refetch: () => void;
 }
 
 /**
@@ -119,7 +120,14 @@ export function useLoggedExercises(clientId: string): UseLoggedExercises {
     );
   }, [logs]);
 
-  return { exercises, isLoading: query.isLoading, error: query.error };
+  return {
+    exercises,
+    isLoading: query.isLoading,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }
 
 /** Marca/desmarca revisado con parche optimista del mapa y rollback en error. */

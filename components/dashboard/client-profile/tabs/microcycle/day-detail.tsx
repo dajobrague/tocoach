@@ -124,6 +124,7 @@ function SetsTable({
     <div className="mt-2.5 grid grid-cols-[2.5rem_1fr_1fr_auto] overflow-hidden rounded-large border border-gray-100 bg-white text-xs tabular-nums">
       {sets.map((set, index) => {
         const isRecord = index === recordIndex;
+        const videoUrl = set.video_url ?? null;
         const lowReps =
           prescribedMin !== null &&
           typeof set.reps === "number" &&
@@ -168,12 +169,12 @@ function SetsTable({
                   🏅 Récord
                 </span>
               ) : null}
-              {set.video_url && onPlayVideo ? (
+              {videoUrl !== null && onPlayVideo ? (
                 <button
                   aria-label={`Ver video de ${exerciseName} serie ${set.set_number}`}
                   className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-medium border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
                   type="button"
-                  onClick={() => onPlayVideo(set.video_url!, exerciseName)}
+                  onClick={() => onPlayVideo(videoUrl, exerciseName)}
                 >
                   <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[7px] text-white">
                     ▶
@@ -614,9 +615,11 @@ function SessionCard({
         <StatStrip
           items={[
             {
+              // Numerador SOLO con ejercicios del plan: los fuera-de-plan
+              // (prestados incl.) inflaban el ratio ("3 de 2").
               label: "Ejercicios",
               value: showLoggedView
-                ? `${loggedGroups.length}${
+                ? `${onPlanGroups.length}${
                     entry.adherence.totalPrescribed > 0
                       ? ` de ${entry.adherence.totalPrescribed}`
                       : ""

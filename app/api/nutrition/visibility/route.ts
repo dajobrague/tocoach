@@ -112,7 +112,11 @@ function parseClientIdParam(request: NextRequest): number | null {
 
 function parseClientIdBody(body: unknown): number | null {
   const raw = (body as { clientId?: unknown } | null)?.clientId;
-  const parsed = typeof raw === "number" ? raw : Number(raw);
+
+  // Solo number o string numérica: Number(true) === 1 y Number([5]) === 5
+  // pasarían la validación de abajo sin este guard.
+  if (typeof raw !== "number" && typeof raw !== "string") return null;
+  const parsed = Number(raw);
 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }

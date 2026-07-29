@@ -586,7 +586,11 @@ export async function POST(
 // PATCH - Cambiar solo el estado del programa (activar/desactivar).
 // El PUT reconstruye metadata al completo; este handler toca ÚNICAMENTE
 // client_programs.status para que "Desactivar" no arriesgue el resto.
-export async function PATCH(request: NextRequest) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const supabase = createSupabaseClient();
 
   try {
@@ -599,6 +603,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const { clientId } = await params;
     const { searchParams } = new URL(request.url);
     const programId = searchParams.get("programId");
     const body = await request.json().catch(() => ({}));
@@ -614,16 +619,23 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // client_id acota la actualización a la asignación de ESTE cliente:
+    // sin él, un program_id repetido entre clientes del mismo trainer haría
+    // que maybeSingle() reciba más de una fila (o tocara la ajena).
     const { data: updated, error } = await supabase
       .from("client_programs")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("program_id", programId)
+      .eq("client_id", clientId)
       .eq("trainer_id", session.trainer_id)
       .select("id, status")
       .maybeSingle();
 
-    if (error || !updated) {
-      console.error("[Programs API] Error updating status:", error);
+    if (error) {
+      console.error(
+        `[Programs API] ${correlationId} Error updating status:`,
+        error
+      );
 
       return NextResponse.json(
         { success: false, error: "Error al actualizar el estado" },
@@ -631,9 +643,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: "Programa no encontrado o no autorizado" },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({ success: true, status: updated.status });
   } catch (error) {
-    console.error("[Programs API] Unexpected PATCH error:", error);
+    console.error(
+      `[Programs API] ${correlationId} Unexpected PATCH error:`,
+      error
+    );
 
     return NextResponse.json(
       { success: false, error: "Error interno del servidor" },

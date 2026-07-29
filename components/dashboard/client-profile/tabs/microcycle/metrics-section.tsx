@@ -126,11 +126,10 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
       const idx = week.data.days.findIndex((d) => d.date === selectedDate);
 
       if (idx === -1) return;
-      if (direction === "left" && idx > 0) {
-        setSelectedDate(week.data.days[idx - 1]!.date);
-      } else if (direction === "right" && idx < week.data.days.length - 1) {
-        setSelectedDate(week.data.days[idx + 1]!.date);
-      }
+      const next =
+        direction === "left" ? week.data.days[idx - 1] : week.data.days[idx + 1];
+
+      if (next) setSelectedDate(next.date);
     },
     [week.data, selectedDate]
   );
@@ -147,9 +146,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
   }, [view, month.byDate, week.data, selectedDate]);
 
   const weekIsCompletelyEmpty =
-    !!week.data &&
-    week.data.days.every((d) => d.sessions.length === 0) &&
-    week.data.orphansByDate.size === 0;
+    !!week.data && week.data.days.every((d) => d.sessions.length === 0);
 
   const activeError = view === "mes" ? month.error : week.error;
   const activeRefetch = view === "mes" ? month.refetch : week.refetch;

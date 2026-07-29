@@ -99,9 +99,10 @@ export interface DayMetrics {
   isFuture: boolean;
 }
 
+// Nota: orphansByDate se eliminó — siempre viajaba vacío (los huérfanos se
+// promueven a días dentro de buildDayMetricsRange) y su único consumidor
+// comprobaba `.size === 0`, que era verdadero por construcción.
 export interface WeekMetrics {
   /** 7 entries, Monday first. */
   days: DayMetrics[];
-  /** Logs whose scheduled_date sits inside the week but with no scheduled session. */
-  orphansByDate: Map<string, ExerciseLog[]>;
 }

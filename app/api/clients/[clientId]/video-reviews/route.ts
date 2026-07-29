@@ -31,6 +31,8 @@ interface VideoReviewBody {
   videoUrl: string;
   reviewed: boolean;
   comment: string | null;
+  /** false = el body no traía `comment` → preservar el comentario previo. */
+  commentProvided: boolean;
   exerciseLogId?: string;
   context?: VideoReviewContext;
 }
@@ -134,6 +136,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const hadComment =
       typeof previous?.comment === "string" && previous.comment.trim() !== "";
 
+    // Body sin campo `comment` = "no tocar el comentario": se preserva el
+    // previo. Mandar comment vacío/null sigue borrándolo explícitamente.
+    const commentForWrite = body.commentProvided
+      ? body.comment
+      : (previous?.comment ?? null);
+
     const { data: saved, error: upsertError } = await supabase
       .from(TABLE)
       .upsert(
@@ -142,7 +150,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
           client_id: Number(clientId),
           trainer_id: session.trainer_id,
           video_url: body.videoUrl,
-          comment: body.comment,
+          comment: commentForWrite,
           ...(body.exerciseLogId
             ? { exercise_log_id: body.exerciseLogId }
             : {}),
@@ -254,7 +262,9 @@ function parseBody(raw: unknown): VideoReviewBody | null {
   if (videoUrl === "") return null;
   if (typeof input.reviewed !== "boolean") return null;
 
-  // Comentario vacío o solo espacios se guarda como null, no como "".
+  // Tres estados del comentario: ausente (no tocar el existente), string con
+  // texto (set) o vacío/null explícito (borrar). Vacío o solo espacios = null.
+  const commentProvided = "comment" in input;
   const rawComment = input.comment;
   const trimmedComment =
     typeof rawComment === "string" ? rawComment.trim() : "";
@@ -270,6 +280,7 @@ function parseBody(raw: unknown): VideoReviewBody | null {
     videoUrl,
     reviewed: input.reviewed,
     comment,
+    commentProvided,
     ...(exerciseLogId === null ? {} : { exerciseLogId }),
     ...(context === null ? {} : { context }),
   };

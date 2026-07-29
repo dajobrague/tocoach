@@ -70,9 +70,12 @@ export function VisibilitySelect({
   );
 
   function onChange(keys: SharedSelection): void {
-    const next = NUTRITION_SECTIONS.filter(
-      (section) => keys !== "all" && keys.has(section)
-    );
+    // HeroUI puede entregar el sentinel "all" (select-all por teclado):
+    // significa "todas las disponibles", no "ninguna".
+    const next =
+      keys === "all"
+        ? NUTRITION_SECTIONS.filter((section) => available[section])
+        : NUTRITION_SECTIONS.filter((section) => keys.has(section));
 
     save.mutate(next.length === 0 ? null : next);
   }
