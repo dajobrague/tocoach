@@ -15,6 +15,11 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo, useRef, useState } from "react";
@@ -33,6 +38,9 @@ interface ProgramHeaderCardProps {
   isUpdating: boolean;
   updateError: string | null;
   onRename: (name: string) => void;
+  /** Desactivar el programa (status → paused) tras confirmación. */
+  onDeactivate: () => void;
+  isDeactivating: boolean;
   onEdit: () => void;
   onSaveAsTemplate: () => void;
   onDelete: () => void;
@@ -43,6 +51,8 @@ export function ProgramHeaderCard({
   microcycleDays,
   isUpdating,
   updateError,
+  onDeactivate,
+  isDeactivating,
   onRename,
   onEdit,
   onSaveAsTemplate,
@@ -53,6 +63,7 @@ export function ProgramHeaderCard({
   const status = programStatus(program.status);
 
   const [editingName, setEditingName] = useState(false);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   // Se marca en Escape para que el blur del input no committee el cambio.
   const cancelName = useRef(false);
@@ -150,17 +161,30 @@ export function ProgramHeaderCard({
                     />
                   </button>
                 )}
-                <Chip color={status.color} size="sm" variant="flat">
-                  {status.label}
-                </Chip>
-                <Chip
-                  className={visual.square}
-                  size="sm"
-                  startContent={<Icon icon={visual.icon} width={12} />}
-                  variant="flat"
-                >
-                  {visual.label}
-                </Chip>
+                {program.status === "active" ? (
+                  <button
+                    className="group/status"
+                    title="Desactivar programa"
+                    type="button"
+                    onClick={() => setDeactivateOpen(true)}
+                  >
+                    <Chip
+                      className="cursor-pointer transition-opacity group-hover/status:opacity-80"
+                      color={status.color}
+                      endContent={
+                        <Icon icon="solar:alt-arrow-down-linear" width={11} />
+                      }
+                      size="sm"
+                      variant="flat"
+                    >
+                      {status.label}
+                    </Chip>
+                  </button>
+                ) : (
+                  <Chip color={status.color} size="sm" variant="flat">
+                    {status.label}
+                  </Chip>
+                )}
               </div>
               <p className="text-xs text-default-500">
                 {program.type}
@@ -200,7 +224,7 @@ export function ProgramHeaderCard({
               </DropdownItem>
               <DropdownItem
                 key="template"
-                startContent={<Icon icon="solar:save-bold" width={16} />}
+                startContent={<Icon icon="solar:diskette-linear" width={16} />}
               >
                 Guardar como plantilla
               </DropdownItem>
@@ -241,6 +265,50 @@ export function ProgramHeaderCard({
           </div>
         )}
       </CardBody>
+
+      {/* Confirmación de desactivado: el programa desaparece de esta vista
+          y el cliente deja de verlo. */}
+      <Modal
+        isOpen={deactivateOpen}
+        placement="center"
+        size="sm"
+        onClose={() => setDeactivateOpen(false)}
+      >
+        <ModalContent>
+          <ModalHeader className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <Icon icon="solar:pause-circle-linear" width={18} />
+            </span>
+            Desactivar programa
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-600">
+              <span className="font-semibold text-gray-900">
+                {program.name}
+              </span>{" "}
+              pasará a pausado: desaparecerá de esta vista y tu cliente dejará
+              de verlo en su app. Las sesiones, ejercicios e historial se
+              conservan.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              isDisabled={isDeactivating}
+              variant="light"
+              onPress={() => setDeactivateOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="warning"
+              isLoading={isDeactivating}
+              onPress={onDeactivate}
+            >
+              Desactivar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Card>
   );
 }

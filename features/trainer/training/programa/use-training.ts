@@ -45,6 +45,8 @@ import {
   searchExerciseLibrary,
   updateExercise,
   updateProgram,
+  updateProgramStatus,
+  type ProgramStatus,
   updateSession,
 } from "./training-api";
 
@@ -86,6 +88,12 @@ export function useProgramMutations(clientId: string) {
       updateProgram(clientId, vars.programId, vars.input),
     onSuccess: invalidate,
   });
+  const updateStatusM = useMutation({
+    mutationFn: (vars: { programId: string; status: ProgramStatus }) =>
+      updateProgramStatus(clientId, vars.programId, vars.status),
+    onSuccess: invalidate,
+  });
+
   const deleteProgramM = useMutation({
     mutationFn: (programId: string) => deleteProgram(clientId, programId),
     onSuccess: invalidate,
@@ -101,6 +109,7 @@ export function useProgramMutations(clientId: string) {
 
   return {
     createProgram: createProgramM,
+    updateProgramStatus: updateStatusM,
     updateProgram: updateProgramM,
     deleteProgram: deleteProgramM,
     saveAsTemplate: saveAsTemplateM,

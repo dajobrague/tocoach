@@ -583,6 +583,65 @@ export async function POST(
   }
 }
 
+// PATCH - Cambiar solo el estado del programa (activar/desactivar).
+// El PUT reconstruye metadata al completo; este handler toca ÚNICAMENTE
+// client_programs.status para que "Desactivar" no arriesgue el resto.
+export async function PATCH(request: NextRequest) {
+  const supabase = createSupabaseClient();
+
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const programId = searchParams.get("programId");
+    const body = await request.json().catch(() => ({}));
+    const status = body?.status;
+
+    if (
+      !programId ||
+      !["active", "paused", "completed", "cancelled"].includes(status)
+    ) {
+      return NextResponse.json(
+        { success: false, error: "programId y status válido son requeridos" },
+        { status: 400 }
+      );
+    }
+
+    const { data: updated, error } = await supabase
+      .from("client_programs")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("program_id", programId)
+      .eq("trainer_id", session.trainer_id)
+      .select("id, status")
+      .maybeSingle();
+
+    if (error || !updated) {
+      console.error("[Programs API] Error updating status:", error);
+
+      return NextResponse.json(
+        { success: false, error: "Error al actualizar el estado" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, status: updated.status });
+  } catch (error) {
+    console.error("[Programs API] Unexpected PATCH error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
 // PUT - Update a program
 export async function PUT(
   request: NextRequest,

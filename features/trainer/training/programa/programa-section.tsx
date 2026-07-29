@@ -37,7 +37,7 @@ interface DrawerState {
 
 export function ProgramaSection({ clientId }: { clientId: string }) {
   const { programs, isLoading, error, refetch } = usePrograms(clientId);
-  const { updateProgram } = useProgramMutations(clientId);
+  const { updateProgram, updateProgramStatus } = useProgramMutations(clientId);
   const microcycle = useMicrocycleState(clientId);
   const logs = useClientExerciseLogs(clientId);
 
@@ -153,6 +153,7 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
           })()}
 
           <ProgramHeaderCard
+            isDeactivating={updateProgramStatus.isPending}
             isUpdating={updateProgram.isPending}
             microcycleDays={microcycle.durationDays}
             program={selected}
@@ -162,6 +163,12 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
                   ? updateProgram.error.message
                   : "No se pudo actualizar el programa"
                 : null
+            }
+            onDeactivate={() =>
+              updateProgramStatus.mutate(
+                { programId: selected.programId, status: "paused" },
+                { onSuccess: () => setSelectedId(null) }
+              )
             }
             onDelete={() => setDeleteOpen(true)}
             onEdit={() => setEditOpen(true)}

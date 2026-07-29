@@ -281,6 +281,21 @@ export function updateProgram(
 }
 
 /** Borra programa + sesiones + ejercicios + asignación (cascada manual). */
+export type ProgramStatus = "active" | "paused" | "completed" | "cancelled";
+
+/** Cambia SOLO el estado (activar/desactivar) sin tocar metadata. */
+export function updateProgramStatus(
+  clientId: string,
+  programId: string,
+  status: ProgramStatus
+): Promise<void> {
+  return sendJson<Record<string, unknown>>(
+    `${base(clientId)}?programId=${programId}`,
+    "PATCH",
+    { status }
+  ).then(() => undefined);
+}
+
 export function deleteProgram(
   clientId: string,
   programId: string
