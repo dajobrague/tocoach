@@ -411,17 +411,15 @@ export function EditProgramModal({
             isDisabled={updateProgram.isPending}
             onChange={patch}
           />
+          {/* Solo lectura: el PUT no acepta status (reconstruye metadata) y
+              este Select era un no-op silencioso. El camino real es el chip
+              de estado del header card (PATCH dedicado). */}
           <Select
-            disallowEmptySelection
-            isDisabled={updateProgram.isPending}
+            isDisabled
+            description="Para activar o pausar el programa usa el chip de estado en la cabecera."
             label="Estado"
             selectedKeys={[status]}
             variant="bordered"
-            onSelectionChange={(keys) => {
-              const key = Array.from(keys)[0];
-
-              if (typeof key === "string") setStatus(key);
-            }}
           >
             <SelectItem key="active">Activo</SelectItem>
             <SelectItem key="paused">Pausado</SelectItem>

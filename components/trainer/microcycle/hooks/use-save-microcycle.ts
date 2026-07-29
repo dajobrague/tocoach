@@ -5,6 +5,7 @@
 import type { MicrocycleWithSlots } from "@/types/training";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 
 import { TRAINER_MICROCYCLE_QUERY_KEY } from "./use-trainer-microcycle";
 
@@ -41,9 +42,22 @@ async function putMicrocycle(
 
 export function useSaveMicrocycle(clientId: string) {
   const queryClient = useQueryClient();
+  // Cadena de serialización: cada guardado manda el ciclo COMPLETO, así que
+  // el último en dispararse debe ser el último en llegar al server. Sin esto,
+  // clicks rápidos (+día, ×día) lanzaban PUTs concurrentes y uno viejo podía
+  // aterrizar último y persistir estado obsoleto.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
 
   return useMutation({
-    mutationFn: (input: SaveMicrocycleInput) => putMicrocycle(clientId, input),
+    mutationFn: (input: SaveMicrocycleInput) => {
+      const run = chainRef.current
+        .catch(() => undefined)
+        .then(() => putMicrocycle(clientId, input));
+
+      chainRef.current = run;
+
+      return run;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: TRAINER_MICROCYCLE_QUERY_KEY(clientId),

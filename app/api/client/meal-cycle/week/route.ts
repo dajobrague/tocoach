@@ -165,7 +165,10 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...week,
-        goals,
+        // Mismo gating que fallback.presets/pdf: si el trainer ocultó la
+        // sección de objetivos, el objeto crudo no viaja al cliente (los
+        // targets por día del plan visible ya van dentro de `week`).
+        goals: sections.includes("goals") ? goals : null,
         sections,
         ...(fallback !== undefined ? { fallback } : {}),
       },

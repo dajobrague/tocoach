@@ -162,7 +162,11 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
                 ? updateProgram.error instanceof Error
                   ? updateProgram.error.message
                   : "No se pudo actualizar el programa"
-                : null
+                : updateProgramStatus.isError
+                  ? updateProgramStatus.error instanceof Error
+                    ? updateProgramStatus.error.message
+                    : "No se pudo desactivar el programa"
+                  : null
             }
             onDeactivate={() =>
               updateProgramStatus.mutate(

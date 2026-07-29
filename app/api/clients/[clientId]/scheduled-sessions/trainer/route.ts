@@ -42,6 +42,8 @@ interface ScheduledSessionResponse {
   scheduled_date: string;
   status: string;
   completion_date: string | null;
+  /** Hora de inicio declarada por el cliente; null en filas virtuales. */
+  scheduled_time?: string | null;
   /**
    * Sesión que se muestra como prescripción del día. Cuando el cliente
    * divergió del microciclo (entrenó otra sesión), `session` lleva la
@@ -351,6 +353,7 @@ async function materializeTemplate(
       out.set(date, {
         id: `template:${cycle.startDate}:${dayIndex}:${date}`,
         scheduled_date: date,
+        scheduled_time: null,
         status: "scheduled",
         completion_date: null,
         session: sessionDetail,

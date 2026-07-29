@@ -504,6 +504,13 @@ export function ExerciseLogModal({
     let outcome: SaveOutcome = FAILED_SAVE;
 
     try {
+      // Si hay un autosave en vuelo, performSave devolvería FAILED_SAVE y el
+      // tap en "Finalizado" moriría en silencio. Esperamos a que el lock se
+      // libere (máx ~3s) antes de finalizar.
+      for (let i = 0; i < 10 && isSavingRef.current; i += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
+
       outcome = await performSave(false, true);
     } finally {
       setIsSaving(false);

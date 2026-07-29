@@ -154,7 +154,14 @@ export function SessionRow({
         : []
     );
 
-    if (payload.length !== reordered.length) return;
+    // Ejercicio sin id (no debería pasar): avisar en vez de ignorar el drag.
+    if (payload.length !== reordered.length) {
+      setActionError("No se pudo reordenar los ejercicios");
+
+      return;
+    }
+
+    setActionError(null);
 
     mutations.reorderExercises.mutate(payload, {
       onError: () => setActionError("No se pudo reordenar los ejercicios"),

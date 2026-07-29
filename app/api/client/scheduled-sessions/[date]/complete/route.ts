@@ -235,9 +235,17 @@ async function undoManualComplete(
       clientId
     );
   } catch (error) {
-    console.warn(`${LOG_PREFIX} coverage check failed on undo:`, {
+    // Si no se pudo evaluar la cobertura NO degradamos a "scheduled" a
+    // ciegas (una sesión realmente cubierta perdería su completado): se
+    // devuelve error y el cliente reintenta el deshacer.
+    console.error(`${LOG_PREFIX} coverage check failed on undo:`, {
       error: error instanceof Error ? error.message : String(error),
     });
+
+    return NextResponse.json(
+      { success: false, error: "Error al deshacer" },
+      { status: 500 }
+    );
   }
 
   const { error: updateError } = await supabase

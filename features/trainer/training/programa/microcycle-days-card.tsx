@@ -47,18 +47,19 @@ interface ResolvedSlot {
 
 /** "2026-03-03" → "lun 3 mar 2026" (es-ES corto, sin puntos). */
 function formatStartDate(ymd: string): string {
-  try {
-    return new Date(`${ymd}T00:00:00`)
-      .toLocaleDateString("es-ES", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-      .replaceAll(".", "");
-  } catch {
-    return ymd;
-  }
+  const date = new Date(`${ymd}T00:00:00`);
+
+  // Invalid Date no lanza — formatearía "Invalid Date" silenciosamente.
+  if (Number.isNaN(date.getTime())) return ymd;
+
+  return date
+    .toLocaleDateString("es-ES", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+    .replaceAll(".", "");
 }
 
 export function MicrocycleDaysCard({

@@ -110,8 +110,14 @@ const INTENSITY_BY_LEGACY: Record<string, string> = {
 
 function normalizeIntensity(value: string | undefined): string {
   if (value === undefined) return "";
+  const trimmed = value.trim();
 
-  return INTENSITY_BY_LEGACY[value.trim().toLowerCase()] ?? "";
+  if (trimmed === "") return "";
+
+  // Valor libre no reconocido (prescripciones legacy): se PRESERVA tal cual
+  // en vez de vaciarlo — vaciar lo perdía silenciosamente al guardar la
+  // edición. El Select añade la opción extra cuando hace falta.
+  return INTENSITY_BY_LEGACY[trimmed.toLowerCase()] ?? trimmed;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -673,7 +679,11 @@ export function ExerciseDrawer({
                     );
                   }}
                 >
-                  {INTENSITY_OPTIONS.map((option) => (
+                  {(form.intensity !== "" &&
+                  !INTENSITY_OPTIONS.includes(form.intensity)
+                    ? [...INTENSITY_OPTIONS, form.intensity]
+                    : INTENSITY_OPTIONS
+                  ).map((option) => (
                     <SelectItem key={option}>{option}</SelectItem>
                   ))}
                 </Select>

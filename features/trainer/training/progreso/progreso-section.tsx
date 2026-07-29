@@ -302,6 +302,7 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
     exercises,
     isLoading: exercisesLoading,
     error: exercisesError,
+    refetch: refetchExercises,
   } = useLoggedExercises(clientId);
 
   const [exerciseId, setExerciseId] = useState<string | null>(null);
@@ -404,7 +405,7 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
   }
 
   if (exercisesError != null) {
-    return <ErrorCard error={exercisesError} onRetry={refetch} />;
+    return <ErrorCard error={exercisesError} onRetry={refetchExercises} />;
   }
 
   if (exercises.length === 0) {

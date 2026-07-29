@@ -207,11 +207,8 @@ function buildWeekMetrics(
   scheduled: ScheduledSessionRow[],
   logs: ExerciseLog[]
 ): WeekMetrics {
-  const orphansByDate = new Map<string, ExerciseLog[]>();
-
   return {
     days: buildDayMetricsRange(weekStart, 7, scheduled, logs),
-    orphansByDate,
   };
 }
 
