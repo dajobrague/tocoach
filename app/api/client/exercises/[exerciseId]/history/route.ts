@@ -189,6 +189,11 @@ async function loadCoachComments(
 // desempate por reps. Devuelve también la fecha de la sesión que ganó
 // (scheduled_sessions.scheduled_date del exercise_log padre).
 // Si el cliente todavía no tiene sets registrados con peso → null.
+//
+// Solo cuentan los logs FINALIZADOS: antes un autosave podía ganar el PR — el
+// cliente teclea "100" camino a "10" y el guardado automático lo dejaba como su
+// mejor marca para siempre. La lista `recent` de arriba sí sigue mostrando
+// autosaves (es el historial, no el récord).
 
 async function loadPersonalRecord(
   supabase: ReturnType<typeof createSupabaseClient>,
@@ -199,10 +204,11 @@ async function loadPersonalRecord(
   const { data, error } = await supabase
     .from("exercise_log_sets")
     .select(
-      "reps, weight_kg, exercise_logs!inner(client_id, exercise_id, scheduled_sessions!inner(scheduled_date))"
+      "reps, weight_kg, exercise_logs!inner(client_id, exercise_id, finalized_at, scheduled_sessions!inner(scheduled_date))"
     )
     .eq("exercise_logs.client_id", clientId)
     .eq("exercise_logs.exercise_id", exerciseId)
+    .not("exercise_logs.finalized_at", "is", null)
     .not("weight_kg", "is", null)
     .order("weight_kg", { ascending: false, nullsFirst: false })
     .order("reps", { ascending: false, nullsFirst: false })

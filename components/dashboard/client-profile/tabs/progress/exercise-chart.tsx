@@ -19,6 +19,7 @@ export function ExerciseLineChart({
   lines,
   yFormatter,
   title,
+  headerRight,
 }: {
   data: Record<string, any>[];
   lines: {
@@ -29,10 +30,17 @@ export function ExerciseLineChart({
   }[];
   yFormatter?: (v: any) => string;
   title: string;
+  /** Controles del propio chart (p. ej. el toggle e1RM/Volumen). */
+  headerRight?: React.ReactNode;
 }) {
   if (data.length < 2) {
+    // El toggle sigue visible: una métrica puede tener menos de 2 puntos y la
+    // otra tenerlos, y sin control el usuario quedaría atrapado en la vacía.
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 text-center">
+        {headerRight ? (
+          <div className="mb-3 flex justify-end">{headerRight}</div>
+        ) : null}
         <p className="text-sm text-gray-500">
           Se necesitan al menos 2 registros para mostrar la gráfica
         </p>
@@ -42,7 +50,10 @@ export function ExerciseLineChart({
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+        {headerRight}
+      </div>
       <ResponsiveContainer height={250} width="100%">
         <LineChart
           data={data}

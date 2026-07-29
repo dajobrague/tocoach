@@ -28,7 +28,15 @@
 /* eslint-disable no-console */
 "use client";
 
-import { Button, Modal, ModalContent, ModalFooter } from "@heroui/react";
+import type { NewRecord } from "@/lib/training/e1rm";
+
+import {
+  addToast,
+  Button,
+  Modal,
+  ModalContent,
+  ModalFooter,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -36,8 +44,10 @@ import { ExerciseHistorySection } from "./exercise-history-section";
 import { ExerciseLogForm } from "./exercise-log-form";
 import { ExerciseLogHero } from "./exercise-log-hero";
 import { ExerciseLogIdentity } from "./exercise-log-identity";
+import { ExerciseProgressionSection } from "./exercise-progression-section";
 import { ExerciseTargetSection } from "./exercise-target-section";
 import {
+  formatKg,
   isExerciseCardio,
   shouldAutosaveDraft,
   type ExerciseShape,
@@ -77,6 +87,106 @@ export interface ExerciseLogModalProps {
   clientId: string;
   existingLog?: any;
   onSuccess: () => void;
+}
+
+/** Respuesta del writer de logs, en la parte que nos interesa. */
+interface SaveResponse {
+  success?: boolean;
+  error?: string;
+  newRecords?: NewRecord[] | null;
+  firstTime?: boolean;
+}
+
+/**
+ * Resultado de un guardado. `newRecords` / `firstTime` sólo pueden venir
+ * llenos en el PRIMER finalize: los autosaves y los re-finalize devuelven
+ * la forma vacía, así que la celebración no se puede disparar dos veces.
+ */
+interface SaveOutcome {
+  ok: boolean;
+  newRecords: NewRecord[];
+  firstTime: boolean;
+}
+
+const FAILED_SAVE: SaveOutcome = {
+  ok: false,
+  newRecords: [],
+  firstTime: false,
+};
+
+type Celebration =
+  | { kind: "records"; records: NewRecord[] }
+  | { kind: "first" };
+
+// Cuánto dejamos el modal abierto tras finalizar para que la celebración
+// se vea antes de cerrar. Sin esto el modal se cierra al instante y ni el
+// confeti ni el banner llegan a existir.
+const RECORD_CELEBRATION_MS = 2200;
+const FIRST_TIME_CELEBRATION_MS = 1400;
+
+// Por encima del modal de HeroUI (react-aria monta overlays con z-index
+// inline de 100000); si no, el confeti cae por detrás del modal.
+const CONFETTI_Z_INDEX = 100060;
+
+/**
+ * Confeti de récord: ráfaga central desde abajo + dos laterales, ~1,5s.
+ * Import dinámico para que canvas-confetti no entre en el bundle inicial.
+ * Se salta entero si el usuario pidió menos movimiento (el banner y el
+ * toast siguen apareciendo).
+ */
+async function fireConfetti(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const { default: confetti } = await import("canvas-confetti");
+  const base = {
+    disableForReducedMotion: true,
+    zIndex: CONFETTI_Z_INDEX,
+  };
+
+  void confetti({
+    ...base,
+    origin: { x: 0.5, y: 1 },
+    particleCount: 90,
+    spread: 75,
+    startVelocity: 45,
+  });
+  window.setTimeout(() => {
+    void confetti({
+      ...base,
+      angle: 60,
+      origin: { x: 0, y: 0.9 },
+      particleCount: 30,
+      spread: 55,
+    });
+  }, 220);
+  window.setTimeout(() => {
+    void confetti({
+      ...base,
+      angle: 120,
+      origin: { x: 1, y: 0.9 },
+      particleCount: 30,
+      spread: 55,
+    });
+  }, 380);
+}
+
+/** "6 × 97,5 kg (antes 95 kg)" — para el toast, con el nombre delante. */
+function toastLine(record: NewRecord): string {
+  const weight = `${record.bucket} × ${formatKg(record.weightKg)} kg`;
+
+  return record.previousWeightKg == null
+    ? `${weight} (primera marca en ${record.bucket} reps)`
+    : `${weight} (antes ${formatKg(record.previousWeightKg)} kg)`;
+}
+
+/** "6 × 97,5 kg — antes 95 kg" — una línea por récord en el banner. */
+function bannerLine(record: NewRecord): string {
+  const weight = `${record.bucket} × ${formatKg(record.weightKg)} kg`;
+
+  return record.previousWeightKg == null
+    ? `${weight} — primera marca en ${record.bucket} reps`
+    : `${weight} — antes ${formatKg(record.previousWeightKg)} kg`;
 }
 
 export function ExerciseLogModal({
@@ -240,8 +350,8 @@ export function ExerciseLogModal({
   // y "Finalizado" (silent=false, finalize=true). El flag `finalize`
   // viaja al server y determina si el log se marca como completado.
   const performSave = useCallback(
-    async (silent: boolean, finalize: boolean): Promise<boolean> => {
-      if (isSavingRef.current) return false;
+    async (silent: boolean, finalize: boolean): Promise<SaveOutcome> => {
+      if (isSavingRef.current) return FAILED_SAVE;
       isSavingRef.current = true;
       setAutoSaveState("saving");
       try {
@@ -253,7 +363,7 @@ export function ExerciseLogModal({
             body: JSON.stringify({ ...buildRequestBody(), finalize }),
           }
         );
-        const data = await response.json();
+        const data = (await response.json()) as SaveResponse;
 
         if (data.success) {
           clearExerciseLogDraft(draftKey);
@@ -261,7 +371,12 @@ export function ExerciseLogModal({
           setAutoSaveState("saved");
           onSuccess();
 
-          return true;
+          return {
+            ok: true,
+            newRecords:
+              finalize && Array.isArray(data.newRecords) ? data.newRecords : [],
+            firstTime: finalize && data.firstTime === true,
+          };
         }
         setAutoSaveState("error");
         if (!silent) {
@@ -270,13 +385,13 @@ export function ExerciseLogModal({
           );
         }
 
-        return false;
+        return FAILED_SAVE;
       } catch (err) {
         console.error("[ExerciseLogModal] Error saving log:", err);
         setAutoSaveState("error");
         if (!silent) alert("Error al guardar registro");
 
-        return false;
+        return FAILED_SAVE;
       } finally {
         isSavingRef.current = false;
       }
@@ -311,30 +426,107 @@ export function ExerciseLogModal({
     return () => window.clearTimeout(t);
   }, [formData, isCardio, isOpen, exercise, performSave, hydratedSigRef]);
 
+  // Celebración de récord: vive mientras el modal siga abierto y se
+  // limpia al cerrarlo, como el resto del estado de sesión del modal.
+  const [celebration, setCelebration] = useState<Celebration | null>(null);
+  const [isCelebrating, setIsCelebrating] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const cancelPendingClose = useCallback(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
   // Reset al cerrar el modal: volvemos a estado limpio para la próxima
   // apertura (otro ejercicio o reapertura del mismo).
   useEffect(() => {
     if (!isOpen) {
       isDirtyRef.current = false;
       setAutoSaveState("idle");
+      setCelebration(null);
+      setIsCelebrating(false);
+      cancelPendingClose();
     }
-  }, [isOpen]);
+  }, [isOpen, cancelPendingClose]);
+
+  useEffect(() => cancelPendingClose, [cancelPendingClose]);
+
+  /**
+   * Arranca la celebración y devuelve cuántos ms hay que dejar el modal
+   * abierto (0 = cerrar ya). Nunca puede tumbar el guardado: el log ya
+   * está persistido cuando llegamos acá.
+   */
+  const startCelebration = useCallback(
+    (outcome: SaveOutcome): number => {
+      try {
+        const [first] = outcome.newRecords;
+
+        if (first) {
+          setCelebration({ kind: "records", records: outcome.newRecords });
+          setIsCelebrating(true);
+          void fireConfetti().catch((err) => {
+            console.error("[ExerciseLogModal] Confetti failed:", err);
+          });
+          addToast({
+            color: "success",
+            description: `${exercise?.name ?? "Tu ejercicio"} — ${toastLine(first)}`,
+            title: "¡Nuevo récord! 🎉",
+          });
+
+          return RECORD_CELEBRATION_MS;
+        }
+
+        if (outcome.firstTime) {
+          setCelebration({ kind: "first" });
+          setIsCelebrating(true);
+
+          return FIRST_TIME_CELEBRATION_MS;
+        }
+      } catch (err) {
+        console.error("[ExerciseLogModal] Celebration failed:", err);
+      }
+
+      return 0;
+    },
+    [exercise?.name]
+  );
 
   const handleFinalize = async () => {
     setIsSaving(true);
-    try {
-      // Hace flush del posible debounce pendiente Y manda finalize=true
-      // para que el server marque el log como completado.
-      const ok = await performSave(false, true);
+    // Hace flush del posible debounce pendiente Y manda finalize=true
+    // para que el server marque el log como completado.
+    let outcome: SaveOutcome = FAILED_SAVE;
 
-      if (ok) onClose();
+    try {
+      outcome = await performSave(false, true);
     } finally {
       setIsSaving(false);
     }
+
+    if (!outcome.ok) return;
+
+    const holdMs = startCelebration(outcome);
+
+    if (holdMs === 0) {
+      onClose();
+
+      return;
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, holdMs);
   };
 
   const handleClose = () => {
-    if (!isSaving) onClose();
+    if (isSaving) return;
+    // Si el usuario cierra durante la celebración, no dejamos vivo el
+    // timer que cerraría un modal ya cerrado (o el siguiente).
+    cancelPendingClose();
+    onClose();
   };
 
   const handleDelete = async () => {
@@ -426,6 +618,12 @@ export function ExerciseLogModal({
               isOpen={isOpen}
             />
 
+            <ExerciseProgressionSection
+              exerciseId={exerciseId || null}
+              exerciseName={exercise.name}
+              isOpen={isOpen}
+            />
+
             <ExerciseLogForm
               autoSaveState={autoSaveState}
               cardioVideo={cardioVideo}
@@ -439,6 +637,11 @@ export function ExerciseLogModal({
         </div>
 
         <ModalFooter className="flex-col gap-2 border-t border-default-200 bg-background">
+          {/* La celebración vive en el footer, no arriba del body: al
+              finalizar el usuario está mirando el botón, y el body puede
+              estar scrolleado abajo del todo. */}
+          {celebration ? <CelebrationBanner celebration={celebration} /> : null}
+
           {existingLog?.id ? (
             <Button
               className="w-full"
@@ -471,6 +674,7 @@ export function ExerciseLogModal({
               color="primary"
               isDisabled={
                 isSaving ||
+                isCelebrating ||
                 cardioVideo.isUploading ||
                 setVideos.uploadingIndex !== null ||
                 deleteLog.isPending
@@ -481,11 +685,52 @@ export function ExerciseLogModal({
               }
               onPress={handleFinalize}
             >
-              {isSaving ? "Guardando..." : "Finalizado"}
+              {isSaving
+                ? "Guardando..."
+                : isCelebrating
+                  ? "¡Guardado!"
+                  : "Finalizado"}
             </Button>
           </div>
         </ModalFooter>
       </ModalContent>
     </Modal>
+  );
+}
+
+/**
+ * Récord nuevo: banner amber con una línea por marca. La primera vez que
+ * se registra el ejercicio no hay récord que batir, así que ahí sólo va
+ * una línea discreta (sin confeti, sin toast).
+ *
+ * El amber es literal (no la paleta warning del theme) por lo mismo que
+ * el PR de exercise-history-section: warning pelea con el primario del
+ * entrenador. El texto se queda neutro — el amber marrón se leía sucio.
+ */
+function CelebrationBanner({ celebration }: { celebration: Celebration }) {
+  if (celebration.kind === "first") {
+    return (
+      <p className="w-full text-center text-xs font-body text-foreground/60">
+        Primera marca registrada 📈
+      </p>
+    );
+  }
+
+  return (
+    <div className="w-full rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+      <p className="text-xs font-semibold text-foreground font-heading">
+        🏅 ¡Nuevo récord!
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {celebration.records.map((record) => (
+          <li
+            key={record.bucket}
+            className="text-xs font-body text-foreground/70"
+          >
+            {bannerLine(record)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

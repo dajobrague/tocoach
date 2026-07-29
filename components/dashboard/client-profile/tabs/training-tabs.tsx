@@ -2,8 +2,8 @@
 // Tres superficies vivas: Seguimiento (semana/mes + detalle del día),
 // Programa (constructor unificado de fuerza + cardio con los días del
 // microciclo integrados — features/trainer/training/programa) y Videos
-// (bandeja de revisión de los videos del cliente). Progreso llega en su
-// rebanada; no se muestran pestañas muertas.
+// (bandeja de revisión de los videos del cliente) y Progreso (1RM estimado,
+// progresión y récords por repeticiones de un ejercicio).
 //
 // Pills = la receta exacta de Tabs de nutrición (cycle-builder-content).
 
@@ -17,10 +17,11 @@ import { useUrlEnum } from "../use-url-state";
 import { MetricsSection } from "./microcycle/metrics-section";
 
 import { ProgramaSection } from "@/features/trainer/training/programa/programa-section";
+import { ProgresoSection } from "@/features/trainer/training/progreso/progreso-section";
 import { useVideoFeed } from "@/features/trainer/training/videos/use-videos";
 import { VideosSection } from "@/features/trainer/training/videos/videos-section";
 
-const SUB_TAB_KEYS = ["seguimiento", "programa", "videos"] as const;
+const SUB_TAB_KEYS = ["seguimiento", "programa", "videos", "progreso"] as const;
 
 interface Props {
   clientId: string;
@@ -85,6 +86,15 @@ export default function TrainingTabs({ clientId }: Props) {
               </span>
             }
           />
+          <Tab
+            key="progreso"
+            title={
+              <span className="flex items-center gap-1.5">
+                <Icon icon="solar:graph-up-linear" width={16} />
+                Progreso
+              </span>
+            }
+          />
         </Tabs>
 
         {/* Slots del toolbar: cada sección monta el suyo por portal (misma
@@ -102,6 +112,12 @@ export default function TrainingTabs({ clientId }: Props) {
             id="training-videos-toolbar"
           />
         ) : null}
+        {active === "progreso" ? (
+          <div
+            className="flex min-w-0 items-center gap-2"
+            id="training-progreso-toolbar"
+          />
+        ) : null}
       </div>
 
       {active === "seguimiento" ? (
@@ -114,6 +130,8 @@ export default function TrainingTabs({ clientId }: Props) {
       {active === "programa" ? <ProgramaSection clientId={clientId} /> : null}
 
       {active === "videos" ? <VideosSection clientId={clientId} /> : null}
+
+      {active === "progreso" ? <ProgresoSection clientId={clientId} /> : null}
     </div>
   );
 }

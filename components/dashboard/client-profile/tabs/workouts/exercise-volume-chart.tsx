@@ -2,20 +2,90 @@
 
 import type { ExerciseLog } from "../progress/types";
 
+import { useState } from "react";
+
 import { ExerciseLineChart } from "../progress/exercise-chart";
 import { formatDate } from "../progress/helpers";
 
-import { buildVolumeChartData } from "./helpers";
+import { buildE1rmChartData, buildVolumeChartData } from "./helpers";
 
 interface Props {
   logs: ExerciseLog[];
   variant: "strength" | "cardio";
 }
 
+type StrengthMetric = "e1rm" | "volume";
+
+/** Segmentado compacto del header del chart de fuerza. */
+function MetricToggle({
+  metric,
+  onChange,
+}: {
+  metric: StrengthMetric;
+  onChange: (metric: StrengthMetric) => void;
+}) {
+  const options: { key: StrengthMetric; label: string }[] = [
+    { key: "e1rm", label: "e1RM" },
+    { key: "volume", label: "Volumen" },
+  ];
+
+  return (
+    <div className="flex items-center gap-1 rounded-full bg-gray-100 p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.key}
+          className={`rounded-full px-3 py-1 text-[12px] transition-colors ${
+            metric === option.key
+              ? "bg-white font-semibold text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+          type="button"
+          onClick={() => onChange(option.key)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ExerciseVolumeChart({ logs, variant }: Props) {
+  // e1RM por defecto: responde "¿está más fuerte?", que es la pregunta real.
+  // El volumen sigue a un clic porque explica el POR QUÉ (más trabajo total).
+  const [metric, setMetric] = useState<StrengthMetric>("e1rm");
+
   if (logs.length === 0) return null;
 
   if (variant === "strength") {
+    const toggle = <MetricToggle metric={metric} onChange={setMetric} />;
+
+    if (metric === "e1rm") {
+      // Solo sesiones finalizadas y solo series con peso+reps: el núcleo
+      // descarta lo que no computa, así que un día a peso corporal no genera
+      // punto en lugar de aplastar la línea a 0.
+      const data = buildE1rmChartData(logs).map((p) => ({
+        date: formatDate(p.date),
+        e1rm: Math.round(p.e1rm * 10) / 10,
+      }));
+
+      return (
+        <ExerciseLineChart
+          data={data}
+          headerRight={toggle}
+          lines={[
+            {
+              key: "e1rm",
+              label: "1RM estimado",
+              color: "#2563eb",
+              formatter: (v) => `${v} kg`,
+            },
+          ]}
+          title="1RM estimado por sesión"
+          yFormatter={(v) => `${v}`}
+        />
+      );
+    }
+
     const points = buildVolumeChartData(logs);
     // Bodyweight fallback: si ningún log tiene volumen kg·reps (típico
     // calistenia o sesión sin peso registrado), graficamos total reps
@@ -31,6 +101,7 @@ export function ExerciseVolumeChart({ logs, variant }: Props) {
     return (
       <ExerciseLineChart
         data={data}
+        headerRight={toggle}
         lines={
           hasVolume
             ? [
