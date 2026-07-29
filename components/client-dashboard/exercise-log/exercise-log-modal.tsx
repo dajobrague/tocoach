@@ -422,6 +422,7 @@ export function ExerciseLogModal({
 
             <ExerciseHistorySection
               exerciseId={exerciseId || null}
+              exerciseName={exercise.name}
               isOpen={isOpen}
             />
 

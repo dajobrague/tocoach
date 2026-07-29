@@ -1,8 +1,9 @@
 // Shell del tab Entrenamiento — rediseño.
-// Dos superficies vivas: Seguimiento (semana/mes + detalle del día) y
+// Tres superficies vivas: Seguimiento (semana/mes + detalle del día),
 // Programa (constructor unificado de fuerza + cardio con los días del
-// microciclo integrados — features/trainer/training/programa). Videos y
-// Progreso llegan en sus rebanadas; no se muestran pestañas muertas.
+// microciclo integrados — features/trainer/training/programa) y Videos
+// (bandeja de revisión de los videos del cliente). Progreso llega en su
+// rebanada; no se muestran pestañas muertas.
 //
 // Pills = la receta exacta de Tabs de nutrición (cycle-builder-content).
 
@@ -16,8 +17,10 @@ import { useUrlEnum } from "../use-url-state";
 import { MetricsSection } from "./microcycle/metrics-section";
 
 import { ProgramaSection } from "@/features/trainer/training/programa/programa-section";
+import { useVideoFeed } from "@/features/trainer/training/videos/use-videos";
+import { VideosSection } from "@/features/trainer/training/videos/videos-section";
 
-const SUB_TAB_KEYS = ["seguimiento", "programa"] as const;
+const SUB_TAB_KEYS = ["seguimiento", "programa", "videos"] as const;
 
 interface Props {
   clientId: string;
@@ -26,6 +29,9 @@ interface Props {
 
 export default function TrainingTabs({ clientId }: Props) {
   const [active, setActive] = useUrlEnum("sub", SUB_TAB_KEYS, "seguimiento");
+  // Mismo cache react-query que la sección: el badge no dispara un fetch extra.
+  const { pendingCount, isLoading: videosLoading } = useVideoFeed(clientId);
+  const showBadge = !videosLoading && pendingCount > 0;
 
   return (
     <div className="mt-2 flex flex-col gap-4">
@@ -63,14 +69,37 @@ export default function TrainingTabs({ clientId }: Props) {
               </span>
             }
           />
+          <Tab
+            key="videos"
+            title={
+              <span className="flex items-center gap-1.5">
+                <Icon icon="solar:videocamera-linear" width={16} />
+                Videos
+                {showBadge ? (
+                  <span className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 py-px text-[10px] font-bold leading-none text-white tabular-nums">
+                    {pendingCount}
+                  </span>
+                ) : null}
+              </span>
+            }
+          />
         </Tabs>
 
-        {/* Slot del toolbar de Programa: el selector de programa se monta
-            aquí por portal (misma altura que las pills, a la derecha). */}
-        <div
-          className="flex min-w-0 items-center gap-2"
-          id="training-programa-toolbar"
-        />
+        {/* Slots del toolbar: cada sección monta el suyo por portal (misma
+            altura que las pills, a la derecha). Se renderizan condicionalmente
+            porque solo hay una sección activa a la vez. */}
+        {active === "programa" ? (
+          <div
+            className="flex min-w-0 items-center gap-2"
+            id="training-programa-toolbar"
+          />
+        ) : null}
+        {active === "videos" ? (
+          <div
+            className="flex min-w-0 items-center gap-2"
+            id="training-videos-toolbar"
+          />
+        ) : null}
       </div>
 
       {active === "seguimiento" ? (
@@ -81,6 +110,8 @@ export default function TrainingTabs({ clientId }: Props) {
       ) : null}
 
       {active === "programa" ? <ProgramaSection clientId={clientId} /> : null}
+
+      {active === "videos" ? <VideosSection clientId={clientId} /> : null}
     </div>
   );
 }

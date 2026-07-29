@@ -21,6 +21,10 @@ import {
   RealtimeNotification,
 } from "@/lib/hooks/use-realtime-notifications";
 import { RealtimeStatusIndicator } from "@/components/realtime-status-indicator";
+import {
+  VideoFeedbackStoryViewer,
+  type StoryItem,
+} from "@/components/client-dashboard/video-feedback/video-feedback-story-viewer";
 
 interface Notification {
   id: string;
@@ -31,6 +35,38 @@ interface Notification {
   icon: string;
   read_at: string | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+// metadata viene de la BD como JSONB: leemos con guardas en vez de castear.
+function metaString(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string
+): string {
+  const value = metadata?.[key];
+
+  return typeof value === "string" ? value : "";
+}
+
+function isVideoFeedback(notification: Notification): boolean {
+  return metaString(notification.metadata, "action") === "open_video_feedback";
+}
+
+function toStoryItem(notification: Notification): StoryItem | null {
+  const videoUrl = metaString(notification.metadata, "video_url");
+
+  if (!videoUrl) return null;
+
+  return {
+    videoUrl,
+    exerciseName:
+      metaString(notification.metadata, "exercise_name") || "Ejercicio",
+    setLabel: metaString(notification.metadata, "set_label"),
+    scheduledDate: metaString(notification.metadata, "scheduled_date"),
+    comment:
+      metaString(notification.metadata, "comment") || notification.message,
+    notificationId: notification.id,
+  };
 }
 
 interface NotificationsDropdownProps {
@@ -56,6 +92,9 @@ export function NotificationsDropdown({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [storyItems, setStoryItems] = useState<StoryItem[]>([]);
+  const [storyIndex, setStoryIndex] = useState(0);
+  const [isStoryOpen, setIsStoryOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const loadNotificationsRef = useRef<() => void>();
@@ -159,8 +198,56 @@ export function NotificationsDropdown({
     }
   };
 
+  // Abre el visor de stories con TODAS las notificaciones de video que
+  // siguen sin leer (más la clicada, aunque ya estuviera leída), de la más
+  // nueva a la más vieja.
+  const openVideoStories = (clicked: Notification) => {
+    const items = notifications
+      .filter((n) => isVideoFeedback(n) && (!n.read_at || n.id === clicked.id))
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      .map(toStoryItem)
+      .filter((item): item is StoryItem => item !== null);
+
+    if (items.length === 0) {
+      // Sin video utilizable: al menos no dejamos la notificación colgando.
+      if (!clicked.read_at) markAsRead(clicked.id);
+
+      return;
+    }
+
+    const clickedIndex = items.findIndex(
+      (item) => item.notificationId === clicked.id
+    );
+
+    setStoryItems(items);
+    setStoryIndex(clickedIndex >= 0 ? clickedIndex : 0);
+    setIsStoryOpen(true);
+  };
+
+  // Marca leída la historia al mostrarse (una vez por notificación).
+  const handleStoryViewed = (item: StoryItem) => {
+    const id = item.notificationId;
+
+    if (!id) return;
+    const target = notifications.find((n) => n.id === id);
+
+    if (!target || target.read_at) return;
+    markAsRead(id);
+  };
+
   // Handle notification click
   const handleNotificationClick = (notification: Notification) => {
+    // Feedback en video → visor tipo story (el visor marca como leída).
+    if (isVideoFeedback(notification)) {
+      openVideoStories(notification);
+      setIsOpen(false);
+
+      return;
+    }
+
     // Mark as read
     if (!notification.read_at) {
       markAsRead(notification.id);
@@ -243,163 +330,175 @@ export function NotificationsDropdown({
   }, [isOpen]);
 
   return (
-    <Dropdown
-      classNames={{
-        content: "w-80 md:w-96 max-h-[500px] overflow-hidden",
-      }}
-      isOpen={isOpen}
-      placement="bottom-end"
-      onOpenChange={setIsOpen}
-    >
-      <DropdownTrigger>
-        <Button
-          isIconOnly
-          className="text-foreground/70 relative"
-          size="sm"
-          variant="light"
-        >
-          <RealtimeStatusIndicator
-            hasAttempted={realtimeAttempted}
-            isConnected={realtimeConnected}
-          />
-          {unreadCount > 0 && (
-            <Badge
-              classNames={{
-                badge: "text-xs font-bold",
-              }}
-              color="danger"
-              content={unreadCount > 99 ? "99+" : unreadCount}
-              placement="top-right"
-              size="sm"
-            >
-              <Icon className="text-2xl" icon="solar:bell-linear" />
-            </Badge>
-          )}
-          {unreadCount === 0 && (
-            <Icon className="text-2xl" icon="solar:bell-linear" />
-          )}
-        </Button>
-      </DropdownTrigger>
-      <DropdownMenu
-        aria-label="Notificaciones"
-        className="p-0"
+    <>
+      <Dropdown
         classNames={{
-          base: "p-0 max-h-[450px] overflow-y-auto",
-          list: "p-0 gap-0",
+          content: "w-80 md:w-96 max-h-[500px] overflow-hidden",
         }}
+        isOpen={isOpen}
+        placement="bottom-end"
+        onOpenChange={setIsOpen}
       >
-        <DropdownSection
-          showDivider
+        <DropdownTrigger>
+          <Button
+            isIconOnly
+            className="text-foreground/70 relative"
+            size="sm"
+            variant="light"
+          >
+            <RealtimeStatusIndicator
+              hasAttempted={realtimeAttempted}
+              isConnected={realtimeConnected}
+            />
+            {unreadCount > 0 && (
+              <Badge
+                classNames={{
+                  badge: "text-xs font-bold",
+                }}
+                color="danger"
+                content={unreadCount > 99 ? "99+" : unreadCount}
+                placement="top-right"
+                size="sm"
+              >
+                <Icon className="text-2xl" icon="solar:bell-linear" />
+              </Badge>
+            )}
+            {unreadCount === 0 && (
+              <Icon className="text-2xl" icon="solar:bell-linear" />
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Notificaciones"
+          className="p-0"
           classNames={{
-            base: "p-0",
-            heading: "px-4 py-3",
+            base: "p-0 max-h-[450px] overflow-y-auto",
+            list: "p-0 gap-0",
           }}
         >
-          <DropdownItem
-            key="header"
-            isReadOnly
-            className="cursor-default hover:bg-transparent"
+          <DropdownSection
+            showDivider
             classNames={{
               base: "p-0",
+              heading: "px-4 py-3",
             }}
           >
-            <div className="flex items-center justify-between px-4 py-3">
-              <h3 className="text-lg font-semibold font-heading">
-                Notificaciones
-              </h3>
-              {unreadCount > 0 && (
-                <Button
-                  className="text-primary"
-                  size="sm"
-                  variant="light"
-                  onPress={markAllAsRead}
-                >
-                  Marcar todas leídas
-                </Button>
-              )}
-            </div>
-          </DropdownItem>
-        </DropdownSection>
+            <DropdownItem
+              key="header"
+              isReadOnly
+              className="cursor-default hover:bg-transparent"
+              classNames={{
+                base: "p-0",
+              }}
+            >
+              <div className="flex items-center justify-between px-4 py-3">
+                <h3 className="text-lg font-semibold font-heading">
+                  Notificaciones
+                </h3>
+                {unreadCount > 0 && (
+                  <Button
+                    className="text-primary"
+                    size="sm"
+                    variant="light"
+                    onPress={markAllAsRead}
+                  >
+                    Marcar todas leídas
+                  </Button>
+                )}
+              </div>
+            </DropdownItem>
+          </DropdownSection>
 
-        {isLoading ? (
-          <DropdownItem
-            key="loading"
-            isReadOnly
-            className="justify-center py-8"
-          >
-            <Spinner color="primary" size="md" />
-          </DropdownItem>
-        ) : null}
-        {!isLoading && notifications.length === 0 ? (
-          <DropdownItem key="empty" isReadOnly className="cursor-default">
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Icon
-                className="text-5xl text-foreground/20 mb-3"
-                icon="solar:bell-off-linear"
-              />
-              <p className="text-foreground/60 font-body text-sm">
-                No tienes notificaciones
-              </p>
-            </div>
-          </DropdownItem>
-        ) : null}
-        {!isLoading && notifications.length > 0 ? (
-          <DropdownSection classNames={{ base: "p-0" }}>
-            {notifications.map((notification) => (
-              <DropdownItem
-                key={notification.id}
-                className="py-3 px-4"
-                classNames={{
-                  base: "data-[hover=true]:bg-content2",
-                }}
-                onPress={() => handleNotificationClick(notification)}
-              >
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        !notification.read_at ? "bg-primary/20" : "bg-content2"
-                      }`}
-                    >
-                      <Icon
-                        className={`text-xl ${
+          {isLoading ? (
+            <DropdownItem
+              key="loading"
+              isReadOnly
+              className="justify-center py-8"
+            >
+              <Spinner color="primary" size="md" />
+            </DropdownItem>
+          ) : null}
+          {!isLoading && notifications.length === 0 ? (
+            <DropdownItem key="empty" isReadOnly className="cursor-default">
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Icon
+                  className="text-5xl text-foreground/20 mb-3"
+                  icon="solar:bell-off-linear"
+                />
+                <p className="text-foreground/60 font-body text-sm">
+                  No tienes notificaciones
+                </p>
+              </div>
+            </DropdownItem>
+          ) : null}
+          {!isLoading && notifications.length > 0 ? (
+            <DropdownSection classNames={{ base: "p-0" }}>
+              {notifications.map((notification) => (
+                <DropdownItem
+                  key={notification.id}
+                  className="py-3 px-4"
+                  classNames={{
+                    base: "data-[hover=true]:bg-content2",
+                  }}
+                  onPress={() => handleNotificationClick(notification)}
+                >
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
                           !notification.read_at
-                            ? "text-primary"
-                            : "text-foreground/60"
-                        }`}
-                        icon={notification.icon}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p
-                        className={`text-sm font-semibold font-heading ${
-                          !notification.read_at
-                            ? "text-foreground"
-                            : "text-foreground/70"
+                            ? "bg-primary/20"
+                            : "bg-content2"
                         }`}
                       >
-                        {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
-                        {notification.title}
-                      </p>
-                      {!notification.read_at && (
-                        <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
-                      )}
+                        <Icon
+                          className={`text-xl ${
+                            !notification.read_at
+                              ? "text-primary"
+                              : "text-foreground/60"
+                          }`}
+                          icon={notification.icon}
+                        />
+                      </div>
                     </div>
-                    <p className="text-xs text-foreground/60 font-body mb-1 line-clamp-2">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-foreground/50 font-body">
-                      {formatTimeAgo(notification.created_at)}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p
+                          className={`text-sm font-semibold font-heading ${
+                            !notification.read_at
+                              ? "text-foreground"
+                              : "text-foreground/70"
+                          }`}
+                        >
+                          {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
+                          {notification.title}
+                        </p>
+                        {!notification.read_at && (
+                          <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                        )}
+                      </div>
+                      <p className="text-xs text-foreground/60 font-body mb-1 line-clamp-2">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-foreground/50 font-body">
+                        {formatTimeAgo(notification.created_at)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </DropdownItem>
-            ))}
-          </DropdownSection>
-        ) : null}
-      </DropdownMenu>
-    </Dropdown>
+                </DropdownItem>
+              ))}
+            </DropdownSection>
+          ) : null}
+        </DropdownMenu>
+      </Dropdown>
+
+      <VideoFeedbackStoryViewer
+        initialIndex={storyIndex}
+        isOpen={isStoryOpen}
+        items={storyItems}
+        onClose={() => setIsStoryOpen(false)}
+        onViewed={handleStoryViewed}
+      />
+    </>
   );
 }

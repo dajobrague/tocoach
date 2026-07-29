@@ -404,6 +404,10 @@ export interface ExerciseHistoryEntry {
     set_number: number;
     reps: number;
     weight_kg: number | null;
+    /** Video subido por el cliente en esa serie; null/ausente si no hay. */
+    video_url?: string | null;
+    /** Comentario del coach sobre ese video (exercise_video_reviews). */
+    coach_comment?: string | null;
   }>;
   /** Comentario que el cliente dejó ese día en el ejercicio; null si no hubo. */
   notes?: string | null;
