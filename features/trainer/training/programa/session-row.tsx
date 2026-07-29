@@ -177,7 +177,7 @@ export function SessionRow({
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           aria-label={`Reordenar ${session.name}`}
-          className="cursor-grab touch-none rounded-medium p-1 text-default-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
+          className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
           type="button"
           {...dragHandleProps}
         >
@@ -302,7 +302,7 @@ export function SessionRow({
                       <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
                         <button
                           aria-label={`Reordenar ${exercise.name}`}
-                          className="cursor-grab touch-none rounded-medium p-1 text-default-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
+                          className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
                           type="button"
                           {...exerciseHandle}
                         >

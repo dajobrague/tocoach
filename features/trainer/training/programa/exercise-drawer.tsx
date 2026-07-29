@@ -777,10 +777,16 @@ function LibraryRow({
     item.category !== undefined
       ? (CATEGORY_LABELS[item.category] ?? item.category)
       : null;
+  // description puede venir null desde la librería (el trainer nunca escribió
+  // una) — antes se interpolaba y se veía "Cardio · null".
+  const description =
+    typeof item.description === "string" && item.description.trim().length > 0
+      ? item.description
+      : null;
   const subtitle =
-    categoryLabel !== null && item.description !== undefined
-      ? `${categoryLabel} · ${item.description}`
-      : (categoryLabel ?? item.description ?? null);
+    categoryLabel !== null && description !== null
+      ? `${categoryLabel} · ${description}`
+      : (categoryLabel ?? description);
 
   return (
     <button

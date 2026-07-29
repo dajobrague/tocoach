@@ -49,6 +49,10 @@ export interface MicrocycleState {
     startDate: string,
     onSuccess?: () => void
   ) => void;
+  /** Agrega un día al final del ciclo (máx 28) y guarda. */
+  addDay: () => void;
+  /** Quita un día; los siguientes se corren uno hacia atrás (mín 1). */
+  removeDay: (day: number) => void;
 }
 
 export function useMicrocycleState(clientId: string): MicrocycleState {
@@ -159,6 +163,36 @@ export function useMicrocycleState(clientId: string): MicrocycleState {
     [slotByDay, save, buildPayloadSlots]
   );
 
+  const addDay = useCallback(() => {
+    if (durationDays >= 28) return;
+    applySettings(durationDays + 1, startDate);
+  }, [durationDays, startDate, applySettings]);
+
+  const removeDay = useCallback(
+    (day: number) => {
+      if (durationDays <= 1 || day < 1 || day > durationDays) return;
+      // Los días posteriores al quitado se corren uno hacia atrás — igual
+      // que quitar un día del plan en nutrición.
+      const nextDays = durationDays - 1;
+      const next = new Map<number, string | null>();
+
+      for (let d = 1; d <= nextDays; d++) {
+        const source = d < day ? d : d + 1;
+
+        next.set(d, slotByDay.get(source) ?? null);
+      }
+
+      setDurationDays(nextDays);
+      setSlotByDay(next);
+      save.mutate({
+        duration_days: nextDays,
+        start_date: startDate,
+        slots: buildPayloadSlots(next, nextDays),
+      });
+    },
+    [durationDays, slotByDay, startDate, save, buildPayloadSlots]
+  );
+
   return {
     isLoading: query.isLoading,
     isError: query.isError,
@@ -184,5 +218,7 @@ export function useMicrocycleState(clientId: string): MicrocycleState {
           : null,
     assign,
     applySettings,
+    addDay,
+    removeDay,
   };
 }
