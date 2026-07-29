@@ -417,6 +417,7 @@ function LoggedExerciseRow({
   allTimeLogs,
   category,
   prescribedEntry,
+  originNote,
   onPlayVideo,
 }: {
   exerciseName: string;
@@ -425,6 +426,8 @@ function LoggedExerciseRow({
   category: string | undefined;
   /** Prescripción correspondiente cuando el ejercicio estaba en el plan. */
   prescribedEntry: PrescribedExercise | null;
+  /** "De la sesión «X»" cuando el cliente lo tomó prestado de otro día. */
+  originNote?: string | null;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
   const allSets = logs.flatMap((l) => l.sets ?? []);
@@ -464,6 +467,13 @@ function LoggedExerciseRow({
         }
         tone={tone}
       />
+
+      {originNote ? (
+        <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+          <Icon icon="solar:transfer-horizontal-linear" width={11} />
+          {originNote}
+        </span>
+      ) : null}
 
       {prescribedSets > 0 ? (
         <MiniProgress tone={tone} value={totalSets / prescribedSets} />
@@ -719,6 +729,9 @@ function SessionCard({
                   category={g.logs[0]?.exercises?.category}
                   exerciseName={g.name}
                   logs={g.logs}
+                  originNote={
+                    g.borrowedFrom ? `De la sesión «${g.borrowedFrom}»` : null
+                  }
                   prescribedEntry={null}
                   onPlayVideo={onPlayVideo}
                 />

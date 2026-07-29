@@ -170,6 +170,7 @@ export async function POST(
       avgHeartRate,
       notes,
       finalize,
+      borrowedFromSessionName,
     } = body;
 
     if (session.client_id.toString() !== clientId) {
@@ -253,6 +254,17 @@ export async function POST(
 
     if (intensityCompleted) metadata.intensity = intensityCompleted;
     if (avgHeartRate) metadata.avg_heart_rate = parseInt(avgHeartRate);
+    // Ejercicio "prestado" de otra sesión del programa (feature 15-jul):
+    // se guarda la procedencia para que el detalle del día del trainer
+    // etiquete el fuera-de-plan con su sesión de origen.
+    if (
+      typeof borrowedFromSessionName === "string" &&
+      borrowedFromSessionName.trim() !== ""
+    ) {
+      metadata.borrowed_from_session_name = borrowedFromSessionName
+        .trim()
+        .slice(0, 120);
+    }
 
     const logData: any = {
       tenant_host: sessionData.tenant_host,
@@ -285,7 +297,7 @@ export async function POST(
     // conservan la búsqueda de 3 llaves.
     let existingLookup = supabase
       .from("exercise_logs")
-      .select("id, finalized_at")
+      .select("id, finalized_at, metadata")
       .eq("scheduled_session_id", scheduledSessionId)
       .eq("exercise_id", exerciseId)
       .eq("client_id", parseInt(clientId));
@@ -332,6 +344,24 @@ export async function POST(
         ...logData,
         completed_at: new Date().toISOString(),
       };
+
+      // La procedencia "prestado de otra sesión" es pegajosa: los saves
+      // posteriores pueden venir de un shape de ejercicio sin el campo
+      // (p.ej. reabierto desde la lista de extras) y el metadata se
+      // reconstruye entero en cada save — sin este merge se perdería.
+      const previousBorrowed = (existingExerciseLog as any)?.metadata
+        ?.borrowed_from_session_name;
+
+      if (
+        typeof previousBorrowed === "string" &&
+        previousBorrowed !== "" &&
+        updatePayload.metadata?.borrowed_from_session_name === undefined
+      ) {
+        updatePayload.metadata = {
+          ...(updatePayload.metadata ?? {}),
+          borrowed_from_session_name: previousBorrowed,
+        };
+      }
 
       if (finalizedAtForWrite !== undefined) {
         updatePayload.finalized_at = finalizedAtForWrite;

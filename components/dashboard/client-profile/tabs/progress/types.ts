@@ -39,6 +39,15 @@ export interface ExerciseLog {
   intensity: string | null;
   avg_heart_rate: number | null;
   notes: string | null;
+  /**
+   * exercise_logs.metadata (JSONB). Interesa borrowed_from_session_name:
+   * el ejercicio fue "prestado" de otra sesión por el cliente y el detalle
+   * del día lo etiqueta con su origen. Opcional: no todas las rutas lo traen.
+   */
+  metadata?: {
+    borrowed_from_session_name?: string;
+    [key: string]: unknown;
+  } | null;
 }
 
 export interface ExerciseGroup {

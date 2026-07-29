@@ -29,6 +29,8 @@ export interface ExerciseShape {
   intensity?: string;
   heartRateZone?: { min: number; max: number };
   cardioType?: string;
+  /** Sesión de origen cuando el ejercicio fue "prestado" de otro día. */
+  borrowedFromSessionName?: string;
 }
 
 export function isExerciseCardio(exercise: ExerciseShape): boolean {
