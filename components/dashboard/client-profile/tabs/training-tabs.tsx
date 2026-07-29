@@ -76,7 +76,9 @@ export default function TrainingTabs({ clientId }: Props) {
                 <Icon icon="solar:videocamera-linear" width={16} />
                 Videos
                 {showBadge ? (
-                  <span className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 py-px text-[10px] font-bold leading-none text-white tabular-nums">
+                  // h = min-w para que un dígito sea un CÍRCULO (no óvalo);
+                  // con dos dígitos crece a píldora.
+                  <span className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold leading-none text-white tabular-nums">
                     {pendingCount}
                   </span>
                 ) : null}

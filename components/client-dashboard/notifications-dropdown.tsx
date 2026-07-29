@@ -108,10 +108,23 @@ export function NotificationsDropdown({
       // Con el chat abierto el mensaje ya se ve en el panel — sin toast.
       if (notification.type === "message" && isChatOpenRef.current) return;
 
+      // Superficie NEUTRA (content1/foreground) en vez de color="primary":
+      // el primary lo pinta el theme de cada tenant y el banner sólido
+      // quedaba ilegible o chillón según la paleta. El acento del tenant
+      // se usa solo en el icono, donde no puede romper el contraste.
       addToast({
         title: notification.title,
         description: notification.message,
-        color: "primary",
+        icon: (
+          <Icon icon={notification.icon ?? "solar:bell-linear"} width={20} />
+        ),
+        classNames: {
+          base: "bg-content1 border border-default-200 shadow-lg",
+          icon: "text-primary",
+          title: "text-foreground font-semibold font-heading",
+          description: "text-foreground/70 font-body",
+          closeButton: "text-foreground/50",
+        },
       });
     },
     []
