@@ -177,7 +177,7 @@ export function SessionRow({
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           aria-label={`Reordenar ${session.name}`}
-          className="cursor-grab touch-none rounded-medium p-1 text-default-300 transition-colors hover:bg-gray-100 hover:text-default-500 active:cursor-grabbing"
+          className="cursor-grab touch-none rounded-medium p-1 text-default-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
           type="button"
           {...dragHandleProps}
         >
@@ -211,11 +211,7 @@ export function SessionRow({
           variant="light"
           onPress={onRequestDuplicate}
         >
-          <Icon
-            className="text-default-400"
-            icon="solar:copy-linear"
-            width={16}
-          />
+          <Icon className="text-gray-600" icon="solar:copy-linear" width={16} />
         </Button>
         <Button
           isIconOnly
@@ -225,11 +221,7 @@ export function SessionRow({
           variant="light"
           onPress={onRequestRename}
         >
-          <Icon
-            className="text-default-400"
-            icon="solar:pen-linear"
-            width={16}
-          />
+          <Icon className="text-gray-600" icon="solar:pen-linear" width={16} />
         </Button>
         <Dropdown placement="bottom-end">
           <DropdownTrigger>
@@ -240,7 +232,7 @@ export function SessionRow({
               variant="light"
             >
               <Icon
-                className="text-default-400"
+                className="text-gray-600"
                 icon="solar:menu-dots-bold"
                 width={16}
               />
@@ -272,7 +264,7 @@ export function SessionRow({
           onPress={onToggle}
         >
           <Icon
-            className={`text-default-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+            className={`text-gray-600 transition-transform ${isExpanded ? "rotate-180" : ""}`}
             icon="solar:alt-arrow-down-linear"
             width={16}
           />
@@ -310,7 +302,7 @@ export function SessionRow({
                       <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
                         <button
                           aria-label={`Reordenar ${exercise.name}`}
-                          className="cursor-grab touch-none rounded-medium p-1 text-default-300 transition-colors hover:bg-gray-100 hover:text-default-500 active:cursor-grabbing"
+                          className="cursor-grab touch-none rounded-medium p-1 text-default-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
                           type="button"
                           {...exerciseHandle}
                         >
@@ -371,7 +363,7 @@ export function SessionRow({
                           }}
                         >
                           <Icon
-                            className="text-default-400"
+                            className="text-gray-600"
                             icon="solar:copy-linear"
                             width={15}
                           />
@@ -385,7 +377,7 @@ export function SessionRow({
                           onPress={() => onEditExercise(exercise)}
                         >
                           <Icon
-                            className="text-default-400"
+                            className="text-gray-600"
                             icon="solar:pen-linear"
                             width={15}
                           />
@@ -400,7 +392,7 @@ export function SessionRow({
                           onPress={() => setDeleteTarget(exercise)}
                         >
                           <Icon
-                            className="text-default-400 hover:text-danger"
+                            className="text-gray-600 hover:text-danger"
                             icon="solar:trash-bin-trash-linear"
                             width={15}
                           />

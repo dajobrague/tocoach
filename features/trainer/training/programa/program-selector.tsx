@@ -79,7 +79,7 @@ export function ProgramSelector({
             </span>
           </span>
           <Icon
-            className="shrink-0 text-default-400 transition-transform group-data-[open=true]:rotate-180"
+            className="shrink-0 text-gray-600 transition-transform group-data-[open=true]:rotate-180"
             icon="solar:alt-arrow-down-linear"
             width={16}
           />

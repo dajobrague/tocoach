@@ -29,40 +29,49 @@ export default function TrainingTabs({ clientId }: Props) {
 
   return (
     <div className="mt-2 flex flex-col gap-4">
-      <Tabs
-        aria-label="Secciones de entrenamiento"
-        classNames={{
-          tabList: "rounded-large bg-gray-100 p-1 gap-1",
-          cursor: "rounded-medium bg-white shadow-sm",
-          tab: "h-9 px-6",
-          tabContent:
-            "font-medium text-default-500 group-data-[selected=true]:text-gray-900",
-        }}
-        selectedKey={active}
-        variant="light"
-        onSelectionChange={(key) =>
-          setActive(key as (typeof SUB_TAB_KEYS)[number])
-        }
-      >
-        <Tab
-          key="seguimiento"
-          title={
-            <span className="flex items-center gap-1.5">
-              <Icon icon="solar:calendar-linear" width={16} />
-              Seguimiento
-            </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs
+          aria-label="Secciones de entrenamiento"
+          classNames={{
+            tabList: "rounded-large bg-gray-100 p-1 gap-1",
+            cursor: "rounded-medium bg-white shadow-sm",
+            tab: "h-9 px-6",
+            tabContent:
+              "font-medium text-default-500 group-data-[selected=true]:text-gray-900",
+          }}
+          selectedKey={active}
+          variant="light"
+          onSelectionChange={(key) =>
+            setActive(key as (typeof SUB_TAB_KEYS)[number])
           }
+        >
+          <Tab
+            key="seguimiento"
+            title={
+              <span className="flex items-center gap-1.5">
+                <Icon icon="solar:calendar-linear" width={16} />
+                Seguimiento
+              </span>
+            }
+          />
+          <Tab
+            key="programa"
+            title={
+              <span className="flex items-center gap-1.5">
+                <Icon icon="solar:clipboard-list-linear" width={16} />
+                Programa
+              </span>
+            }
+          />
+        </Tabs>
+
+        {/* Slot del toolbar de Programa: el selector de programa se monta
+            aquí por portal (misma altura que las pills, a la derecha). */}
+        <div
+          className="flex min-w-0 items-center gap-2"
+          id="training-programa-toolbar"
         />
-        <Tab
-          key="programa"
-          title={
-            <span className="flex items-center gap-1.5">
-              <Icon icon="solar:clipboard-list-linear" width={16} />
-              Programa
-            </span>
-          }
-        />
-      </Tabs>
+      </div>
 
       {active === "seguimiento" ? (
         <MetricsSection

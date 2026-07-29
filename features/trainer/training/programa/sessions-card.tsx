@@ -205,11 +205,9 @@ export function SessionsCard({
     <div className="rounded-large border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Icon
-            className="text-default-500"
-            icon="solar:dumbbell-linear"
-            width={16}
-          />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-medium bg-emerald-50 text-emerald-600">
+            <Icon icon="solar:dumbbell-bold" width={15} />
+          </span>
           <h3 className="text-sm font-semibold text-gray-900">Sesiones</h3>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-default-600 tabular-nums">
             {program.sessions.length}

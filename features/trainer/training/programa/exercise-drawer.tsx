@@ -27,7 +27,7 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { TrainingApiError } from "./training-api";
 import { useExerciseLibrarySearch, useExerciseMutations } from "./use-training";
@@ -179,6 +179,17 @@ export function ExerciseDrawer({
   const library = useExerciseLibrarySearch(
     term,
     isCardio ? "cardio" : undefined
+  );
+  // Biblioteca acotada a la categoría de la sesión (pedido de David): en una
+  // sesión de fuerza no aparecen ejercicios de cardio y viceversa. Filtro en
+  // cliente: el endpoint no distingue "todo lo no-cardio" y los ejercicios de
+  // fuerza traen categorías variadas (pecho, pierna, etc.).
+  const visibleExercises = useMemo(
+    () =>
+      library.exercises.filter((item) =>
+        isCardio ? item.category === "cardio" : item.category !== "cardio"
+      ),
+    [library.exercises, isCardio]
   );
   const { addExercise, updateExercise } = useExerciseMutations(
     clientId,
@@ -355,7 +366,13 @@ export function ExerciseDrawer({
         : `Añadir a ${sessionName}`;
 
   return (
-    <Drawer isOpen={isOpen} placement="right" size="md" onClose={onClose}>
+    <Drawer
+      classNames={{ base: "!max-w-full sm:!max-w-[600px]" }}
+      isOpen={isOpen}
+      placement="right"
+      size="lg"
+      onClose={onClose}
+    >
       <DrawerContent>
         <DrawerHeader className="flex flex-col gap-0.5">
           <h2 className="text-base font-semibold text-gray-900">
@@ -415,7 +432,7 @@ export function ExerciseDrawer({
                   placeholder="Buscar ejercicios..."
                   startContent={
                     <Icon
-                      className="text-default-400"
+                      className="text-gray-600"
                       icon="solar:magnifer-linear"
                       width={16}
                     />
@@ -435,7 +452,7 @@ export function ExerciseDrawer({
                     No pudimos cargar tu biblioteca de ejercicios. Inténtalo de
                     nuevo.
                   </p>
-                ) : library.exercises.length === 0 ? (
+                ) : visibleExercises.length === 0 ? (
                   <div className="flex flex-col items-center gap-2 rounded-large border border-dashed border-gray-200 bg-gray-50/50 px-6 py-8 text-center">
                     <Icon
                       className="text-default-300"
@@ -450,7 +467,7 @@ export function ExerciseDrawer({
                   </div>
                 ) : (
                   <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-0.5">
-                    {library.exercises.map((item) => (
+                    {visibleExercises.map((item) => (
                       <LibraryRow
                         key={item.id}
                         fallbackIcon={
@@ -740,7 +757,7 @@ function ExerciseThumb({
 
   return (
     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
-      <Icon className="text-default-300" icon={fallbackIcon} width={18} />
+      <Icon className="text-default-400" icon={fallbackIcon} width={18} />
     </span>
   );
 }
@@ -792,7 +809,7 @@ function LibraryRow({
         )}
       </div>
       <Icon
-        className="shrink-0 text-default-300"
+        className="shrink-0 text-default-400"
         icon="solar:alt-arrow-right-linear"
         width={18}
       />

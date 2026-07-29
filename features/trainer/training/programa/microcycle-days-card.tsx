@@ -108,11 +108,9 @@ export function MicrocycleDaysCard({
     <div className="rounded-large border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Icon
-            className="text-default-500"
-            icon="solar:calendar-linear"
-            width={16}
-          />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-medium bg-blue-50 text-blue-600">
+            <Icon icon="solar:calendar-bold" width={15} />
+          </span>
           <h3 className="text-sm font-semibold text-gray-900">
             Días del microciclo
           </h3>
@@ -160,7 +158,7 @@ export function MicrocycleDaysCard({
                       }`}
                       type="button"
                     >
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-default-400">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-default-500">
                         Día {day}
                       </span>
                       <span
@@ -178,7 +176,7 @@ export function MicrocycleDaysCard({
                   </PopoverTrigger>
                   <PopoverContent className="w-64 p-1.5">
                     <div className="flex w-full flex-col gap-0.5">
-                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-default-400">
+                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
                         Asignar al día {day}
                       </p>
                       {sessions.length === 0 && (

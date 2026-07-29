@@ -9,7 +9,8 @@ import type { WorkoutExercise, WorkoutSession } from "./training-api";
 
 import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ExerciseDrawer } from "./exercise-drawer";
 import { MicrocycleDaysCard } from "./microcycle-days-card";
@@ -55,6 +56,13 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
+  // Slot del shell (fila de pills) donde vive el selector de programa; si no
+  // existe (tests, otros hosts) el selector cae en línea como antes.
+  const [toolbarEl, setToolbarEl] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setToolbarEl(document.getElementById("training-programa-toolbar"));
+  }, []);
 
   const openCreate = (focusTemplates: boolean) => {
     setCreateFocusTemplates(focusTemplates);
@@ -125,14 +133,24 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-3">
-            <ProgramSelector
-              activeId={selected.programId}
-              programs={programs}
-              onCreateNew={() => openCreate(false)}
-              onSelect={setSelectedId}
-            />
-          </div>
+          {(() => {
+            const selector = (
+              <ProgramSelector
+                activeId={selected.programId}
+                programs={programs}
+                onCreateNew={() => openCreate(false)}
+                onSelect={setSelectedId}
+              />
+            );
+
+            return toolbarEl !== null ? (
+              createPortal(selector, toolbarEl)
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                {selector}
+              </div>
+            );
+          })()}
 
           <ProgramHeaderCard
             isUpdating={updateProgram.isPending}
