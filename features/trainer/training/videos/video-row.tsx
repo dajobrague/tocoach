@@ -18,11 +18,11 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { ReviewComposer } from "./review-composer";
 import { VideoThumb } from "./video-thumb";
 
 type ComposerMode = "review" | "edit";
@@ -46,7 +46,6 @@ export function VideoRow({
   onUnreview,
 }: Props) {
   const [composer, setComposer] = useState<ComposerMode | null>(null);
-  const [draft, setDraft] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const isReviewed = review !== undefined;
@@ -54,15 +53,7 @@ export function VideoRow({
   const hasComment = comment !== null && comment.trim().length > 0;
 
   const openComposer = (mode: ComposerMode) => {
-    setDraft(mode === "edit" ? (comment ?? "") : "");
     setComposer(mode);
-  };
-
-  const submit = () => {
-    const trimmed = draft.trim();
-
-    onSave(item, trimmed.length > 0 ? trimmed : null);
-    setComposer(null);
   };
 
   const handleToggle = () => {
@@ -146,34 +137,16 @@ export function VideoRow({
       ) : null}
 
       {composer !== null ? (
-        <div className="mt-2.5 rounded-large border border-gray-200 bg-gray-50/60 p-3">
-          <p className="mb-1.5 text-[11px] font-semibold text-gray-600">
-            Comentario para el cliente (opcional)
-          </p>
-          <Textarea
-            autoFocus
-            classNames={{ inputWrapper: "bg-white" }}
-            maxRows={3}
-            minRows={2}
-            placeholder="Ej: buena profundidad, cuida que la espalda no se redondee al subir."
-            value={draft}
-            variant="bordered"
-            onValueChange={setDraft}
-          />
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <Button size="sm" variant="light" onPress={() => setComposer(null)}>
-              Cancelar
-            </Button>
-            <Button
-              className="bg-emerald-600 text-white"
-              isLoading={isSaving}
-              size="sm"
-              onPress={submit}
-            >
-              {composer === "edit" ? "Guardar" : "Marcar revisado"}
-            </Button>
-          </div>
-        </div>
+        <ReviewComposer
+          initial={composer === "edit" ? (comment ?? "") : ""}
+          isSaving={isSaving}
+          submitLabel={composer === "edit" ? "Guardar" : "Marcar revisado"}
+          onCancel={() => setComposer(null)}
+          onSubmit={(text) => {
+            onSave(item, text);
+            setComposer(null);
+          }}
+        />
       ) : null}
 
       <Modal

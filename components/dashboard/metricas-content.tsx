@@ -8,6 +8,7 @@ import AddClientModal from "@/components/dashboard/add-client-modal";
 import AddExerciseLibraryModal from "@/components/dashboard/add-exercise-library-modal";
 import AddSupplementModal from "@/components/dashboard/add-supplement-modal";
 import { NutritionUpdateBanner } from "@/features/trainer/nutrition-update/nutrition-update-banner";
+import { PendingReviewsCard } from "@/features/trainer/training/videos/pending-reviews-card";
 
 interface ActivityEvent {
   id: string;
@@ -283,6 +284,10 @@ export default function MetricasContent() {
             </CardBody>
           </Card>
         )}
+
+        {/* Cola de videos de clientes pendientes de revisión (rebanada
+            Videos del rediseño de Entrenamiento) */}
+        <PendingReviewsCard />
 
         {/* Engagement Summary + Activity Feed */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

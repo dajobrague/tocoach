@@ -16,6 +16,8 @@
 -- ADD VALUE dentro de una transacción siempre que el valor no se USE en esa
 -- misma transacción (aquí no se usa, solo se declara).
 ALTER TYPE "public"."notification_type" ADD VALUE IF NOT EXISTS 'video_feedback';
+-- Campana del ENTRENADOR cuando el cliente sube un video nuevo.
+ALTER TYPE "public"."notification_type" ADD VALUE IF NOT EXISTS 'video_upload';
 
 CREATE TABLE IF NOT EXISTS exercise_video_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
