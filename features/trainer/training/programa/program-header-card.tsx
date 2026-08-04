@@ -40,6 +40,8 @@ interface ProgramHeaderCardProps {
   onRename: (name: string) => void;
   /** Desactivar el programa (status → paused) tras confirmación. */
   onDeactivate: () => void;
+  /** Reactivar un programa pausado (status → active), sin confirmación. */
+  onReactivate: () => void;
   isDeactivating: boolean;
   onEdit: () => void;
   onSaveAsTemplate: () => void;
@@ -52,6 +54,7 @@ export function ProgramHeaderCard({
   isUpdating,
   updateError,
   onDeactivate,
+  onReactivate,
   isDeactivating,
   onRename,
   onEdit,
@@ -181,9 +184,30 @@ export function ProgramHeaderCard({
                     </Chip>
                   </button>
                 ) : (
-                  <Chip color={status.color} size="sm" variant="flat">
-                    {status.label}
-                  </Chip>
+                  <>
+                    <Chip color={status.color} size="sm" variant="flat">
+                      {status.label}
+                    </Chip>
+                    {/* Reactivación directa (llamada 29 Jul): pausar ya no es
+                        un viaje sin retorno. Sin confirmación — es reversible
+                        con el mismo botón de desactivar. */}
+                    {program.status === "paused" ? (
+                      <Button
+                        color="success"
+                        isLoading={isDeactivating}
+                        size="sm"
+                        startContent={
+                          isDeactivating ? null : (
+                            <Icon icon="solar:play-circle-linear" width={14} />
+                          )
+                        }
+                        variant="flat"
+                        onPress={onReactivate}
+                      >
+                        Activar
+                      </Button>
+                    ) : null}
+                  </>
                 )}
               </div>
               <p className="text-xs text-default-500">
@@ -286,8 +310,9 @@ export function ProgramHeaderCard({
               <span className="font-semibold text-gray-900">
                 {program.name}
               </span>{" "}
-              pasará a pausado: desaparecerá de esta vista y tu cliente dejará
-              de verlo en su app. Las sesiones, ejercicios e historial se
+              pasará a pausado: tu cliente dejará de verlo en su app y quedará
+              en la sección &ldquo;Pausados&rdquo; del selector, desde donde
+              puedes reactivarlo. Las sesiones, ejercicios e historial se
               conservan.
             </p>
           </ModalBody>

@@ -23,7 +23,10 @@ import {
 } from "./programa-format";
 
 interface ProgramSelectorProps {
+  /** Programas con status "active". */
   programs: WorkoutProgram[];
+  /** Programas pausados — sección aparte para poder verlos y reactivarlos. */
+  pausedPrograms: WorkoutProgram[];
   activeId: string | null;
   onSelect: (programId: string) => void;
   onCreateNew: () => void;
@@ -31,12 +34,15 @@ interface ProgramSelectorProps {
 
 export function ProgramSelector({
   programs,
+  pausedPrograms,
   activeId,
   onSelect,
   onCreateNew,
 }: ProgramSelectorProps) {
   const active =
-    programs.find((program) => program.programId === activeId) ?? null;
+    [...programs, ...pausedPrograms].find(
+      (program) => program.programId === activeId
+    ) ?? null;
   const activeVisual =
     active !== null ? CATEGORY_VISUAL[programCategory(active)] : null;
   const activeStatus = active !== null ? programStatus(active.status) : null;
@@ -93,40 +99,80 @@ export function ProgramSelector({
           else onSelect(String(key));
         }}
       >
-        <DropdownSection
-          showDivider={programs.length > 0}
-          title="Programas activos"
-        >
-          {programs.map((program) => {
-            const visual = CATEGORY_VISUAL[programCategory(program)];
+        {[
+          ...(programs.length > 0
+            ? [
+                <DropdownSection
+                  key="active-section"
+                  showDivider
+                  title="Programas activos"
+                >
+                  {programs.map((program) => {
+                    const visual = CATEGORY_VISUAL[programCategory(program)];
 
-            return (
-              <DropdownItem
-                key={program.programId}
-                description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
-                startContent={
-                  <span className={`h-2 w-2 rounded-full ${visual.dot}`} />
-                }
-              >
-                {program.name}
-              </DropdownItem>
-            );
-          })}
-        </DropdownSection>
-        <DropdownSection>
-          <DropdownItem
-            key="new-program"
-            startContent={
-              <Icon
-                className="text-default-500"
-                icon="solar:add-circle-bold"
-                width={16}
-              />
-            }
-          >
-            Nuevo programa
-          </DropdownItem>
-        </DropdownSection>
+                    return (
+                      <DropdownItem
+                        key={program.programId}
+                        description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
+                        startContent={
+                          <span
+                            className={`h-2 w-2 rounded-full ${visual.dot}`}
+                          />
+                        }
+                      >
+                        {program.name}
+                      </DropdownItem>
+                    );
+                  })}
+                </DropdownSection>,
+              ]
+            : []),
+          /* Pausados accesibles (llamada 29 Jul): antes desaparecían de la
+             vista sin forma de reactivarlos. */
+          ...(pausedPrograms.length > 0
+            ? [
+                <DropdownSection
+                  key="paused-section"
+                  showDivider
+                  title="Pausados"
+                >
+                  {pausedPrograms.map((program) => {
+                    const visual = CATEGORY_VISUAL[programCategory(program)];
+
+                    return (
+                      <DropdownItem
+                        key={program.programId}
+                        description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
+                        startContent={
+                          <Icon
+                            className="text-default-400"
+                            icon="solar:pause-circle-linear"
+                            width={14}
+                          />
+                        }
+                      >
+                        <span className="text-default-600">{program.name}</span>
+                      </DropdownItem>
+                    );
+                  })}
+                </DropdownSection>,
+              ]
+            : []),
+          <DropdownSection key="actions-section">
+            <DropdownItem
+              key="new-program"
+              startContent={
+                <Icon
+                  className="text-default-500"
+                  icon="solar:add-circle-bold"
+                  width={16}
+                />
+              }
+            >
+              Nuevo programa
+            </DropdownItem>
+          </DropdownSection>,
+        ]}
       </DropdownMenu>
     </Dropdown>
   );

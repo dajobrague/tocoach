@@ -58,22 +58,22 @@ function RecordsStrip({ logs }: { logs: ExerciseLog[] }) {
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-large border border-gray-200 bg-gray-50/60 px-3 py-2 text-[11px] tabular-nums">
       {current !== null ? (
         <span className="font-semibold text-blue-600">
-          1RM est. {formatKg(current)}
+          1 RM est. {formatKg(current)}
         </span>
       ) : null}
       {best !== null ? (
         <>
           {current !== null ? <span className="text-gray-300">·</span> : null}
+          {/* Nomenclatura de récord (29 Jul): nº reps + " RM" + peso. */}
           <span className="font-semibold text-gray-900">
-            🏅 {formatKg(best.weightKg)} ({best.reps}{" "}
-            {best.reps === 1 ? "rep" : "reps"})
+            🏅 {best.reps} RM · {formatKg(best.weightKg)}
           </span>
         </>
       ) : null}
       {others.map((record) => (
         <span key={record.bucket} className="text-gray-500">
           <span className="mr-2 text-gray-300">·</span>
-          {record.bucket}×{formatKg(record.weightKg)}
+          {record.bucket} RM {formatKg(record.weightKg)}
         </span>
       ))}
     </div>

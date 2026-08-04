@@ -171,21 +171,23 @@ async function fireConfetti(): Promise<void> {
   }, 380);
 }
 
-/** "6 × 97,5 kg (antes 95 kg)" — para el toast, con el nombre delante. */
+// Nomenclatura de récord (llamada 29 Jul): nº de reps + " RM" + peso.
+
+/** "6 RM · 97,5 kg (antes 95 kg)" — para el toast, con el nombre delante. */
 function toastLine(record: NewRecord): string {
-  const weight = `${record.bucket} × ${formatKg(record.weightKg)} kg`;
+  const weight = `${record.bucket} RM · ${formatKg(record.weightKg)} kg`;
 
   return record.previousWeightKg == null
-    ? `${weight} (primera marca en ${record.bucket} reps)`
+    ? `${weight} (primera marca)`
     : `${weight} (antes ${formatKg(record.previousWeightKg)} kg)`;
 }
 
-/** "6 × 97,5 kg — antes 95 kg" — una línea por récord en el banner. */
+/** "6 RM · 97,5 kg — antes 95 kg" — una línea por récord en el banner. */
 function bannerLine(record: NewRecord): string {
-  const weight = `${record.bucket} × ${formatKg(record.weightKg)} kg`;
+  const weight = `${record.bucket} RM · ${formatKg(record.weightKg)} kg`;
 
   return record.previousWeightKg == null
-    ? `${weight} — primera marca en ${record.bucket} reps`
+    ? `${weight} — primera marca`
     : `${weight} — antes ${formatKg(record.previousWeightKg)} kg`;
 }
 

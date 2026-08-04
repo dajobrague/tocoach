@@ -38,9 +38,12 @@ export function formatTickDate(date: string): string {
   });
 }
 
-/** Bucket de reps a etiqueta: "12+" se muestra tal cual. */
+/**
+ * Bucket de reps a etiqueta de récord: "12" → "12 RM" (nomenclatura pedida en
+ * la llamada del 29 Jul: nº de reps + espacio + RM).
+ */
 export function repsLabel(bucket: string): string {
-  return bucket === "12+" ? "12+" : bucket;
+  return `${bucket} RM`;
 }
 
 /** Días transcurridos entre dos fechas YYYY-MM-DD (0 si alguna no parsea). */

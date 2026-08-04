@@ -40,16 +40,18 @@ import {
 } from "./progreso-format";
 import { useProgression } from "./use-progreso";
 
+// 1M/3M/1A (llamada 29 Jul): según el nivel del cliente un mes ya muestra
+// cambios; dos años era un horizonte que nadie consultaba.
 const RANGES = [
+  { key: "1m", label: "1M", days: 30, caption: "último mes" },
   { key: "3m", label: "3M", days: 90, caption: "últimos 3 meses" },
   { key: "1a", label: "1A", days: 365, caption: "último año" },
-  { key: "2a", label: "2A", days: 730, caption: "últimos 2 años" },
 ] as const;
 
 type RangeKey = (typeof RANGES)[number]["key"];
 
 const METRICS = [
-  { key: "e1rm", label: "e1RM" },
+  { key: "e1rm", label: "1 RM" },
   { key: "volumeKg", label: "Volumen" },
 ] as const;
 
@@ -163,7 +165,7 @@ function ChartTooltip({
       {metric === "e1rm" ? (
         <>
           <p className="text-blue-600 tabular-nums">
-            1RM est. {formatKg(entry.e1rm)}
+            1 RM est. {formatKg(entry.e1rm)}
           </p>
           <p className="text-gray-500 tabular-nums">
             Mejor serie: {entry.reps} × {formatKg(entry.weightKg)}
@@ -446,7 +448,7 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
           <div className="overflow-hidden rounded-large border border-gray-200">
             <div className="grid grid-cols-1 gap-px bg-gray-100 sm:grid-cols-3">
               <StatCell
-                label="1RM estimado"
+                label="1 RM estimado"
                 sub={
                   trend === null
                     ? null
@@ -461,8 +463,10 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
                     : "—"
                 }
               />
+              {/* "Mejor 1 RM relativo" y no "mejor serie" (llamada 29 Jul):
+                  es el nivel de fuerza relativo más alto alcanzado. */}
               <StatCell
-                label="Mejor serie"
+                label="Mejor 1 RM relativo"
                 sub={best !== null ? formatLongDate(best.date) : null}
                 tone="neutral"
                 value={
@@ -487,8 +491,8 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
                   Progresión
                 </p>
                 <p className="text-[11px] text-gray-400">
-                  e1RM = mejor serie de cada sesión (Epley ≥7 · Brzycki 2–6 · 1
-                  rep = peso)
+                  1 RM est. = mejor serie de cada sesión (Epley ≥7 · Brzycki 2–6
+                  · 1 rep = peso)
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-3">
@@ -553,7 +557,7 @@ export function ProgresoSection({ clientId }: { clientId: string }) {
                         Peso
                       </th>
                       <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        e1RM
+                        1 RM est.
                       </th>
                       <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
                         Fecha

@@ -123,7 +123,7 @@ function Sparkline({
           etiqueta del último punto. */}
       <div className="absolute inset-y-0 left-0 right-[62px] text-primary">
         <svg
-          aria-label={`Progresión de 1RM estimado${exerciseName ? ` de ${exerciseName}` : ""}`}
+          aria-label={`Progresión de 1 RM estimado${exerciseName ? ` de ${exerciseName}` : ""}`}
           className="h-full w-full overflow-visible"
           preserveAspectRatio="none"
           role="img"
@@ -158,7 +158,8 @@ function Sparkline({
 }
 
 function RecordChip({ repMax, isBest }: { repMax: RepMax; isBest: boolean }) {
-  const label = `${repMax.bucket}×${formatKg(repMax.weightKg)}`;
+  // Nomenclatura de récord (llamada 29 Jul): nº de reps + " RM" + peso.
+  const label = `${repMax.bucket} RM · ${formatKg(repMax.weightKg)} kg`;
 
   return (
     <span

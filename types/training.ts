@@ -219,7 +219,9 @@ export interface WorkoutProgram {
   assignedDate: string;
   lastModified: string;
   progress: number;
-  status: "active" | "completed";
+  /** Refleja client_programs.status — el fetch del trainer trae active Y
+   *  paused (los pausados se listan aparte y pueden reactivarse). */
+  status: "active" | "paused" | "completed" | "cancelled";
   notes?: string | undefined;
   sessions: WorkoutSession[];
   // Database IDs

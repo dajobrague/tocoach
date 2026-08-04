@@ -12,7 +12,7 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { BorrowExerciseModal } from "./borrow-exercise-modal";
 import { collectExtraLoggedExercises } from "./extra-logged-exercises";
@@ -110,18 +110,11 @@ export function ActiveSessionView({
   const schedState = useScheduledSessionState(scheduledDate, session.id);
   const setStartTime = useSetStartTime(scheduledDate, session.id);
   const markCompleted = useMarkSessionCompleted(scheduledDate, session.id);
-  const autoStartFired = useRef(false);
 
-  // Al entrenar HOY sin hora registrada, la registramos sola al entrar
-  // (el momento en que el cliente empieza); después puede corregirla.
-  useEffect(() => {
-    if (autoStartFired.current) return;
-    if (schedState.isSuccess === false) return;
-    if (schedState.data?.scheduled_time != null) return;
-    if (scheduledDate !== getLocalTodayYmd()) return;
-    autoStartFired.current = true;
-    setStartTime.mutate(nowHHMM());
-  }, [schedState.isSuccess, schedState.data, scheduledDate, setStartTime]);
+  // La hora de inicio SOLO se registra con el botón explícito (llamada 29
+  // Jul): antes se auto-registraba al entrar a la vista, pero el cliente
+  // puede abrir la sesión horas antes solo para ver qué le toca — eso no es
+  // empezar a entrenar.
 
   const sessionCompleted = schedState.data?.status === "completed";
 
@@ -305,10 +298,11 @@ export function ActiveSessionView({
         </div>
       ) : null}
 
-      {/* Hora de inicio declarada por el cliente (editable — última gana).
-          Boolean(): mientras carga, data es undefined y no debe contar como
-          "hay fila" (mostraría el input vacío en fechas pasadas sin sesión). */}
-      {Boolean(schedState.data) || scheduledDate === getLocalTodayYmd() ? (
+      {/* Hora de inicio: con hora ya declarada se muestra editable (última
+          gana); sin hora, un botón explícito la registra — nunca se registra
+          sola al abrir la vista (llamada 29 Jul: el cliente puede entrar solo
+          a revisar qué le toca). */}
+      {schedState.data?.scheduled_time != null || timeDraft !== null ? (
         <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-content1 px-3 py-2">
           <Icon
             className="shrink-0 text-default-400"
@@ -328,6 +322,25 @@ export function ActiveSessionView({
             onChange={(event) => setTimeDraft(event.target.value)}
           />
         </div>
+      ) : !sessionCompleted && scheduledDate === getLocalTodayYmd() ? (
+        <button
+          className="flex w-full items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 disabled:opacity-60"
+          disabled={setStartTime.isPending}
+          type="button"
+          onClick={() => setStartTime.mutate(nowHHMM())}
+        >
+          <Icon
+            className="shrink-0 text-primary"
+            icon="solar:play-circle-bold"
+            width={18}
+          />
+          <span className="flex-1 text-sm font-body font-medium text-foreground">
+            Pulsa al iniciar tu entrenamiento
+          </span>
+          <span className="shrink-0 text-[11px] font-body text-default-500">
+            {setStartTime.isPending ? "Guardando…" : "Registra tu hora"}
+          </span>
+        </button>
       ) : null}
 
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner

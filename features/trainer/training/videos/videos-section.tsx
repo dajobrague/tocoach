@@ -29,10 +29,12 @@ import {
 
 import { TrainerExerciseVideoModal } from "@/components/trainer/trainer-exercise-video-modal";
 
+// "Todos" a la derecha (llamada 29 Jul): el flujo natural es sin revisar →
+// revisados; el agregado va al final.
 const FILTERS = [
   { key: "pending", label: "Sin revisar" },
-  { key: "all", label: "Todos" },
   { key: "reviewed", label: "Revisados" },
+  { key: "all", label: "Todos" },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];

@@ -127,7 +127,9 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
 
       if (idx === -1) return;
       const next =
-        direction === "left" ? week.data.days[idx - 1] : week.data.days[idx + 1];
+        direction === "left"
+          ? week.data.days[idx - 1]
+          : week.data.days[idx + 1];
 
       if (next) setSelectedDate(next.date);
     },

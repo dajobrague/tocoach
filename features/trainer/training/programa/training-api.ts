@@ -236,13 +236,15 @@ const base = (clientId: string) => `/api/clients/${clientId}/programs`;
 // ─── Programas ──────────────────────────────────────────────────────────────
 
 /**
- * Todos los programas ACTIVOS del cliente, de AMBAS categorías, ya
- * transformados a WorkoutProgram en el servidor (un solo GET sin `category`).
+ * TODOS los programas del cliente (activos Y pausados), de AMBAS categorías,
+ * ya transformados a WorkoutProgram en el servidor (un solo GET sin
+ * `category`). Antes se pedía `?status=active`, con lo que un programa
+ * desactivado desaparecía sin forma de reactivarlo (llamada 29 Jul).
  */
 export function fetchPrograms(clientId: string): Promise<WorkoutProgram[]> {
-  return getJson<{ programs?: WorkoutProgram[] }>(
-    `${base(clientId)}?status=active`
-  ).then((body) => body.programs ?? []);
+  return getJson<{ programs?: WorkoutProgram[] }>(base(clientId)).then(
+    (body) => body.programs ?? []
+  );
 }
 
 function programBody(input: CreateProgramInput | UpdateProgramInput) {

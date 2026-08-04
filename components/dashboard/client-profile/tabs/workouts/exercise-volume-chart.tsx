@@ -25,7 +25,7 @@ function MetricToggle({
   onChange: (metric: StrengthMetric) => void;
 }) {
   const options: { key: StrengthMetric; label: string }[] = [
-    { key: "e1rm", label: "e1RM" },
+    { key: "e1rm", label: "1 RM" },
     { key: "volume", label: "Volumen" },
   ];
 
@@ -75,12 +75,12 @@ export function ExerciseVolumeChart({ logs, variant }: Props) {
           lines={[
             {
               key: "e1rm",
-              label: "1RM estimado",
+              label: "1 RM estimado",
               color: "#2563eb",
               formatter: (v) => `${v} kg`,
             },
           ]}
-          title="1RM estimado por sesión"
+          title="1 RM estimado por sesión"
           yFormatter={(v) => `${v}`}
         />
       );

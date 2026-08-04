@@ -41,13 +41,27 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
   const microcycle = useMicrocycleState(clientId);
   const logs = useClientExerciseLogs(clientId);
 
+  // Activos y pausados por separado (llamada 29 Jul): desactivar un programa
+  // lo movía a un limbo sin forma de verlo ni reactivarlo. Ahora el fetch trae
+  // ambos y el selector los lista en secciones; otros estados legacy
+  // (completed/cancelled) siguen fuera de esta vista.
+  const activePrograms = useMemo(
+    () => programs.filter((program) => program.status === "active"),
+    [programs]
+  );
+  const pausedPrograms = useMemo(
+    () => programs.filter((program) => program.status === "paused"),
+    [programs]
+  );
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
     () =>
       programs.find((program) => program.programId === selectedId) ??
-      programs[0] ??
+      activePrograms[0] ??
+      pausedPrograms[0] ??
       null,
-    [programs, selectedId]
+    [programs, activePrograms, pausedPrograms, selectedId]
   );
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -137,7 +151,8 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
             const selector = (
               <ProgramSelector
                 activeId={selected.programId}
-                programs={programs}
+                pausedPrograms={pausedPrograms}
+                programs={activePrograms}
                 onCreateNew={() => openCreate(false)}
                 onSelect={setSelectedId}
               />
@@ -165,7 +180,7 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
                 : updateProgramStatus.isError
                   ? updateProgramStatus.error instanceof Error
                     ? updateProgramStatus.error.message
-                    : "No se pudo desactivar el programa"
+                    : "No se pudo cambiar el estado del programa"
                   : null
             }
             onDeactivate={() =>
@@ -176,6 +191,12 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
             }
             onDelete={() => setDeleteOpen(true)}
             onEdit={() => setEditOpen(true)}
+            onReactivate={() =>
+              updateProgramStatus.mutate({
+                programId: selected.programId,
+                status: "active",
+              })
+            }
             onRename={(name) =>
               updateProgram.mutate({
                 programId: selected.programId,

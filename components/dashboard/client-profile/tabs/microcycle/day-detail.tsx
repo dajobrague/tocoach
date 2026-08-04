@@ -164,7 +164,7 @@ function SetsTable({
               {isRecord ? (
                 <span
                   className="inline-flex items-center gap-1 whitespace-nowrap rounded-medium border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
-                  title="Mejor serie histórica de este ejercicio (por 1RM estimado)"
+                  title="Mejor serie histórica de este ejercicio (por 1 RM estimado)"
                 >
                   🏅 Récord
                 </span>
