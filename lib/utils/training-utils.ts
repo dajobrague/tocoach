@@ -238,6 +238,22 @@ export function sessionCalendarDayMatches(
   return sessionAbbr === cal;
 }
 
+const PROGRAM_STATUSES = [
+  "active",
+  "paused",
+  "completed",
+  "cancelled",
+] as const;
+
+type ProgramStatusValue = (typeof PROGRAM_STATUSES)[number];
+
+/** Status desconocido/legacy → "completed" (comportamiento histórico). */
+function normalizeProgramStatus(status: string): ProgramStatusValue {
+  return (PROGRAM_STATUSES as readonly string[]).includes(status)
+    ? (status as ProgramStatusValue)
+    : "completed";
+}
+
 /**
  * Transform database ClientProgram to UI WorkoutProgram
  */
@@ -381,7 +397,10 @@ export function transformToWorkoutProgram(
     assignedDate: clientProgram.start_date,
     lastModified: clientProgram.updated_at,
     progress: clientProgram.progress_percentage,
-    status: clientProgram.status === "active" ? "active" : "completed",
+    // Pasar el status REAL: colapsar todo lo no-activo a "completed" hacía
+    // invisible el estado "paused" y rompía la sección Pausados del trainer
+    // (los clientes filtran por "active", así que para ellos no cambia nada).
+    status: normalizeProgramStatus(clientProgram.status),
     notes: clientProgram.notes,
     sessions: workoutSessions,
   };

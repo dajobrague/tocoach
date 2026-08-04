@@ -49,9 +49,20 @@ export async function GET(
       .eq("client_id", clientId)
       .eq("trainer_id", session.trainer_id);
 
-    // Filter by status if provided
+    // Filter by status if provided; acepta lista separada por comas
+    // ("active,paused") para que el trainer no pague el fan-out por-programa
+    // de estados que su UI nunca muestra (completed/cancelled).
     if (status) {
-      clientProgramsQuery = clientProgramsQuery.eq("status", status);
+      const statuses = status
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const first = statuses[0];
+
+      clientProgramsQuery =
+        statuses.length > 1
+          ? clientProgramsQuery.in("status", statuses)
+          : clientProgramsQuery.eq("status", first ?? status);
     }
 
     const { data: clientPrograms, error: programsError } =

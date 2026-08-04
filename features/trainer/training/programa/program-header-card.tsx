@@ -327,7 +327,15 @@ export function ProgramHeaderCard({
             <Button
               color="warning"
               isLoading={isDeactivating}
-              onPress={onDeactivate}
+              onPress={() => {
+                // Cerrar ANTES de mutar: la card no lleva `key` por programa,
+                // así que un modal abierto sobrevive al cambio de selección y
+                // quedaría apuntando al programa de fallback tras el pause
+                // (segundo clic = pausar el programa equivocado). El error, si
+                // lo hay, se muestra en la franja updateError de la card.
+                setDeactivateOpen(false);
+                onDeactivate();
+              }}
             >
               Desactivar
             </Button>

@@ -322,7 +322,12 @@ export function ActiveSessionView({
             onChange={(event) => setTimeDraft(event.target.value)}
           />
         </div>
-      ) : !sessionCompleted && scheduledDate === getLocalTodayYmd() ? (
+      ) : schedState.isSuccess &&
+        !sessionCompleted &&
+        scheduledDate === getLocalTodayYmd() ? (
+        // isSuccess: sin esperar la respuesta del server, el botón se pintaría
+        // durante la carga aunque YA exista hora registrada, y un tap la
+        // sobrescribiría con la hora actual.
         <button
           className="flex w-full items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 disabled:opacity-60"
           disabled={setStartTime.isPending}
