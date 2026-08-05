@@ -3,15 +3,18 @@
 // Hooks react-query de la rebanada "Videos". Un solo cache por cliente que
 // comparten el badge de la pill del shell y la sección; la mutación de revisión
 // parchea ese cache optimistamente (mismo patrón onMutate/rollback de
-// use-training) para que el toggle no espere al round-trip. Sin toasts: los
-// errores suben como VideosApiError y los pinta la UI.
+// use-training) para que el toggle no espere al round-trip. Los errores de
+// query suben como VideosApiError y los pinta la UI; los de la mutación se
+// avisan con toast porque el composer ya se cerró y no hay dónde pintarlos.
 
 import type { VideoFeed, VideoReviewInput, VideoReviewMap } from "./videos-api";
 import type { VideoFeedItem } from "./videos-format";
 
+import { addToast } from "@heroui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { pendingReviewsKey } from "./use-pending-reviews";
 import { fetchVideoFeed, putVideoReview } from "./videos-api";
 import { applyReviewToFeed, buildVideoFeed, isReviewed } from "./videos-format";
 
@@ -153,13 +156,31 @@ export function useVideoReviewMutation(clientId: string) {
 
       return { previous };
     },
-    onError: (_error, _input, context) => {
+    onError: (error, input, context) => {
       if (context?.previous !== undefined) {
         qc.setQueryData(key, context.previous);
       }
+      // El composer se cierra al enviar, así que en un fallo el borrador ya no
+      // existe en la UI: el toast repite el comentario para que el coach pueda
+      // recuperarlo y reintentarlo.
+      const comment = input.comment ?? "";
+
+      addToast({
+        color: "danger",
+        description:
+          comment.length > 0
+            ? `${error.message}. Tu comentario: «${comment}»`
+            : error.message,
+        timeout: 10_000,
+        title: "No se pudo guardar la revisión",
+      });
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: key });
+      // Espejo de usePendingReviewMutation: sin esto la cola "Videos por
+      // revisar" (staleTime 60s) seguiría listando el video recién revisado
+      // y permitiría machacar el comentario desde la card de métricas.
+      void qc.invalidateQueries({ queryKey: pendingReviewsKey });
     },
   });
 }

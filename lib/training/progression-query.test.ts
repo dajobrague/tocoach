@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProgression,
   parseDaysParam,
+  progressionWindowStart,
 } from "@/lib/training/progression-query";
 
 // Filas con la forma exacta que devuelve el select de fetchProgression.
@@ -130,6 +131,31 @@ describe("buildProgression", () => {
       "5",
       "12+",
     ]);
+  });
+});
+
+describe("progressionWindowStart", () => {
+  it("ancla al día UTC y resta days + 1 de tolerancia", () => {
+    // 02:00 UTC del 5-ago = tarde local del 4-ago para un cliente UTC-6: la
+    // sesión con scheduled_date 2026-07-05 (hace exactamente 30 días locales)
+    // debe seguir dentro de la ventana 1M.
+    expect(progressionWindowStart(30, new Date("2026-08-05T02:00:00Z"))).toBe(
+      "2026-07-05"
+    );
+    // Mismo día por la mañana: la frontera solo puede ser MÁS amplia, nunca
+    // dejar fuera una sesión que sí entraba.
+    expect(progressionWindowStart(30, new Date("2026-08-04T14:00:00Z"))).toBe(
+      "2026-07-04"
+    );
+  });
+
+  it("cruza límites de mes y año sin depender de la zona del servidor", () => {
+    expect(progressionWindowStart(1, new Date("2026-01-01T00:30:00Z"))).toBe(
+      "2025-12-30"
+    );
+    expect(progressionWindowStart(365, new Date("2026-08-04T12:00:00Z"))).toBe(
+      "2025-08-03"
+    );
   });
 });
 

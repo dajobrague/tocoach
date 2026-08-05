@@ -58,7 +58,10 @@ import { useSetVideos } from "./hooks/use-set-videos";
 import { TrainerNoteCard } from "./trainer-note-card";
 import { TrainerVideoBanner } from "./trainer-video-banner";
 
-import { clearExerciseLogDraft } from "@/lib/client/exercise-log-draft";
+import {
+  clearExerciseLogDraft,
+  slotScopedExerciseId,
+} from "@/lib/client/exercise-log-draft";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useDeleteExerciseLogs } from "@/lib/hooks/use-client-queries";
@@ -217,7 +220,10 @@ export function ExerciseLogModal({
       existingLog,
       clientId,
       sessionId,
-      exerciseId,
+      // El writer dedupea por session_exercises.id: dos slots con el mismo
+      // exercise_id en la sesión necesitan drafts (y contexto de hidratación)
+      // separados, así que el slot viaja dentro del segmento exerciseId.
+      exerciseId: slotScopedExerciseId(exerciseId, sessionExerciseId),
       scheduledDate,
     });
 
@@ -307,6 +313,9 @@ export function ExerciseLogModal({
   // Lock para que dos saves no compitan. Si cae uno mientras hay otro
   // en vuelo, el debounce trigger lo va a re-disparar al terminar.
   const isSavingRef = useRef(false);
+  // Promesa del save en vuelo: "Finalizado" la espera (sin tope arbitrario
+  // — el fetch resuelve o falla solo) en vez de morir contra el lock.
+  const inflightSaveRef = useRef<Promise<SaveOutcome> | null>(null);
 
   const buildRequestBody = useCallback(() => {
     const body: any = {
@@ -356,51 +365,60 @@ export function ExerciseLogModal({
   // y "Finalizado" (silent=false, finalize=true). El flag `finalize`
   // viaja al server y determina si el log se marca como completado.
   const performSave = useCallback(
-    async (silent: boolean, finalize: boolean): Promise<SaveOutcome> => {
-      if (isSavingRef.current) return FAILED_SAVE;
+    (silent: boolean, finalize: boolean): Promise<SaveOutcome> => {
+      if (isSavingRef.current) return Promise.resolve(FAILED_SAVE);
       isSavingRef.current = true;
       setAutoSaveState("saving");
-      try {
-        const response = await clientFetch(
-          `/api/clients/${clientId}/exercise-logs`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...buildRequestBody(), finalize }),
-          }
-        );
-        const data = (await response.json()) as SaveResponse;
-
-        if (data.success) {
-          clearExerciseLogDraft(draftKey);
-          isDirtyRef.current = false;
-          setAutoSaveState("saved");
-          onSuccess();
-
-          return {
-            ok: true,
-            newRecords:
-              finalize && Array.isArray(data.newRecords) ? data.newRecords : [],
-            firstTime: finalize && data.firstTime === true,
-          };
-        }
-        setAutoSaveState("error");
-        if (!silent) {
-          alert(
-            "Error al guardar registro: " + (data.error || "Error desconocido")
+      const save = (async (): Promise<SaveOutcome> => {
+        try {
+          const response = await clientFetch(
+            `/api/clients/${clientId}/exercise-logs`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...buildRequestBody(), finalize }),
+            }
           );
+          const data = (await response.json()) as SaveResponse;
+
+          if (data.success) {
+            clearExerciseLogDraft(draftKey);
+            isDirtyRef.current = false;
+            setAutoSaveState("saved");
+            onSuccess();
+
+            return {
+              ok: true,
+              newRecords:
+                finalize && Array.isArray(data.newRecords)
+                  ? data.newRecords
+                  : [],
+              firstTime: finalize && data.firstTime === true,
+            };
+          }
+          setAutoSaveState("error");
+          if (!silent) {
+            alert(
+              "Error al guardar registro: " +
+                (data.error || "Error desconocido")
+            );
+          }
+
+          return FAILED_SAVE;
+        } catch (err) {
+          console.error("[ExerciseLogModal] Error saving log:", err);
+          setAutoSaveState("error");
+          if (!silent) alert("Error al guardar registro");
+
+          return FAILED_SAVE;
+        } finally {
+          isSavingRef.current = false;
         }
+      })();
 
-        return FAILED_SAVE;
-      } catch (err) {
-        console.error("[ExerciseLogModal] Error saving log:", err);
-        setAutoSaveState("error");
-        if (!silent) alert("Error al guardar registro");
+      inflightSaveRef.current = save;
 
-        return FAILED_SAVE;
-      } finally {
-        isSavingRef.current = false;
-      }
+      return save;
     },
     [buildRequestBody, clientId, draftKey, onSuccess]
   );
@@ -431,6 +449,29 @@ export function ExerciseLogModal({
 
     return () => window.clearTimeout(t);
   }, [formData, isCardio, isOpen, exercise, performSave, hydratedSigRef]);
+
+  // Cardio: el video vive en useExerciseVideo, fuera de formData, así que
+  // ni el draft local ni el gate del autosave (que solo miran formData) lo
+  // cubren — subir el video y cerrar sin tocar el form lo perdía. Persistimos
+  // en cuanto cambia la URL por acción del usuario (isDirtyRef distingue
+  // subida/borrado de la hidratación inicial). La ref evita re-disparar
+  // cuando cambia performSave (cada keystroke) sin cambiar la URL.
+  const lastCardioVideoUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !isCardio) return;
+    const url = rawCardioVideo.videoUrl;
+
+    if (url === lastCardioVideoUrlRef.current) return;
+    lastCardioVideoUrlRef.current = url;
+    if (!isDirtyRef.current) return;
+    void (async () => {
+      while (isSavingRef.current && inflightSaveRef.current) {
+        await inflightSaveRef.current;
+      }
+      await performSave(true, false);
+    })();
+  }, [rawCardioVideo.videoUrl, isCardio, isOpen, performSave]);
 
   // Celebración de récord: vive mientras el modal siga abierto y se
   // limpia al cerrarlo, como el resto del estado de sesión del modal.
@@ -507,10 +548,11 @@ export function ExerciseLogModal({
 
     try {
       // Si hay un autosave en vuelo, performSave devolvería FAILED_SAVE y el
-      // tap en "Finalizado" moriría en silencio. Esperamos a que el lock se
-      // libere (máx ~3s) antes de finalizar.
-      for (let i = 0; i < 10 && isSavingRef.current; i += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      // tap en "Finalizado" moriría en silencio. Esperamos a que ese save
+      // termine — sin tope arbitrario: su fetch resuelve o falla por sí
+      // solo — y recién entonces finalizamos.
+      while (isSavingRef.current && inflightSaveRef.current) {
+        await inflightSaveRef.current;
       }
 
       outcome = await performSave(false, true);

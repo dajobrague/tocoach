@@ -17,6 +17,7 @@ import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { formatKg } from "./helpers";
 import { useExerciseHistory } from "./hooks/use-exercise-history";
 
 import {
@@ -112,7 +113,7 @@ function PrBanner({
           Tu mejor marca
         </p>
         <p className="text-sm font-semibold text-foreground font-heading">
-          {pr.weight_kg} kg{reps}
+          {formatKg(pr.weight_kg)} kg{reps}
           {ago ? (
             <span className="ml-1 text-foreground/50 font-normal">({ago})</span>
           ) : null}
@@ -201,7 +202,7 @@ function HistoryRow({
   const [expanded, setExpanded] = useState(false);
   const best = bestSet(entry);
   const bestLabel = best
-    ? `${best.weight > 0 ? `${best.weight}kg` : "—"} × ${best.reps}`
+    ? `${best.weight > 0 ? `${formatKg(best.weight)}kg` : "—"} × ${best.reps}`
     : "—";
   const hasCoachFeedback = entry.sets.some(
     (s) => (s.coach_comment ?? "") !== ""
@@ -339,7 +340,8 @@ function SetLine({
   scheduledDate: string;
   onOpenStory: (item: StoryItem) => void;
 }) {
-  const weightLabel = set.weight_kg != null ? `${set.weight_kg} kg` : "—";
+  const weightLabel =
+    set.weight_kg != null ? `${formatKg(set.weight_kg)} kg` : "—";
   const comment = set.coach_comment ?? "";
   const videoUrl = set.video_url ?? "";
 
@@ -424,7 +426,9 @@ function CoachComment({
 
 function buildSetLabel(set: ExerciseHistoryEntry["sets"][number]): string {
   const weight =
-    set.weight_kg != null && set.weight_kg > 0 ? ` × ${set.weight_kg} kg` : "";
+    set.weight_kg != null && set.weight_kg > 0
+      ? ` × ${formatKg(set.weight_kg)} kg`
+      : "";
 
   return `Serie ${set.set_number} · ${set.reps} reps${weight}`;
 }

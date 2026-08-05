@@ -65,7 +65,7 @@ export async function fetchProgression(
   exerciseId: string,
   days: number
 ): Promise<Progression> {
-  const since = ymdDaysAgo(days);
+  const since = progressionWindowStart(days);
 
   const { data, error } = await supabase
     .from("exercise_logs")
@@ -139,13 +139,27 @@ export function buildProgression(rows: ProgressionRow[]): Progression {
   };
 }
 
-/** Ventana de días en formato YYYY-MM-DD, hora local del servidor. */
-function ymdDaysAgo(days: number): string {
-  const d = new Date();
+/**
+ * Inicio de la ventana en YYYY-MM-DD. scheduled_date guarda la fecha LOCAL del
+ * cliente y el día del servidor (UTC en prod) puede ir hasta un día por
+ * delante, así que se ancla al calendario UTC y se resta un día extra de
+ * tolerancia: la sesión de hace exactamente `days` días locales nunca cae
+ * fuera según la hora. Aritmética pura sobre el calendario UTC — nada de Date
+ * en zona local del servidor.
+ */
+export function progressionWindowStart(
+  days: number,
+  now: Date = new Date()
+): string {
+  const anchorMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
 
-  d.setDate(d.getDate() - days);
-
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Date(anchorMs - (days + 1) * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 /** ?days → entero acotado a 1..730. Default 365. */

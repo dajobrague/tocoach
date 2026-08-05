@@ -131,7 +131,7 @@ export async function GET(
     //    migration 113 there can be multiple — one per session the
     //    client touched. Each row carries its own session (template
     //    data) used to render what the client actually trained.
-    const { data: ssRowsRaw } = await supabase
+    const { data: ssRowsRaw, error: ssError } = await supabase
       .from("scheduled_sessions")
       .select(
         `id, session_id,
@@ -145,6 +145,20 @@ export async function GET(
       )
       .eq("client_id", clientId)
       .eq("scheduled_date", date);
+
+    // Un fallo de query NO puede degradar a template/rest: eso ocultaría
+    // la sesión que el cliente entrenó como si fuera un día de descanso.
+    if (ssError) {
+      console.error(
+        `${LOG_PREFIX} scheduled_sessions query failed [${correlationId}]:`,
+        ssError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error interno del servidor" },
+        { status: 500 }
+      );
+    }
 
     const ssRows = (ssRowsRaw ?? []) as any[];
 

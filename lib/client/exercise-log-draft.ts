@@ -35,6 +35,29 @@ export function exerciseLogDraftStorageKey(
   return `${PREFIX}${clientId}:${sessionId}:${exerciseId}:${scheduledDate}`;
 }
 
+/**
+ * El writer del server dedupea por session_exercises.id, así que dos slots
+ * con el mismo exercise_id en una sesión necesitan drafts SEPARADOS (si no,
+ * lo tipeado en un slot hidrata el otro y se atribuye al slot equivocado).
+ * El slot viaja embebido en el segmento exerciseId de la key
+ * ("<exerciseId>@<sessionExerciseId>") para no cambiar la aridad de
+ * exerciseLogDraftStorageKey. "@" no aparece en UUIDs ni en el resto de
+ * segmentos, así que el sufijo es reversible (ver legacyDraftKey).
+ */
+export function slotScopedExerciseId(
+  exerciseId: string,
+  sessionExerciseId?: string | null
+): string {
+  return sessionExerciseId ? `${exerciseId}@${sessionExerciseId}` : exerciseId;
+}
+
+/** Key equivalente sin slot (formato pre-scoping), o null si no lleva slot. */
+function legacyDraftKey(key: string): string | null {
+  if (!key.includes("@")) return null;
+
+  return key.replace(/@[^:@]*/, "");
+}
+
 export type ExerciseLogDraftRead = {
   formData: ExerciseLogFormDraft;
   updatedAt: number;
@@ -43,6 +66,24 @@ export type ExerciseLogDraftRead = {
 };
 
 export function readExerciseLogDraft(key: string): ExerciseLogDraftRead | null {
+  const direct = readDraftAt(key);
+
+  if (direct) return direct;
+  // Fallback: drafts escritos antes del scoping por slot viven bajo la key
+  // sin "@slot". Se migran leyéndolos una única vez y borrando la entrada
+  // legacy, para que no contaminen el OTRO slot del mismo ejercicio (el
+  // debounce del hook re-persiste el contenido bajo la key nueva).
+  const legacy = legacyDraftKey(key);
+
+  if (!legacy) return null;
+  const fallback = readDraftAt(legacy);
+
+  if (fallback) clearExerciseLogDraft(legacy);
+
+  return fallback;
+}
+
+function readDraftAt(key: string): ExerciseLogDraftRead | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(key);

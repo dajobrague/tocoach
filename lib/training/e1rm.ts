@@ -35,7 +35,7 @@ export interface RepMax {
   reps: number;
   weightKg: number;
   e1rm: number;
-  /** Primera fecha en que se levantó ese peso récord para el bucket. */
+  /** Primera fecha en que se logró el e1RM récord del bucket. */
   date: string;
 }
 
@@ -117,8 +117,10 @@ export function computeE1rmSeries(sessions: SessionSets[]): E1rmPoint[] {
 }
 
 /**
- * Récords por nº de reps: el mayor peso levantado en cada bucket (1..11, 12+).
- * A igual peso gana la PRIMERA fecha (el récord es de quien lo logró antes).
+ * Récords por nº de reps: la mejor serie por e1RM de cada bucket (1..11, 12+).
+ * En 1..11 las reps son fijas y equivale al mayor peso; en "12+" las reps
+ * varían, así que más reps al mismo (o menor) peso también puede ser récord.
+ * A igual e1RM gana la PRIMERA fecha (el récord es de quien lo logró antes).
  * Orden: buckets numéricos ascendentes, "12+" al final.
  */
 export function computeRepMaxes(sessions: SessionSets[]): RepMax[] {
@@ -139,8 +141,8 @@ export function computeRepMaxes(sessions: SessionSets[]): RepMax[] {
 
       const beats =
         current === undefined ||
-        weightKg > current.weightKg ||
-        (weightKg === current.weightKg && session.date < current.date);
+        e1rm > current.e1rm ||
+        (e1rm === current.e1rm && session.date < current.date);
 
       if (beats) {
         byBucket.set(bucket, {
@@ -166,6 +168,8 @@ export function computeRepMaxes(sessions: SessionSets[]): RepMax[] {
  * Récords nuevos de un log recién finalizado contra los mejores previos
  * (previos = SIN el log actual — el autosave borra-y-reinserta hace que el
  * log actual ya esté en la base al momento de comparar).
+ * Superar = mayor e1RM del bucket, no solo mayor peso: en "12+" un rep-PR al
+ * mismo peso también es récord.
  * Bucket sin precedente → previousWeightKg null ("primera marca en N reps").
  * Devuelve null si no hay ninguno.
  */
@@ -174,7 +178,11 @@ export function diffRecords(
   currentSets: SetInput[]
 ): NewRecord[] | null {
   const priorByBucket = new Map(prior.map((r) => [r.bucket, r]));
-  const bestNewByBucket = new Map<string, NewRecord>();
+  // El e1rm acompaña al candidato: dentro de "12+" el peso solo no ordena.
+  const bestNewByBucket = new Map<
+    string,
+    { e1rm: number; record: NewRecord }
+  >();
 
   for (const set of currentSets) {
     const e1rm = estimateOneRepMax(set.weight_kg, set.reps);
@@ -186,7 +194,7 @@ export function diffRecords(
     const bucket = repBucket(reps);
     const previous = priorByBucket.get(bucket);
 
-    if (previous !== undefined && weightKg <= previous.weightKg) continue;
+    if (previous !== undefined && e1rm <= previous.e1rm) continue;
 
     const candidate: NewRecord = {
       bucket,
@@ -197,12 +205,12 @@ export function diffRecords(
 
     const existing = bestNewByBucket.get(bucket);
 
-    if (existing === undefined || weightKg > existing.weightKg) {
-      bestNewByBucket.set(bucket, candidate);
+    if (existing === undefined || e1rm > existing.e1rm) {
+      bestNewByBucket.set(bucket, { e1rm, record: candidate });
     }
   }
 
-  const records = [...bestNewByBucket.values()];
+  const records = [...bestNewByBucket.values()].map((v) => v.record);
 
   return records.length > 0 ? records : null;
 }

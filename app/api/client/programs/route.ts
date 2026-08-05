@@ -206,21 +206,32 @@ export async function GET(request: NextRequest) {
         ),
       }));
 
-      // Fetch scheduled sessions for current week to check completion status
+      // Fetch scheduled sessions for current week to check completion status.
+      // Filtramos por session_id (las sesiones de ESTE programa), no por
+      // client_program_id: los flujos actuales (exercise-log save, /start,
+      // /complete vía upsert_scheduled_session) dejan client_program_id
+      // NULL, así que ese filtro nunca matcheaba filas creadas por el
+      // cliente y `completed` salía siempre false.
       const weekRange = getCurrentWeekRange();
-      const { data: scheduledSessions, error: scheduledError } = await supabase
-        .from("scheduled_sessions")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("client_program_id", clientProgram.id)
-        .gte("scheduled_date", weekRange.start.toISOString().split("T")[0])
-        .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]);
+      let scheduledSessions: any[] | null = null;
 
-      if (scheduledError) {
-        console.error(
-          "[Client Programs API] Error fetching scheduled sessions:",
-          scheduledError
-        );
+      if (sessionIds.length > 0) {
+        const { data: scheduledData, error: scheduledError } = await supabase
+          .from("scheduled_sessions")
+          .select("*")
+          .eq("client_id", clientId)
+          .in("session_id", sessionIds)
+          .gte("scheduled_date", weekRange.start.toISOString().split("T")[0])
+          .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]);
+
+        if (scheduledError) {
+          console.error(
+            "[Client Programs API] Error fetching scheduled sessions:",
+            scheduledError
+          );
+        }
+
+        scheduledSessions = scheduledData;
       }
 
       // Transform to UI format

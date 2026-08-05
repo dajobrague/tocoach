@@ -93,7 +93,7 @@ describe("computeE1rmSeries", () => {
 });
 
 describe("computeRepMaxes", () => {
-  it("mayor peso por bucket; a igual peso gana la primera fecha", () => {
+  it("mejor e1RM por bucket; a igual marca gana la primera fecha", () => {
     const maxes = computeRepMaxes([
       { date: "2026-06-10", sets: [{ reps: 6, weight_kg: 95 }] },
       { date: "2026-05-01", sets: [{ reps: 6, weight_kg: 95 }] },
@@ -107,9 +107,25 @@ describe("computeRepMaxes", () => {
     expect(six?.weightKg).toBe(95);
     expect(six?.date).toBe("2026-05-01");
 
+    // En "12+" ordena el e1RM, no el peso: 70×14 (≈102,7) > 72,5×12 (101,5)
     const high = maxes.find((m) => m.bucket === "12+");
 
-    expect(high?.weightKg).toBe(72.5);
+    expect(high?.weightKg).toBe(70);
+    expect(high?.reps).toBe(14);
+  });
+
+  it("en '12+' más reps al mismo peso reemplaza el récord (rep-PR)", () => {
+    const maxes = computeRepMaxes([
+      { date: "2026-06-01", sets: [{ reps: 12, weight_kg: 10 }] },
+      { date: "2026-07-01", sets: [{ reps: 24, weight_kg: 10 }] },
+    ]);
+
+    const high = maxes.find((m) => m.bucket === "12+");
+
+    // Epley 10×24 = 18 > 10×12 = 14: el récord es la serie de más reps.
+    expect(high?.reps).toBe(24);
+    expect(high?.e1rm).toBeCloseTo(18, 5);
+    expect(high?.date).toBe("2026-07-01");
   });
 
   it("ordena buckets numéricos con 12+ al final", () => {
@@ -173,5 +189,25 @@ describe("diffRecords", () => {
   it("null cuando no hay nada nuevo", () => {
     expect(diffRecords(prior, [{ reps: 8, weight_kg: 80 }])).toBeNull();
     expect(diffRecords(prior, [])).toBeNull();
+  });
+
+  it("rep-PR en '12+' al mismo peso SÍ es récord (compara e1RM, no peso)", () => {
+    const prior12 = computeRepMaxes([
+      { date: "2026-06-01", sets: [{ reps: 12, weight_kg: 10 }] },
+    ]);
+
+    const records = diffRecords(prior12, [{ reps: 24, weight_kg: 10 }]);
+
+    expect(records).toEqual([
+      { bucket: "12+", reps: 24, weightKg: 10, previousWeightKg: 10 },
+    ]);
+  });
+
+  it("menos reps en '12+' al mismo peso NO es récord", () => {
+    const prior12 = computeRepMaxes([
+      { date: "2026-06-01", sets: [{ reps: 24, weight_kg: 10 }] },
+    ]);
+
+    expect(diffRecords(prior12, [{ reps: 12, weight_kg: 10 }])).toBeNull();
   });
 });

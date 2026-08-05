@@ -102,5 +102,19 @@ describe("logMatchesSlot — the false-done fix", () => {
 
       expect(logMatchesSlot(l, offPlan, MON)).toBe(false);
     });
+
+    it("THE BUG: does NOT adopt a same-day log from another session (borrowed exercise)", () => {
+      // Morning: Plank finalized inside Wednesday-Pull. Evening: the client
+      // borrows Plank into Monday-Push — the morning log must not mark it.
+      const l = log({ session_exercise_id: slotB, session_id: WED });
+
+      expect(logMatchesSlot(l, offPlan, MON)).toBe(false);
+    });
+
+    it("a log without session_id still matches (legacy permissive)", () => {
+      const l = log({ session_exercise_id: null, session_id: null });
+
+      expect(logMatchesSlot(l, offPlan, MON)).toBe(true);
+    });
   });
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { loadTenantContext } from "@/lib/tenant/loader";
 
 // GET - Fetch scheduled sessions for a client within a date range
 export async function GET(
@@ -103,13 +104,26 @@ export async function POST(
     }
 
     // Get the session to find trainer_id and tenant_host
-    const { data: sessionData, error: sessionError } = await supabase
-      .from("sessions")
-      .select("trainer_id, tenant_host")
-      .eq("id", sessionId)
-      .single();
+    const [{ data: sessionData, error: sessionError }, tenant] =
+      await Promise.all([
+        supabase
+          .from("sessions")
+          .select("trainer_id, tenant_host")
+          .eq("id", sessionId)
+          .single(),
+        loadTenantContext(session.tenant_slug),
+      ]);
 
-    if (sessionError || !sessionData) {
+    // La sesión debe ser del MISMO tenant que el cliente autenticado — sin
+    // esto un sessionId ajeno crearía filas con tenant_host y trainer_id de
+    // otro tenant (mismo guard que /scheduled-sessions/[date]/start y
+    // /complete).
+    if (
+      sessionError ||
+      !sessionData ||
+      tenant === null ||
+      sessionData.tenant_host !== tenant.host
+    ) {
       console.error(
         "[Scheduled Sessions API] Session not found:",
         sessionError

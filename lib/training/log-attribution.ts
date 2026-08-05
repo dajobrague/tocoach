@@ -33,7 +33,9 @@ export interface AttributablePlannedExercise {
  * Whether `log` should mark the planned `plannedExercise` (within `sessionId`)
  * as done. The rule:
  *
- *   - Off-plan extra (planned has no slot id): pure `exercise_id` match.
+ *   - Off-plan extra (planned has no slot id): `exercise_id` match,
+ *     session-scoped like the legacy branch — a borrowed exercise must not
+ *     adopt a same-day log from another session.
  *   - Log carries a slot id: require EXACT slot equality. This is what fixes
  *     the false-positive — a log for slotA never marks slotB even when both
  *     slots share the same library `exercise_id`.
@@ -48,11 +50,14 @@ export function logMatchesSlot(
 ): boolean {
   const slotId = plannedExercise.session_exercise_id;
 
-  // Off-plan extra (no slot conocido): conserva el match por exercise_id puro.
+  // Off-plan extra (no slot conocido): match por exercise_id acotado a esta
+  // sesión — sin el scope, un ejercicio prestado adoptaría el log del mismo
+  // ejercicio hecho en OTRA sesión del mismo día.
   if (typeof slotId !== "string" || slotId.length === 0) {
     return (
       Boolean(log.exercise_id) &&
-      log.exercise_id === plannedExercise.exercise_id
+      log.exercise_id === plannedExercise.exercise_id &&
+      (log.session_id == null || log.session_id === sessionId)
     );
   }
 

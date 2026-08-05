@@ -225,8 +225,15 @@ export function CreateProgramModal({
     }
   }, [isOpen]);
 
-  const patch = (next: Partial<ProgramFormState>) =>
+  const patch = (next: Partial<ProgramFormState>) => {
+    // Cambiar de categoría deja la plantilla elegida fuera de la lista del
+    // Select; sin este reset el POST seguiría clonando la plantilla de la
+    // otra categoría aunque el campo se vea vacío.
+    if (next.category !== undefined && next.category !== form.category) {
+      setTemplateId("");
+    }
     setForm((prev) => ({ ...prev, ...next }));
+  };
 
   const submit = () => {
     if (formIsValid(form) === false || createProgram.isPending) return;

@@ -91,9 +91,12 @@ export function ProgramSelector({
           />
         </button>
       </DropdownTrigger>
+      {/* selectionMode es obligatorio para que react-aria pinte selectedKeys;
+          onAction sigue disparando una sola vez por click. */}
       <DropdownMenu
         aria-label="Seleccionar programa"
         selectedKeys={activeId !== null ? [activeId] : []}
+        selectionMode="single"
         onAction={(key) => {
           if (key === "new-program") onCreateNew();
           else onSelect(String(key));

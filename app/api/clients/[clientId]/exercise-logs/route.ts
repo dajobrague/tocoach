@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { loadTenantContext } from "@/lib/tenant/loader";
 import { computeRepMaxes, diffRecords } from "@/lib/training/e1rm";
 import { isSessionFullyCovered } from "@/lib/training/session-completion";
 
@@ -198,13 +199,26 @@ export async function POST(
 
     console.log("[Exercise Logs API] Creating log:", body);
 
-    const { data: sessionData, error: sessionError } = await supabase
-      .from("sessions")
-      .select("trainer_id, tenant_host")
-      .eq("id", sessionId)
-      .single();
+    const [{ data: sessionData, error: sessionError }, tenant] =
+      await Promise.all([
+        supabase
+          .from("sessions")
+          .select("trainer_id, tenant_host")
+          .eq("id", sessionId)
+          .single(),
+        loadTenantContext(session.tenant_slug),
+      ]);
 
-    if (sessionError || !sessionData) {
+    // La sesión debe ser del MISMO tenant que el cliente autenticado — sin
+    // esto un sessionId ajeno crearía filas con tenant_host y trainer_id de
+    // otro tenant (mismo guard que /scheduled-sessions/[date]/start y
+    // /complete).
+    if (
+      sessionError ||
+      !sessionData ||
+      tenant === null ||
+      sessionData.tenant_host !== tenant.host
+    ) {
       console.error("[Exercise Logs API] Session not found:", sessionError);
 
       return NextResponse.json(
@@ -309,7 +323,30 @@ export async function POST(
       );
     }
 
-    const { data: existingExerciseLog } = await existingLookup.maybeSingle();
+    // La búsqueda de 3 llaves puede matchear VARIAS filas (dos slots del
+    // mismo ejercicio guardados con sessionExerciseId, releídos por un
+    // cliente sin él): maybeSingle sin limit erroraba y el error descartado
+    // mandaba al camino de insert, duplicando logs. Orden determinista +
+    // limit(1) elige la más reciente; un error real de query corta acá en
+    // vez de insertar un duplicado.
+    const { data: existingExerciseLog, error: existingLookupError } =
+      await existingLookup
+        .order("completed_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (existingLookupError) {
+      console.error(
+        "[Exercise Logs API] Error looking up existing log:",
+        existingLookupError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al guardar registro de ejercicio" },
+        { status: 500 }
+      );
+    }
 
     // finalize=true: el cliente tocó "Finalizado" — el ejercicio queda
     // marcado como hecho. Si ya estaba finalizado preservamos el
@@ -693,9 +730,10 @@ export async function DELETE(
 //
 // Solo cuentan los logs finalizados: un autosave a medio tipear no es una marca.
 //
-// firstTime = el cliente no tenía NINGUNA sesión computable previa de este
-// ejercicio. En ese caso todo sería "récord" y celebrarlo es ruido, así que se
-// devuelve newRecords null y el cliente se queda callado.
+// firstTime = esta finalización aporta la primera marca computable del
+// ejercicio (o, para ejercicios que nunca computan e1rm, su primer log
+// finalizado). En ese caso todo sería "récord" y celebrarlo es ruido, así que
+// se devuelve newRecords null y el cliente se queda callado.
 //
 // Best-effort: cualquier error devuelve newRecords null. El guardado ya
 // comiteó y no se pierde nada por no celebrar.
@@ -734,14 +772,26 @@ async function detectNewRecords(
 
     const priorRepMaxes = computeRepMaxes(priorSessions);
 
-    if (priorRepMaxes.length === 0) {
-      return { newRecords: null, firstTime: true };
-    }
-
     const sets: SetInput[] = currentSets.map((set) => ({
       reps: set.reps,
       weight_kg: set.weight_kg,
     }));
+
+    if (priorRepMaxes.length === 0) {
+      // "Primera marca" = esta finalización aporta la primera serie
+      // computable (peso+reps → e1rm) del ejercicio. Cardio y peso corporal
+      // nunca computan e1rm: para esos, primera vez = ningún log finalizado
+      // previo del ejercicio — sin este check el banner de primera marca
+      // saldría en CADA finalización para siempre.
+      const currentIsComputable =
+        computeRepMaxes([{ date: "current", sets }]).length > 0;
+      const hadPriorFinalizedLog = ((data ?? []) as any[]).length > 0;
+
+      return {
+        newRecords: null,
+        firstTime: currentIsComputable ? true : !hadPriorFinalizedLog,
+      };
+    }
 
     return { newRecords: diffRecords(priorRepMaxes, sets), firstTime: false };
   } catch (error) {
