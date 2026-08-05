@@ -118,6 +118,21 @@ export function defaultSet(): SetDraft {
 }
 
 /**
+ * SetDraft extendido con la prescripción de reps no numérica ("8-12",
+ * "AMRAP"). El input de reps es type="number": un value así se ve VACÍO
+ * en pantalla pero seguía en el state, y el save lo coercionaba al
+ * límite inferior (parseInt("8-12") → 8) como si el cliente hubiera
+ * hecho esas series. La prescripción viaja como placeholder — visible
+ * pero nunca persistida — y solo se guardan reps tecleadas.
+ */
+export type SetDraftWithTarget = SetDraft & { repsPlaceholder?: string };
+
+/** Reps que un input type="number" puede mostrar tal cual como value. */
+export function isPlainNumericReps(value: string): boolean {
+  return /^\d+(\.\d+)?$/.test(value.trim());
+}
+
+/**
  * Peso en formato es-ES: coma decimal y como mucho un decimal ("97,5",
  * "95"). Lo comparten la progresión, los chips de récord y el mensaje de
  * celebración para que un mismo número no se vea de dos maneras.
@@ -137,7 +152,10 @@ export function buildBaseFormData(
   exercise: ExerciseShape,
   existingLog: any
 ): ExerciseLogFormDraft {
-  let sets: SetDraft[];
+  let sets: SetDraftWithTarget[];
+  // Solo el path de prescripción (log nuevo) admite prellenar pesos
+  // desde lastUsedWeights; ver bloque más abajo.
+  let prefillLastUsedWeights = false;
 
   // Only prefer an existing log over the prescription when the log carries
   // actual data. An autosave taken before the trainer edited the override
@@ -202,19 +220,35 @@ export function buildBaseFormData(
       exercise.weightKg != null ? String(exercise.weightKg) : "";
     const perSetReps = parsePipeReps(repsStr, count);
 
-    sets = Array.from({ length: count }, (_, i) => ({
-      reps: perSetReps[i] ?? "",
-      weight: weightStr,
-    }));
+    // Reps no numéricas (rango "8-12", "AMRAP") van como placeholder,
+    // nunca como value: el input number las mostraría vacías mientras
+    // el save persistía el límite inferior en silencio.
+    sets = Array.from({ length: count }, (_, i) => {
+      const target = (perSetReps[i] ?? "").trim();
+
+      if (target !== "" && !isPlainNumericReps(target)) {
+        return { reps: "", weight: weightStr, repsPlaceholder: target };
+      }
+
+      return { reps: target, weight: weightStr };
+    });
+    prefillLastUsedWeights = true;
   }
 
   // Fallback: prellenar pesos vacíos con el último valor usado por el
-  // cliente en este ejercicio. Aplica a CUALQUIER path anterior — un set
-  // sin peso (autosave previo sin completar, prescripción sin weight, o
-  // simple olvido del cliente) hereda el peso del último log finalizado
-  // del mismo ejercicio. Si una posición no existe en el log anterior,
-  // cae al último peso disponible para no dejar el input vacío.
-  if (exercise.lastUsedWeights && exercise.lastUsedWeights.length > 0) {
+  // cliente en este ejercicio. SOLO aplica a logs nuevos (hidratados
+  // desde la prescripción): al reabrir un log existente el form debe
+  // mostrar exactamente lo guardado — un peso vacío ahí es deliberado
+  // (trabajo a peso corporal) y prellenarlo desde lastUsedWeights
+  // (cacheado por react-query, no invalidado en la misma visita)
+  // re-atribuía los kilos de la sesión anterior. Si una posición no
+  // existe en el log anterior, cae al último peso disponible para no
+  // dejar el input vacío.
+  if (
+    prefillLastUsedWeights &&
+    exercise.lastUsedWeights &&
+    exercise.lastUsedWeights.length > 0
+  ) {
     const lastNonNull = [...exercise.lastUsedWeights]
       .reverse()
       .find((w) => w != null);

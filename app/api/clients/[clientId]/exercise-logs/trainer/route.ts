@@ -129,7 +129,11 @@ export async function GET(
         `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)`
       )
       .eq("client_id", clientId)
-      .order("completed_at", { ascending: true })
+      // DESC + cap: si un cliente veterano supera el tope, se pierde la cola
+      // más ANTIGUA, nunca lo reciente (con ASC el cap se comía lo nuevo ahora
+      // que el fetch es all-time). Abajo se re-invierte para conservar el
+      // contrato ascendente de los consumidores.
+      .order("completed_at", { ascending: false })
       // Hard cap defense against runaway payloads regardless of window.
       .limit(2000);
 
@@ -151,7 +155,7 @@ export async function GET(
       );
     }
 
-    const flattenedLogs = (exerciseLogs || []).map((log: any) => {
+    const flattenedLogs = (exerciseLogs || []).reverse().map((log: any) => {
       const rawSets = log.exercise_log_sets ?? [];
       const sets =
         rawSets.length > 0

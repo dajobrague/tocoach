@@ -40,9 +40,9 @@ export interface UseClientExerciseLogs {
 }
 
 /**
- * Fetches all exercise logs for a client (no date range) once per mount, memoizes
- * the indexed views, and exposes selectors. Designed to live at the tab level so
- * every exercise card shares the same fetched dataset.
+ * Fetches ALL exercise logs for a client (all-time, sin ventana) once per mount,
+ * memoizes the indexed views, and exposes selectors. Designed to live at the tab
+ * level so every exercise card shares the same fetched dataset.
  */
 export function useClientExerciseLogs(clientId: string): UseClientExerciseLogs {
   const [{ logs, loading, error }, setState] = useState<State>({
@@ -54,8 +54,12 @@ export function useClientExerciseLogs(clientId: string): UseClientExerciseLogs {
   const fetchAll = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      // No startDate/endDate => endpoint returns all-time logs for the client.
-      const res = await fetch(`/api/clients/${clientId}/exercise-logs/trainer`);
+      // Sin fechas, el endpoint acota a los últimos 180 días — insuficiente
+      // para récords/medallas "históricos". Un startDate explícito anterior a
+      // cualquier dato posible fuerza el historial completo.
+      const res = await fetch(
+        `/api/clients/${clientId}/exercise-logs/trainer?startDate=1970-01-01`
+      );
       const json = await res.json();
 
       if (!json.success) {

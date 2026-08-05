@@ -7,6 +7,17 @@ import type {
   PrescribedExercise,
 } from "./types";
 
+import { logMatchesSlot } from "@/lib/training/log-attribution";
+
+/**
+ * Prescripción con el id del slot (`session_exercises.id`) cuando el caller
+ * lo conoce. Con él, dos slots del mismo ejercicio de librería (pesado +
+ * back-off) cuentan por separado; sin él aplica el fallback por exercise_id.
+ */
+export type PrescribedSlot = PrescribedExercise & {
+  sessionExerciseId?: string;
+};
+
 // Returned by reference today, but every consumer must treat as read-only —
 // any mutation would silently corrupt every "no prescription" day in the
 // week. Frozen to surface the contract loudly.
@@ -53,8 +64,68 @@ function parseReps(reps: string | null | undefined): number {
   return Math.round(sum / nums.length);
 }
 
+/**
+ * Asigna cada log a UN solo slot prescrito — nunca compartido, para que dos
+ * slots del mismo ejercicio no cuenten el mismo trabajo dos veces:
+ *   1. Match exacto por `session_exercise_id` (la regla canónica de
+ *      lib/training/log-attribution).
+ *   2. Fallback vía logMatchesSlot para prescripciones/logs sin slot id;
+ *      cada grupo de logs (mismo slot de origen) lo consume el primer slot
+ *      pendiente, así los grupos se reparten en orden entre duplicados.
+ * Los logs ya llegan acotados a la sesión por el caller, por eso el
+ * sessionId que exige logMatchesSlot se neutraliza con el del propio log.
+ */
+function attributeLogsToSlots(
+  prescribed: readonly PrescribedSlot[],
+  logs: readonly ExerciseLog[]
+): ExerciseLog[][] {
+  const consumed = new Set<ExerciseLog>();
+  const bySlot = prescribed.map<ExerciseLog[]>(() => []);
+
+  prescribed.forEach((p, i) => {
+    const bucket = bySlot[i];
+    const slotId = p.sessionExerciseId;
+
+    if (!bucket || !slotId) return;
+    for (const log of logs) {
+      if (consumed.has(log)) continue;
+      if (log.session_exercise_id === slotId) {
+        bucket.push(log);
+        consumed.add(log);
+      }
+    }
+  });
+
+  prescribed.forEach((p, i) => {
+    const bucket = bySlot[i];
+
+    if (!bucket || bucket.length > 0) return;
+    const planned = {
+      exercise_id: p.exerciseId,
+      ...(p.sessionExerciseId
+        ? { session_exercise_id: p.sessionExerciseId }
+        : {}),
+    };
+    const candidates = logs.filter(
+      (l) => !consumed.has(l) && logMatchesSlot(l, planned, l.session_id ?? "")
+    );
+    const first = candidates[0];
+
+    if (!first) return;
+    const groupKey = first.session_exercise_id ?? null;
+
+    for (const log of candidates) {
+      if ((log.session_exercise_id ?? null) !== groupKey) continue;
+      bucket.push(log);
+      consumed.add(log);
+    }
+  });
+
+  return bySlot;
+}
+
 export function computeDayAdherence(
-  prescribed: PrescribedExercise[],
+  prescribed: PrescribedSlot[],
   logs: ExerciseLog[]
 ): DayAdherence {
   if (prescribed.length === 0) return EMPTY_ADHERENCE;
@@ -65,8 +136,10 @@ export function computeDayAdherence(
   let prescribedLoadTotal = 0;
   let loggedLoadTotal = 0;
 
-  for (const p of prescribed) {
-    const exerciseLogs = logs.filter((l) => l.exercise_id === p.exerciseId);
+  const logsBySlot = attributeLogsToSlots(prescribed, logs);
+
+  prescribed.forEach((p, slotIndex) => {
+    const exerciseLogs = logsBySlot[slotIndex] ?? [];
     const loggedSetsForExercise = exerciseLogs.flatMap((l) => l.sets ?? []);
 
     const prescribedSets = p.prescribedSets ?? 0;
@@ -101,7 +174,7 @@ export function computeDayAdherence(
         loggedLoadTotal += (s.reps ?? 0) * (s.weight_kg ?? 0);
       }
     }
-  }
+  });
 
   const ejercicios = completedExercises / prescribed.length;
   // seriesRaw exposes the unclamped ratio so the UI can distinguish "did
@@ -196,9 +269,12 @@ export function classifyDay(
       adherence.completedExercises >= adherence.totalPrescribed
     )
       return "complete";
-    if (adherence.completedExercises > 0) return "partial";
 
-    return "complete";
+    // Hubo trabajo pero la prescripción no se cubrió entera: "partial"
+    // incluso cuando NINGÚN ejercicio llegó a su cantidad de series (el
+    // fallthrough anterior marcaba 'complete' un día apenas empezado).
+    // Sin prescripción contra la cual comparar, el trabajo cuenta entero.
+    return adherence.totalPrescribed === 0 ? "complete" : "partial";
   }
   if (!hasPrescribed) return "rest";
 

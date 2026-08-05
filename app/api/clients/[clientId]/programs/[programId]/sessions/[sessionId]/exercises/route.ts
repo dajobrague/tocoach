@@ -4,6 +4,49 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
+// PUT/DELETE mutan por el id del slot (query param), así que antes de tocar
+// la fila se verifica la cadena completa slot → sesión → programa →
+// client_programs contra el trainer autenticado y los params de la URL;
+// cualquier eslabón que no cuadre devuelve null (→ 404, mismo criterio que
+// el POST de esta ruta y los handlers de programs).
+async function findOwnedSessionExercise(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  trainerId: string,
+  routeParams: { clientId: string; programId: string; sessionId: string },
+  sessionExerciseRowId: string
+): Promise<{ id: string; exercise_id: string; session_id: string } | null> {
+  const { data: sessionExercise } = await supabase
+    .from("session_exercises")
+    .select("id, exercise_id, session_id")
+    .eq("id", sessionExerciseRowId)
+    .eq("session_id", routeParams.sessionId)
+    .maybeSingle();
+
+  if (!sessionExercise) return null;
+
+  const { data: sessionRow } = await supabase
+    .from("sessions")
+    .select("id")
+    .eq("id", routeParams.sessionId)
+    .eq("program_id", routeParams.programId)
+    .eq("trainer_id", trainerId)
+    .maybeSingle();
+
+  if (!sessionRow) return null;
+
+  const { data: clientProgram } = await supabase
+    .from("client_programs")
+    .select("id")
+    .eq("program_id", routeParams.programId)
+    .eq("client_id", routeParams.clientId)
+    .eq("trainer_id", trainerId)
+    .maybeSingle();
+
+  if (!clientProgram) return null;
+
+  return sessionExercise;
+}
+
 // POST - Add a new exercise to a session
 export async function POST(
   request: NextRequest,
@@ -53,7 +96,7 @@ export async function POST(
     // Verify that the session belongs to this trainer
     const { data: sessionData, error: sessionError } = await supabase
       .from("sessions")
-      .select("id, trainer_id, tenant_host, session_type")
+      .select("id, trainer_id, tenant_host")
       .eq("id", sessionId)
       .eq("trainer_id", session.trainer_id)
       .single();
@@ -89,7 +132,10 @@ export async function POST(
       );
     }
 
-    // Validate ownership + category match against this session's type.
+    // Validate ownership of the library exercise. La categoría NO se compara
+    // con el tipo de la sesión: desde el rediseño una sesión puede mezclar
+    // tipos (un finisher de cardio en un día de fuerza), igual que el picker
+    // del drawer.
     const { data: libraryExercise, error: libraryError } = await supabase
       .from("exercises")
       .select("id, category, metadata")
@@ -101,19 +147,6 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Ejercicio de biblioteca no encontrado" },
         { status: 404 }
-      );
-    }
-
-    const expectedCategory =
-      sessionData.session_type === "cardio" ? "cardio" : "strength";
-
-    if (libraryExercise.category !== expectedCategory) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `El ejercicio seleccionado no es de tipo ${expectedCategory}`,
-        },
-        { status: 400 }
       );
     }
 
@@ -132,8 +165,11 @@ export async function POST(
         ? (existingExercises[0].exercise_order || 0) + 1
         : 1;
 
-    // Build the session_exercise data based on exercise type
-    const isCardio = sessionData.session_type === "cardio";
+    // Build the session_exercise data based on exercise type: los campos
+    // siguen la categoría del EJERCICIO elegido, no el tipo de la sesión
+    // (el drawer envía duración/distancia para cardio y series/reps para el
+    // resto, sea cual sea la sesión).
+    const isCardio = libraryExercise.category === "cardio";
     const sessionExerciseData: any = {
       tenant_host: sessionData.tenant_host,
       session_id: sessionId,
@@ -217,7 +253,7 @@ export async function POST(
 export async function PUT(
   request: NextRequest,
   {
-    params: _params,
+    params,
   }: {
     params: Promise<{ clientId: string; programId: string; sessionId: string }>;
   }
@@ -235,6 +271,7 @@ export async function PUT(
       );
     }
 
+    const routeParams = await params;
     const { searchParams } = new URL(request.url);
     const sessionExerciseRowId = searchParams.get("exerciseId"); // session_exercises.id
 
@@ -268,15 +305,20 @@ export async function PUT(
       body
     );
 
-    // Get the session_exercise to find the exercise_id and session info
-    const { data: sessionExercise, error: seError } = await supabase
-      .from("session_exercises")
-      .select("exercise_id, tenant_host, session_id, sessions(session_type)")
-      .eq("id", sessionExerciseRowId)
-      .single();
+    // Ownership: el slot debe colgar de la sesión/programa/cliente de la URL
+    // y pertenecer al trainer autenticado.
+    const sessionExercise = await findOwnedSessionExercise(
+      supabase,
+      session.trainer_id,
+      routeParams,
+      sessionExerciseRowId
+    );
 
-    if (seError || !sessionExercise) {
-      console.error("[Exercises API] Session exercise not found:", seError);
+    if (!sessionExercise) {
+      console.error(
+        "[Exercises API] Session exercise not found or unauthorized:",
+        sessionExerciseRowId
+      );
 
       return NextResponse.json(
         { success: false, error: "Ejercicio no encontrado" },
@@ -284,16 +326,14 @@ export async function PUT(
       );
     }
 
-    const sessionType = (sessionExercise as any).sessions?.session_type as
-      | string
-      | undefined;
-
     // Library-only swap: if the body names a (different) library exercise,
     // repoint the slot's exercise_id to it. We never rename/edit the library
     // row from here. Existing logs keep their old exercise_id (history split,
     // surfaced to the trainer in the UI warning).
     const rawLibraryExerciseId: unknown = body.exerciseId;
     let nextExerciseId: string | undefined;
+    let swappedLibrary: { category: string | null; metadata: any } | null =
+      null;
 
     if (rawLibraryExerciseId !== undefined && rawLibraryExerciseId !== null) {
       if (
@@ -310,9 +350,9 @@ export async function PUT(
       }
 
       if (rawLibraryExerciseId !== sessionExercise.exercise_id) {
-        const expectedCategory =
-          sessionType === "cardio" ? "cardio" : "strength";
-
+        // Solo se valida propiedad del ejercicio de biblioteca; la categoría
+        // no se compara con la sesión porque las sesiones pueden mezclar
+        // tipos (mismo criterio que el POST).
         const { data: libraryExercise, error: libraryError } = await supabase
           .from("exercises")
           .select("id, category, metadata")
@@ -327,22 +367,26 @@ export async function PUT(
           );
         }
 
-        if (libraryExercise.category !== expectedCategory) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `El ejercicio seleccionado no es de tipo ${expectedCategory}`,
-            },
-            { status: 400 }
-          );
-        }
-
         nextExerciseId = libraryExercise.id;
+        swappedLibrary = libraryExercise;
       }
     }
 
-    // Determine if this is a cardio exercise
-    const isCardio = sessionType === "cardio";
+    // Los campos siguen la categoría del ejercicio EFECTIVO del slot (el
+    // swapeado si hay swap, si no el actual), no el tipo de la sesión.
+    let effectiveLibrary = swappedLibrary;
+
+    if (effectiveLibrary === null) {
+      const { data: currentLibrary } = await supabase
+        .from("exercises")
+        .select("category, metadata")
+        .eq("id", sessionExercise.exercise_id)
+        .maybeSingle();
+
+      effectiveLibrary = currentLibrary ?? null;
+    }
+
+    const isCardio = effectiveLibrary?.category === "cardio";
 
     // Build update data based on exercise type
     const updateData: any = {
@@ -355,23 +399,26 @@ export async function PUT(
     }
 
     if (isCardio) {
-      // Cardio exercise fields
-      if (duration) updateData.duration_seconds = parseInt(duration) * 60;
-      if (distance) updateData.distance_meters = parseFloat(distance) * 1000;
+      // Cardio exercise fields. Presencia (no truthiness): un valor presente
+      // pero vacío/0/null BORRA la columna — con el guard falsy anterior era
+      // imposible quitar una duración o distancia ya guardadas.
+      if (duration !== undefined) {
+        const minutes = parseInt(duration);
+
+        updateData.duration_seconds = minutes > 0 ? minutes * 60 : null;
+      }
+      if (distance !== undefined) {
+        const km = parseFloat(distance);
+
+        updateData.distance_meters = km > 0 ? km * 1000 : null;
+      }
 
       const metadata: any = {};
 
       if (intensity) metadata.intensity = intensity;
       // cardio_type is intrinsic to the library exercise — source it from
-      // there, never from the request body. Use the slot's effective library
-      // exercise (the swapped one if swapping, else the current exercise_id).
-      const effectiveExerciseId = nextExerciseId ?? sessionExercise.exercise_id;
-      const { data: curLib } = await supabase
-        .from("exercises")
-        .select("metadata")
-        .eq("id", effectiveExerciseId)
-        .maybeSingle();
-      const libCardioType = (curLib as any)?.metadata?.cardio_type ?? null;
+      // there, never from the request body.
+      const libCardioType = effectiveLibrary?.metadata?.cardio_type ?? null;
 
       if (libCardioType) metadata.cardio_type = libCardioType;
       if (minHeartRate) metadata.heart_rate_min = parseInt(minHeartRate);
@@ -430,7 +477,7 @@ export async function PUT(
 export async function DELETE(
   request: NextRequest,
   {
-    params: _params,
+    params,
   }: {
     params: Promise<{ clientId: string; programId: string; sessionId: string }>;
   }
@@ -448,6 +495,7 @@ export async function DELETE(
       );
     }
 
+    const routeParams = await params;
     const { searchParams } = new URL(request.url);
     const exerciseId = searchParams.get("exerciseId");
 
@@ -458,13 +506,34 @@ export async function DELETE(
       );
     }
 
+    // Ownership: mismo guard que el PUT antes de borrar por id.
+    const sessionExercise = await findOwnedSessionExercise(
+      supabase,
+      session.trainer_id,
+      routeParams,
+      exerciseId
+    );
+
+    if (!sessionExercise) {
+      console.error(
+        "[Exercises API] Session exercise not found or unauthorized:",
+        exerciseId
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Ejercicio no encontrado" },
+        { status: 404 }
+      );
+    }
+
     console.log("[Exercises API] Deleting exercise:", exerciseId);
 
     // Delete the session_exercise (the exercise library entry stays)
     const { error: deleteError } = await supabase
       .from("session_exercises")
       .delete()
-      .eq("id", exerciseId);
+      .eq("id", exerciseId)
+      .eq("session_id", routeParams.sessionId);
 
     if (deleteError) {
       console.error(

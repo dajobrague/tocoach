@@ -329,8 +329,10 @@ export function ExerciseDrawer({
 
     return {
       duration: durationNum ?? 0,
+      // distance SIEMPRE presente: 0 = campo vaciado, el PUT anula la
+      // columna (si se omitiera, el valor viejo quedaría irrecuperable).
+      distance: distanceNum ?? 0,
       notes: form.notes.trim(),
-      ...(distanceNum !== null ? { distance: distanceNum } : {}),
       ...(form.intensity !== "" ? { intensity: form.intensity } : {}),
       ...(minHrNum !== null ? { minHeartRate: minHrNum } : {}),
       ...(maxHrNum !== null ? { maxHeartRate: maxHrNum } : {}),

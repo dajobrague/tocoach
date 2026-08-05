@@ -197,3 +197,17 @@ Findings fixed in commit d2ab2fe are marked **[FIXED]**. Everything else is pre-
 - **OPEN:** Trainer pauses while client mid-workout ejects the client from the active session view — check: With a client session open in one browser (active-session-view mounted, sets partially logged), pause the program from the trainer UI in another; wait for the sessions query refetch (staleTime ~30s or tab refocus) and observe the client being dumped back to the sessions list.
 - **OPEN:** Video review/upload API routes were excluded from every area, including the security audit — check: Review the three routes for: (a) video_url ownership validation in the video-reviews PUT (can a trainer create review rows/notifications for URLs outside the client's storage prefix?), (b) fileExt sanitization at upload-video/route.ts:103 (fileExt comes from the client-supplied filename), (c) tenant scoping in pending-video-reviews.
 - **OPEN:** Trainer bell integration for 'video_upload' notifications is unreviewed — no type/action handling in the trainer dropdown — check: As a client, upload a set video; confirm a notifications row with metadata.audience='trainer' and tenant_slug=SLUG (not host) is created, that it renders in the trainer bell, and what tapping it does (currently no navigation to the pending-reviews queue). Repeat for a review comment -> client bell -> open_video_feedback viewer.
+
+---
+
+# Fix round — same day (all 31 open findings resolved)
+
+All 31 open findings above were fixed via a two-wave multi-agent workflow (5 blocker clusters, then 5 remaining clusters, disjoint file sets), with full gates (type-check / lint / 814 tests) green after each wave and an adversarial verifier per cluster confirming each original failure scenario is no longer reproducible. Fixes landed in two commits: deploy blockers first, remainder second. 24 test cases were added (adherence, e1rm, log-attribution, progression-query, exercise-log form data).
+
+## Known limitations accepted (flagged by verifiers, documented deliberately)
+
+- **DELETE program retry after partial cascade failure**: if a previous cascade failed mid-way after removing the client_programs row, a retry now 404s at the ownership gate and the orphaned programs row is not deletable via this endpoint. Requires a mid-cascade DB failure to arise; true transactional cascade (RPC) is the eventual fix.
+- **Stale metadata.goal key after category change**: the PUT metadata merge never deletes keys, so switching a program cardio→strength leaves an inert goal key behind. Readers branch on category; no visible effect.
+- **Legacy logs + duplicate same-exercise slots**: logs without session_exercise_id collapse onto the first pending duplicate slot, so a fully-completed day logged pre-backfill can read "partial". Trades the old false-complete for rare under-credit; disappears as legacy logs age out.
+- **>2000 all-time logs**: the trainer exercise-logs fetch now orders DESC before the 2000-row cap (then re-reverses), so a long-tenured client loses the oldest tail, never recent history.
+- **"12+" rep-PR toast copy**: a same-weight rep improvement in the 12+ bucket shows identical weights ("antes 10 kg") because toast/banner lines don't carry reps. Data is correct; copy could be enriched later.

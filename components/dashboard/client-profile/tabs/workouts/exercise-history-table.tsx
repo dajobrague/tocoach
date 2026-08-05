@@ -5,7 +5,7 @@ import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
-import { computeSessionVolume } from "./helpers";
+import { computeSessionVolume, sortLogsByDateDesc } from "./helpers";
 import { HistoryDateFilter } from "./history-date-filter";
 
 interface Props {
@@ -371,7 +371,10 @@ export function ExerciseHistoryTable({
     );
   }
 
-  const orderedLogs = [...logs].reverse();
+  // Mismo orden que computeStrengthStats/computeCardioStats (scheduled_date
+  // desc): la API viene ordenada por completed_at, y un simple reverse()
+  // ponía arriba una sesión back-dated mientras "Último" mostraba otra.
+  const orderedLogs = sortLogsByDateDesc(logs);
   const filteredLogs = dateFilter
     ? orderedLogs.filter((l) => l.scheduled_date === dateFilter)
     : orderedLogs;

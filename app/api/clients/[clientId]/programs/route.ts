@@ -717,11 +717,39 @@ export async function PUT(
 
     console.log("[Programs API] Updating program:", programId, body);
 
-    // Build metadata object
-    const metadata: any = {
-      type,
-      sessions_per_week: parseInt(sessionsPerWeek),
-    };
+    // Merge sobre la metadata existente: el body de rename/edición no trae
+    // todas las claves (goal nunca viaja en el GET del programa), así que
+    // reconstruirla desde cero borraba goal/division silenciosamente.
+    const { data: existingProgram, error: existingError } = await supabase
+      .from("programs")
+      .select("metadata")
+      .eq("id", programId)
+      .eq("trainer_id", session.trainer_id)
+      .maybeSingle();
+
+    if (existingError || !existingProgram) {
+      console.error(
+        "[Programs API] Program not found or not owned:",
+        existingError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Programa no encontrado o no autorizado" },
+        { status: 404 }
+      );
+    }
+
+    const metadata: any = { ...(existingProgram.metadata ?? {}) };
+
+    if (type !== undefined) {
+      metadata.type = type;
+    }
+
+    const parsedSessionsPerWeek = parseInt(sessionsPerWeek);
+
+    if (!isNaN(parsedSessionsPerWeek)) {
+      metadata.sessions_per_week = parsedSessionsPerWeek;
+    }
 
     if (category) {
       metadata.category = category;
@@ -825,6 +853,38 @@ export async function DELETE(
       "for client:",
       clientId
     );
+
+    // 0. Verificar propiedad ANTES del cascade: los deletes de sesiones,
+    // ejercicios y scheduled_sessions de abajo filtran solo por program_id,
+    // así que sin este check cualquier trainer autenticado podía vaciar
+    // programas de otro tenant conociendo el UUID.
+    const { data: ownedProgram, error: ownershipError } = await supabase
+      .from("client_programs")
+      .select("id")
+      .eq("program_id", programId)
+      .eq("client_id", clientId)
+      .eq("trainer_id", session.trainer_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (ownershipError) {
+      console.error(
+        "[Programs API] Error verifying program ownership:",
+        ownershipError
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al eliminar programa" },
+        { status: 500 }
+      );
+    }
+
+    if (!ownedProgram) {
+      return NextResponse.json(
+        { success: false, error: "Programa no encontrado o no autorizado" },
+        { status: 404 }
+      );
+    }
 
     // 1. Get all sessions for this program
     const { data: sessions } = await supabase

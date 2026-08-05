@@ -52,6 +52,21 @@ function formatKg(value: number): string {
   return value.toLocaleString("es-ES", { maximumFractionDigits: 2 });
 }
 
+/**
+ * Flags paralelos a `logs.flatMap((l) => l.sets)`: solo las series de logs
+ * FINALIZADOS compiten por la medalla 🏅 — un autosave a medio teclear ("100"
+ * camino a "10") no puede ser récord. Misma regla (y misma excepción de
+ * transporte cuando ningún log trae el campo) que logsToSessionSets, que
+ * calcula el máximo histórico contra el que se compara.
+ */
+function recordEligibleFlags(logs: ExerciseLog[]): boolean[] {
+  const anyFinalizedField = logs.some((l) => l.finalized_at !== undefined);
+
+  return logs.flatMap((l) =>
+    (l.sets ?? []).map(() => !anyFinalizedField || l.finalized_at != null)
+  );
+}
+
 // ─── Franja de stats (separadores de 1px, receta de nutrición) ──────────────
 
 interface StatItem {
@@ -86,12 +101,15 @@ function StatStrip({ items }: { items: StatItem[] }) {
 
 function SetsTable({
   sets,
+  recordEligible,
   exerciseName,
   prescribedMin,
   historicalMaxE1rm,
   onPlayVideo,
 }: {
   sets: ExerciseLogSet[];
+  /** Paralelo a `sets`: false = serie de un log sin finalizar (autosave). */
+  recordEligible: boolean[];
   exerciseName: string;
   /** Reps mínimas prescritas — por debajo, el número se tiñe ámbar. */
   prescribedMin: number | null;
@@ -103,12 +121,15 @@ function SetsTable({
   historicalMaxE1rm: number;
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }) {
-  // La medalla va SOLO a la primera serie que alcanza el máximo histórico —
-  // dos series iguales no son dos récords. Comparación con epsilon porque el
-  // máximo sale de la misma fórmula sobre los mismos números en coma flotante.
+  // La medalla va SOLO a la primera serie FINALIZADA que alcanza el máximo
+  // histórico — dos series iguales no son dos récords, y un autosave (que el
+  // máximo histórico ya excluye) no puede autoproclamarse récord. Comparación
+  // con epsilon porque el máximo sale de la misma fórmula sobre los mismos
+  // números en coma flotante.
   const recordIndex =
     historicalMaxE1rm > 0
-      ? sets.findIndex((s) => {
+      ? sets.findIndex((s, index) => {
+          if (recordEligible[index] !== true) return false;
           const e1rm = estimateOneRepMax(s.weight_kg, s.reps);
 
           return e1rm !== null && e1rm >= historicalMaxE1rm - 1e-9;
@@ -392,6 +413,7 @@ function PrescribedRow({
           exerciseName={prescribed.name}
           historicalMaxE1rm={allTimeMaxE1rm(allTimeLogs)}
           prescribedMin={minPrescribedReps(prescribed.prescribedReps)}
+          recordEligible={recordEligibleFlags(exerciseLogs)}
           sets={allSets}
           onPlayVideo={onPlayVideo}
         />
@@ -485,6 +507,7 @@ function LoggedExerciseRow({
           exerciseName={exerciseName}
           historicalMaxE1rm={allTimeMaxE1rm(allTimeLogs)}
           prescribedMin={minPrescribedReps(prescribedEntry?.prescribedReps)}
+          recordEligible={recordEligibleFlags(logs)}
           sets={allSets}
           onPlayVideo={onPlayVideo}
         />
@@ -532,6 +555,20 @@ function SessionCard({
 
   // Stats del día: volumen y peso máximo salen de las series ejecutadas.
   const daySets = entry.logs.flatMap((l) => l.sets ?? []);
+  // Los ratios del plan se calculan AQUÍ y no desde entry.adherence: cuando
+  // ningún log casa con la prescripción, adherence viene de
+  // computeAdherenceFromLogs y sus campos "prescribed*" son en realidad el
+  // trabajo hecho — mezclarlos daba ratios contradictorios ("0 de 2" junto a
+  // "12 de 12").
+  const hasPlan = entry.prescribed.length > 0;
+  const prescribedSetsTotal = entry.prescribed.reduce(
+    (acc, p) => acc + (p.prescribedSets ?? 0),
+    0
+  );
+  const onPlanSetsCount = onPlanGroups.reduce(
+    (acc, g) => acc + g.logs.reduce((sum, l) => sum + (l.sets?.length ?? 0), 0),
+    0
+  );
   const volume = Math.round(
     daySets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight_kg ?? 0), 0)
   );
@@ -616,25 +653,30 @@ function SessionCard({
           items={[
             {
               // Numerador SOLO con ejercicios del plan: los fuera-de-plan
-              // (prestados incl.) inflaban el ratio ("3 de 2").
+              // (prestados incl.) inflaban el ratio ("3 de 2"). Sin plan
+              // (sesión registrada sin prescripción) se muestra el conteo
+              // real sin denominador inventado.
               label: "Ejercicios",
               value: showLoggedView
-                ? `${onPlanGroups.length}${
-                    entry.adherence.totalPrescribed > 0
-                      ? ` de ${entry.adherence.totalPrescribed}`
-                      : ""
-                  }`
-                : `0 de ${entry.adherence.totalPrescribed}`,
+                ? hasPlan
+                  ? `${onPlanGroups.length} de ${entry.prescribed.length}`
+                  : `${loggedGroups.length}`
+                : `0 de ${entry.prescribed.length}`,
             },
             {
+              // Misma regla que "Ejercicios": series del plan contra series
+              // prescritas — las fuera-de-plan viven en su propia tarjeta y
+              // no cuentan como cumplimiento.
               label: "Series",
               value: showLoggedView
-                ? `${daySets.length}${
-                    entry.adherence.prescribedSetsTotal > 0
-                      ? ` de ${entry.adherence.prescribedSetsTotal}`
-                      : ""
-                  }`
-                : `0 de ${entry.adherence.prescribedSetsTotal}`,
+                ? hasPlan
+                  ? `${onPlanSetsCount}${
+                      prescribedSetsTotal > 0
+                        ? ` de ${prescribedSetsTotal}`
+                        : ""
+                    }`
+                  : `${daySets.length}`
+                : `0 de ${prescribedSetsTotal}`,
             },
             {
               label: "Volumen",

@@ -14,17 +14,16 @@
 
 "use client";
 
-import type { SetDraft } from "@/lib/client/exercise-log-draft";
-
 import { Button, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
+import { type SetDraftWithTarget } from "./helpers";
 import { SetVideoPreview } from "./set-video-preview";
 
 interface Props {
   index: number;
-  set: SetDraft;
+  set: SetDraftWithTarget;
   canRemove: boolean;
   isUploading: boolean;
   onUpdate: (field: "reps" | "weight", value: string) => void;
@@ -70,10 +69,13 @@ export function ExerciseSetRow({
           value={set.weight}
           onValueChange={(value) => onUpdate("weight", value)}
         />
+        {/* Prescripción no numérica ("8-12") como placeholder: el input
+            number no puede mostrarla como value y guardarla persistiría
+            el límite inferior sin que el cliente registrara nada. */}
         <Input
           classNames={{ input: "text-base", base: "flex-1" }}
           inputMode="numeric"
-          placeholder="Reps"
+          placeholder={set.repsPlaceholder ?? "Reps"}
           size="md"
           type="number"
           value={set.reps}
