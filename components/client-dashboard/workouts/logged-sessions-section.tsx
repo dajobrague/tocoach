@@ -10,6 +10,8 @@ import { Icon } from "@iconify/react";
 
 import { SessionCard } from "./session-card";
 
+import { confirmAfterPress } from "@/lib/ui/native-dialog";
+
 interface Props {
   loggedSessions: LoggedSession[];
   scheduledDate: string;
@@ -100,13 +102,14 @@ export function LoggedSessionsSection({
                     size="sm"
                     variant="light"
                     onPress={() => {
-                      if (
-                        window.confirm(
-                          "¿Borrar todo este entrenamiento? Se eliminarán todos los registros de esta sesión en esta fecha."
-                        )
-                      ) {
-                        onDelete(s.sessionId);
-                      }
+                      // confirmAfterPress y no window.confirm: un confirm()
+                      // síncrono dentro de onPress congela la página hasta
+                      // recargar (react-aria queda esperando el pointer-up).
+                      void confirmAfterPress(
+                        "¿Borrar todo este entrenamiento? Se eliminarán todos los registros de esta sesión en esta fecha."
+                      ).then((ok) => {
+                        if (ok) onDelete(s.sessionId);
+                      });
                     }}
                   >
                     <Icon icon="solar:trash-bin-trash-linear" width={16} />

@@ -663,7 +663,10 @@ function findExercisesForSession(
   sessionId: string
 ): Array<ExerciseLike & Record<string, unknown>> {
   for (const program of programs) {
-    if (program.status !== "active") continue;
+    // Pausado cuenta: si el trainer pausa a mitad de una sesión iniciada, el
+    // cliente la termina con el template que ya tenía (el pause afecta el
+    // futuro, no lo empezado). Completed/cancelled siguen fuera.
+    if (program.status !== "active" && program.status !== "paused") continue;
     const sessions = (program as unknown as { sessions?: unknown[] }).sessions;
 
     if (!Array.isArray(sessions)) continue;

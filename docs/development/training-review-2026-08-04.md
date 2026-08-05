@@ -211,3 +211,16 @@ All 31 open findings above were fixed via a two-wave multi-agent workflow (5 blo
 - **Legacy logs + duplicate same-exercise slots**: logs without session_exercise_id collapse onto the first pending duplicate slot, so a fully-completed day logged pre-backfill can read "partial". Trades the old false-complete for rare under-credit; disappears as legacy logs age out.
 - **>2000 all-time logs**: the trainer exercise-logs fetch now orders DESC before the 2000-row cap (then re-reverses), so a long-tenured client loses the oldest tail, never recent history.
 - **"12+" rep-PR toast copy**: a same-weight rep improvement in the 12+ bucket shows identical weights ("antes 10 kg") because toast/banner lines don't carry reps. Data is correct; copy could be enriched later.
+
+---
+
+# Round 3 — open critic items (pause semantics + bell)
+
+**Pause = future, not past** (client-side; server already blocked the future):
+- In-progress sessions survive a pause: the workouts screen only ejects the active session when there is NO evidence of started work (no logs for that date+session AND no scheduled_sessions row); the eject also waits out in-flight fetches and never fires on query error. The active-session banner falls back to the programs cache (active/paused only) when the session leaves the actives list, and the template fallback in active-session-view now admits paused programs.
+- Past stays browsable with zero active programs: week selector + logged sessions render whenever the client has history; only the available-sessions list is replaced by a "programa pausado" notice. Saving/finalizing logs and marking complete are tenant-scoped, not status-scoped, so finishing a started workout works throughout. Adversarially verified: calendar, resolved past days (real row wins), logged-session names, progress surfaces all status-independent.
+- Accepted edge: a started-but-unlogged session voluntarily exited under pause has no re-entry path (nothing was recorded beyond the start time).
+
+**Trainer bell / video_upload**: verified working end-to-end (insert with dedup → GET filters → realtime + toast → link navigation to the videos sub-tab → anon RLS policy allows the insert). Prod enum contains video_upload (checked live). Latent notes: notifications.tenant_slug stores SLUG against an FK on tenants(host) — works only while host==slug (true for all 37 tenants); realtime UPDATE handler can over-decrement the unread counter (REPLICA IDENTITY default).
+
+**Drive-by fixes**: logged-session cards recover their strength/cardio styling (camelCase sessionType lookup); delete-logged-session uses confirmAfterPress instead of window.confirm (page-freeze bug).

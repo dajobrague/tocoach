@@ -19,7 +19,11 @@ import {
   AvailableSessionsList,
   type OpenLogPayload,
 } from "./available-sessions-list";
-import { useAvailableSessions } from "./hooks/use-available-sessions";
+import {
+  useAvailableSessions,
+  type AvailableSession,
+} from "./hooks/use-available-sessions";
+import { useScheduledSessionState } from "./hooks/use-scheduled-session-state";
 import { useLoggedSessionsForDate } from "./hooks/use-logged-sessions-for-date";
 import { useMicrocycle } from "./hooks/use-microcycle";
 import { usePersistedActiveTraining } from "./hooks/use-persisted-active-training";
@@ -112,25 +116,94 @@ export function WorkoutsContent() {
     ? null
     : (resolvedForSelectedDate?.trainer_recommended_session_id ?? null);
 
+  // Fallback para la sesión activa cuando ya no está en el listado de
+  // disponibles (programa recién pausado): el cache de programs del cliente
+  // trae TODOS los status, así que el template sigue ahí para el banner.
+  const sessionFromCache = useMemo<AvailableSession | null>(() => {
+    if (!activeSessionId) return null;
+    for (const program of programs as WorkoutProgram[]) {
+      // Solo active/paused: resucitar sesiones de programas completed/
+      // cancelled pintaría una vista sin ejercicios (el fallback de
+      // active-session-view también los excluye).
+      if (program.status !== "active" && program.status !== "paused") continue;
+      const match = program.sessions.find((s) => s.id === activeSessionId);
+
+      if (match) {
+        return {
+          id: match.id,
+          name: match.name,
+          session_type: match.sessionType ?? null,
+          duration_minutes: null,
+          exercise_count: match.exercises.length,
+        };
+      }
+    }
+
+    return null;
+  }, [programs, activeSessionId]);
+
   const activeSession = activeSessionId
-    ? (availableData?.sessions.find((s) => s.id === activeSessionId) ?? null)
+    ? (availableData?.sessions.find((s) => s.id === activeSessionId) ??
+      sessionFromCache)
     : null;
 
+  // Estado servidor de la sesión activa en la fecha elegida: una fila real
+  // (hora de inicio declarada / status) es evidencia de trabajo iniciado.
+  const activeSchedState = useScheduledSessionState(
+    activeSessionId !== null ? selectedDate : "",
+    activeSessionId ?? ""
+  );
+  const activeHasLoggedWork = useMemo(() => {
+    if (activeSessionId === null) return false;
+
+    return (
+      exerciseLogs as Array<{
+        training_date?: string;
+        scheduled_date?: string;
+        session_id?: string;
+      }>
+    ).some(
+      (log) =>
+        (log.training_date ?? log.scheduled_date) === selectedDate &&
+        log.session_id === activeSessionId
+    );
+  }, [exerciseLogs, activeSessionId, selectedDate]);
+
   // Si la sesión persistida ya no existe en el programa activo (el
-  // trainer la borró/movió, o el cliente cambió de programa), limpiamos
-  // la persistencia para evitar quedar bloqueados sin "Cambiar
-  // entrenamiento". Solo corre cuando availableData ya cargó.
+  // trainer la borró/movió, pausó el programa, o el cliente cambió de
+  // programa), limpiamos la persistencia para evitar quedar bloqueados
+  // sin "Cambiar entrenamiento". EXCEPCIÓN (llamada 4 Ago): con trabajo
+  // ya iniciado — logs de esa sesión ese día o fila real con hora de
+  // inicio — la sesión sigue viva y el cliente la termina; pausar afecta
+  // el futuro, no lo empezado. Solo corre cuando availableData ya cargó.
   useEffect(() => {
     if (!availableData || !activeSessionId) return;
     const stillExists = availableData.sessions.some(
       (s) => s.id === activeSessionId
     );
 
-    if (!stillExists) {
-      setActiveSessionId(null);
-      clearActive();
-    }
-  }, [availableData, activeSessionId, clearActive]);
+    if (stillExists) return;
+    if (activeHasLoggedWork) return;
+    // Esperar CUALQUIER fetch en vuelo antes de expulsar (isPending cubre la
+    // primera carga, isFetching el refetch que dispara el POST de inicio):
+    // con solo isLoading, el clear ganaba la carrera contra la fila recién
+    // creada. Un error de red tampoco expulsa — "no sé" no es "no hay fila".
+    if (activeSchedState.isPending || activeSchedState.isFetching) return;
+    if (activeSchedState.isError) return;
+    if (activeSchedState.data != null) return;
+
+    setActiveSessionId(null);
+    clearActive();
+  }, [
+    availableData,
+    activeSessionId,
+    activeHasLoggedWork,
+    activeSchedState.isPending,
+    activeSchedState.isFetching,
+    activeSchedState.isError,
+    activeSchedState.data,
+    clearActive,
+  ]);
 
   const handleActivateSession = useCallback(
     (sessionId: string) => {
@@ -230,6 +303,14 @@ export function WorkoutsContent() {
   const isLoading = isLoadingAvailable;
   const error = availableError ? (availableError as Error).message : null;
   const hasActiveProgram = (availableData?.programs?.length ?? 0) > 0;
+  // Sin programa activo el HISTORIAL sigue siendo del cliente (pausar
+  // afecta el futuro, no el pasado): con actividad registrada se mantienen
+  // el selector de semana y las sesiones pasadas; solo se retira la lista
+  // de entrenamientos disponibles. El empty state grande queda para
+  // clientes sin programa Y sin historial.
+  const hasHistory = datesWithActivity.size > 0;
+  const showNoProgramEmptyState =
+    !hasActiveProgram && !hasHistory && activeSession === null;
 
   return (
     <>
@@ -277,7 +358,7 @@ export function WorkoutsContent() {
               </Card>
             ) : null}
 
-            {!isLoading && !error && !hasActiveProgram ? (
+            {!isLoading && !error && showNoProgramEmptyState ? (
               <Card className="bg-content1 border border-default-200 shadow-sm">
                 <CardBody className="p-12">
                   <div className="flex flex-col items-center justify-center text-center">
@@ -298,7 +379,7 @@ export function WorkoutsContent() {
               </Card>
             ) : null}
 
-            {!isLoading && !error && hasActiveProgram ? (
+            {!isLoading && !error && (hasActiveProgram || hasHistory) ? (
               <WeekDateSelector
                 datesWithActivity={datesWithActivity}
                 selectedDate={selectedDate}
@@ -307,7 +388,7 @@ export function WorkoutsContent() {
               />
             ) : null}
 
-            {!isLoading && !error && hasActiveProgram && activeSession ? (
+            {!isLoading && !error && activeSession ? (
               <ActiveSessionView
                 exerciseLogs={exerciseLogs}
                 programs={programs}
@@ -318,7 +399,10 @@ export function WorkoutsContent() {
               />
             ) : null}
 
-            {!isLoading && !error && hasActiveProgram && !activeSession ? (
+            {!isLoading &&
+            !error &&
+            !activeSession &&
+            (hasActiveProgram || hasHistory) ? (
               <>
                 {loggedSessions.length > 0 ? (
                   <LoggedSessionsSection
@@ -330,25 +414,49 @@ export function WorkoutsContent() {
                   />
                 ) : null}
 
-                <AvailableSessionsList
-                  availableSessions={availableData?.sessions ?? []}
-                  heading={
-                    isViewingToday
-                      ? "Escoge tu siguiente entrenamiento"
-                      : loggedSessions.length > 0
-                        ? "Agregar otro entrenamiento"
-                        : isViewingPast
-                          ? "¿Qué hiciste ese día?"
-                          : "Plan para ese día"
-                  }
-                  loggedSessionIds={
-                    new Set(loggedSessions.map((s) => s.sessionId))
-                  }
-                  recommendedSessionId={recommendedSessionId}
-                  onActivate={handleActivateSession}
-                />
+                {hasActiveProgram ? (
+                  <AvailableSessionsList
+                    availableSessions={availableData?.sessions ?? []}
+                    heading={
+                      isViewingToday
+                        ? "Escoge tu siguiente entrenamiento"
+                        : loggedSessions.length > 0
+                          ? "Agregar otro entrenamiento"
+                          : isViewingPast
+                            ? "¿Qué hiciste ese día?"
+                            : "Plan para ese día"
+                    }
+                    loggedSessionIds={
+                      new Set(loggedSessions.map((s) => s.sessionId))
+                    }
+                    recommendedSessionId={recommendedSessionId}
+                    onActivate={handleActivateSession}
+                  />
+                ) : (
+                  <Card className="bg-content1 border border-default-200 shadow-sm">
+                    <CardBody className="p-6">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-default-100">
+                          <Icon
+                            className="text-foreground/40 text-xl"
+                            icon="solar:pause-circle-linear"
+                          />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-heading font-semibold text-foreground">
+                            No tienes un programa activo ahora mismo
+                          </p>
+                          <p className="text-xs font-body text-foreground/60">
+                            Tu historial de entrenamientos sigue disponible
+                            aquí.
+                          </p>
+                        </div>
+                      </div>
+                    </CardBody>
+                  </Card>
+                )}
 
-                {microcycle ? (
+                {hasActiveProgram && microcycle ? (
                   <div className="flex justify-center">
                     <Button
                       className="text-foreground/70"

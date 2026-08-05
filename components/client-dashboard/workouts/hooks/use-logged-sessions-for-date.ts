@@ -38,6 +38,8 @@ interface SessionTemplate {
   id: string;
   name?: string;
   session_type?: SessionType | null;
+  /** El cache de programs (transformToWorkoutProgram) emite camelCase. */
+  sessionType?: SessionType | null;
   exercises?: unknown[];
 }
 
@@ -99,7 +101,9 @@ export function useLoggedSessionsForDate(
       result.push({
         sessionId,
         name: template?.name ?? "Sesión eliminada",
-        sessionType: template?.session_type ?? null,
+        // Solo snake_case dejaba el tipo siempre null (el cache real trae
+        // camelCase) y toda card pasada caía al estilo "other".
+        sessionType: template?.session_type ?? template?.sessionType ?? null,
         exercisesLogged: logs.length,
         exercisesTotal: totalFromTemplate ?? logs.length,
         templateMissing: !template,
