@@ -4,9 +4,12 @@
 // grilla mensual para que ambas digan y pinten exactamente lo mismo:
 // pasado/hoy → palabra de estado (Hecho/Empezado/Sin hacer); futuro con
 // sesión → chip punteado con el nombre (recomendación, no hecho); descanso →
-// nada. La regla de agregación vive en day-label.ts.
+// luna + "Descanso" (pedido de David: la celda vacía se sentía rara).
+// La regla de agregación vive en day-label.ts.
 
 import type { DayMetrics } from "./types";
+
+import { Icon } from "@iconify/react";
 
 import { classificationLabel } from "./adherence";
 import { dayLabelClassification } from "./day-label";
@@ -30,6 +33,17 @@ export function dayCellInfo(day: DayMetrics): {
 
 export function DayCellChip({ day }: { day: DayMetrics }) {
   const { statusWord, label, sessionName } = dayCellInfo(day);
+
+  // Día de descanso (sin sesiones programadas ni actividad): chip mudo con
+  // luna, pasado o futuro por igual. Sin él, la celda vacía parecía un bug.
+  if (day.sessions.length === 0 && sessionName === null) {
+    return (
+      <span className="flex w-fit max-w-full items-center gap-1 rounded-full bg-gray-50 px-1.5 py-px text-[10px] font-medium text-gray-400">
+        <Icon className="shrink-0" icon="solar:moon-bold" width={10} />
+        Descanso
+      </span>
+    );
+  }
 
   if (day.isFuture && sessionName !== null) {
     return (
