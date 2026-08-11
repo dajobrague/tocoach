@@ -198,6 +198,44 @@ export function usePrograms() {
   });
 }
 
+// Activa un programa y pausa cualquier otro activo (invariante
+// un-solo-activo, RPC atómico server-side). Invalida todo lo derivado
+// del programa activo: plan del día, sesiones disponibles, calendario.
+export function useActivateProgram() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (clientProgramId: string) => {
+      const response = await clientFetch("/api/client/programs/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientProgramId }),
+      });
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Error al activar el programa");
+      }
+
+      return data as { activatedId: string; demotedIds: string[] };
+    },
+    onSuccess: () => {
+      const affected: string[][] = [
+        ["client", "programs"],
+        ["client", "available-sessions"],
+        ["client", "microcycle"],
+        ["client", "resolved-day"],
+        ["client", "calendar"],
+        ["client", "scheduledSessions"],
+      ];
+
+      for (const queryKey of affected) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}
+
 export function useExerciseLogs(clientId: string) {
   return useQuery({
     queryKey: ["client", "exerciseLogs", clientId],

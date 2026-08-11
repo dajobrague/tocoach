@@ -56,7 +56,7 @@ export async function loadAllActiveOwnedPrograms(
 ): Promise<OwnedProgram[]> {
   let query = supabase
     .from("client_programs")
-    .select("id, program_id, tenant_host, start_date, status");
+    .select("id, program_id, tenant_host, start_date, status, created_at");
 
   query = query.eq("client_id", clientId);
 
@@ -84,10 +84,20 @@ export async function loadAllActiveOwnedPrograms(
         cp.status.trim().toLowerCase() === "active"
     )
     .sort((a, b) => {
+      // Con el invariante de un-solo-activo esto casi siempre ordena 1
+      // elemento; el desempate (created_at, id) queda como red de
+      // seguridad determinista mientras drena la data multi-activa.
       const aDate = a.start_date ?? "";
       const bDate = b.start_date ?? "";
 
-      return aDate < bDate ? 1 : aDate > bDate ? -1 : 0;
+      if (aDate !== bDate) return aDate < bDate ? 1 : -1;
+
+      const aCreated = a.created_at ?? "";
+      const bCreated = b.created_at ?? "";
+
+      if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
+
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
     })
     .map((cp) => ({
       id: cp.id,

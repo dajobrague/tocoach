@@ -550,7 +550,9 @@ export async function POST(
 
     console.log("[Programs API] Program created:", program.id);
 
-    // Then, assign it to the client
+    // Then, assign it to the client. Se inserta 'paused' y se activa vía
+    // el RPC atómico: así nunca existen dos programas activos a la vez
+    // (invariante un-solo-activo) — el RPC activa este y pausa el anterior.
     const { data: clientProgram, error: assignError } = await supabase
       .from("client_programs")
       .insert({
@@ -559,7 +561,7 @@ export async function POST(
         program_id: program.id,
         trainer_id: session.trainer_id,
         start_date: startDate,
-        status: "active",
+        status: "paused",
         progress_percentage: 0,
         notes: notes || null,
       })
@@ -577,11 +579,40 @@ export async function POST(
       );
     }
 
+    const { data: demoted, error: activateError } = await supabase.rpc(
+      "activate_client_program",
+      {
+        p_client_program_id: clientProgram.id,
+        p_client_id: clientIdNum,
+      }
+    );
+
+    if (activateError) {
+      // El programa quedó asignado pero pausado — visible y recuperable
+      // desde la sección Pausados. Preferible a dos activos simultáneos.
+      console.error(
+        "[Programs API] Error activating assigned program:",
+        activateError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Programa asignado pero no activado. Actívalo desde la lista de programas.",
+        },
+        { status: 500 }
+      );
+    }
+
     console.log("[Programs API] Program assigned to client:", clientProgram.id);
 
     return NextResponse.json({
       success: true,
       clientProgramId: clientProgram.id,
+      demotedIds: (demoted ?? []).map(
+        (row: { demoted_id: string }) => row.demoted_id
+      ),
       programId: program.id,
     });
   } catch (error) {
@@ -633,19 +664,18 @@ export async function PATCH(
     // client_id acota la actualización a la asignación de ESTE cliente:
     // sin él, un program_id repetido entre clientes del mismo trainer haría
     // que maybeSingle() reciba más de una fila (o tocara la ajena).
-    const { data: updated, error } = await supabase
+    const { data: target, error: targetError } = await supabase
       .from("client_programs")
-      .update({ status, updated_at: new Date().toISOString() })
+      .select("id, client_id")
       .eq("program_id", programId)
       .eq("client_id", clientId)
       .eq("trainer_id", session.trainer_id)
-      .select("id, status")
       .maybeSingle();
 
-    if (error) {
+    if (targetError) {
       console.error(
-        `[Programs API] ${correlationId} Error updating status:`,
-        error
+        `[Programs API] ${correlationId} Error resolving client_program:`,
+        targetError
       );
 
       return NextResponse.json(
@@ -654,10 +684,62 @@ export async function PATCH(
       );
     }
 
-    if (!updated) {
+    if (!target) {
       return NextResponse.json(
         { success: false, error: "Programa no encontrado o no autorizado" },
         { status: 404 }
+      );
+    }
+
+    // Activar pasa por el RPC atómico que además pausa cualquier otro
+    // programa activo del cliente (invariante un-solo-activo). El resto de
+    // estados (paused/completed/cancelled) no necesitan fan-out.
+    if (status === "active") {
+      const { data: demoted, error: rpcError } = await supabase.rpc(
+        "activate_client_program",
+        {
+          p_client_program_id: target.id,
+          p_client_id: target.client_id,
+        }
+      );
+
+      if (rpcError) {
+        console.error(
+          `[Programs API] ${correlationId} Error activating program:`,
+          rpcError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al activar el programa" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: "active",
+        demotedIds: (demoted ?? []).map(
+          (row: { demoted_id: string }) => row.demoted_id
+        ),
+      });
+    }
+
+    const { data: updated, error } = await supabase
+      .from("client_programs")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", target.id)
+      .select("id, status")
+      .maybeSingle();
+
+    if (error || !updated) {
+      console.error(
+        `[Programs API] ${correlationId} Error updating status:`,
+        error
+      );
+
+      return NextResponse.json(
+        { success: false, error: "Error al actualizar el estado" },
+        { status: 500 }
       );
     }
 

@@ -52,7 +52,7 @@ export async function GET(_request: NextRequest) {
     // espacios, etc.). El select trae start_date para ordenar luego.
     const { data: clientPrograms, error: clientProgramsError } = await supabase
       .from("client_programs")
-      .select("id, program_id, status, start_date")
+      .select("id, program_id, status, start_date, created_at")
       .eq("client_id", clientId);
 
     if (clientProgramsError) {
@@ -68,6 +68,10 @@ export async function GET(_request: NextRequest) {
       );
     }
 
+    // Invariante un-solo-activo: las sesiones disponibles salen ÚNICAMENTE
+    // del programa activo primario. Mientras drena la data multi-activa
+    // heredada, el desempate determinista (created_at, id) garantiza que
+    // este pick coincide con el del microciclo (loadActiveOwnedProgram).
     const activeClientPrograms = (clientPrograms ?? [])
       .filter(
         (cp) =>
@@ -78,8 +82,16 @@ export async function GET(_request: NextRequest) {
         const aDate = a.start_date ?? "";
         const bDate = b.start_date ?? "";
 
-        return aDate < bDate ? 1 : aDate > bDate ? -1 : 0;
-      });
+        if (aDate !== bDate) return aDate < bDate ? 1 : -1;
+
+        const aCreated = a.created_at ?? "";
+        const bCreated = b.created_at ?? "";
+
+        if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
+
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      })
+      .slice(0, 1);
 
     console.log(`${LOG_PREFIX} client_programs lookup:`, {
       correlationId,
