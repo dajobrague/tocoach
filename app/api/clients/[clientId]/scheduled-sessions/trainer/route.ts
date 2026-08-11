@@ -15,8 +15,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
-  loadAllActiveOwnedPrograms,
   loadMicrocycleWithSlots,
+  loadOwnedProgramsByStatus,
 } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Trainer Scheduled Sessions API]";
@@ -263,9 +263,17 @@ export async function GET(
 }
 
 /**
- * Walks every active client_program owned by `trainerId` for `clientId`,
- * loads its microcycle slots, and projects a virtual ScheduledSessionResponse
- * for every date in [startDate, endDate] whose cycle slot points at a session.
+ * Walks the client's programs owned by `trainerId`, loads their microcycle
+ * slots, and projects a virtual ScheduledSessionResponse for every date in
+ * [startDate, endDate] whose cycle slot points at a session.
+ *
+ * Regla de fechas (invariante un-solo-activo, Aug 2026):
+ * - Hoy y futuro se proyectan SOLO desde el programa activo — la
+ *   prescripción vigente.
+ * - El pasado se proyecta también desde programas pausados: el seguimiento
+ *   es el registro histórico del cliente y no debe quedar en blanco al
+ *   cambiar de programa activo (el activo tiene precedencia si ambos
+ *   cubren la misma fecha).
  */
 async function materializeTemplate(
   supabase: ReturnType<typeof createSupabaseClient>,
@@ -277,10 +285,11 @@ async function materializeTemplate(
 ): Promise<Map<string, ScheduledSessionResponse>> {
   const out = new Map<string, ScheduledSessionResponse>();
 
-  const programs = await loadAllActiveOwnedPrograms(
+  const programs = await loadOwnedProgramsByStatus(
     supabase,
     clientId,
     trainerId,
+    ["active", "paused"],
     correlationId
   );
 
@@ -291,6 +300,7 @@ async function materializeTemplate(
   type ProgramCycle = {
     startDate: string;
     durationDays: number;
+    isActive: boolean;
     slotByDayIndex: Map<number, string | null>;
   };
   const programCycles: ProgramCycle[] = [];
@@ -318,11 +328,23 @@ async function materializeTemplate(
     programCycles.push({
       startDate: microcycle.start_date,
       durationDays: microcycle.duration_days,
+      isActive: program.status === "active",
       slotByDayIndex,
     });
   }
 
   if (programCycles.length === 0) return out;
+
+  // Activo primero: si el activo y un pausado cubren la misma fecha
+  // pasada, gana la prescripción del activo. El loader ya ordena por
+  // start_date desc dentro de cada grupo.
+  programCycles.sort((a, b) => Number(b.isActive) - Number(a.isActive));
+
+  // Frontera pasado/futuro en hora local del servidor (mismo formato YMD
+  // que daysBetween). Railway corre en UTC: en la madrugada española la
+  // frontera cae 1-2h tarde — aceptable para una vista de seguimiento.
+  const now = new Date();
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Load all referenced sessions with their session_exercises.
   const sessionMap = await loadSessionsWithExercises(
@@ -336,6 +358,10 @@ async function materializeTemplate(
       // Skip dates before this program's start.
       if (date < cycle.startDate) continue;
 
+      // Hoy y futuro: solo el programa activo prescribe. Los ciclos
+      // pausados solo rellenan el track pasado.
+      if (date >= todayYmd && !cycle.isActive) continue;
+
       const offset = diffDays(cycle.startDate, date);
       const dayIndex = (offset % cycle.durationDays) + 1;
       const sessionId = cycle.slotByDayIndex.get(dayIndex);
@@ -346,8 +372,8 @@ async function materializeTemplate(
 
       if (!sessionDetail) continue;
 
-      // First program that schedules this date wins (programs ordered by
-      // start_date desc upstream — most recent program takes precedence).
+      // First cycle that schedules this date wins (active program first,
+      // then paused by start_date desc).
       if (out.has(date)) continue;
 
       out.set(date, {

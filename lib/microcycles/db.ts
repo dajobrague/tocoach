@@ -18,6 +18,8 @@ export interface OwnedProgram {
   program_id: string;
   tenant_host: string;
   start_date: string;
+  /** Status normalizado (trim + lowercase) del client_program. */
+  status: string;
 }
 
 const LOG_PREFIX = "[Microcycle DB]";
@@ -43,15 +45,34 @@ export async function loadActiveOwnedProgram(
   return all[0] ?? null;
 }
 
-// Devuelve TODOS los client_programs activos del cliente (un cliente
-// puede tener fuerza + cardio activos a la vez). Ordenados por
-// start_date desc — el primero es el "primario" para el microciclo.
-// Filtra por status === 'active' en JS (insensible a mayúsculas/
-// espacios) replicando el patrón de /api/client/programs.
+// Devuelve los client_programs activos del cliente ordenados por
+// start_date desc — el primero es el "primario" para el microciclo
+// (con el invariante un-solo-activo, a lo sumo uno).
 export async function loadAllActiveOwnedPrograms(
   supabase: Supabase,
   clientId: string,
   trainerIdOrNull: string | null,
+  correlationId: string
+): Promise<OwnedProgram[]> {
+  return loadOwnedProgramsByStatus(
+    supabase,
+    clientId,
+    trainerIdOrNull,
+    ["active"],
+    correlationId
+  );
+}
+
+// Variante general: filtra por una lista de status (en JS, insensible a
+// mayúsculas/espacios, replicando el patrón de /api/client/programs).
+// La usa el seguimiento del trainer para proyectar el track PASADO también
+// desde programas pausados — la historia planificada no debe desaparecer
+// al cambiar de programa activo.
+export async function loadOwnedProgramsByStatus(
+  supabase: Supabase,
+  clientId: string,
+  trainerIdOrNull: string | null,
+  statuses: string[],
   correlationId: string
 ): Promise<OwnedProgram[]> {
   let query = supabase
@@ -77,11 +98,13 @@ export async function loadAllActiveOwnedPrograms(
     return [];
   }
 
+  const wanted = new Set(statuses.map((s) => s.trim().toLowerCase()));
+
   return (data ?? [])
     .filter(
       (cp) =>
         typeof cp.status === "string" &&
-        cp.status.trim().toLowerCase() === "active"
+        wanted.has(cp.status.trim().toLowerCase())
     )
     .sort((a, b) => {
       // Con el invariante de un-solo-activo esto casi siempre ordena 1
@@ -104,6 +127,7 @@ export async function loadAllActiveOwnedPrograms(
       program_id: cp.program_id,
       tenant_host: cp.tenant_host,
       start_date: cp.start_date,
+      status: (cp.status as string).trim().toLowerCase(),
     }));
 }
 
