@@ -68,10 +68,11 @@ export async function GET(_request: NextRequest) {
       );
     }
 
-    // Invariante un-solo-activo: las sesiones disponibles salen ÚNICAMENTE
-    // del programa activo primario. Mientras drena la data multi-activa
-    // heredada, el desempate determinista (created_at, id) garantiza que
-    // este pick coincide con el del microciclo (loadActiveOwnedProgram).
+    // Multi-activo: las sesiones disponibles salen de TODOS los programas
+    // activos (fuerza + cardio conviven). El orden es determinista —
+    // primario primero, mismo desempate (start_date, created_at, id) que
+    // loadActiveOwnedProgram — para que la lista sea estable entre requests
+    // y coincida con el programa que ancla el microciclo.
     const activeClientPrograms = (clientPrograms ?? [])
       .filter(
         (cp) =>
@@ -90,8 +91,7 @@ export async function GET(_request: NextRequest) {
         if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
 
         return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      })
-      .slice(0, 1);
+      });
 
     console.log(`${LOG_PREFIX} client_programs lookup:`, {
       correlationId,

@@ -44,16 +44,14 @@ export function ProgramsContent() {
     (p: WorkoutProgram) => p.status === "completed"
   );
 
-  // Un solo programa activo a la vez: activar uno pausa el actual. Es
+  // Activar no toca los demás programas (multi-activo válido). Es
   // reversible desde esta misma pantalla, así que no pedimos confirmación.
   const handleActivate = (program: WorkoutProgram) => {
     activateProgram.mutate(program.clientProgramId, {
       onSuccess: () => {
         addToast({
           title: `"${program.name}" activado`,
-          ...(active.length > 0
-            ? { description: "Tu programa anterior quedó en pausa." }
-            : {}),
+          description: "Ya aparece en tu pantalla de Entrenamiento.",
           color: "success",
         });
       },

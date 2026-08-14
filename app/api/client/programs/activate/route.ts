@@ -1,9 +1,8 @@
 // POST /api/client/programs/activate
-// El cliente elige su programa activo (chooser al entrar con varios
-// activos, o "Activar" sobre un programa pausado). Activa el
-// client_program indicado y pausa cualquier otro activo del cliente en
-// una sola sentencia atómica (RPC activate_client_program) — invariante
-// de un solo programa activo a la vez.
+// "Activar" sobre un programa pausado en la pestaña Programas. Activa el
+// client_program indicado y NO toca el resto: pueden convivir varios
+// programas activos (fuerza + cardio). El scoping por client_id de la
+// sesión evita activar programas ajenos.
 
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
@@ -50,19 +49,16 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createSupabaseClient();
-    const { data: demoted, error } = await supabase.rpc(
-      "activate_client_program",
-      {
-        p_client_program_id: clientProgramId,
-        p_client_id: clientId,
-      }
-    );
+    const { data: updated, error } = await supabase
+      .from("client_programs")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("id", clientProgramId)
+      .eq("client_id", clientId)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
-      // P0002 (no_data_found) del RPC = el programa no pertenece al cliente.
-      const notOwned = error.code === "P0002";
-
-      console.error(`${LOG_PREFIX} RPC failed:`, {
+      console.error(`${LOG_PREFIX} Update failed:`, {
         correlationId,
         clientId,
         clientProgramId,
@@ -70,31 +66,30 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(
-        {
-          success: false,
-          error: notOwned
-            ? "Programa no encontrado"
-            : "Error al activar el programa",
-        },
-        { status: notOwned ? 404 : 500 }
+        { success: false, error: "Error al activar el programa" },
+        { status: 500 }
       );
     }
 
-    const demotedIds = (demoted ?? []).map(
-      (row: { demoted_id: string }) => row.demoted_id
-    );
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: "Programa no encontrado" },
+        { status: 404 }
+      );
+    }
 
     console.log(`${LOG_PREFIX} Program activated:`, {
       correlationId,
       clientId,
       clientProgramId,
-      demotedCount: demotedIds.length,
     });
 
+    // demotedIds se mantiene (vacío) por compatibilidad de shape con el
+    // hook useActivateProgram.
     return NextResponse.json({
       success: true,
       activatedId: clientProgramId,
-      demotedIds,
+      demotedIds: [],
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} Unexpected error:`, { correlationId, error });

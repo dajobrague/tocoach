@@ -200,7 +200,6 @@ export function CreateProgramModal({
   isOpen,
   clientId,
   focusTemplates,
-  activeProgramName,
   onClose,
   onCreated,
 }: {
@@ -208,8 +207,6 @@ export function CreateProgramModal({
   clientId: string;
   /** true cuando se abre desde "Usar una plantilla" del empty state. */
   focusTemplates: boolean;
-  /** Programa activo actual del cliente — se pausa al crear (un solo activo). */
-  activeProgramName: string | null;
   onClose: () => void;
   onCreated: (programId: string) => void;
 }) {
@@ -317,21 +314,6 @@ export function CreateProgramModal({
             isDisabled={createProgram.isPending}
             onChange={patch}
           />
-          {activeProgramName !== null && (
-            <div className="flex items-start gap-2 rounded-medium bg-amber-50 p-3 text-sm text-amber-700">
-              <Icon
-                className="mt-0.5 shrink-0"
-                icon="solar:pause-circle-linear"
-                width={16}
-              />
-              <p>
-                Al crear este programa,{" "}
-                <span className="font-semibold">{activeProgramName}</span> se
-                pausará automáticamente (solo puede haber un programa activo).
-                Podrás reactivarlo desde &ldquo;Pausados&rdquo;.
-              </p>
-            </div>
-          )}
           {createProgram.isError && (
             <ErrorNote
               message={

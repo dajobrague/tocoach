@@ -40,11 +40,9 @@ interface ProgramHeaderCardProps {
   onRename: (name: string) => void;
   /** Desactivar el programa (status → paused) tras confirmación. */
   onDeactivate: () => void;
-  /** Reactivar un programa pausado (status → active). Pausa el activo actual. */
+  /** Reactivar un programa pausado (status → active). No toca el resto:
+      pueden convivir varios programas activos. */
   onReactivate: () => void;
-  /** Nombre del programa activo actual (null si no hay). Con valor, la
-      reactivación pide confirmación porque pausará ese programa. */
-  activeProgramName: string | null;
   isDeactivating: boolean;
   onEdit: () => void;
   onSaveAsTemplate: () => void;
@@ -58,7 +56,6 @@ export function ProgramHeaderCard({
   updateError,
   onDeactivate,
   onReactivate,
-  activeProgramName,
   isDeactivating,
   onRename,
   onEdit,
@@ -71,7 +68,6 @@ export function ProgramHeaderCard({
 
   const [editingName, setEditingName] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
-  const [reactivateOpen, setReactivateOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   // Se marca en Escape para que el blur del input no committee el cambio.
   const cancelName = useRef(false);
@@ -193,9 +189,8 @@ export function ProgramHeaderCard({
                     <Chip color={status.color} size="sm" variant="flat">
                       {status.label}
                     </Chip>
-                    {/* Reactivar pausa el programa activo actual (invariante
-                        un-solo-activo): con activo presente pide confirmación;
-                        sin activo, directo — es reversible. */}
+                    {/* Reactivar es directo y reversible: no pausa ningún
+                        otro programa (multi-activo válido). */}
                     {program.status === "paused" ? (
                       <Button
                         color="success"
@@ -207,11 +202,7 @@ export function ProgramHeaderCard({
                           )
                         }
                         variant="flat"
-                        onPress={() =>
-                          activeProgramName !== null
-                            ? setReactivateOpen(true)
-                            : onReactivate()
-                        }
+                        onPress={() => onReactivate()}
                       >
                         Activar
                       </Button>
@@ -346,57 +337,6 @@ export function ProgramHeaderCard({
               }}
             >
               Desactivar
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      <Modal
-        isOpen={reactivateOpen}
-        placement="center"
-        size="sm"
-        onClose={() => setReactivateOpen(false)}
-      >
-        <ModalContent>
-          <ModalHeader className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success-50 text-success-600">
-              <Icon icon="solar:play-circle-linear" width={18} />
-            </span>
-            Activar programa
-          </ModalHeader>
-          <ModalBody>
-            <p className="text-sm text-default-600">
-              Al activar{" "}
-              <span className="font-semibold text-gray-900">
-                {program.name}
-              </span>
-              ,{" "}
-              <span className="font-semibold text-gray-900">
-                {activeProgramName}
-              </span>{" "}
-              se pausará automáticamente (solo puede haber un programa activo).
-              Nada se pierde: puedes volver a cambiarlos cuando quieras.
-            </p>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              isDisabled={isDeactivating}
-              variant="light"
-              onPress={() => setReactivateOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              color="success"
-              isLoading={isDeactivating}
-              onPress={() => {
-                // Mismo patrón que Desactivar: cerrar antes de mutar para que
-                // el modal no sobreviva apuntando a otro programa tras el swap.
-                setReactivateOpen(false);
-                onReactivate();
-              }}
-            >
-              Activar
             </Button>
           </ModalFooter>
         </ModalContent>

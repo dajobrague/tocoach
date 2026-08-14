@@ -550,9 +550,9 @@ export async function POST(
 
     console.log("[Programs API] Program created:", program.id);
 
-    // Then, assign it to the client. Se inserta 'paused' y se activa vía
-    // el RPC atómico: así nunca existen dos programas activos a la vez
-    // (invariante un-solo-activo) — el RPC activa este y pausa el anterior.
+    // Then, assign it to the client. Se crea directamente activo y SIN
+    // pausar los demás: pueden convivir varios programas activos por
+    // cliente (fuerza + cardio es uso deliberado de los trainers).
     const { data: clientProgram, error: assignError } = await supabase
       .from("client_programs")
       .insert({
@@ -561,7 +561,7 @@ export async function POST(
         program_id: program.id,
         trainer_id: session.trainer_id,
         start_date: startDate,
-        status: "paused",
+        status: "active",
         progress_percentage: 0,
         notes: notes || null,
       })
@@ -579,40 +579,11 @@ export async function POST(
       );
     }
 
-    const { data: demoted, error: activateError } = await supabase.rpc(
-      "activate_client_program",
-      {
-        p_client_program_id: clientProgram.id,
-        p_client_id: clientIdNum,
-      }
-    );
-
-    if (activateError) {
-      // El programa quedó asignado pero pausado — visible y recuperable
-      // desde la sección Pausados. Preferible a dos activos simultáneos.
-      console.error(
-        "[Programs API] Error activating assigned program:",
-        activateError
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Programa asignado pero no activado. Actívalo desde la lista de programas.",
-        },
-        { status: 500 }
-      );
-    }
-
     console.log("[Programs API] Program assigned to client:", clientProgram.id);
 
     return NextResponse.json({
       success: true,
       clientProgramId: clientProgram.id,
-      demotedIds: (demoted ?? []).map(
-        (row: { demoted_id: string }) => row.demoted_id
-      ),
       programId: program.id,
     });
   } catch (error) {
@@ -691,39 +662,8 @@ export async function PATCH(
       );
     }
 
-    // Activar pasa por el RPC atómico que además pausa cualquier otro
-    // programa activo del cliente (invariante un-solo-activo). El resto de
-    // estados (paused/completed/cancelled) no necesitan fan-out.
-    if (status === "active") {
-      const { data: demoted, error: rpcError } = await supabase.rpc(
-        "activate_client_program",
-        {
-          p_client_program_id: target.id,
-          p_client_id: target.client_id,
-        }
-      );
-
-      if (rpcError) {
-        console.error(
-          `[Programs API] ${correlationId} Error activating program:`,
-          rpcError
-        );
-
-        return NextResponse.json(
-          { success: false, error: "Error al activar el programa" },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        status: "active",
-        demotedIds: (demoted ?? []).map(
-          (row: { demoted_id: string }) => row.demoted_id
-        ),
-      });
-    }
-
+    // Todos los estados son un update directo escopado. Activar NO pausa
+    // los demás programas: multi-activo es válido (fuerza + cardio).
     const { data: updated, error } = await supabase
       .from("client_programs")
       .update({ status, updated_at: new Date().toISOString() })

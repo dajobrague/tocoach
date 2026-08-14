@@ -30,7 +30,6 @@ import { usePersistedActiveTraining } from "./hooks/use-persisted-active-trainin
 import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescription";
 import { LoggedSessionsSection } from "./logged-sessions-section";
 import { MicrocycleReferenceModal } from "./microcycle-reference-modal";
-import { ProgramChooserModal } from "./program-chooser-modal";
 import { WeekDateSelector } from "./week-date-selector";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -313,24 +312,12 @@ export function WorkoutsContent() {
   const showNoProgramEmptyState =
     !hasActiveProgram && !hasHistory && activeSession === null;
 
-  // Data heredada de cuando podían coexistir varios programas activos:
-  // el cliente debe elegir cuál seguir (los demás se pausan). No se
-  // interrumpe una sesión en curso — el chooser espera a que salga.
-  const clientActivePrograms = useMemo(
-    () => programs.filter((p: WorkoutProgram) => p.status === "active"),
-    [programs]
-  );
   const hasPausedPrograms = programs.some(
     (p: WorkoutProgram) => p.status === "paused"
   );
-  const showProgramChooser =
-    clientActivePrograms.length > 1 && activeSession === null;
 
   return (
     <>
-      {showProgramChooser ? (
-        <ProgramChooserModal activePrograms={clientActivePrograms} />
-      ) : null}
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-lg mx-auto">
           <ClientHeader

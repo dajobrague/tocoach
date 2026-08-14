@@ -81,6 +81,11 @@ export function MorePanel({ isOpen, onClose }: MorePanelProps) {
   // when ready to ship.
   const navItems = [
     {
+      href: `/${slug}/programs`,
+      icon: "solar:dumbbell-bold",
+      label: "Programas",
+    },
+    {
       href: `/${slug}/suplementos`,
       icon: "solar:pill-bold",
       label: "Suplementos",

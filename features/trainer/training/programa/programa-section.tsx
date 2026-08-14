@@ -168,11 +168,6 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
           })()}
 
           <ProgramHeaderCard
-            activeProgramName={
-              activePrograms.find(
-                (program) => program.programId !== selected.programId
-              )?.name ?? null
-            }
             isDeactivating={updateProgramStatus.isPending}
             isUpdating={updateProgram.isPending}
             microcycleDays={microcycle.durationDays}
@@ -227,7 +222,6 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
       )}
 
       <CreateProgramModal
-        activeProgramName={activePrograms[0]?.name ?? null}
         clientId={clientId}
         focusTemplates={createFocusTemplates}
         isOpen={createOpen}

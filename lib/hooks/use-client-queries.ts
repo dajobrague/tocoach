@@ -198,9 +198,9 @@ export function usePrograms() {
   });
 }
 
-// Activa un programa y pausa cualquier otro activo (invariante
-// un-solo-activo, RPC atómico server-side). Invalida todo lo derivado
-// del programa activo: plan del día, sesiones disponibles, calendario.
+// Activa un programa pausado sin tocar el resto (multi-activo válido).
+// Invalida todo lo derivado de los programas activos: plan del día,
+// sesiones disponibles, calendario.
 export function useActivateProgram() {
   const queryClient = useQueryClient();
 

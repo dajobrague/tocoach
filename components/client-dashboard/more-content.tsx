@@ -26,6 +26,14 @@ export function MoreContent() {
 
   const menuItems = [
     {
+      icon: "solar:dumbbell-bold",
+      title: "Programas",
+      description: "Tus programas de entrenamiento",
+      href: `/${slug}/programs`,
+      iconBg: "bg-emerald-500/10",
+      iconColor: "text-emerald-600",
+    },
+    {
       icon: "solar:health-bold",
       title: "Suplementos",
       description: "Tu protocolo de suplementación",
