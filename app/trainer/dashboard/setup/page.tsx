@@ -314,42 +314,17 @@ export default function SetupWizardPage() {
       size:
         (config?.theme?.logo?.size as "small" | "medium" | "large") || "medium",
     },
-    // Initialize colors from existing theme or use defaults
-    colors: {
-      primary: config?.theme?.colors?.brand || "#0f172a",
-      secondary: config?.theme?.colors?.secondary || "#334155",
-      text: config?.theme?.colors?.text || {
-        h1: "#1f2937",
-        h2: "#374151",
-        h3: "#4b5563",
-        body: "#6b7280",
-        muted: "#9ca3af",
-      },
-      background: config?.theme?.colors?.background || {
-        primary: "#ffffff",
-        secondary: "#f9fafb",
-        accent: "#f3f4f6",
-      },
-      surface: config?.theme?.colors?.surface || {
-        "1": "#ffffff",
-        "2": "#f8fafc",
-        "3": "#f1f5f9",
-      },
-      buttons: config?.theme?.colors?.buttons || {
-        primary: { bg: "#0f172a", text: "#ffffff", hover: "#1e293b" },
-        secondary: { bg: "#f3f4f6", text: "#374151", hover: "#e5e7eb" },
-      },
-      shadows: config?.theme?.colors?.shadows || {
-        light: "rgba(0, 0, 0, 0.05)",
-        medium: "rgba(0, 0, 0, 0.1)",
-        dark: "rgba(0, 0, 0, 0.25)",
-      },
-      semantic: config?.theme?.colors?.semantic || {
-        success: "#10b981",
-        warning: "#f59e0b",
-        danger: "#ef4444",
-      },
-    },
+    // Initialize colors from existing theme or use defaults.
+    //
+    // OJO: los theme_json guardados usan la shape canónica
+    // colors.text = {primary, secondary, muted} (lib/theme/heal.ts y el
+    // propio saveConfiguration escriben esa shape), NO la shape del wizard
+    // {h1,h2,h3,body,muted}. Un `||` sobre el objeto entero pasaba esa
+    // shape tal cual, dejaba text.h1..body undefined y ColorSetup
+    // reventaba al renderizar ("Siguiente: Colores" → error). Defaults
+    // POR CLAVE con guard de tipo, mapeando la shape canónica/legacy:
+    // primary→h1, secondary→body.
+    colors: buildInitialColors(config?.theme?.colors),
   };
 
   return (
@@ -357,4 +332,72 @@ export default function SetupWizardPage() {
       <SetupWizardContent />
     </SetupWizardProvider>
   );
+}
+
+// Construye el estado inicial de colores del wizard con defaults POR CLAVE.
+// Acepta cualquier shape guardada de theme_json.colors (la canónica de
+// healThemeJson, legacy parcial de tenants viejos, o la del propio wizard)
+// sin dejar claves undefined: cada valor pasa por un guard de tipo y las
+// claves de texto canónicas/legacy (primary/secondary) se mapean a h1/body.
+function buildInitialColors(stored: unknown) {
+  const rec = (value: unknown): Record<string, unknown> =>
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+  const color = (value: unknown, fallback: string): string =>
+    typeof value === "string" && value.trim().length > 0 ? value : fallback;
+
+  const colors = rec(stored);
+  const text = rec(colors.text);
+  const background = rec(colors.background);
+  const surface = rec(colors.surface);
+  const buttons = rec(colors.buttons);
+  const buttonsPrimary = rec(buttons.primary);
+  const buttonsSecondary = rec(buttons.secondary);
+  const shadows = rec(colors.shadows);
+  const semantic = rec(colors.semantic);
+
+  return {
+    primary: color(colors.brand, color(colors.primary, "#0f172a")),
+    secondary: color(colors.secondary, "#334155"),
+    text: {
+      h1: color(text.h1, color(text.primary, "#1f2937")),
+      h2: color(text.h2, "#374151"),
+      h3: color(text.h3, "#4b5563"),
+      body: color(text.body, color(text.secondary, "#6b7280")),
+      muted: color(text.muted, "#9ca3af"),
+    },
+    background: {
+      primary: color(background.primary, "#ffffff"),
+      secondary: color(background.secondary, "#f9fafb"),
+      accent: color(background.accent, "#f3f4f6"),
+    },
+    surface: {
+      "1": color(surface["1"], "#ffffff"),
+      "2": color(surface["2"], "#f8fafc"),
+      "3": color(surface["3"], "#f1f5f9"),
+    },
+    buttons: {
+      primary: {
+        bg: color(buttonsPrimary.bg, "#0f172a"),
+        text: color(buttonsPrimary.text, "#ffffff"),
+        hover: color(buttonsPrimary.hover, "#1e293b"),
+      },
+      secondary: {
+        bg: color(buttonsSecondary.bg, "#f3f4f6"),
+        text: color(buttonsSecondary.text, "#374151"),
+        hover: color(buttonsSecondary.hover, "#e5e7eb"),
+      },
+    },
+    shadows: {
+      light: color(shadows.light, "rgba(0, 0, 0, 0.05)"),
+      medium: color(shadows.medium, "rgba(0, 0, 0, 0.1)"),
+      dark: color(shadows.dark, "rgba(0, 0, 0, 0.25)"),
+    },
+    semantic: {
+      success: color(semantic.success, "#10b981"),
+      warning: color(semantic.warning, "#f59e0b"),
+      danger: color(semantic.danger, "#ef4444"),
+    },
+  };
 }

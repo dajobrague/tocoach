@@ -387,39 +387,47 @@ export default function ColorSetup() {
     label: string;
     pickerId: string;
     onChange: (color: string) => void;
-  }) => (
-    <div className="space-y-3">
-      <label className="text-sm font-medium text-black">{label}</label>
-      <div className="flex items-center gap-4">
-        <button
-          className="w-16 h-16 rounded-lg border-2 border-gray-300 flex-shrink-0 cursor-pointer hover:border-gray-400 transition-colors"
-          style={{ backgroundColor: color }}
-          type="button"
-          onClick={() =>
-            setActiveColorPicker(
-              activeColorPicker === pickerId ? null : pickerId
-            )
-          }
-        />
-        <Input
-          className="font-mono flex-1"
-          description="Código hexadecimal"
-          placeholder="3b82f6"
-          startContent={<span className="text-gray-400">#</span>}
-          value={color.replace(/^#/, "")}
-          onValueChange={(value) => handleHexInput(value, onChange)}
-        />
-      </div>
+  }) => {
+    // Cinturón de seguridad: si el estado llega con un color undefined o
+    // vacío (theme_json guardado con otra shape), la card no debe tirar
+    // abajo el paso entero del wizard.
+    const safeColor =
+      typeof color === "string" && color.length > 0 ? color : "#000000";
 
-      {activeColorPicker === pickerId && (
-        <Card className="p-4">
-          <CardBody className="flex items-center justify-center">
-            <HexColorPicker color={color} onChange={onChange} />
-          </CardBody>
-        </Card>
-      )}
-    </div>
-  );
+    return (
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-black">{label}</label>
+        <div className="flex items-center gap-4">
+          <button
+            className="w-16 h-16 rounded-lg border-2 border-gray-300 flex-shrink-0 cursor-pointer hover:border-gray-400 transition-colors"
+            style={{ backgroundColor: safeColor }}
+            type="button"
+            onClick={() =>
+              setActiveColorPicker(
+                activeColorPicker === pickerId ? null : pickerId
+              )
+            }
+          />
+          <Input
+            className="font-mono flex-1"
+            description="Código hexadecimal"
+            placeholder="3b82f6"
+            startContent={<span className="text-gray-400">#</span>}
+            value={safeColor.replace(/^#/, "")}
+            onValueChange={(value) => handleHexInput(value, onChange)}
+          />
+        </div>
+
+        {activeColorPicker === pickerId && (
+          <Card className="p-4">
+            <CardBody className="flex items-center justify-center">
+              <HexColorPicker color={safeColor} onChange={onChange} />
+            </CardBody>
+          </Card>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-6 w-full">
