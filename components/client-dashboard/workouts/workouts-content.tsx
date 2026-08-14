@@ -377,7 +377,7 @@ export function WorkoutsContent() {
                     </h3>
                     <p className="text-foreground/60 text-sm font-body">
                       {hasPausedPrograms
-                        ? "Tienes programas en pausa — actívalos desde la pestaña Programas"
+                        ? "Tienes programas en pausa — actívalos desde Más → Programas"
                         : "Tu entrenador asignará un programa pronto"}
                     </p>
                   </div>

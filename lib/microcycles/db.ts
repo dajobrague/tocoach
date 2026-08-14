@@ -46,8 +46,11 @@ export async function loadActiveOwnedProgram(
 }
 
 // Devuelve los client_programs activos del cliente ordenados por
-// start_date desc — el primero es el "primario" para el microciclo
-// (con el invariante un-solo-activo, a lo sumo uno).
+// start_date desc — el primero es el "primario" para el microciclo.
+// Multi-activo es estado válido y deliberado (fuerza + cardio): puede
+// haber N elementos. El plan de índice único parcial de la migración
+// 20260811090000 queda RETIRADO; el ancla estable del microciclo llega
+// en el follow-up is_primary.
 export async function loadAllActiveOwnedPrograms(
   supabase: Supabase,
   clientId: string,
@@ -107,9 +110,9 @@ export async function loadOwnedProgramsByStatus(
         wanted.has(cp.status.trim().toLowerCase())
     )
     .sort((a, b) => {
-      // Con el invariante de un-solo-activo esto casi siempre ordena 1
-      // elemento; el desempate (created_at, id) queda como red de
-      // seguridad determinista mientras drena la data multi-activa.
+      // Multi-activo: puede ordenar N elementos. El desempate
+      // (created_at, id) mantiene el pick del "primario" determinista
+      // entre requests.
       const aDate = a.start_date ?? "";
       const bDate = b.start_date ?? "";
 

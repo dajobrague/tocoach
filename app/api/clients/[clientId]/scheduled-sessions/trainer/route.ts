@@ -267,12 +267,14 @@ export async function GET(
  * slots, and projects a virtual ScheduledSessionResponse for every date in
  * [startDate, endDate] whose cycle slot points at a session.
  *
- * Regla de fechas (invariante un-solo-activo, Aug 2026):
- * - Hoy y futuro se proyectan SOLO desde el programa activo — la
- *   prescripción vigente.
+ * Regla de fechas:
+ * - Hoy y futuro se proyectan desde los programas ACTIVOS (puede haber
+ *   varios: multi-activo es válido, p. ej. fuerza + cardio). Si dos
+ *   programas prescriben la misma fecha gana el primero en orden primario
+ *   (first-wins) — limitación conocida hasta la vista de día fusionada.
  * - El pasado se proyecta también desde programas pausados: el seguimiento
  *   es el registro histórico del cliente y no debe quedar en blanco al
- *   cambiar de programa activo (el activo tiene precedencia si ambos
+ *   cambiar de programa activo (los activos tienen precedencia si ambos
  *   cubren la misma fecha).
  */
 async function materializeTemplate(
