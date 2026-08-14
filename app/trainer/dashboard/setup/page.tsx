@@ -316,15 +316,17 @@ export default function SetupWizardPage() {
     },
     // Initialize colors from existing theme or use defaults.
     //
-    // OJO: los theme_json guardados usan la shape canónica
-    // colors.text = {primary, secondary, muted} (lib/theme/heal.ts y el
-    // propio saveConfiguration escriben esa shape), NO la shape del wizard
-    // {h1,h2,h3,body,muted}. Un `||` sobre el objeto entero pasaba esa
-    // shape tal cual, dejaba text.h1..body undefined y ColorSetup
+    // OJO: los theme_json guardados usan la shape canónica que escribe el
+    // propio saveConfiguration (lib/setup-wizard/context.tsx) y garantiza
+    // healThemeJson — NO la shape del estado del wizard: text es
+    // {primary,secondary,muted} (no {h1..muted}), el secundario vive en
+    // colors.accent, los fondos en colors.surface{"1","2","3"} y semantic
+    // a nivel de theme (con key `error`). Un `||` sobre el objeto entero
+    // pasaba text tal cual, dejaba text.h1..body undefined y ColorSetup
     // reventaba al renderizar ("Siguiente: Colores" → error). Defaults
-    // POR CLAVE con guard de tipo, mapeando la shape canónica/legacy:
-    // primary→h1, secondary→body.
-    colors: buildInitialColors(config?.theme?.colors),
+    // POR CLAVE con guard de tipo, deshaciendo ese mapeo de guardado para
+    // que reentrar y completar el wizard NO degrade el tema guardado.
+    colors: buildInitialColors(config?.theme),
   };
 
   return (
@@ -334,12 +336,16 @@ export default function SetupWizardPage() {
   );
 }
 
-// Construye el estado inicial de colores del wizard con defaults POR CLAVE.
-// Acepta cualquier shape guardada de theme_json.colors (la canónica de
-// healThemeJson, legacy parcial de tenants viejos, o la del propio wizard)
-// sin dejar claves undefined: cada valor pasa por un guard de tipo y las
-// claves de texto canónicas/legacy (primary/secondary) se mapean a h1/body.
-function buildInitialColors(stored: unknown) {
+// Construye el estado inicial de colores del wizard con defaults POR CLAVE,
+// deshaciendo el mapeo con el que saveConfiguration persiste el tema:
+// brand↔primary, accent↔secondary, text {primary,secondary,muted}↔{h1,body,
+// muted}, surface{"1","2","3"}↔background{primary,secondary,accent}, y
+// semantic a nivel de theme con `error`↔danger. Acepta cualquier shape
+// guardada (canónica de healThemeJson, legacy parcial, o la del wizard) sin
+// dejar claves undefined: cada valor pasa por un guard de tipo. Los shadows
+// guardados son strings compuestos (shadow.e1..e3) no reversibles a un
+// color puro — quedan en defaults, igual que antes de este fix.
+function buildInitialColors(storedTheme: unknown) {
   const rec = (value: unknown): Record<string, unknown> =>
     typeof value === "object" && value !== null
       ? (value as Record<string, unknown>)
@@ -347,7 +353,8 @@ function buildInitialColors(stored: unknown) {
   const color = (value: unknown, fallback: string): string =>
     typeof value === "string" && value.trim().length > 0 ? value : fallback;
 
-  const colors = rec(stored);
+  const theme = rec(storedTheme);
+  const colors = rec(theme.colors);
   const text = rec(colors.text);
   const background = rec(colors.background);
   const surface = rec(colors.surface);
@@ -355,11 +362,15 @@ function buildInitialColors(stored: unknown) {
   const buttonsPrimary = rec(buttons.primary);
   const buttonsSecondary = rec(buttons.secondary);
   const shadows = rec(colors.shadows);
-  const semantic = rec(colors.semantic);
+  const semantic = rec(theme.semantic);
+  const semanticLegacy = rec(colors.semantic);
 
   return {
     primary: color(colors.brand, color(colors.primary, "#0f172a")),
-    secondary: color(colors.secondary, "#334155"),
+    // El "Color Secundario" del wizard se guarda como colors.accent
+    // (healThemeJson lo garantiza); colors.secondary solo existe en shapes
+    // pre-wizard.
+    secondary: color(colors.accent, color(colors.secondary, "#334155")),
     text: {
       h1: color(text.h1, color(text.primary, "#1f2937")),
       h2: color(text.h2, "#374151"),
@@ -367,11 +378,15 @@ function buildInitialColors(stored: unknown) {
       body: color(text.body, color(text.secondary, "#6b7280")),
       muted: color(text.muted, "#9ca3af"),
     },
+    // Los "Fondos" del wizard se guardan como surface "1"/"2"/"3";
+    // colors.background solo existe en shapes pre-wizard.
     background: {
-      primary: color(background.primary, "#ffffff"),
-      secondary: color(background.secondary, "#f9fafb"),
-      accent: color(background.accent, "#f3f4f6"),
+      primary: color(surface["1"], color(background.primary, "#ffffff")),
+      secondary: color(surface["2"], color(background.secondary, "#f9fafb")),
+      accent: color(surface["3"], color(background.accent, "#f3f4f6")),
     },
+    // Slot inerte del estado del wizard: no se persiste y se regenera al
+    // cambiar el primario (generateSurfaceColors).
     surface: {
       "1": color(surface["1"], "#ffffff"),
       "2": color(surface["2"], "#f8fafc"),
@@ -394,10 +409,18 @@ function buildInitialColors(stored: unknown) {
       medium: color(shadows.medium, "rgba(0, 0, 0, 0.1)"),
       dark: color(shadows.dark, "rgba(0, 0, 0, 0.25)"),
     },
+    // Guardado como theme.semantic con key `error` (no `danger`);
+    // colors.semantic solo en shapes pre-wizard.
     semantic: {
-      success: color(semantic.success, "#10b981"),
-      warning: color(semantic.warning, "#f59e0b"),
-      danger: color(semantic.danger, "#ef4444"),
+      success: color(
+        semantic.success,
+        color(semanticLegacy.success, "#10b981")
+      ),
+      warning: color(
+        semantic.warning,
+        color(semanticLegacy.warning, "#f59e0b")
+      ),
+      danger: color(semantic.error, color(semanticLegacy.danger, "#ef4444")),
     },
   };
 }
