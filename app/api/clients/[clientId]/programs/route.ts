@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { ensurePrimaryProgram } from "@/lib/microcycles/db";
 import {
   getCurrentWeekRange,
   transformToWorkoutProgram,
@@ -581,6 +582,15 @@ export async function POST(
 
     console.log("[Programs API] Program assigned to client:", clientProgram.id);
 
+    // El primer programa activo del cliente se vuelve primario (ancla del
+    // microciclo); si ya había primario, este NO se lo roba — asignar un
+    // programa nuevo ya no re-ancla el plan del trainer.
+    await ensurePrimaryProgram(
+      supabase,
+      clientIdNum,
+      `assign-${clientProgram.id}`
+    );
+
     return NextResponse.json({
       success: true,
       clientProgramId: clientProgram.id,
@@ -663,10 +673,17 @@ export async function PATCH(
     }
 
     // Todos los estados son un update directo escopado. Activar NO pausa
-    // los demás programas: multi-activo es válido (fuerza + cardio).
+    // los demás programas: multi-activo es válido (fuerza + cardio). Al
+    // salir de 'active' se limpia is_primary en el MISMO update (atómico)
+    // para que un ex-primario pausado nunca reactive robando el ancla ni
+    // choque con el índice parcial único.
     const { data: updated, error } = await supabase
       .from("client_programs")
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({
+        status,
+        ...(status === "active" ? {} : { is_primary: false }),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", target.id)
       .select("id, status")
       .maybeSingle();
@@ -682,6 +699,10 @@ export async function PATCH(
         { status: 500 }
       );
     }
+
+    // Si el que salió/entró era (o debía ser) el primario, re-asegura el
+    // ancla: promueve al primero determinista si no queda ninguno.
+    await ensurePrimaryProgram(supabase, target.client_id, correlationId);
 
     return NextResponse.json({ success: true, status: updated.status });
   } catch (error) {
@@ -1008,6 +1029,10 @@ export async function DELETE(
     }
 
     console.log("[Programs API] Program deleted successfully:", programId);
+
+    // Si el borrado era el primario, promueve al siguiente activo para que
+    // el microciclo del cliente no se quede sin ancla explícita.
+    await ensurePrimaryProgram(supabase, clientId, `delete-${programId}`);
 
     return NextResponse.json({
       success: true,

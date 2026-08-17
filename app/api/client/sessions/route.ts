@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { compareProgramPriority } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Sessions API]";
 
@@ -52,7 +53,7 @@ export async function GET(_request: NextRequest) {
     // espacios, etc.). El select trae start_date para ordenar luego.
     const { data: clientPrograms, error: clientProgramsError } = await supabase
       .from("client_programs")
-      .select("id, program_id, status, start_date, created_at")
+      .select("id, program_id, status, start_date, created_at, is_primary")
       .eq("client_id", clientId);
 
     if (clientProgramsError) {
@@ -69,29 +70,16 @@ export async function GET(_request: NextRequest) {
     }
 
     // Multi-activo: las sesiones disponibles salen de TODOS los programas
-    // activos (fuerza + cardio conviven). El orden es determinista —
-    // primario primero, mismo desempate (start_date, created_at, id) que
-    // loadActiveOwnedProgram — para que la lista sea estable entre requests
-    // y coincida con el programa que ancla el microciclo.
+    // activos (fuerza + cardio conviven). Orden canónico compartido
+    // (compareProgramPriority): el primario explícito primero — coincide
+    // con el programa que ancla el microciclo — con desempate determinista.
     const activeClientPrograms = (clientPrograms ?? [])
       .filter(
         (cp) =>
           typeof cp.status === "string" &&
           cp.status.trim().toLowerCase() === "active"
       )
-      .sort((a, b) => {
-        const aDate = a.start_date ?? "";
-        const bDate = b.start_date ?? "";
-
-        if (aDate !== bDate) return aDate < bDate ? 1 : -1;
-
-        const aCreated = a.created_at ?? "";
-        const bCreated = b.created_at ?? "";
-
-        if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
-
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
+      .sort(compareProgramPriority);
 
     console.log(`${LOG_PREFIX} client_programs lookup:`, {
       correlationId,
