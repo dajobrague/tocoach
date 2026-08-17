@@ -2,7 +2,13 @@ import type { CycleSlot, CycleTree, SlotOption } from "../cycle-api";
 
 import { describe, expect, it } from "vitest";
 
-import { cycleMetrics, dayStatus, dayTotals, slotTotals } from "../cycle-math";
+import {
+  cycleMetrics,
+  dayStatus,
+  dayTotals,
+  kcalFromMacros,
+  slotTotals,
+} from "../cycle-math";
 
 function option(
   totals: {
@@ -42,6 +48,21 @@ function slot(id: string, dayIndex: number, options: SlotOption[]): CycleSlot {
     options,
   };
 }
+
+describe("kcalFromMacros", () => {
+  it("applies 4/4/9 kcal per gram", () => {
+    expect(kcalFromMacros(150, 200, 60)).toBe(1940);
+    expect(kcalFromMacros(0, 0, 0)).toBe(0);
+  });
+
+  it("rounds to the nearest integer", () => {
+    expect(kcalFromMacros(10.1, 0, 0)).toBe(40);
+  });
+
+  it("treats non-finite inputs (partially-typed fields) as 0", () => {
+    expect(kcalFromMacros(NaN, 100, 10)).toBe(490);
+  });
+});
 
 describe("dayTotals", () => {
   it("sums the primary (first) option of each slot", () => {

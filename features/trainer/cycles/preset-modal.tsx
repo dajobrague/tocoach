@@ -14,6 +14,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { kcalFromMacros } from "./cycle-math";
+
 interface PresetModalProps {
   isOpen: boolean;
   /** Preset being edited, or null when creating a new one. */
@@ -63,6 +65,26 @@ export function PresetModal({
       );
     }
   }, [isOpen, preset]);
+
+  // Macro edits recompute kcal (4/4/9); direct kcal edits are kept as typed.
+  const setField = (key: keyof NutritionGoals, value: string) => {
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+
+      if (key === "kcal") return next;
+
+      return {
+        ...next,
+        kcal: String(
+          kcalFromMacros(
+            Number(next.protein_g),
+            Number(next.carbs_g),
+            Number(next.fat_g)
+          )
+        ),
+      };
+    });
+  };
 
   const values: NutritionGoals = {
     kcal: Number(draft.kcal),
@@ -129,12 +151,15 @@ export function PresetModal({
                 type="number"
                 value={draft[field.key] ?? ""}
                 variant="bordered"
-                onValueChange={(value) =>
-                  setDraft((prev) => ({ ...prev, [field.key]: value }))
-                }
+                onValueChange={(value) => setField(field.key, value)}
               />
             ))}
           </div>
+
+          <p className="text-xs text-default-400">
+            Las calorías se recalculan desde los macros (proteína y
+            carbohidratos ×4, grasa ×9). Puedes ajustarlas a mano después.
+          </p>
 
           {error !== null && <p className="text-sm text-danger">{error}</p>}
         </ModalBody>
