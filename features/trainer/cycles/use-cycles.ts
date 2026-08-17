@@ -37,6 +37,9 @@ import {
   fetchDietPdf,
   fetchClientGoals,
   fetchCycleTree,
+  deleteCycleTemplate,
+  fetchCycleTemplates,
+  instantiateCycleTemplate,
   listCycles,
   listGoalPresets,
   removeDay,
@@ -44,6 +47,7 @@ import {
   reorderDay,
   saveClientGoals,
   saveClientVisibility,
+  saveCycleAsTemplate,
   searchFoods,
   searchRecipes,
   updateCycle,
@@ -53,6 +57,7 @@ import {
   updateOptionPosition,
   updateSlot,
   uploadDietPdf,
+  type CycleTemplateSummary,
   type OptionIngredientEdit,
 } from "./cycle-api";
 
@@ -454,6 +459,53 @@ export function useCycleMutations(cycleId: string) {
     removeDayM,
     reorderDayM,
   };
+}
+
+const TEMPLATES_KEY = ["cycle-templates"];
+
+/** The tenant's meal-plan templates (for the new-plan modal picker). */
+export function useCycleTemplates(enabled: boolean) {
+  return useQuery<CycleTemplateSummary[]>({
+    queryKey: TEMPLATES_KEY,
+    queryFn: fetchCycleTemplates,
+    enabled,
+  });
+}
+
+export function useSaveCycleAsTemplate(cycleId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (name: string) => saveCycleAsTemplate(cycleId, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  });
+}
+
+export function useInstantiateTemplate(clientId: number) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (vars: {
+      templateId: string;
+      name?: string;
+      startDate?: string;
+    }) =>
+      instantiateCycleTemplate(vars.templateId, {
+        clientId,
+        ...(vars.name !== undefined ? { name: vars.name } : {}),
+        ...(vars.startDate !== undefined ? { startDate: vars.startDate } : {}),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: cyclesKey(clientId) }),
+  });
+}
+
+export function useDeleteCycleTemplate() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (templateId: string) => deleteCycleTemplate(templateId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  });
 }
 
 export function useRecipeSearch(query: string) {
