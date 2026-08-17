@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import React from "react";
 
 import Sidebar, { type SidebarItem } from "@/components/dashboard/sidebar";
+import { MessagingNavButton } from "@/components/trainer/messaging-nav-button";
 import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
 import {
   TRAINER_NAV,
@@ -288,7 +289,12 @@ export function SideShell({
           >
             <Icon icon="solar:hamburger-menu-linear" width={22} />
           </button>
-          {trainerId && <TrainerNotificationsDropdown trainerId={trainerId} />}
+          <div className="flex items-center gap-1">
+            <MessagingNavButton />
+            {trainerId && (
+              <TrainerNotificationsDropdown trainerId={trainerId} />
+            )}
+          </div>
         </header>
 
         <main className="flex-1 w-full overflow-y-auto">{children}</main>

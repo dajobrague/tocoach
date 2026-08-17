@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React from "react";
 
+import { MessagingNavButton } from "@/components/trainer/messaging-nav-button";
 import { PlantillasDropdown } from "@/components/trainer/nav/plantillas-dropdown";
 import { TrainerNotificationsDropdown } from "@/components/trainer/notifications-dropdown";
 import {
@@ -168,6 +169,9 @@ export function TopShell({
       </NavbarContent>
 
       <NavbarContent justify="end">
+        <NavbarItem>
+          <MessagingNavButton />
+        </NavbarItem>
         {trainerId && (
           <NavbarItem>
             <TrainerNotificationsDropdown trainerId={trainerId} />
