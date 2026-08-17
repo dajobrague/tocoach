@@ -20,14 +20,49 @@ export interface OwnedProgram {
   start_date: string;
   /** Status normalizado (trim + lowercase) del client_program. */
   status: string;
+  /** Ancla explícita del microciclo: a lo sumo un activo por cliente. */
+  is_primary: boolean;
 }
 
 const LOG_PREFIX = "[Microcycle DB]";
 
-// Resuelve el client_program activo de un cliente. Si se pasa trainerId,
-// además exige que ese trainer sea dueño (filtro doble client_id +
-// trainer_id, patrón implícito de ownership usado en el resto de los
-// endpoints trainer-side del repo).
+// Orden canónico de los picks de programa en TODO el repo: el primario
+// explícito (is_primary) primero y, como fallback determinista si no hay
+// ninguno marcado (fila recién borrada, data anterior a la migración
+// 20260817120000), el desempate start_date desc, created_at desc, id desc.
+export interface ProgramOrderFields {
+  id: string;
+  start_date?: string | null;
+  created_at?: string | null;
+  is_primary?: boolean | null;
+}
+
+export function compareProgramPriority(
+  a: ProgramOrderFields,
+  b: ProgramOrderFields
+): number {
+  const aPrimary = a.is_primary === true;
+  const bPrimary = b.is_primary === true;
+
+  if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
+
+  const aDate = a.start_date ?? "";
+  const bDate = b.start_date ?? "";
+
+  if (aDate !== bDate) return aDate < bDate ? 1 : -1;
+
+  const aCreated = a.created_at ?? "";
+  const bCreated = b.created_at ?? "";
+
+  if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
+
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+// Resuelve el client_program PRIMARIO activo de un cliente (ancla del
+// microciclo). Si se pasa trainerId, además exige que ese trainer sea
+// dueño (filtro doble client_id + trainer_id, patrón implícito de
+// ownership usado en el resto de los endpoints trainer-side del repo).
 
 export async function loadActiveOwnedProgram(
   supabase: Supabase,
@@ -45,12 +80,10 @@ export async function loadActiveOwnedProgram(
   return all[0] ?? null;
 }
 
-// Devuelve los client_programs activos del cliente ordenados por
-// start_date desc — el primero es el "primario" para el microciclo.
-// Multi-activo es estado válido y deliberado (fuerza + cardio): puede
-// haber N elementos. El plan de índice único parcial de la migración
-// 20260811090000 queda RETIRADO; el ancla estable del microciclo llega
-// en el follow-up is_primary.
+// Devuelve los client_programs activos del cliente en orden canónico
+// (compareProgramPriority): el primario explícito primero. Multi-activo
+// es estado válido y deliberado (fuerza + cardio): puede haber N
+// elementos.
 export async function loadAllActiveOwnedPrograms(
   supabase: Supabase,
   clientId: string,
@@ -80,7 +113,9 @@ export async function loadOwnedProgramsByStatus(
 ): Promise<OwnedProgram[]> {
   let query = supabase
     .from("client_programs")
-    .select("id, program_id, tenant_host, start_date, status, created_at");
+    .select(
+      "id, program_id, tenant_host, start_date, status, created_at, is_primary"
+    );
 
   query = query.eq("client_id", clientId);
 
@@ -109,29 +144,80 @@ export async function loadOwnedProgramsByStatus(
         typeof cp.status === "string" &&
         wanted.has(cp.status.trim().toLowerCase())
     )
-    .sort((a, b) => {
-      // Multi-activo: puede ordenar N elementos. El desempate
-      // (created_at, id) mantiene el pick del "primario" determinista
-      // entre requests.
-      const aDate = a.start_date ?? "";
-      const bDate = b.start_date ?? "";
-
-      if (aDate !== bDate) return aDate < bDate ? 1 : -1;
-
-      const aCreated = a.created_at ?? "";
-      const bCreated = b.created_at ?? "";
-
-      if (aCreated !== bCreated) return aCreated < bCreated ? 1 : -1;
-
-      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-    })
+    .sort(compareProgramPriority)
     .map((cp) => ({
       id: cp.id,
       program_id: cp.program_id,
       tenant_host: cp.tenant_host,
       start_date: cp.start_date,
       status: (cp.status as string).trim().toLowerCase(),
+      is_primary: cp.is_primary === true,
     }));
+}
+
+// Garantiza que haya un primario entre los programas ACTIVOS del cliente.
+// Se llama tras cualquier cambio de estado/asignación/borrado: si ninguno
+// está marcado (primer programa del cliente, primario recién pausado o
+// eliminado), promueve el primero del orden determinista. Best-effort —
+// si falla, los lectores igual caen al desempate de compareProgramPriority.
+export async function ensurePrimaryProgram(
+  supabase: Supabase,
+  clientId: string | number,
+  correlationId: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("client_programs")
+    .select("id, status, start_date, created_at, is_primary")
+    .eq("client_id", clientId);
+
+  if (error) {
+    console.error(`${LOG_PREFIX} ensurePrimary: error loading programs:`, {
+      correlationId,
+      clientId,
+      error: error.message,
+    });
+
+    return;
+  }
+
+  const actives = (data ?? []).filter(
+    (cp) =>
+      typeof cp.status === "string" &&
+      cp.status.trim().toLowerCase() === "active"
+  );
+
+  if (actives.length === 0 || actives.some((cp) => cp.is_primary === true)) {
+    return;
+  }
+
+  const next = [...actives].sort(compareProgramPriority)[0];
+
+  if (next === undefined) return;
+
+  // Guard .eq(is_primary, false): si otra request promovió en paralelo,
+  // este update no pisa nada y el índice parcial único hace de cinturón.
+  const { error: promoteError } = await supabase
+    .from("client_programs")
+    .update({ is_primary: true, updated_at: new Date().toISOString() })
+    .eq("id", next.id)
+    .eq("is_primary", false);
+
+  if (promoteError) {
+    console.error(`${LOG_PREFIX} ensurePrimary: error promoting:`, {
+      correlationId,
+      clientId,
+      clientProgramId: next.id,
+      error: promoteError.message,
+    });
+
+    return;
+  }
+
+  console.log(`${LOG_PREFIX} ensurePrimary: promoted`, {
+    correlationId,
+    clientId,
+    clientProgramId: next.id,
+  });
 }
 
 export async function loadMicrocycleWithSlots(

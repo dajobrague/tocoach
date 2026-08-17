@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { ensurePrimaryProgram } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Program Activate API]";
 
@@ -83,6 +84,10 @@ export async function POST(request: NextRequest) {
       clientId,
       clientProgramId,
     });
+
+    // No roba el ancla del microciclo: solo queda como primario si el
+    // cliente no tenía ningún otro activo primario.
+    await ensurePrimaryProgram(supabase, clientId, correlationId);
 
     // demotedIds se mantiene (vacío) por compatibilidad de shape con el
     // hook useActivateProgram.
