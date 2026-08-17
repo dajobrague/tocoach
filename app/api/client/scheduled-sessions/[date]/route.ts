@@ -210,14 +210,20 @@ export async function GET(
     // construimos el día desde los session_exercises de esa sesión
     // (template data). Esto preserva el render de divergencia: el
     // cliente ve lo que efectivamente entrenó.
-    // First scheduled_sessions row with exercises wins; additional
-    // same-date sessions are not rendered here.
-    const realRow = ssRows.find(
+    // Con días fusionados puede haber varias filas reales el mismo día y
+    // la query no trae .order(): elegimos DETERMINISTA — la recomendada
+    // primaria si el cliente la entrenó, si no la de id menor. Las demás
+    // sesiones del día no se renderizan aquí.
+    const rowsWithExercises = ssRows.filter(
       (r) =>
         r.session &&
         Array.isArray(r.session.session_exercises) &&
         r.session.session_exercises.length > 0
     );
+    const realRow =
+      rowsWithExercises.find(
+        (r) => r.session_id === trainerRecommendedSessionIds[0]
+      ) ?? [...rowsWithExercises].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 
     if (realRow) {
       const sessionRow = realRow.session as any;
@@ -241,10 +247,11 @@ export async function GET(
     //    result) instead of re-querying. El día "por defecto" es la
     //    prescripción del programa PRIMARIO; el resto de recomendadas
     //    viajan en trainer_recommended_session_ids y el cliente las abre
-    //    desde la lista de sesiones.
-    const slotMatch = recSlotMatches[0] ?? null;
-
-    if (slotMatch) {
+    //    desde la lista de sesiones. Si la sesión del primario no carga
+    //    (borrada/corrupta), caemos a la siguiente recomendada en vez de
+    //    declarar "rest" con badges de recomendado vivos — sería
+    //    contradictorio.
+    for (const slotMatch of recSlotMatches) {
       const { data: sessionDetail } = await supabase
         .from("sessions")
         .select(
@@ -315,13 +322,15 @@ async function resolveMicrocycleSlots(
   const matches: Array<{ sessionId: string }> = [];
   const seen = new Set<string>();
 
-  for (const program of programs) {
-    const microcycle = await loadMicrocycleWithSlots(
-      supabase,
-      program.id,
-      correlationId
-    );
+  // En paralelo: el walk completo es necesario (todas las recomendadas del
+  // día), pero secuencial costaba 2 round-trips POR programa en serie.
+  const microcycles = await Promise.all(
+    programs.map((program) =>
+      loadMicrocycleWithSlots(supabase, program.id, correlationId)
+    )
+  );
 
+  for (const microcycle of microcycles) {
     if (!microcycle?.start_date) continue;
     if (date < microcycle.start_date) continue;
 

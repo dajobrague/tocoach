@@ -216,7 +216,17 @@ export async function GET(
           .map((t) => t.session?.id)
           .filter((id): id is string => id != null)
       );
-      const primaryTemplate = templates[0] ?? null;
+      // Anotación de divergencia: "lo originalmente prescrito" es la
+      // primera recomendada que NINGUNA fila real cubre. Anotar una ya
+      // cubierta (p. ej. el primario ya entrenado en su propia fila)
+      // señalaría al trainer una divergencia inexistente; si todas están
+      // cubiertas, no hay nada que anotar.
+      const uncoveredTemplate =
+        templates.find(
+          (t) =>
+            t.session?.id != null &&
+            !realsForDate.some((r) => r.session?.id === t.session?.id)
+        ) ?? null;
 
       // Emitir cada fila real con anotación de divergencia.
       for (const row of realsForDate) {
@@ -225,10 +235,8 @@ export async function GET(
           (row.session?.id == null ||
             !recommendedSessionIds.has(row.session.id))
         ) {
-          // Cliente entrenó algo fuera de lo recomendado: anotar la
-          // sesión del template primario como "originalmente prescrito"
-          // para que la UI le ponga el chip.
-          row.originally_prescribed_session = primaryTemplate?.session ?? null;
+          row.originally_prescribed_session =
+            uncoveredTemplate?.session ?? null;
         }
         merged.push(row);
       }
@@ -332,6 +340,10 @@ async function materializeTemplate(
     const slotByDayIndex = new Map<number, string | null>();
 
     for (const slot of microcycle.slots) {
+      // First-wins en day_index duplicado (data anómala) — mismo criterio
+      // que el resolver del cliente (slots.find), para que ambas vistas
+      // prescriban la misma sesión.
+      if (slotByDayIndex.has(slot.day_index)) continue;
       slotByDayIndex.set(slot.day_index, slot.session_id);
       if (slot.session_id) allSessionIds.add(slot.session_id);
     }

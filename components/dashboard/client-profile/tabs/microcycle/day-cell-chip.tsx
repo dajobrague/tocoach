@@ -17,27 +17,43 @@ import { dayLabelClassification } from "./day-label";
 export function dayCellInfo(day: DayMetrics): {
   statusWord: string;
   label: ReturnType<typeof dayLabelClassification>;
-  /** Todos los nombres del día (únicos, orden primario-primero). */
+  /**
+   * Nombres para los chips del día. Futuro: SOLO prescripciones del
+   * template (una fila real creada por el cliente en fecha futura es su
+   * elección, no plan del trainer). Pasado/hoy: las sesiones del día.
+   * Únicos por session ID — los NOMBRES pueden repetirse entre programas
+   * ("Día 1" de fuerza y de cardio son dos chips, no uno).
+   */
   sessionNames: string[];
   /** Nombres unidos con " + " para aria/labels de una línea; null = rest. */
   sessionName: string | null;
 } {
   const label = dayLabelClassification(day);
 
-  // Nombres únicos de las sesiones del día; fallback a las recomendadas
-  // del template (día futuro sin filas aún) y al campo legacy singular.
-  const fromSessions = day.sessions
-    .map((s) => s.scheduledSession.session?.name)
-    .filter((n): n is string => n != null);
-  const base =
-    fromSessions.length > 0
-      ? fromSessions
-      : day.recommendedSessionNames.length > 0
-        ? day.recommendedSessionNames
-        : day.recommendedSessionName != null
-          ? [day.recommendedSessionName]
-          : [];
-  const sessionNames = Array.from(new Set(base));
+  // Únicos por session id (no por nombre) — dos programas pueden tener
+  // sesiones homónimas y ambas deben contarse.
+  const seenIds = new Set<string>();
+  const actualNames: string[] = [];
+
+  for (const entry of day.sessions) {
+    const session = entry.scheduledSession.session;
+
+    if (session?.name == null) continue;
+    const key = session.id ?? `name:${session.name}`;
+
+    if (seenIds.has(key)) continue;
+    seenIds.add(key);
+    actualNames.push(session.name);
+  }
+
+  const recommendedNames = day.recommendedSessions.map((s) => s.name);
+  const sessionNames = day.isFuture
+    ? recommendedNames.length > 0
+      ? recommendedNames
+      : actualNames
+    : actualNames.length > 0
+      ? actualNames
+      : recommendedNames;
 
   return {
     label,
@@ -62,18 +78,27 @@ export function DayCellChip({ day }: { day: DayMetrics }) {
   }
 
   // Futuro: un chip punteado por sesión prescrita — con fuerza + cardio el
-  // mismo día se apilan dos.
+  // mismo día se apilan dos. Tope de 2 + "+N": la celda mide h-[4.5rem]
+  // y con 3+ programas los chips desbordarían sobre la fila siguiente.
   if (day.isFuture && sessionNames.length > 0) {
+    const shown = sessionNames.slice(0, 2);
+    const extra = sessionNames.length - shown.length;
+
     return (
-      <span className="flex w-fit max-w-full flex-col items-start gap-0.5">
-        {sessionNames.map((name) => (
+      <span className="flex w-fit max-w-full flex-col items-start gap-0.5 overflow-hidden">
+        {shown.map((name, idx) => (
           <span
-            key={name}
+            key={`${name}-${idx}`}
             className="w-fit max-w-full truncate rounded-full border border-dashed border-gray-300 px-1.5 py-px text-[10px] font-semibold text-default-500 opacity-70"
           >
             {name}
           </span>
         ))}
+        {extra > 0 ? (
+          <span className="w-fit rounded-full border border-dashed border-gray-300 px-1.5 py-px text-[10px] font-semibold text-default-500 opacity-70">
+            +{extra}
+          </span>
+        ) : null}
       </span>
     );
   }

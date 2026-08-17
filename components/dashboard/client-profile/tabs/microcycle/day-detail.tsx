@@ -820,9 +820,7 @@ export function DayDetail({
           {formatDateLong(day.date)} — día de descanso
           {day.recommendedSessionNames.length > 0
             ? ` · recomendado: ${day.recommendedSessionNames.join(" + ")}`
-            : day.recommendedSessionName != null
-              ? ` · recomendado: ${day.recommendedSessionName}`
-              : ""}
+            : ""}
         </p>
       </section>
     );
@@ -831,17 +829,14 @@ export function DayDetail({
   // Sin línea de fecha sobre las tarjetas (la fecha ya se ve seleccionada en
   // la tira/grilla); el chip "Recomendado" lista SOLO las prescripciones que
   // no aparecen entre las sesiones del día (con dos programas puede faltar
-  // una y estar la otra).
-  const recommendedPool =
-    day.recommendedSessionNames.length > 0
-      ? day.recommendedSessionNames
-      : day.recommendedSessionName != null
-        ? [day.recommendedSessionName]
-        : [];
-  const missingRecommended = recommendedPool.filter(
-    (name) =>
-      !day.sessions.some((s) => s.scheduledSession.session?.name === name)
-  );
+  // una y estar la otra). Matching por ID, no por nombre: dos programas
+  // pueden tener sesiones homónimas y el nombre taparía la ausente.
+  const missingRecommended = day.recommendedSessions
+    .filter(
+      (rec) =>
+        !day.sessions.some((s) => s.scheduledSession.session?.id === rec.id)
+    )
+    .map((rec) => rec.name);
 
   return (
     <div className="flex flex-col gap-3">

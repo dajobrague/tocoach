@@ -108,7 +108,9 @@ export function WorkoutsContent() {
   // real del trainer (microciclo), nunca a la sesión que el cliente eligió
   // hacer al loguear. Con varios programas activos puede haber VARIAS
   // recomendadas el mismo día (fuerza + cardio) — todas llevan badge. El
-  // scalar legacy queda como fallback de respuestas cacheadas pre-Fase-2.
+  // scalar legacy cubre SOLO el skew de deploy (bundle nuevo hablando con
+  // un servidor pre-Fase-2 que aún no manda el array); el SW nunca cachea
+  // /api/ y no hay persister de React Query, así que no hay otra fuente.
   const { data: resolvedForSelectedDate } =
     useResolvedDayPrescription(selectedDate);
   const isPastDate = selectedDate < todayYmd;
