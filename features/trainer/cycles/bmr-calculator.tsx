@@ -13,15 +13,25 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { basalMetabolicRate, isValidBmrInput } from "./bmr";
+
+function formatShortDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00`);
+
+  return Number.isNaN(date.getTime())
+    ? isoDate
+    : date.toLocaleDateString("es", { day: "numeric", month: "short" });
+}
 
 interface BmrProfile {
   sex: ClientSex | null;
   height_cm: number | null;
   age: number | null;
   latest_weight_kg: number | null;
+  latest_weight_date: string | null;
 }
 
 async function fetchBmrProfile(clientId: number): Promise<BmrProfile> {
@@ -40,7 +50,7 @@ async function fetchBmrProfile(clientId: number): Promise<BmrProfile> {
 
 async function saveBmrProfile(
   clientId: number,
-  patch: { sex?: ClientSex; height_cm?: number }
+  patch: { sex?: ClientSex; height_cm?: number; weight_kg?: number }
 ): Promise<void> {
   const response = await fetch(`/api/clients/${clientId}/bmr`, {
     method: "PATCH",
@@ -117,23 +127,40 @@ export function BmrCalculator({
     onResultChange(bmr);
   }, [bmr, onResultChange]);
 
-  // Sex/height typed here that differ from the stored profile can be saved.
+  // Values typed here that differ from what the profile/check-ins hold can
+  // be saved back: sex/height to the clients row, weight as a new check-in
+  // measurement (joining the weight-evolution history).
   const stored = profileQuery.data;
   const heightNumber = Number(height);
+  const weightNumber = Number(weight);
+  const heightValid =
+    Number.isFinite(heightNumber) && heightNumber > 50 && heightNumber < 275;
+  const weightValid =
+    Number.isFinite(weightNumber) && weightNumber >= 25 && weightNumber <= 400;
   const profileDirty =
     stored !== undefined &&
     sex !== "" &&
-    Number.isFinite(heightNumber) &&
-    heightNumber > 50 &&
-    heightNumber < 275 &&
+    heightValid &&
     (sex !== stored.sex || heightNumber !== stored.height_cm);
+  const weightDirty =
+    stored !== undefined &&
+    weightValid &&
+    weightNumber !== stored.latest_weight_kg;
+  const anyDirty = profileDirty || weightDirty;
 
   const saveProfile = useMutation({
     mutationFn: () => {
-      const patch: { sex?: ClientSex; height_cm?: number } = {};
+      const patch: {
+        sex?: ClientSex;
+        height_cm?: number;
+        weight_kg?: number;
+      } = {};
 
-      if (sex !== "") patch.sex = sex;
-      if (Number.isFinite(heightNumber)) patch.height_cm = heightNumber;
+      if (profileDirty) {
+        patch.sex = sex;
+        patch.height_cm = heightNumber;
+      }
+      if (weightDirty) patch.weight_kg = weightNumber;
 
       return saveBmrProfile(clientId, patch);
     },
@@ -158,8 +185,12 @@ export function BmrCalculator({
         </div>
 
         <p className="text-xs text-default-500">
-          Basal estimado con los datos del cliente. El peso viene de su último
-          check-in.
+          Basal estimado con los datos del cliente.
+          {profileQuery.data?.latest_weight_date != null
+            ? ` Peso del último registro (${formatShortDate(
+                profileQuery.data.latest_weight_date
+              )}).`
+            : " Aún no hay peso registrado — escríbelo y guárdalo."}
         </p>
 
         {profileQuery.isLoading ? (
@@ -264,18 +295,27 @@ export function BmrCalculator({
                 Mifflin-St Jeor, sin factor de actividad — aplica tu método
                 sobre esta base.
               </p>
-              {profileDirty && (
-                <button
-                  className="text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                  disabled={saveProfile.isPending}
-                  type="button"
-                  onClick={() => saveProfile.mutate()}
+              <div className="flex items-center gap-3">
+                {anyDirty && (
+                  <button
+                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    disabled={saveProfile.isPending}
+                    type="button"
+                    onClick={() => saveProfile.mutate()}
+                  >
+                    {saveProfile.isPending
+                      ? "Guardando..."
+                      : "Guardar datos del cliente"}
+                  </button>
+                )}
+                <Link
+                  className="flex items-center gap-1 text-[11px] font-medium text-default-500 hover:text-gray-900"
+                  href={`/trainer/dashboard/clients/${clientId}/charts`}
                 >
-                  {saveProfile.isPending
-                    ? "Guardando..."
-                    : "Guardar sexo y altura en el perfil"}
-                </button>
-              )}
+                  <Icon icon="solar:graph-up-linear" width={13} />
+                  Ver evolución del peso
+                </Link>
+              </div>
               {saveProfile.isError && (
                 <span className="text-[11px] text-danger">
                   No se pudo guardar.
