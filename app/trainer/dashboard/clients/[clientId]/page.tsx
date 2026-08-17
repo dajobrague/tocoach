@@ -117,6 +117,11 @@ function ClientProfileInner() {
             phone: client.phone || "",
             occupation: client.occupation || "",
             dob: client.dob || "",
+            sex: client.sex ?? "",
+            heightCm:
+              typeof client.heightCm === "number"
+                ? String(client.heightCm)
+                : "",
             city: client.location?.city || "",
             state: client.location?.state || "",
             country: client.location?.country || "",

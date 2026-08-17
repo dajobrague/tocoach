@@ -16,6 +16,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { BmrCalculator } from "./bmr-calculator";
 import { DEFAULT_TARGETS } from "./cycle-math";
 import { GoalsModal } from "./goals-modal";
 import { PresetModal } from "./preset-modal";
@@ -201,6 +202,8 @@ export function GoalsSection({ clientId }: { clientId: number }) {
           )}
         </CardBody>
       </Card>
+
+      <BmrCalculator clientId={clientId} />
 
       <GoalsModal
         initial={defaults}

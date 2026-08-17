@@ -740,6 +740,8 @@ export type Database = {
           password: string | null;
           phone: string | null;
           profile_picture_url: string | null;
+          sex: string | null;
+          height_cm: number | null;
           sign_up_date: string;
           state: string | null;
           status: Database["public"]["Enums"]["client_status"] | null;
@@ -761,6 +763,8 @@ export type Database = {
           password?: string | null;
           phone?: string | null;
           profile_picture_url?: string | null;
+          sex?: string | null;
+          height_cm?: number | null;
           sign_up_date?: string;
           state?: string | null;
           status?: Database["public"]["Enums"]["client_status"] | null;
@@ -782,6 +786,8 @@ export type Database = {
           password?: string | null;
           phone?: string | null;
           profile_picture_url?: string | null;
+          sex?: string | null;
+          height_cm?: number | null;
           sign_up_date?: string;
           state?: string | null;
           status?: Database["public"]["Enums"]["client_status"] | null;
