@@ -55,14 +55,31 @@ async function saveBmrProfile(
   }
 }
 
+interface BmrCalculatorProps {
+  clientId: number;
+  /** Current default-goals kcal, to mark the estimate as already applied. */
+  currentKcal: number | null;
+  /** Persisting the estimate into the default goals is in flight. */
+  applying: boolean;
+  onApply: (kcal: number) => void;
+  /** Fires whenever the computed estimate changes (null = incomplete data). */
+  onResultChange: (kcal: number | null) => void;
+}
+
 /**
- * Basal-calorie estimator for the goals tab (Jul 28 call): sex, age, height
- * and weight prefilled from the profile / latest check-in, result in big
- * integer kcal. Sex and height typed here can be saved back to the profile;
- * age derives from the birth date and weight from check-ins, so those two are
+ * Basal-calorie estimator (Mifflin-St Jeor) that sits directly under the
+ * default-goals card and feeds it: the result can be applied as the goals'
+ * kcal in one tap. Sex/height typed here can be saved back to the profile;
+ * age derives from dob and weight from the latest check-in, so those two are
  * calculator-only overrides.
  */
-export function BmrCalculator({ clientId }: { clientId: number }) {
+export function BmrCalculator({
+  clientId,
+  currentKcal,
+  applying,
+  onApply,
+  onResultChange,
+}: BmrCalculatorProps) {
   const qc = useQueryClient();
   const profileQuery = useQuery({
     queryKey: ["bmr-profile", clientId],
@@ -96,6 +113,10 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
   };
   const bmr = isValidBmrInput(input) ? basalMetabolicRate(input) : null;
 
+  useEffect(() => {
+    onResultChange(bmr);
+  }, [bmr, onResultChange]);
+
   // Sex/height typed here that differ from the stored profile can be saved.
   const stored = profileQuery.data;
   const heightNumber = Number(height);
@@ -107,7 +128,7 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
     heightNumber < 275 &&
     (sex !== stored.sex || heightNumber !== stored.height_cm);
 
-  const save = useMutation({
+  const saveProfile = useMutation({
     mutationFn: () => {
       const patch: { sex?: ClientSex; height_cm?: number } = {};
 
@@ -120,12 +141,14 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
       qc.invalidateQueries({ queryKey: ["bmr-profile", clientId] }),
   });
 
+  const applied = bmr !== null && currentKcal === bmr;
+
   return (
-    <Card className="border border-gray-200 bg-white shadow-sm lg:col-span-3">
+    <Card className="border border-gray-200 bg-white shadow-sm">
       <CardBody className="gap-4 p-5">
         <div className="flex items-center gap-2">
           <Icon
-            className="text-default-500"
+            className="text-emerald-600"
             icon="solar:calculator-linear"
             width={18}
           />
@@ -135,10 +158,8 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
         </div>
 
         <p className="text-xs text-default-500">
-          Metabolismo basal estimado (Mifflin-St Jeor) a partir de sexo, edad,
-          altura y peso. Sin factor de actividad ni déficit/superávit — eso lo
-          aplicas tú con tu propio método. El peso se precarga del último
-          check-in del cliente.
+          Basal estimado con los datos del cliente. El peso viene de su último
+          check-in.
         </p>
 
         {profileQuery.isLoading ? (
@@ -146,8 +167,8 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
             <Spinner size="sm" />
           </div>
         ) : (
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-            <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
+          <>
+            <div className="grid grid-cols-2 gap-3">
               <Select
                 aria-label="Sexo"
                 label="Sexo"
@@ -198,45 +219,70 @@ export function BmrCalculator({ clientId }: { clientId: number }) {
               />
             </div>
 
-            <div className="flex min-w-[13rem] flex-col items-center gap-1 rounded-large border border-emerald-100 bg-emerald-50/60 px-6 py-4">
-              <span className="text-[11px] font-medium tracking-wide text-emerald-700 uppercase">
-                Basal estimado
-              </span>
-              {bmr !== null ? (
-                <span className="text-3xl font-bold text-gray-900 tabular-nums">
-                  {bmr.toLocaleString("es")}
-                  <span className="ml-1 text-sm font-medium text-default-500">
-                    kcal
+            <div className="flex items-center justify-between gap-3 rounded-large border border-gray-200 bg-gray-50/60 px-4 py-3">
+              <div className="flex flex-col">
+                <span className="text-[11px] text-default-500">
+                  Basal estimado
+                </span>
+                {bmr !== null ? (
+                  <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                    {bmr.toLocaleString("es")}
+                    <span className="ml-1 text-xs font-medium text-default-400">
+                      kcal
+                    </span>
                   </span>
+                ) : (
+                  <span className="text-sm text-default-400">
+                    Completa los datos
+                  </span>
+                )}
+              </div>
+
+              {applied ? (
+                <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600">
+                  <Icon icon="solar:check-circle-linear" width={16} />
+                  En metas
                 </span>
               ) : (
-                <span className="py-1.5 text-sm text-default-400">
-                  Completa los datos
+                <Button
+                  className="shrink-0 bg-slate-900 text-white"
+                  color="primary"
+                  isDisabled={bmr === null}
+                  isLoading={applying}
+                  size="sm"
+                  onPress={() => {
+                    if (bmr !== null) onApply(bmr);
+                  }}
+                >
+                  Usar en metas
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] text-default-400">
+                Mifflin-St Jeor, sin factor de actividad — aplica tu método
+                sobre esta base.
+              </p>
+              {profileDirty && (
+                <button
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                  disabled={saveProfile.isPending}
+                  type="button"
+                  onClick={() => saveProfile.mutate()}
+                >
+                  {saveProfile.isPending
+                    ? "Guardando..."
+                    : "Guardar sexo y altura en el perfil"}
+                </button>
+              )}
+              {saveProfile.isError && (
+                <span className="text-[11px] text-danger">
+                  No se pudo guardar.
                 </span>
               )}
             </div>
-          </div>
-        )}
-
-        {profileDirty && (
-          <div className="flex items-center gap-2">
-            <Button
-              isLoading={save.isPending}
-              size="sm"
-              startContent={
-                save.isPending ? null : (
-                  <Icon icon="solar:diskette-linear" width={15} />
-                )
-              }
-              variant="bordered"
-              onPress={() => save.mutate()}
-            >
-              Guardar sexo y altura en el perfil
-            </Button>
-            {save.isError && (
-              <span className="text-xs text-danger">No se pudo guardar.</span>
-            )}
-          </div>
+          </>
         )}
       </CardBody>
     </Card>
