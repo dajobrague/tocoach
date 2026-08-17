@@ -13,10 +13,11 @@ import { useMemo, useState } from "react";
 
 import { DeleteRecipeModal } from "./delete-recipe-modal";
 import { FolderBrowser } from "./folder-browser";
+import { GroupedRecipeList } from "./grouped-recipe-list";
 import { NewRecipeModal } from "./new-recipe-modal";
 import { RecipeFilters } from "./recipe-filters";
-import { RecipeList } from "./recipe-list";
 import { distinctMealTypes } from "./recipe-query";
+import { useRecipeFolders } from "./use-folders";
 import { useRecipes } from "./use-recipes";
 
 const VIEW_STORAGE_KEY = "topcoach.recipes.view";
@@ -72,6 +73,9 @@ export function RecipeLibraryContent() {
   // Unfiltered library (cache-shared with the initial page load) so the tag
   // dropdown keeps offering every tag while a filter narrows the list.
   const allRecipes = useRecipes({});
+  // Folder hierarchy, shared with the folder view's cache: the list view
+  // groups by it.
+  const foldersQuery = useRecipeFolders();
   const mealTypeOptions = useMemo(
     () => distinctMealTypes(allRecipes.data ?? [], mealType),
     [allRecipes.data, mealType]
@@ -183,7 +187,8 @@ export function RecipeLibraryContent() {
             }
           />
         ) : (
-          <RecipeList
+          <GroupedRecipeList
+            folders={foldersQuery.data ?? []}
             isError={isError}
             isLoading={isLoading}
             recipes={recipes}

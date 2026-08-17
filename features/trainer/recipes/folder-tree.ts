@@ -139,6 +139,69 @@ export function folderPath(
   return path;
 }
 
+/** One section of the grouped list view, ordered depth-first so nested
+ *  folders follow their parent. */
+export interface RecipeSection {
+  kind: "folder" | "loose" | "untagged";
+  /** Display heading ("Desayunos", "Verano", "Sin carpeta"). */
+  label: string;
+  depth: number;
+  recipes: RecipeListItem[];
+}
+
+/**
+ * Flatten the folder tree into grouped-list sections (depth-first, parents
+ * before children). A folder appears only when its subtree holds at least
+ * one of the given recipes, so filters/search never leave hollow headings.
+ * Recipes with several tags appear under each of their folders; tags without
+ * a folder row yet get their own flat sections (nothing ever vanishes from
+ * the list), and untagged recipes close the list as "Sin carpeta".
+ */
+export function groupedSections(
+  folders: RecipeFolder[],
+  recipes: RecipeListItem[]
+): RecipeSection[] {
+  const walk = (nodes: FolderNode[], depth: number): RecipeSection[] =>
+    nodes.flatMap((node) => {
+      if (node.recipeCount === 0) return [];
+      const direct = recipesInFolder(recipes, node.folder);
+
+      return [
+        {
+          kind: "folder" as const,
+          label: node.folder.name,
+          depth,
+          recipes: direct,
+        },
+        ...walk(node.children, depth + 1),
+      ];
+    });
+
+  const sections = walk(folderNodes(folders, recipes, null), 0);
+
+  for (const entry of looseTags(recipes, folders)) {
+    sections.push({
+      kind: "loose",
+      label: entry.tag,
+      depth: 0,
+      recipes: recipes.filter((recipe) => hasTag(recipe, entry.tag)),
+    });
+  }
+
+  const untagged = untaggedRecipes(recipes);
+
+  if (untagged.length > 0) {
+    sections.push({
+      kind: "untagged",
+      label: "Sin carpeta",
+      depth: 0,
+      recipes: untagged,
+    });
+  }
+
+  return sections;
+}
+
 /** Folders that can host `folderId` (everything but itself + its subtree). */
 export function moveTargets(
   folders: RecipeFolder[],

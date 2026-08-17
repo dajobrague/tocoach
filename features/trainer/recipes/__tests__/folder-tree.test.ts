@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   folderNodes,
   folderPath,
+  groupedSections,
   looseTags,
   moveTargets,
   recipesInFolder,
@@ -106,6 +107,48 @@ describe("folderPath", () => {
       "Desayunos",
       "Dulces",
     ]);
+  });
+});
+
+describe("groupedSections", () => {
+  it("orders depth-first, then loose tags, then untagged", () => {
+    const sections = groupedSections(FOLDERS, RECIPES);
+
+    expect(
+      sections.map((s) => ({ label: s.label, depth: s.depth, kind: s.kind }))
+    ).toEqual([
+      { label: "Cenas", depth: 0, kind: "folder" },
+      { label: "Desayunos", depth: 0, kind: "folder" },
+      { label: "Dulces", depth: 1, kind: "folder" },
+      { label: "Salados", depth: 1, kind: "folder" },
+      { label: "Verano", depth: 0, kind: "loose" },
+      { label: "Sin carpeta", depth: 0, kind: "untagged" },
+    ]);
+  });
+
+  it("puts each recipe under every folder it belongs to", () => {
+    const sections = groupedSections(FOLDERS, RECIPES);
+    const dulces = sections.find((s) => s.label === "Dulces");
+    const salados = sections.find((s) => s.label === "Salados");
+
+    // r3 carries both tags → appears in both groups.
+    expect(dulces?.recipes.map((r) => r.id)).toContain("r3");
+    expect(salados?.recipes.map((r) => r.id)).toContain("r3");
+  });
+
+  it("skips folders whose subtree holds none of the given recipes", () => {
+    const onlyCenas = RECIPES.filter((r) => r.id === "r4");
+    const sections = groupedSections(FOLDERS, onlyCenas);
+
+    expect(sections.map((s) => s.label)).toEqual(["Cenas"]);
+  });
+
+  it("closes with the untagged section when untagged recipes exist", () => {
+    const sections = groupedSections(FOLDERS, RECIPES);
+    const last = sections[sections.length - 1];
+
+    expect(last?.kind).toBe("untagged");
+    expect(last?.recipes.map((r) => r.id)).toEqual(["r6"]);
   });
 });
 
