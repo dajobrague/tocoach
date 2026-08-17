@@ -103,18 +103,35 @@ export function WorkoutsContent() {
   // atrás, así que tagueaba "Recomendado" sobre una sesión que no fue
   // necesariamente lo que el trainer prescribió en ese momento.
   //
-  // Usamos `trainer_recommended_session_id` (no `session.id`) para que el
+  // Usamos `trainer_recommended_session_ids` (no `session.id`) para que el
   // badge "Recomendado por tu entrenador" siempre apunte a la prescripción
-  // real del trainer (microciclo o override por-fecha del trainer), nunca
-  // a la sesión que el cliente eligió hacer al loguear. Antes el badge
-  // se movía a la elección del cliente porque scheduled_sessions no
-  // distinguía quién había creado la fila.
+  // real del trainer (microciclo), nunca a la sesión que el cliente eligió
+  // hacer al loguear. Con varios programas activos puede haber VARIAS
+  // recomendadas el mismo día (fuerza + cardio) — todas llevan badge. El
+  // scalar legacy queda como fallback de respuestas cacheadas pre-Fase-2.
   const { data: resolvedForSelectedDate } =
     useResolvedDayPrescription(selectedDate);
   const isPastDate = selectedDate < todayYmd;
-  const recommendedSessionId = isPastDate
-    ? null
-    : (resolvedForSelectedDate?.trainer_recommended_session_id ?? null);
+  const recommendedSessionIds = useMemo<ReadonlySet<string>>(() => {
+    if (isPastDate || !resolvedForSelectedDate) return new Set<string>();
+    const ids =
+      resolvedForSelectedDate.trainer_recommended_session_ids ??
+      (resolvedForSelectedDate.trainer_recommended_session_id !== null
+        ? [resolvedForSelectedDate.trainer_recommended_session_id]
+        : []);
+
+    return new Set(ids);
+  }, [isPastDate, resolvedForSelectedDate]);
+
+  // Etiqueta de programa en las cards SOLO cuando hay más de un programa
+  // activo (fuerza + cardio): con uno solo es ruido visual.
+  const programNameById = useMemo<ReadonlyMap<string, string> | null>(() => {
+    const list = availableData?.programs ?? [];
+
+    if (list.length <= 1) return null;
+
+    return new Map(list.map((p) => [p.id, p.name]));
+  }, [availableData?.programs]);
 
   // Fallback para la sesión activa cuando ya no está en el listado de
   // disponibles (programa recién pausado): el cache de programs del cliente
@@ -435,7 +452,8 @@ export function WorkoutsContent() {
                     loggedSessionIds={
                       new Set(loggedSessions.map((s) => s.sessionId))
                     }
-                    recommendedSessionId={recommendedSessionId}
+                    programNameById={programNameById}
+                    recommendedSessionIds={recommendedSessionIds}
                     onActivate={handleActivateSession}
                   />
                 ) : (

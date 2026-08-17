@@ -99,11 +99,14 @@ export function buildDayMetricsRange(
     const rows = scheduledByDate.get(ymd) ?? [];
     const isFuture = ymd > todayYmd;
 
-    // recommendedSessionName: la fila de template (los IDs virtuales
-    // del template arrancan con "template:"). Si no hay nada, null = rest.
-    const templateVirtualRow =
-      rows.find((r) => r.id.startsWith("template:")) ?? null;
-    const recommendedSessionName = templateVirtualRow?.session?.name ?? null;
+    // recommendedSessionNames: las filas de template (los IDs virtuales
+    // del template arrancan con "template:") — puede haber varias, una
+    // por programa activo que prescribe el día. Vacío = rest.
+    const recommendedSessionNames = rows
+      .filter((r) => r.id.startsWith("template:"))
+      .map((r) => r.session?.name)
+      .filter((n): n is string => n != null);
+    const recommendedSessionName = recommendedSessionNames[0] ?? null;
 
     // Build session entries from scheduled rows, matching logs.
     const claimedLogKeys = new Set<string>();
@@ -194,6 +197,7 @@ export function buildDayMetricsRange(
       date: ymd,
       sessions: visibleSessions,
       recommendedSessionName,
+      recommendedSessionNames,
       isToday: ymd === todayYmd,
       isFuture,
     });

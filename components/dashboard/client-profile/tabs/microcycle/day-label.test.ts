@@ -16,6 +16,7 @@ function day(
     date: "2026-07-28",
     sessions,
     recommendedSessionName: null,
+    recommendedSessionNames: [],
     isToday: false,
     isFuture: false,
     ...over,

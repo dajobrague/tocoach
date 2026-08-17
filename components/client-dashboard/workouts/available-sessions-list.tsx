@@ -31,8 +31,16 @@ interface Props {
   availableSessions: AvailableSession[];
   onActivate: (sessionId: string) => void;
   heading?: string;
-  /** Session id that the trainer's microcycle/override prescribes for the visible date. */
-  recommendedSessionId?: string | null;
+  /**
+   * Session ids que el microciclo prescribe para la fecha visible — una
+   * por programa activo (fuerza + cardio el mismo día = dos badges).
+   */
+  recommendedSessionIds?: ReadonlySet<string> | null;
+  /**
+   * Nombre de programa por program_id, para etiquetar cada card cuando el
+   * cliente tiene varios programas activos. null/omitido = sin etiquetas.
+   */
+  programNameById?: ReadonlyMap<string, string> | null;
   /**
    * Sessions el cliente ya logueó al menos un ejercicio para la fecha
    * visible. Se renderizan grises + "Hecho" en vez de "Comenzar" — no
@@ -67,7 +75,8 @@ export function AvailableSessionsList({
   availableSessions,
   onActivate,
   heading = "Escoge tu siguiente entrenamiento",
-  recommendedSessionId = null,
+  recommendedSessionIds = null,
+  programNameById = null,
   loggedSessionIds,
 }: Props) {
   if (availableSessions.length === 0) return null;
@@ -89,7 +98,14 @@ export function AvailableSessionsList({
                 <SessionRow
                   key={session.id}
                   isDone={loggedSessionIds?.has(session.id) ?? false}
-                  isRecommended={session.id === recommendedSessionId}
+                  isRecommended={
+                    recommendedSessionIds?.has(session.id) ?? false
+                  }
+                  programName={
+                    (session.program_id != null
+                      ? programNameById?.get(session.program_id)
+                      : null) ?? null
+                  }
                   session={session}
                   onActivate={onActivate}
                 />
@@ -122,11 +138,13 @@ function SessionRow({
   onActivate,
   isRecommended,
   isDone,
+  programName,
 }: {
   session: AvailableSession;
   onActivate: (sessionId: string) => void;
   isRecommended: boolean;
   isDone: boolean;
+  programName: string | null;
 }) {
   // Sesión ya logueada hoy: la card va gris y no es clickable. El cliente
   // puede entrar a otra sesión, pero no a la misma de nuevo el mismo día —
@@ -141,6 +159,7 @@ function SessionRow({
           exerciseCount={session.exercise_count}
           isRecommended={isRecommended}
           name={session.name}
+          programName={programName}
           rightContent={
             <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-success-700">
               <Icon icon="solar:check-circle-bold" width={14} />
@@ -170,6 +189,7 @@ function SessionRow({
         exerciseCount={session.exercise_count}
         isRecommended={isRecommended}
         name={session.name}
+        programName={programName}
         rightContent={
           <Button
             color="primary"

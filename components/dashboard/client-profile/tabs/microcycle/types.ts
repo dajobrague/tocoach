@@ -90,11 +90,16 @@ export interface DayMetrics {
    */
   sessions: SessionEntry[];
   /**
-   * Sesión que el trainer recomienda para el día (microciclo). null =
-   * rest day. Se usa para anotar "Recomendado: X" en el header del día
-   * cuando no aparece en `sessions`.
+   * Sesión PRIMARIA que el trainer recomienda para el día (microciclo).
+   * null = rest day. Compat: igual a recommendedSessionNames[0].
    */
   recommendedSessionName: string | null;
+  /**
+   * TODAS las recomendadas del día — una por programa activo que
+   * prescribe la fecha (fuerza + cardio = dos nombres), orden
+   * primario-primero. Vacío = rest day.
+   */
+  recommendedSessionNames: string[];
   isToday: boolean;
   isFuture: boolean;
 }
