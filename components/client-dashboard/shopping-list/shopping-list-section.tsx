@@ -96,7 +96,10 @@ export function ShoppingListSection() {
         type="button"
         onClick={() => setOpen(true)}
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        {/* Solid primary + primary-foreground: tenant themes only guarantee
+            contrast for that pairing — a primary/10 tint can render solid
+            under some theme_json shapes and swallow the glyph. */}
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <Icon icon="solar:cart-large-2-bold" width={22} />
         </span>
         <span className="min-w-0 flex-1">
@@ -190,7 +193,7 @@ function ShoppingListModal({
     >
       <ModalContent>
         <ModalHeader className="flex items-center gap-3 pb-2 pr-10">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Icon icon="solar:cart-large-2-bold" width={20} />
           </span>
           <span className="min-w-0 flex-1">

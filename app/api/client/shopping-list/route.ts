@@ -137,6 +137,10 @@ async function attachImages(
       .not("image_url", "is", null);
 
     const byKey = new Map<string, string>();
+    // Snapshot lines often carry no brand while the cache row does (OFF
+    // products), so an exact (name, brand) miss falls back to any cached
+    // image under the same name.
+    const byName = new Map<string, string>();
 
     for (const row of (data ?? []) as {
       name: string | null;
@@ -147,15 +151,17 @@ async function attachImages(
 
       if (typeof url !== "string" || url.length === 0) continue;
       const key = imageKey(row.name ?? "", row.brand);
+      const nameKey = `${row.name ?? ""}`.trim().toLowerCase();
 
       if (byKey.has(key) === false) byKey.set(key, url);
+      if (byName.has(nameKey) === false) byName.set(nameKey, url);
     }
 
     return items.map((item) => ({
       ...item,
       imageUrl:
         byKey.get(imageKey(item.name, item.brand)) ??
-        byKey.get(imageKey(item.name, null)) ??
+        byName.get(item.name.trim().toLowerCase()) ??
         null,
     }));
   } catch {
