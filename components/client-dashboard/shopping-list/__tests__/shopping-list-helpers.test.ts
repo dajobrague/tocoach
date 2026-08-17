@@ -25,7 +25,7 @@ describe("dedupeProducts — products only, no quantities", () => {
       { name: "Huevos", brand: null },
     ]);
 
-    expect(products.map((p) => p.label)).toEqual(["Avena", "Huevos"]);
+    expect(products.map((p) => p.name)).toEqual(["Avena", "Huevos"]);
   });
 
   it("keeps different brands as separate products", () => {
@@ -35,10 +35,7 @@ describe("dedupeProducts — products only, no quantities", () => {
       { name: "Yogur griego", brand: "Hacendado" },
     ]);
 
-    expect(products.map((p) => p.label)).toEqual([
-      "Yogur griego (Hacendado)",
-      "Yogur griego (Fage)",
-    ]);
+    expect(products.map((p) => p.brand)).toEqual(["Hacendado", "Fage"]);
   });
 
   it("dedupes case-insensitively and treats missing brand as null", () => {
@@ -48,6 +45,24 @@ describe("dedupeProducts — products only, no quantities", () => {
     ]);
 
     expect(products).toHaveLength(1);
+  });
+
+  it("keeps the first non-null photo among merged lines", () => {
+    const products = dedupeProducts([
+      { name: "Avena", brand: null, imageUrl: null },
+      { name: "Avena", brand: null, imageUrl: "https://img/avena.jpg" },
+    ]);
+
+    expect(products[0]?.imageUrl).toBe("https://img/avena.jpg");
+  });
+
+  it("never merges a spaced name into a name+brand pair", () => {
+    const products = dedupeProducts([
+      { name: "Yogur griego", brand: null },
+      { name: "Yogur", brand: "griego" },
+    ]);
+
+    expect(products).toHaveLength(2);
   });
 });
 

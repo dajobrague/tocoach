@@ -1,4 +1,6 @@
 import type { ClientSession } from "@/lib/auth/client-session";
+import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -90,10 +92,11 @@ export async function GET(request: NextRequest) {
       to: range.to,
       menuChoices,
     });
+    const enriched = await attachImages(supabase, tenant?.host ?? "", items);
 
     return NextResponse.json({
       success: true,
-      data: { from: range.from, to: range.to, items },
+      data: { from: range.from, to: range.to, items: enriched },
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
@@ -106,6 +109,64 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Attach product photos from the tenant's ingredient cache (image_url comes
+ * from OpenFoodFacts). Snapshot lines carry name+brand but no ingredient id,
+ * so the match is exact (name, brand) case-insensitive, falling back to a
+ * brand-less cache row with the same name. Best-effort: a lookup failure
+ * degrades to no images, never to an error.
+ */
+async function attachImages(
+  supabase: SupabaseClient,
+  tenantHost: string,
+  items: ShoppingListItem[]
+): Promise<ShoppingListItem[]> {
+  if (items.length === 0 || tenantHost.length === 0) {
+    return items;
+  }
+
+  try {
+    const names = [...new Set(items.map((item) => item.name))];
+    const { data } = await supabase
+      .from("ingredients")
+      .select("name, brand, image_url")
+      .eq("tenant_host", tenantHost)
+      .in("name", names)
+      .not("image_url", "is", null);
+
+    const byKey = new Map<string, string>();
+
+    for (const row of (data ?? []) as {
+      name: string | null;
+      brand: string | null;
+      image_url: string | null;
+    }[]) {
+      const url = row.image_url;
+
+      if (typeof url !== "string" || url.length === 0) continue;
+      const key = imageKey(row.name ?? "", row.brand);
+
+      if (byKey.has(key) === false) byKey.set(key, url);
+    }
+
+    return items.map((item) => ({
+      ...item,
+      imageUrl:
+        byKey.get(imageKey(item.name, item.brand)) ??
+        byKey.get(imageKey(item.name, null)) ??
+        null,
+    }));
+  } catch {
+    return items;
+  }
+}
+
+function imageKey(name: string, brand: string | null | undefined): string {
+  const trimmedBrand = brand?.trim().toLowerCase() ?? "";
+
+  return `${name.trim().toLowerCase()}|${trimmedBrand}`;
 }
 
 /**
