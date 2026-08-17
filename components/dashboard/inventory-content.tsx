@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import AddSupplementModal from "./add-supplement-modal";
 import EditSupplementModal from "./edit-supplement-modal";
 
+import { normalizeProductUrl } from "@/lib/supplements/product-url";
 import { SupplementInventoryItem } from "@/types/supplements";
 
 export default function InventoryContent() {
@@ -285,7 +286,7 @@ export default function InventoryContent() {
                 {item.product_url && (
                   <a
                     className="text-sm text-slate-700 hover:text-slate-800 flex items-center gap-1 mb-3"
-                    href={item.product_url}
+                    href={normalizeProductUrl(item.product_url)}
                     rel="noopener noreferrer"
                     target="_blank"
                   >

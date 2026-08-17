@@ -16,6 +16,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { normalizeProductUrl } from "@/lib/supplements/product-url";
 import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
   ClientSupplementAssignment,
@@ -696,7 +697,7 @@ function AssignmentDetailsModal({
                     {supplement.product_url && (
                       <a
                         className="text-xs text-slate-700 hover:text-slate-800 flex items-center gap-1"
-                        href={supplement.product_url}
+                        href={normalizeProductUrl(supplement.product_url)}
                         rel="noopener noreferrer"
                         target="_blank"
                       >
