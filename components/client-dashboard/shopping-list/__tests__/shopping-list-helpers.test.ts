@@ -4,6 +4,7 @@ import {
   SHOPPING_RANGE_OPTIONS,
   checkedStorageKey,
   computeRange,
+  dedupeProducts,
   formatItemLine,
   formatQuantity,
   itemKey,
@@ -15,6 +16,40 @@ import {
  * the range math and the per-range localStorage key are unit-tested directly
  * (the no-jsdom convention).
  */
+
+describe("dedupeProducts — products only, no quantities", () => {
+  it("merges same-name lines across units into one product", () => {
+    const products = dedupeProducts([
+      { name: "Avena", brand: null },
+      { name: "Avena", brand: null },
+      { name: "Huevos", brand: null },
+    ]);
+
+    expect(products.map((p) => p.label)).toEqual(["Avena", "Huevos"]);
+  });
+
+  it("keeps different brands as separate products", () => {
+    const products = dedupeProducts([
+      { name: "Yogur griego", brand: "Hacendado" },
+      { name: "Yogur griego", brand: "Fage" },
+      { name: "Yogur griego", brand: "Hacendado" },
+    ]);
+
+    expect(products.map((p) => p.label)).toEqual([
+      "Yogur griego (Hacendado)",
+      "Yogur griego (Fage)",
+    ]);
+  });
+
+  it("dedupes case-insensitively and treats missing brand as null", () => {
+    const products = dedupeProducts([
+      { name: "avena" },
+      { name: "Avena", brand: null },
+    ]);
+
+    expect(products).toHaveLength(1);
+  });
+});
 
 describe("formatQuantity — rounds away float noise", () => {
   it("rounds 1.4999 to 1.5", () => {

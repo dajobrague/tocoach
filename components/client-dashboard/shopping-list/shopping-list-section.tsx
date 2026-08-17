@@ -8,8 +8,7 @@ import {
   SHOPPING_RANGE_OPTIONS,
   checkedStorageKey,
   computeRange,
-  formatItemLine,
-  itemKey,
+  dedupeProducts,
   type ShoppingRangeKey,
 } from "@/components/client-dashboard/shopping-list/shopping-list-helpers";
 import { useClientShoppingList } from "@/lib/hooks/use-client-queries";
@@ -102,10 +101,12 @@ function RangeTabs({
  * view — so the existing `/nutricion` flag swap shows the new list when
  * nutrition_v2 is on and the old one when off. Fetches
  * `GET /api/client/shopping-list?from=&to=` for the selected range (this week
- * by default; next week / a 2-week window), shows each merged item as
- * `name · qty unit`, and lets the client check items off. Check state is local
- * (localStorage, keyed per range) — no backend — and survives within the
- * session. Empty when there's no active cycle / nothing in range.
+ * by default; next week / a 2-week window) and shows PRODUCTS ONLY — no
+ * quantities or units, per the Jul 28 call decision ("el cliente ya sabrá
+ * cuánto comprar con la experiencia") — deduped across units, and lets the
+ * client check items off. Check state is local (localStorage, keyed per
+ * range) — no backend — and survives within the session. Empty when there's
+ * no active cycle / nothing in range.
  */
 export function ShoppingListSection() {
   const [rangeKey, setRangeKey] = useState<ShoppingRangeKey>("this-week");
@@ -141,7 +142,7 @@ export function ShoppingListSection() {
     });
   }
 
-  const items = data?.items ?? [];
+  const products = dedupeProducts(data?.items ?? []);
 
   return (
     <Card data-testid="shopping-list">
@@ -167,7 +168,7 @@ export function ShoppingListSection() {
           <p className="py-4 text-sm text-default-500">
             No pudimos cargar tu lista. Vuelve a intentarlo en un momento.
           </p>
-        ) : items.length === 0 ? (
+        ) : products.length === 0 ? (
           <p
             className="py-4 text-sm text-default-500"
             data-testid="shopping-empty"
@@ -176,19 +177,18 @@ export function ShoppingListSection() {
           </p>
         ) : (
           <div className="flex flex-col gap-1">
-            {items.map((item) => {
-              const key = itemKey(item);
-              const isChecked = checked.has(key);
+            {products.map((product) => {
+              const isChecked = checked.has(product.key);
 
               return (
                 <button
-                  key={key}
+                  key={product.key}
                   aria-pressed={isChecked}
                   className="flex items-center gap-2 rounded-lg bg-default-50 px-3 py-2.5 text-left transition-colors active:scale-[0.99]"
                   data-checked={isChecked}
                   data-testid="shopping-item"
                   type="button"
-                  onClick={() => toggle(key)}
+                  onClick={() => toggle(product.key)}
                 >
                   <Icon
                     className={isChecked ? "text-primary" : "text-default-300"}
@@ -206,7 +206,7 @@ export function ShoppingListSection() {
                         : "text-foreground"
                     }`}
                   >
-                    {formatItemLine(item)}
+                    {product.label}
                   </span>
                 </button>
               );
