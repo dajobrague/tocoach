@@ -267,6 +267,16 @@ export function fetchRecipe(recipeId: string): Promise<RecipeDetail> {
   return getData<RecipeDetail>(`/api/recipes/${recipeId}`);
 }
 
+/** Partial update of only the tags — how the folder view moves a recipe. */
+export function updateRecipeTags(
+  recipeId: string,
+  tags: string[]
+): Promise<RecipeDetail> {
+  return sendJson<RecipeDetail>(`/api/recipes/${recipeId}`, "PATCH", {
+    meal_type_tags: tags,
+  });
+}
+
 /** Soft-deletes (archives) a recipe so it leaves the library. */
 export async function deleteRecipe(recipeId: string): Promise<void> {
   const response = await fetch(`/api/recipes/${recipeId}`, {

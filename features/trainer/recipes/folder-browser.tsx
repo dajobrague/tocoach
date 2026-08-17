@@ -19,7 +19,8 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import {
   folderNodes,
@@ -29,17 +30,11 @@ import {
   recipesInFolder,
   untaggedRecipes,
 } from "./folder-tree";
+import { updateRecipeTags } from "./recipe-api";
 import { RecipeList } from "./recipe-list";
 import { useFolderMutations, useRecipeFolders } from "./use-folders";
 
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
-
-/** What the browser is currently showing. */
-type Location =
-  | { kind: "root" }
-  | { kind: "folder"; folderId: string }
-  | { kind: "tag"; tag: string }
-  | { kind: "untagged" };
 
 interface FolderBrowserProps {
   /** The full (non-archived) library; membership is computed client-side. */
@@ -52,12 +47,13 @@ interface FolderBrowserProps {
 }
 
 /**
- * Folder view of the recipe library (Jul 28 call, Pablo). Folders are tags
- * underneath: a recipe belongs by carrying the folder's tag, and only the
- * hierarchy lives in recipe_folders — so folders can nest freely while
- * recipes keep their portable tag list. Tags no folder claims render as
- * flat "loose" cards (promotable to real folders), and untagged recipes get
- * their own card so nothing ever disappears from this view.
+ * Drive-style folder view of the recipe library (Jul 28 call, Pablo).
+ * Folders are tags underneath: a recipe belongs by carrying the folder's
+ * tag, and only the hierarchy lives in recipe_folders — so folders nest
+ * freely while recipes keep their portable tag list. Every existing tag is
+ * auto-materialized into a folder (no manual promotion), untagged recipes
+ * live directly at the root like Drive files, and each recipe card offers
+ * "move to folder" without opening the editor.
  */
 export function FolderBrowser({
   recipes,
@@ -67,16 +63,82 @@ export function FolderBrowser({
   onDeleteRecipe,
   onCreateRecipe,
 }: FolderBrowserProps) {
+  const qc = useQueryClient();
   const foldersQuery = useRecipeFolders();
   const { createM, renameM, moveM, deleteM } = useFolderMutations();
-  const [location, setLocation] = useState<Location>({ kind: "root" });
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [nameModal, setNameModal] = useState<
     | { mode: "create"; parentId: string | null; initial: string }
     | { mode: "rename"; folderId: string; initial: string }
     | null
   >(null);
+  const [movingRecipe, setMovingRecipe] = useState<RecipeListItem | null>(null);
 
   const folders = foldersQuery.data ?? [];
+
+  // Every tag IS a folder: silently materialize folder rows for tags that
+  // don't have one yet (first visit after tagging in the editor, imports,
+  // pre-folders libraries). The unique index dedupes concurrent tabs; the
+  // ref stops re-attempts (and StrictMode double-runs) within this mount.
+  const materializedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (foldersQuery.data === undefined) return;
+    const missing = looseTags(recipes, foldersQuery.data).filter(
+      (entry) => materializedRef.current.has(entry.tag.toLowerCase()) === false
+    );
+
+    if (missing.length === 0) return;
+    for (const entry of missing) {
+      materializedRef.current.add(entry.tag.toLowerCase());
+    }
+
+    void (async () => {
+      for (const entry of missing) {
+        try {
+          await createM.mutateAsync({ name: entry.tag, parentId: null });
+        } catch {
+          // 409 (already created by another tab) or transient failure —
+          // the next folders refetch reconciles either way.
+        }
+      }
+    })();
+  }, [recipes, foldersQuery.data, createM]);
+
+  const moveRecipeM = useMutation({
+    mutationFn: (vars: {
+      recipe: RecipeListItem;
+      targetFolderId: string | null;
+    }) => {
+      const currentTag =
+        folderId !== null
+          ? (folders.find((folder) => folder.id === folderId)?.name ?? null)
+          : null;
+      const target =
+        vars.targetFolderId !== null
+          ? (folders.find((folder) => folder.id === vars.targetFolderId) ??
+            null)
+          : null;
+      const norm = (value: string) => value.trim().toLowerCase();
+      // Leave the folder being viewed; keep every other tag (a recipe can
+      // live in several folders at once, like Drive shortcuts).
+      const without = vars.recipe.meal_type_tags.filter(
+        (tag) => currentTag === null || norm(tag) !== norm(currentTag)
+      );
+      const next =
+        target === null
+          ? without
+          : without.some((tag) => norm(tag) === norm(target.name))
+            ? without
+            : [...without, target.name];
+
+      return updateRecipeTags(vars.recipe.id, next);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recipes"] });
+      setMovingRecipe(null);
+    },
+  });
 
   if (isLoading || foldersQuery.isLoading) {
     return (
@@ -95,42 +157,19 @@ export function FolderBrowser({
   }
 
   const currentFolder =
-    location.kind === "folder"
-      ? (folders.find((folder) => folder.id === location.folderId) ?? null)
+    folderId !== null
+      ? (folders.find((folder) => folder.id === folderId) ?? null)
       : null;
   // A folder deleted elsewhere while open falls back to the root.
-  const effective: Location =
-    location.kind === "folder" && currentFolder === null
-      ? { kind: "root" }
-      : location;
+  const effectiveId = currentFolder?.id ?? null;
 
-  const nodes =
-    effective.kind === "root"
-      ? folderNodes(folders, recipes, null)
-      : effective.kind === "folder"
-        ? folderNodes(folders, recipes, effective.folderId)
-        : [];
-  const loose = effective.kind === "root" ? looseTags(recipes, folders) : [];
-  const untagged = effective.kind === "root" ? untaggedRecipes(recipes) : [];
-
+  const nodes = folderNodes(folders, recipes, effectiveId);
   const shownRecipes =
-    effective.kind === "folder" && currentFolder !== null
+    currentFolder !== null
       ? recipesInFolder(recipes, currentFolder)
-      : effective.kind === "tag"
-        ? recipes.filter((recipe) =>
-            recipe.meal_type_tags.some(
-              (tag) =>
-                tag.trim().toLowerCase() === effective.tag.trim().toLowerCase()
-            )
-          )
-        : effective.kind === "untagged"
-          ? untaggedRecipes(recipes)
-          : [];
-
+      : untaggedRecipes(recipes);
   const breadcrumb =
-    effective.kind === "folder" && currentFolder !== null
-      ? folderPath(folders, currentFolder.id)
-      : [];
+    currentFolder !== null ? folderPath(folders, currentFolder.id) : [];
 
   const submitName = (name: string) => {
     if (nameModal === null) return;
@@ -148,41 +187,26 @@ export function FolderBrowser({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Breadcrumb
           path={breadcrumb}
-          virtualLabel={
-            effective.kind === "tag"
-              ? effective.tag
-              : effective.kind === "untagged"
-                ? "Sin clasificar"
-                : null
-          }
-          onNavigate={(folderId) =>
-            setLocation(
-              folderId === null
-                ? { kind: "root" }
-                : { kind: "folder", folderId }
-            )
-          }
+          onNavigate={(target) => setFolderId(target)}
         />
 
-        {(effective.kind === "root" || effective.kind === "folder") && (
-          <Button
-            size="sm"
-            startContent={<Icon icon="solar:add-folder-linear" width={16} />}
-            variant="bordered"
-            onPress={() =>
-              setNameModal({
-                mode: "create",
-                parentId: currentFolder?.id ?? null,
-                initial: "",
-              })
-            }
-          >
-            Nueva carpeta
-          </Button>
-        )}
+        <Button
+          size="sm"
+          startContent={<Icon icon="solar:add-folder-linear" width={16} />}
+          variant="bordered"
+          onPress={() =>
+            setNameModal({
+              mode: "create",
+              parentId: effectiveId,
+              initial: "",
+            })
+          }
+        >
+          Nueva carpeta
+        </Button>
       </div>
 
-      {(nodes.length > 0 || loose.length > 0 || untagged.length > 0) && (
+      {nodes.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {nodes.map((node) => (
             <FolderCard
@@ -191,7 +215,7 @@ export function FolderBrowser({
               node={node}
               onDelete={() => {
                 confirmAfterPress(
-                  `¿Eliminar la carpeta "${node.folder.name}"? Las recetas conservan su etiqueta y las subcarpetas pasan a la raíz.`
+                  `¿Eliminar la carpeta "${node.folder.name}"? Las recetas pasan a la raíz (o a sus otras carpetas) y las subcarpetas suben a la raíz.`
                 ).then((confirmed) => {
                   if (confirmed) deleteM.mutate(node.folder.id);
                 });
@@ -199,9 +223,7 @@ export function FolderBrowser({
               onMove={(parentId) =>
                 moveM.mutate({ folderId: node.folder.id, parentId })
               }
-              onOpen={() =>
-                setLocation({ kind: "folder", folderId: node.folder.id })
-              }
+              onOpen={() => setFolderId(node.folder.id)}
               onRename={() =>
                 setNameModal({
                   mode: "rename",
@@ -211,71 +233,42 @@ export function FolderBrowser({
               }
             />
           ))}
-
-          {loose.map((entry) => (
-            <LooseTagCard
-              key={entry.tag}
-              count={entry.count}
-              tag={entry.tag}
-              onOpen={() => setLocation({ kind: "tag", tag: entry.tag })}
-              onPromote={() =>
-                createM.mutate({ name: entry.tag, parentId: null })
-              }
-            />
-          ))}
-
-          {untagged.length > 0 && (
-            <button
-              className="flex items-center gap-3 rounded-large border border-dashed border-gray-300 bg-white p-3 text-left transition-colors hover:border-gray-400"
-              type="button"
-              onClick={() => setLocation({ kind: "untagged" })}
-            >
-              <Icon
-                className="shrink-0 text-default-300"
-                icon="solar:folder-error-linear"
-                width={22}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-gray-900">
-                  Sin clasificar
-                </span>
-                <span className="block text-xs text-default-500">
-                  {untagged.length}{" "}
-                  {untagged.length === 1 ? "receta" : "recetas"}
-                </span>
-              </span>
-            </button>
-          )}
         </div>
       )}
 
-      {effective.kind === "root" &&
-        nodes.length === 0 &&
-        loose.length === 0 &&
-        untagged.length === 0 && (
-          <div className="flex flex-col items-center gap-2 rounded-large border border-dashed border-gray-200 bg-gray-50/60 py-10 text-center">
-            <Icon
-              className="text-default-300"
-              icon="solar:folder-open-linear"
-              width={28}
-            />
-            <p className="max-w-sm text-sm text-default-500">
-              Crea tu primera carpeta o añade etiquetas a tus recetas para
-              organizarlas aquí.
-            </p>
-          </div>
-        )}
-
-      {effective.kind !== "root" && (
+      {shownRecipes.length > 0 ? (
         <RecipeList
           isError={false}
           isLoading={false}
           recipes={shownRecipes}
           onCreate={onCreateRecipe}
           onDelete={onDeleteRecipe}
+          onMove={setMovingRecipe}
           onOpen={onOpenRecipe}
         />
-      )}
+      ) : nodes.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-large border border-dashed border-gray-200 bg-gray-50/60 py-12 text-center">
+          <Icon
+            className="text-default-300"
+            icon="solar:folder-open-linear"
+            width={30}
+          />
+          <p className="max-w-sm text-sm text-default-500">
+            {currentFolder !== null
+              ? "Esta carpeta está vacía. Mueve recetas aquí desde sus tarjetas o crea una nueva."
+              : "Crea tu primera receta o una carpeta para empezar a organizar."}
+          </p>
+          <Button
+            className="bg-black text-white"
+            color="primary"
+            size="sm"
+            startContent={<Icon icon="solar:add-circle-bold" width={16} />}
+            onPress={onCreateRecipe}
+          >
+            Nueva receta
+          </Button>
+        </div>
+      ) : null}
 
       <FolderNameModal
         error={
@@ -289,31 +282,42 @@ export function FolderBrowser({
         onClose={() => setNameModal(null)}
         onSave={submitName}
       />
+
+      <MoveRecipeModal
+        currentFolderId={effectiveId}
+        folders={folders}
+        moving={moveRecipeM.isPending}
+        recipe={movingRecipe}
+        onClose={() => setMovingRecipe(null)}
+        onMove={(targetFolderId) => {
+          if (movingRecipe !== null) {
+            moveRecipeM.mutate({ recipe: movingRecipe, targetFolderId });
+          }
+        }}
+      />
     </div>
   );
 }
 
 function Breadcrumb({
   path,
-  virtualLabel,
   onNavigate,
 }: {
   path: RecipeFolder[];
-  virtualLabel: string | null;
   onNavigate: (folderId: string | null) => void;
 }) {
   return (
     <nav className="flex flex-wrap items-center gap-1 text-sm">
       <button
         className={
-          path.length === 0 && virtualLabel === null
+          path.length === 0
             ? "font-semibold text-gray-900"
             : "text-default-500 hover:text-gray-900"
         }
         type="button"
         onClick={() => onNavigate(null)}
       >
-        Carpetas
+        Mis recetas
       </button>
       {path.map((folder, index) => (
         <span key={folder.id} className="flex items-center gap-1">
@@ -335,16 +339,6 @@ function Breadcrumb({
           </button>
         </span>
       ))}
-      {virtualLabel !== null && (
-        <span className="flex items-center gap-1">
-          <Icon
-            className="text-default-300"
-            icon="solar:alt-arrow-right-linear"
-            width={13}
-          />
-          <span className="font-semibold text-gray-900">{virtualLabel}</span>
-        </span>
-      )}
     </nav>
   );
 }
@@ -368,7 +362,7 @@ function FolderCard({
   const subfolders = node.children.length;
 
   return (
-    <div className="group flex items-center gap-3 rounded-large border border-gray-200 bg-white p-3 shadow-sm transition-colors hover:border-gray-300">
+    <div className="group flex items-center gap-3 rounded-large border border-gray-200 bg-white p-3 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50/60">
       <button
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
         type="button"
@@ -431,7 +425,7 @@ function FolderCard({
                     <Icon icon="solar:folder-open-linear" width={15} />
                   }
                 >
-                  Raíz
+                  Mis recetas (raíz)
                 </DropdownItem>
               )}
               {targets.map((target) => (
@@ -460,47 +454,92 @@ function FolderCard({
   );
 }
 
-function LooseTagCard({
-  tag,
-  count,
-  onOpen,
-  onPromote,
+function MoveRecipeModal({
+  recipe,
+  folders,
+  currentFolderId,
+  moving,
+  onClose,
+  onMove,
 }: {
-  tag: string;
-  count: number;
-  onOpen: () => void;
-  onPromote: () => void;
+  recipe: RecipeListItem | null;
+  folders: RecipeFolder[];
+  currentFolderId: string | null;
+  moving: boolean;
+  onClose: () => void;
+  onMove: (targetFolderId: string | null) => void;
 }) {
+  // Full paths ("Desayunos / Dulces") so nested folders are unambiguous.
+  const options = folders
+    .filter((folder) => folder.id !== currentFolderId)
+    .map((folder) => ({
+      id: folder.id,
+      label: folderPath(folders, folder.id)
+        .map((step) => step.name)
+        .join(" / "),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return (
-    <div className="group flex items-center gap-3 rounded-large border border-gray-200 bg-gray-50/50 p-3 transition-colors hover:border-gray-300">
-      <button
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        type="button"
-        onClick={onOpen}
-      >
-        <Icon
-          className="shrink-0 text-default-400"
-          icon="solar:tag-linear"
-          width={20}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-gray-900">
-            {tag}
+    <Modal
+      isDismissable={moving === false}
+      isOpen={recipe !== null}
+      placement="center"
+      scrollBehavior="inside"
+      size="sm"
+      onClose={onClose}
+    >
+      <ModalContent>
+        <ModalHeader className="flex items-center gap-2">
+          <Icon
+            className="text-amber-500"
+            icon="solar:folder-bold"
+            width={20}
+          />
+          <span className="min-w-0">
+            <span className="block truncate">Mover “{recipe?.name}”</span>
           </span>
-          <span className="block text-xs text-default-500">
-            {count} {count === 1 ? "receta" : "recetas"} · etiqueta
-          </span>
-        </span>
-      </button>
-      <button
-        className="shrink-0 text-[11px] font-medium text-blue-600 opacity-0 transition-opacity group-hover:opacity-100 hover:text-blue-700"
-        title="Crear una carpeta con esta etiqueta para poder anidarla y gestionarla"
-        type="button"
-        onClick={onPromote}
-      >
-        Hacer carpeta
-      </button>
-    </div>
+        </ModalHeader>
+        <ModalBody className="gap-1 pb-4">
+          {currentFolderId !== null && (
+            <button
+              className="flex items-center gap-2.5 rounded-medium border border-gray-200 px-3 py-2.5 text-left text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              disabled={moving}
+              type="button"
+              onClick={() => onMove(null)}
+            >
+              <Icon
+                className="text-default-400"
+                icon="solar:folder-open-linear"
+                width={17}
+              />
+              Mis recetas (raíz)
+            </button>
+          )}
+          {options.map((option) => (
+            <button
+              key={option.id}
+              className="flex items-center gap-2.5 rounded-medium border border-gray-200 px-3 py-2.5 text-left text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              disabled={moving}
+              type="button"
+              onClick={() => onMove(option.id)}
+            >
+              <Icon
+                className="text-amber-500"
+                icon="solar:folder-bold"
+                width={17}
+              />
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+            </button>
+          ))}
+          {options.length === 0 && currentFolderId === null && (
+            <p className="py-4 text-center text-sm text-default-500">
+              Crea una carpeta primero para poder mover recetas.
+            </p>
+          )}
+        </ModalBody>
+      </ModalContent>
+    </Modal>
   );
 }
 
