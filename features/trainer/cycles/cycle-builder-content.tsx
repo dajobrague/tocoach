@@ -312,7 +312,7 @@ export function CycleBuilderContent({
                 assignedPresetId={assignedPresetId}
                 day={day}
                 dayName={(tree.day_names ?? {})[String(day.dayIndex)] ?? null}
-                disabled={disabled === true}
+                disabled={disabled === true || mutations.makePrimaryM.isPending}
                 presets={presetList}
                 targets={dayTargets}
                 onAddAlternative={(slotId, groupIndex) =>
@@ -348,6 +348,9 @@ export function CycleBuilderContent({
                 onDuplicateDay={() => setDayCopyMode("duplicate")}
                 onEditPortions={(slotId, option) =>
                   setEditing({ slotId, option })
+                }
+                onMakePrimary={(slotId, orderedOptionIds) =>
+                  mutations.makePrimaryM.mutate({ slotId, orderedOptionIds })
                 }
                 onRelabelSlot={(slotId, label) =>
                   mutations.updateSlotM.mutate({ slotId, patch: { label } })

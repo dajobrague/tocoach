@@ -435,6 +435,22 @@ export function updateOptionPortions(
   );
 }
 
+/** Move an option within its slot. Options are historically all inserted at
+ *  position 0 (ties broken by insert order), so promoting an alternative to
+ *  primary renumbers its whole component with explicit positions. */
+export function updateOptionPosition(
+  cycleId: string,
+  slotId: string,
+  optionId: string,
+  position: number
+): Promise<SlotOption> {
+  return sendJson<SlotOption>(
+    `${BASE}/${cycleId}/slots/${slotId}/options/${optionId}`,
+    "PATCH",
+    { position }
+  );
+}
+
 /** One line of a per-client ingredient rewrite: keep an existing snapshot line
  *  (by index, possibly re-portioned) or add a raw food (grams). Lines not
  *  listed are removed. */
