@@ -339,3 +339,32 @@ export function useClientSnapshot(
     },
   });
 }
+
+/**
+ * Snapshot for the weight-history modal: same pipeline as useClientSnapshot
+ * plus `ensure=weight`, which appends a synthetic weight chart when the
+ * client's configured charts lack one. Separate cache key on purpose — the
+ * synthetic entry must never leak into the regular charts surfaces.
+ */
+export function useWeightHistorySnapshot(
+  clientId: number | string,
+  range: ChartRange = "90d"
+) {
+  return useQuery({
+    queryKey: ["charts", "weight-history", String(clientId), range],
+    queryFn: () => {
+      let tz = "UTC";
+
+      try {
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      } catch {
+        // browsers muy viejos sin Intl — fallback a UTC.
+      }
+
+      return apiGet<SnapshotData>(
+        `/api/charts/clients/${clientId}/snapshot?range=${range}&tz=${encodeURIComponent(tz)}&as=trainer&ensure=weight`
+      );
+    },
+    enabled: clientId !== "" && clientId !== 0,
+  });
+}

@@ -49,6 +49,37 @@ import {
 } from "@/lib/forms/types";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
 
+// Same aliases the analytics layer accepts for the weight question.
+const WEIGHT_QUESTION_IDS = new Set([
+  "body_weight",
+  "weight",
+  "peso",
+  "peso_corporal",
+]);
+
+function hasWeightChart(charts: ChartConfig[]): boolean {
+  return charts.some(
+    (chart) =>
+      chart.source.kind === "form_question" &&
+      WEIGHT_QUESTION_IDS.has(chart.source.question_id)
+  );
+}
+
+// Mirrors the starter PESO chart; served only under ?ensure=weight.
+const SYNTHETIC_WEIGHT_CHART: ChartConfig = {
+  id: "synthetic-weight-history",
+  position: 999,
+  label: "PESO",
+  source: {
+    kind: "form_question",
+    form_type: "checkins",
+    question_id: "body_weight",
+  },
+  chart_type: "area",
+  color: "weight-amber",
+  aggregation: "checkin_period",
+};
+
 // Accepts the legacy 5-key client period selector (7d / 30d / 3m / 6m / 12m)
 // plus the trainer-side 90d shortcut. Anything unknown defaults to 30d.
 const RANGE_DAYS: Record<string, number> = {
@@ -480,7 +511,23 @@ export async function GET(
       auth.actor.kind,
       new URL(request.url).searchParams
     );
-    const visibleCharts = filterChartsForAudience(resolvableCharts, audience);
+    let visibleCharts = filterChartsForAudience(resolvableCharts, audience);
+
+    // Opt-in synthetic weight chart (?ensure=weight, trainer preview only):
+    // surfaces like the goals-tab weight-history modal must always be able
+    // to plot weight even when the client's configured charts don't include
+    // it. The synthetic entry exists only in responses that asked for it, so
+    // the regular charts surfaces never render it.
+    if (
+      new URL(request.url).searchParams.get("ensure") === "weight" &&
+      audience === "trainer" &&
+      hasWeightChart(visibleCharts.charts) === false
+    ) {
+      visibleCharts = {
+        ...visibleCharts,
+        charts: [...visibleCharts.charts, SYNTHETIC_WEIGHT_CHART],
+      };
+    }
 
     const buckets: Record<
       string,

@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ChartCard } from "@/components/charts";
-import { useClientSnapshot, type ChartRange } from "@/lib/charts/hooks";
+import { useWeightHistorySnapshot, type ChartRange } from "@/lib/charts/hooks";
 
 const RANGES: { key: ChartRange; label: string }[] = [
   { key: "30d", label: "30 días" },
@@ -91,7 +91,10 @@ function WeightChart({
   clientId: number;
   range: ChartRange;
 }) {
-  const { data, isLoading, isError } = useClientSnapshot(clientId, range);
+  const { data, isLoading, isError } = useWeightHistorySnapshot(
+    clientId,
+    range
+  );
 
   if (isLoading) {
     return (
