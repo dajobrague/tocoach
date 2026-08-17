@@ -15,6 +15,7 @@ import { DeleteRecipeModal } from "./delete-recipe-modal";
 import { NewRecipeModal } from "./new-recipe-modal";
 import { RecipeFilters } from "./recipe-filters";
 import { RecipeList } from "./recipe-list";
+import { distinctMealTypes } from "./recipe-query";
 import { useRecipes } from "./use-recipes";
 
 const IMPORT_PATH = "/trainer/dashboard/recipes/import";
@@ -23,6 +24,7 @@ export function RecipeLibraryContent() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"" | RecipeStatus>("");
+  const [mealType, setMealType] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [toDelete, setToDelete] = useState<RecipeListItem | null>(null);
 
@@ -32,11 +34,19 @@ export function RecipeLibraryContent() {
 
     if (trimmed.length > 0) value.query = trimmed;
     if (status !== "") value.status = status;
+    if (mealType.length > 0) value.mealType = mealType;
 
     return value;
-  }, [query, status]);
+  }, [query, status, mealType]);
 
   const { data, isLoading, isError } = useRecipes(filters);
+  // Unfiltered library (cache-shared with the initial page load) so the tag
+  // dropdown keeps offering every tag while a filter narrows the list.
+  const allRecipes = useRecipes({});
+  const mealTypeOptions = useMemo(
+    () => distinctMealTypes(allRecipes.data ?? [], mealType),
+    [allRecipes.data, mealType]
+  );
   // Archived = soft-deleted; hide them unless the trainer explicitly filters by
   // status (they remain reachable via the "Archivada" filter option).
   const recipes = useMemo(
@@ -89,8 +99,11 @@ export function RecipeLibraryContent() {
         </div>
 
         <RecipeFilters
+          mealType={mealType}
+          mealTypeOptions={mealTypeOptions}
           query={query}
           status={status}
+          onMealTypeChange={setMealType}
           onQueryChange={setQuery}
           onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
         />

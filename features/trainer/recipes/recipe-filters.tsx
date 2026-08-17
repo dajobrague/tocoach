@@ -12,8 +12,12 @@ const STATUS_OPTIONS: RecipeStatus[] = ["active", "draft", "archived"];
 interface RecipeFiltersProps {
   query: string;
   status: string;
+  mealType: string;
+  /** Distinct tags across the library to offer as filter options. */
+  mealTypeOptions: string[];
   onQueryChange: (value: string) => void;
   onStatusChange: (value: string) => void;
+  onMealTypeChange: (value: string) => void;
 }
 
 /** Read the single selected key from a HeroUI Selection set (or ""). */
@@ -27,8 +31,11 @@ function firstKey(keys: Selection): string {
 export function RecipeFilters({
   query,
   status,
+  mealType,
+  mealTypeOptions,
   onQueryChange,
   onStatusChange,
+  onMealTypeChange,
 }: RecipeFiltersProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -68,6 +75,28 @@ export function RecipeFilters({
           <SelectItem key={option}>{statusLabel(option)}</SelectItem>
         ))}
       </Select>
+
+      {mealTypeOptions.length > 0 && (
+        <Select
+          aria-label="Filtrar por etiqueta"
+          className="sm:max-w-[200px]"
+          placeholder="Todas las etiquetas"
+          selectedKeys={mealType.length > 0 ? [mealType] : []}
+          startContent={
+            <Icon
+              className="text-default-400"
+              icon="solar:tag-linear"
+              width={16}
+            />
+          }
+          variant="bordered"
+          onSelectionChange={(keys) => onMealTypeChange(firstKey(keys))}
+        >
+          {mealTypeOptions.map((option) => (
+            <SelectItem key={option}>{option}</SelectItem>
+          ))}
+        </Select>
+      )}
     </div>
   );
 }

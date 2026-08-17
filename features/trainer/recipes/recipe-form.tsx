@@ -32,10 +32,13 @@ import {
   ingredientsEqual,
   previewTotals,
 } from "./recipe-draft";
+import { distinctMealTypes } from "./recipe-query";
 import { RecipePreviewModal } from "./recipe-preview-modal";
 import { RecipeSummaryStrip } from "./recipe-summary-strip";
+import { TagsField } from "./tags-field";
 import { UnsavedChangesModal } from "./unsaved-changes-modal";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
+import { useRecipes } from "./use-recipes";
 import {
   useCreateRecipe,
   useRemoveMedia,
@@ -167,6 +170,8 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
   const recipeQuery = useRecipe(recipeId);
   const ingredientsQuery = useRecipeIngredients(recipeId);
   const mediaQuery = useRecipeMedia(recipeId);
+  // Full library, only to suggest existing tags in the tag editor.
+  const libraryQuery = useRecipes({});
 
   const update = useUpdateRecipe(recipeId);
   const replaceIngredients = useReplaceIngredients(recipeId);
@@ -367,6 +372,15 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
                 disabled={busy}
                 values={values}
                 onChange={setValues}
+              />
+
+              <TagsField
+                disabled={busy}
+                suggestions={distinctMealTypes(libraryQuery.data ?? [])}
+                value={values.mealTypeTags}
+                onChange={(tags) =>
+                  setValues({ ...values, mealTypeTags: tags })
+                }
               />
             </SectionCard>
 
