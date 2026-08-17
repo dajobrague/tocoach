@@ -13,10 +13,10 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { basalMetabolicRate, isValidBmrInput } from "./bmr";
+import { WeightHistoryModal } from "./weight-history-modal";
 
 function formatShortDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
@@ -101,6 +101,7 @@ export function BmrCalculator({
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [seeded, setSeeded] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     const data = profileQuery.data;
@@ -308,13 +309,14 @@ export function BmrCalculator({
                       : "Guardar datos del cliente"}
                   </button>
                 )}
-                <Link
+                <button
                   className="flex items-center gap-1 text-[11px] font-medium text-default-500 hover:text-gray-900"
-                  href={`/trainer/dashboard/clients/${clientId}/charts`}
+                  type="button"
+                  onClick={() => setHistoryOpen(true)}
                 >
                   <Icon icon="solar:graph-up-linear" width={13} />
                   Ver evolución del peso
-                </Link>
+                </button>
               </div>
               {saveProfile.isError && (
                 <span className="text-[11px] text-danger">
@@ -325,6 +327,12 @@ export function BmrCalculator({
           </>
         )}
       </CardBody>
+
+      <WeightHistoryModal
+        clientId={clientId}
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
     </Card>
   );
 }
