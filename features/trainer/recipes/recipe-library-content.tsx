@@ -12,11 +12,28 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { DeleteRecipeModal } from "./delete-recipe-modal";
+import { FolderBrowser } from "./folder-browser";
 import { NewRecipeModal } from "./new-recipe-modal";
 import { RecipeFilters } from "./recipe-filters";
 import { RecipeList } from "./recipe-list";
 import { distinctMealTypes } from "./recipe-query";
 import { useRecipes } from "./use-recipes";
+
+const VIEW_STORAGE_KEY = "topcoach.recipes.view";
+
+type LibraryView = "folders" | "list";
+
+function initialView(): LibraryView {
+  if (typeof window === "undefined") return "folders";
+
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === "list"
+      ? "list"
+      : "folders";
+  } catch {
+    return "folders";
+  }
+}
 
 const IMPORT_PATH = "/trainer/dashboard/recipes/import";
 
@@ -27,6 +44,18 @@ export function RecipeLibraryContent() {
   const [mealType, setMealType] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [toDelete, setToDelete] = useState<RecipeListItem | null>(null);
+  // Folder vs list view, remembered per browser (Jul 28 call: each trainer
+  // picks how they want to see their library).
+  const [view, setView] = useState<LibraryView>(initialView);
+
+  const changeView = (next: LibraryView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // Private mode — the preference just won't persist.
+    }
+  };
 
   const filters = useMemo<RecipeFilterValues>(() => {
     const value: RecipeFilterValues = {};
@@ -98,24 +127,73 @@ export function RecipeLibraryContent() {
           </div>
         </div>
 
-        <RecipeFilters
-          mealType={mealType}
-          mealTypeOptions={mealTypeOptions}
-          query={query}
-          status={status}
-          onMealTypeChange={setMealType}
-          onQueryChange={setQuery}
-          onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex shrink-0 items-center gap-1 self-start rounded-large bg-gray-100 p-1">
+            <button
+              className={
+                view === "folders"
+                  ? "flex items-center gap-1.5 rounded-medium bg-white px-3 py-1.5 text-xs font-medium text-gray-900 shadow-sm"
+                  : "flex items-center gap-1.5 rounded-medium px-3 py-1.5 text-xs font-medium text-default-500 hover:text-gray-900"
+              }
+              type="button"
+              onClick={() => changeView("folders")}
+            >
+              <Icon icon="solar:folder-linear" width={14} />
+              Carpetas
+            </button>
+            <button
+              className={
+                view === "list"
+                  ? "flex items-center gap-1.5 rounded-medium bg-white px-3 py-1.5 text-xs font-medium text-gray-900 shadow-sm"
+                  : "flex items-center gap-1.5 rounded-medium px-3 py-1.5 text-xs font-medium text-default-500 hover:text-gray-900"
+              }
+              type="button"
+              onClick={() => changeView("list")}
+            >
+              <Icon icon="solar:list-linear" width={14} />
+              Lista
+            </button>
+          </div>
 
-        <RecipeList
-          isError={isError}
-          isLoading={isLoading}
-          recipes={recipes}
-          onCreate={() => setNewOpen(true)}
-          onDelete={setToDelete}
-          onOpen={(id) => router.push(`/trainer/dashboard/recipes/${id}/edit`)}
-        />
+          <div className="flex-1">
+            <RecipeFilters
+              mealType={mealType}
+              mealTypeOptions={mealTypeOptions}
+              query={query}
+              showSelects={view === "list"}
+              status={status}
+              onMealTypeChange={setMealType}
+              onQueryChange={setQuery}
+              onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
+            />
+          </div>
+        </div>
+
+        {view === "folders" && query.trim().length === 0 ? (
+          <FolderBrowser
+            isError={allRecipes.isError}
+            isLoading={allRecipes.isLoading}
+            recipes={(allRecipes.data ?? []).filter(
+              (recipe) => recipe.status !== "archived"
+            )}
+            onCreateRecipe={() => setNewOpen(true)}
+            onDeleteRecipe={setToDelete}
+            onOpenRecipe={(id) =>
+              router.push(`/trainer/dashboard/recipes/${id}/edit`)
+            }
+          />
+        ) : (
+          <RecipeList
+            isError={isError}
+            isLoading={isLoading}
+            recipes={recipes}
+            onCreate={() => setNewOpen(true)}
+            onDelete={setToDelete}
+            onOpen={(id) =>
+              router.push(`/trainer/dashboard/recipes/${id}/edit`)
+            }
+          />
+        )}
       </div>
 
       <NewRecipeModal isOpen={newOpen} onClose={() => setNewOpen(false)} />
