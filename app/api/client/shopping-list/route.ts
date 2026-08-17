@@ -133,37 +133,67 @@ async function attachImages(
       .from("ingredients")
       .select("name, brand, image_url")
       .eq("tenant_host", tenantHost)
-      .in("name", names)
-      .not("image_url", "is", null);
+      .in("name", names);
 
     const byKey = new Map<string, string>();
     // Snapshot lines often carry no brand while the cache row does (OFF
     // products), so an exact (name, brand) miss falls back to any cached
-    // image under the same name.
-    const byName = new Map<string, string>();
+    // row under the same name — recovering the photo AND the brand from
+    // that row, so the list can display "Quaker" even though the frozen
+    // line never stored it. A row with a photo beats one without.
+    const byName = new Map<
+      string,
+      { url: string | null; brand: string | null }
+    >();
 
     for (const row of (data ?? []) as {
       name: string | null;
       brand: string | null;
       image_url: string | null;
     }[]) {
-      const url = row.image_url;
+      const url =
+        typeof row.image_url === "string" && row.image_url.length > 0
+          ? row.image_url
+          : null;
+      const brand = (row.brand?.trim() ?? "").length > 0 ? row.brand : null;
 
-      if (typeof url !== "string" || url.length === 0) continue;
-      const key = imageKey(row.name ?? "", row.brand);
+      if (url === null && brand === null) continue;
       const nameKey = `${row.name ?? ""}`.trim().toLowerCase();
 
-      if (byKey.has(key) === false) byKey.set(key, url);
-      if (byName.has(nameKey) === false) byName.set(nameKey, url);
+      if (url !== null) {
+        const key = imageKey(row.name ?? "", row.brand);
+
+        if (byKey.has(key) === false) byKey.set(key, url);
+      }
+
+      const existing = byName.get(nameKey);
+
+      if (existing === undefined) {
+        byName.set(nameKey, { url, brand });
+      } else if (existing.url === null && url !== null) {
+        byName.set(nameKey, { url, brand: existing.brand ?? brand });
+      }
     }
 
-    return items.map((item) => ({
-      ...item,
-      imageUrl:
-        byKey.get(imageKey(item.name, item.brand)) ??
-        byName.get(item.name.trim().toLowerCase()) ??
-        null,
-    }));
+    return items.map((item) => {
+      const exact = byKey.get(imageKey(item.name, item.brand));
+
+      if (exact !== undefined) {
+        return { ...item, imageUrl: exact };
+      }
+
+      const fallback = byName.get(item.name.trim().toLowerCase());
+
+      if (fallback === undefined) {
+        return { ...item, imageUrl: null };
+      }
+
+      return {
+        ...item,
+        imageUrl: fallback.url,
+        brand: item.brand ?? fallback.brand,
+      };
+    });
   } catch {
     return items;
   }
