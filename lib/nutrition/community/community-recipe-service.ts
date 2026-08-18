@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { randomUUID } from "node:crypto";
+
+import {
+  RECIPE_MEDIA_BUCKET,
+  storagePathFromUrl,
+} from "@/lib/nutrition/recipes/recipe-media-service";
 import {
   RecipeService,
   type RecipeRow,
@@ -92,11 +98,24 @@ export class CommunityRecipeService {
       return false;
     }
 
-    const [ingredients, media, sharedBy] = await Promise.all([
+    const [ingredients, sourceMedia, sharedBy] = await Promise.all([
       this.loadIngredients(recipeId),
       this.loadMedia(recipeId),
       this.tenantName(tenantHost),
     ]);
+
+    // Own the bytes: copy each media object into the community area of the
+    // (shared) bucket, so the catalog survives the sharer deleting or
+    // changing their originals. Refresh replaces the previous copies.
+    const communityPrefix = `community/${tenantHost}/${recipeId}`;
+
+    await this.removeStoragePrefix(communityPrefix);
+    const media = await Promise.all(
+      sourceMedia.map(async (item) => ({
+        ...item,
+        url: (await this.copyObject(item.url, communityPrefix)) ?? item.url,
+      }))
+    );
 
     const { error } = await this.client.from(COMMUNITY_TABLE).upsert(
       {
@@ -131,7 +150,8 @@ export class CommunityRecipeService {
     return true;
   }
 
-  /** Remove the tenant's share. Imported copies elsewhere are untouched. */
+  /** Remove the tenant's share. Imported copies elsewhere are untouched
+   *  (imports copy the media bytes again into their own storage). */
   async unshare(tenantHost: string, recipeId: string): Promise<boolean> {
     const { data, error } = await this.client
       .from(COMMUNITY_TABLE)
@@ -146,7 +166,14 @@ export class CommunityRecipeService {
       );
     }
 
-    return (data ?? []).length > 0;
+    if ((data ?? []).length === 0) {
+      return false;
+    }
+
+    // Best-effort cleanup of the community media copies.
+    await this.removeStoragePrefix(`community/${tenantHost}/${recipeId}`);
+
+    return true;
   }
 
   /** Whether (and when) the tenant's recipe is currently shared. */
@@ -308,11 +335,19 @@ export class CommunityRecipeService {
       }
     }
 
+    // Own the bytes on this side too: each media object is copied into the
+    // importer's own storage path, so the copy survives the community row
+    // (and its files) disappearing later. A failed copy falls back to the
+    // community URL — a degraded photo, never a failed import.
+    const targetPrefix = `${targetTenantHost}/recipes/${recipe.id}`;
+
     for (const item of source.media ?? []) {
+      const ownedUrl =
+        (await this.copyObject(item.url, targetPrefix)) ?? item.url;
       const { error: mediaError } = await this.client.from(MEDIA_TABLE).insert({
         recipe_id: recipe.id,
         type: item.type,
-        url: item.url,
+        url: ownedUrl,
         orientation: item.orientation,
         sort_order: item.sort_order,
       });
@@ -325,6 +360,61 @@ export class CommunityRecipeService {
     }
 
     return recipe;
+  }
+
+  /**
+   * Server-side storage copy (same bucket, no download/re-upload): returns
+   * the new object's public URL, or null when the source is missing or the
+   * URL isn't a bucket object — callers fall back to the original URL.
+   */
+  private async copyObject(
+    url: string,
+    targetPrefix: string
+  ): Promise<string | null> {
+    const sourcePath = storagePathFromUrl(url);
+
+    if (sourcePath === null) {
+      return null;
+    }
+
+    const extension = sourcePath.includes(".")
+      ? sourcePath.slice(sourcePath.lastIndexOf("."))
+      : "";
+    const targetPath = `${targetPrefix}/${randomUUID()}${extension}`;
+
+    const { error } = await this.client.storage
+      .from(RECIPE_MEDIA_BUCKET)
+      .copy(sourcePath, targetPath);
+
+    if (error !== null) {
+      console.warn(
+        `[CommunityRecipes] media copy skipped (${sourcePath}): ${error.message}`
+      );
+
+      return null;
+    }
+
+    const {
+      data: { publicUrl },
+    } = this.client.storage.from(RECIPE_MEDIA_BUCKET).getPublicUrl(targetPath);
+
+    return publicUrl;
+  }
+
+  /** Best-effort removal of every object under a storage prefix. */
+  private async removeStoragePrefix(prefix: string): Promise<void> {
+    try {
+      const { data } = await this.client.storage
+        .from(RECIPE_MEDIA_BUCKET)
+        .list(prefix, { limit: 100 });
+      const names = (data ?? []).map((entry) => `${prefix}/${entry.name}`);
+
+      if (names.length > 0) {
+        await this.client.storage.from(RECIPE_MEDIA_BUCKET).remove(names);
+      }
+    } catch {
+      // Cleanup only — never block share/unshare on a storage hiccup.
+    }
   }
 
   private async loadIngredients(recipeId: string): Promise<FrozenIngredient[]> {
