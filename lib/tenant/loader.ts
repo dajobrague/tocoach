@@ -249,6 +249,10 @@ export async function getWhitelistedDomains(): Promise<string[]> {
  * Clears both the slug-keyed entry (`loadTenantMetadata`) and the
  * `host:`-prefixed entry (`loadTenantMetadataByHost`) — a stale entry left
  * behind in the other cache key has bitten this repo before.
+ * Caller contract: both deletions are scoped to the exact `host` value
+ * passed in, so when a tenant's slug and host differ, callers must invoke
+ * this once with the slug and once with the host to fully invalidate both
+ * caches (see `app/api/brand/config/route.ts`).
  */
 export function clearTenantCache(host?: string): void {
   if (host) {
