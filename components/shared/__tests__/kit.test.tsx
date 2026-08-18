@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { CenteredState } from "../centered-state";
 import { OutlineChip } from "../outline-chip";
+import { SegmentedControl } from "../segmented-control";
 
 describe("OutlineChip", () => {
   it("tone primary reproduce la receta canónica de menu-picker", () => {
@@ -32,5 +33,25 @@ describe("CenteredState", () => {
     );
     expect(screen.getByText("Vacío")).toBeTruthy();
     expect(screen.getByText("Sin datos")).toBeTruthy();
+  });
+});
+
+describe("SegmentedControl", () => {
+  it("marca la opción activa con la pill bg-content1 y aria-selected", () => {
+    render(
+      <SegmentedControl
+        ariaLabel="Período"
+        options={[
+          { key: "7d", label: "7 días" },
+          { key: "30d", label: "30 días" },
+        ]}
+        value="30d"
+        onChange={() => {}}
+      />
+    );
+    const active = screen.getByRole("tab", { selected: true });
+
+    expect(active.textContent).toBe("30 días");
+    expect(active.className).toContain("bg-content1");
   });
 });

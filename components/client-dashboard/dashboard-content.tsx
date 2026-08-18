@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { SegmentedControl } from "@/components/shared/segmented-control";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { daysToFetchForChartRange } from "@/lib/forms/chart-helpers";
 import {
@@ -558,38 +559,12 @@ export function DashboardContent() {
               Progreso
             </h2>
 
-            {/* Selector de período. Usamos el mismo patrón de segmented
-                control manual que `training-tabs.tsx` (track soft +
-                pill activa con shadow) en lugar de <Tabs> de HeroUI —
-                el variant="bordered" + color="primary" se sentía como
-                control de formulario y desfasaba visualmente con los
-                cards soft de abajo. */}
-            <div
-              aria-label="Seleccionar período de progreso"
-              className="flex rounded-lg bg-default-100 p-1 w-full"
-              role="tablist"
-            >
-              {PERIOD_OPTIONS.map(({ key, label }) => {
-                const isActive = selectedPeriod === key;
-
-                return (
-                  <button
-                    key={key}
-                    aria-selected={isActive}
-                    className={`flex-1 rounded-md px-3 py-1.5 text-xs transition ${
-                      isActive
-                        ? "bg-content1 text-foreground shadow-sm font-medium"
-                        : "text-default-500 hover:text-default-700 font-normal"
-                    }`}
-                    role="tab"
-                    type="button"
-                    onClick={() => setSelectedPeriod(key)}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedControl
+              ariaLabel="Seleccionar período de progreso"
+              options={PERIOD_OPTIONS}
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+            />
 
             <ChartsSection
               clientId={clientId}
