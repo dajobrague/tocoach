@@ -282,6 +282,21 @@ export function MealCycleContent() {
           </>
         )}
 
+        {/* Trainer chose plan + Objetivos → la sección de objetivos se apila
+            debajo del plan, igual que el PDF (el API ya adjunta goals y
+            fallback.presets para este caso; solo faltaba renderizarla —
+            antes Objetivos únicamente aparecía cuando NO había plan
+            visible). Mismo orden relativo que la vista sin plan: objetivos
+            primero, PDF después. */}
+        {data.sections?.includes("goals") === true &&
+        ((data.goals ?? null) !== null ||
+          (data.fallback?.presets ?? []).length > 0) ? (
+          <GoalsOnlyView
+            goals={data.goals ?? null}
+            presets={data.fallback?.presets ?? []}
+          />
+        ) : null}
+
         {/* Trainer chose plan + PDF → the document rides along under the plan. */}
         {data.sections?.includes("pdf") === true &&
         data.fallback?.pdf !== null &&
