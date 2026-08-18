@@ -29,13 +29,13 @@ export function PlantillasDropdown({
         <Button
           className={`h-10 px-4 font-medium text-sm transition-colors ${
             isActive
-              ? "bg-slate-100 text-black"
+              ? "bg-primary-50 text-primary"
               : "text-gray-600 hover:text-black hover:bg-slate-50"
           }`}
           endContent={<Icon icon="solar:alt-arrow-down-linear" width={14} />}
           startContent={
             <Icon
-              className={isActive ? "text-black" : "text-gray-500"}
+              className={isActive ? "text-primary" : "text-gray-500"}
               icon="solar:folder-with-files-linear"
               width={20}
             />

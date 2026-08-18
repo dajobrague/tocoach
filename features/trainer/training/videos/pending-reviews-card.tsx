@@ -58,7 +58,7 @@ function PendingRow({
 
         <div className="min-w-0 flex-1">
           <button
-            className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 transition-colors hover:text-blue-600"
+            className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 transition-colors hover:text-primary"
             type="button"
             onClick={() => onOpenClient(item)}
           >
@@ -125,7 +125,7 @@ export function PendingReviewsCard() {
       <CardHeader className="flex items-center justify-between gap-2 pb-0">
         <div className="flex items-center gap-2">
           <Icon
-            className="text-blue-600"
+            className="text-primary"
             icon="solar:videocamera-record-broken"
             width={18}
           />
@@ -133,7 +133,7 @@ export function PendingReviewsCard() {
             Videos por revisar
           </h3>
           {totalPending > 0 ? (
-            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10.5px] font-bold leading-none text-white tabular-nums">
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10.5px] font-bold leading-none text-primary-foreground tabular-nums">
               {totalPending}
             </span>
           ) : null}

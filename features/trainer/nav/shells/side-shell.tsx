@@ -180,11 +180,11 @@ export function SideShell({
       <Sidebar
         key={activeKey || "metricas"}
         defaultSelectedKey={activeKey || "metricas"}
-        iconClassName="group-data-[selected=true]:text-slate-900"
+        iconClassName="group-data-[selected=true]:text-primary"
         itemClasses={{
-          base: "data-[selected=true]:bg-slate-100 data-[selected=true]:border-l-4 data-[selected=true]:border-slate-900 data-[selected=true]:rounded-l-none data-[selected=true]:pl-2",
+          base: "data-[selected=true]:bg-primary-50 data-[selected=true]:border-l-4 data-[selected=true]:border-primary data-[selected=true]:rounded-l-none data-[selected=true]:pl-2",
           title:
-            "group-data-[selected=true]:text-slate-900 group-data-[selected=true]:font-semibold",
+            "group-data-[selected=true]:text-primary group-data-[selected=true]:font-semibold",
         }}
         items={sidebarItems}
         sectionClasses={{

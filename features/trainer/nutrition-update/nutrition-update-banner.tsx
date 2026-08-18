@@ -24,7 +24,7 @@ export function NutritionUpdateBanner() {
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:p-6">
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black text-white">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
         <Icon icon="solar:rocket-2-linear" width={24} />
       </span>
       <div className="min-w-0 flex-1">
@@ -46,7 +46,8 @@ export function NutritionUpdateBanner() {
       </div>
       <Button
         as={Link}
-        className="shrink-0 bg-slate-900 text-white"
+        className="shrink-0"
+        color="primary"
         endContent={<Icon icon="solar:arrow-right-linear" width={16} />}
         href={WIZARD_PATH}
       >

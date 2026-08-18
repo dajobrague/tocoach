@@ -132,13 +132,13 @@ export function TopShell({
                 as={Link}
                 className={`h-10 px-3 font-medium text-sm relative ${
                   active
-                    ? "bg-slate-100 text-black"
+                    ? "bg-primary-50 text-primary"
                     : "text-gray-600 hover:text-black hover:bg-slate-50"
                 }`}
                 href={item.href ?? "#"}
                 startContent={
                   <Icon
-                    className={active ? "text-black" : "text-gray-500"}
+                    className={active ? "text-primary" : "text-gray-500"}
                     icon={item.icon}
                     width={20}
                   />
@@ -258,11 +258,11 @@ export function TopShell({
             <NavbarMenuItem key={item.key}>
               <Button
                 className={`w-full justify-start h-12 px-4 font-medium ${
-                  active ? "bg-slate-100 text-black" : "text-gray-700"
+                  active ? "bg-primary-50 text-primary" : "text-gray-700"
                 }`}
                 startContent={
                   <Icon
-                    className={active ? "text-black" : "text-gray-500"}
+                    className={active ? "text-primary" : "text-gray-500"}
                     icon={item.icon}
                     width={22}
                   />
@@ -287,11 +287,11 @@ export function TopShell({
             <NavbarMenuItem key={child.key}>
               <Button
                 className={`w-full justify-start h-11 pl-6 pr-4 font-medium text-sm ${
-                  active ? "bg-slate-100 text-black" : "text-gray-700"
+                  active ? "bg-primary-50 text-primary" : "text-gray-700"
                 }`}
                 startContent={
                   <Icon
-                    className={active ? "text-black" : "text-gray-500"}
+                    className={active ? "text-primary" : "text-gray-500"}
                     icon={child.icon}
                     width={20}
                   />
