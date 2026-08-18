@@ -55,7 +55,12 @@ export function GoalsOnlyView({ goals, presets }: GoalsOnlyViewProps) {
   );
 }
 
-function GoalCard({
+/**
+ * Tarjeta de un objetivo (nombre + kcal + macros). Exportada además para la
+ * vista con plan: ahí se muestra UNA sola — la del objetivo al que el día
+ * seleccionado está vinculado.
+ */
+export function GoalCard({
   name,
   values,
   icon,
