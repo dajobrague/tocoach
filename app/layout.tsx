@@ -139,6 +139,12 @@ export default async function RootLayout({
   // Get current pathname to check if navbar should be hidden
   const pathname = headersList.get("x-pathname") || "";
   const hideNavbar = isNoNavbarRoute(pathname);
+  // El shell de trainer (app/trainer/layout.tsx) es dueño único de su tema:
+  // inyecta CSS scoped a .trainer-app. La hoja de marca default que se
+  // linkaba aquí pintaba primarios sky con !important por encima de ese
+  // scope, así que en /trainer no se emite ni <style> ni <link>. Si falta
+  // x-pathname ("" → false), se conserva el fallback seguro: link clásico.
+  const isTrainerRoute = pathname.startsWith("/trainer");
 
   // Check if this is a client slug route (no navbar needed)
   const isClientRoute = Boolean(tenantSlug);
@@ -255,7 +261,7 @@ export default async function RootLayout({
           href="https://fonts.gstatic.com"
           rel="preconnect"
         />
-        {inlineThemeCSS !== null ? (
+        {isTrainerRoute ? null : inlineThemeCSS !== null ? (
           <style
             dangerouslySetInnerHTML={{ __html: inlineThemeCSS }}
             data-theme-inline={tenantSlug ?? ""}

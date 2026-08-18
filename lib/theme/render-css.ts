@@ -110,6 +110,19 @@ export function cssFontFamily(raw: string): string {
 }
 
 // Generate complete CSS for a theme (same as file-based version)
+//
+// Dos modos:
+// - Sin scope (portal de clientes): salida histórica intacta — selectores
+//   html, :root global, overrides por substring y fuentes por control.
+// - Con scope (p. ej. ".trainer-app"): SOLO variables. Los overrides de
+//   clase por substring (*[class*="bg-primary"], etc.) aplanaban cada
+//   tint/hover/variant a un sólido — con la hoja de marca default fuera de
+//   /trainer (app/layout.tsx), las variables HeroUI bastan y los variants
+//   light/flat/ghost y los alpha tints (bg-primary/20) vuelven a funcionar.
+//   Los portals de HeroUI (modal/popover/dropdown montan en document.body,
+//   FUERA del scope) reciben las variables vía body:has(scope), emitido como
+//   bloque separado — un parser sin :has() invalida una lista con coma
+//   ENTERA y perdería también el bloque base del scope.
 export function generateThemeCSS(
   theme: ThemeConfig,
   opts?: { scope?: string }
@@ -117,20 +130,12 @@ export function generateThemeCSS(
   const fontsImport = buildGoogleFontsImport(theme);
   const headingFontCSS = cssFontFamily(theme.fonts.heading.family);
   const bodyFontCSS = cssFontFamily(theme.fonts.body.family);
-  const sel = opts?.scope ?? "html.light,\nhtml:not(.dark)";
-  const prefix = opts?.scope ? `${opts.scope} ` : "html ";
-  // `body` is an ANCESTOR of a scope like `.trainer-app`, never a descendant
-  // — `${prefix}body …` would compile to `.trainer-app body …`, a selector
-  // that can never match. Blocks that need to reach `body`-nested elements
-  // use this prefix instead, which drops the literal `body` segment when
-  // scoped (the scope root itself already sits inside body).
-  const bodyPrefix = opts?.scope ? `${opts.scope} ` : "html body ";
+  const scope = opts?.scope;
+  // Prefijo para las utilidades custom (.bg-brand, .font-heading, …): sin
+  // scope quedan globales como siempre; con scope no se filtran fuera.
+  const utilPrefix = scope ? `${scope} ` : "";
 
-  const css = `
-${fontsImport}
-/* Generated theme CSS for ${theme.meta.name} */
-:root {
-  /* Custom theme variables */
+  const customVars = `  /* Custom theme variables */
   --color-brand: ${theme.colors.brand};
   --color-accent: ${theme.colors.accent};
   --color-text-primary: ${theme.colors.text.primary};
@@ -155,12 +160,9 @@ ${fontsImport}
   --radius-lg: ${theme.radius.lg}px;
   --radius-xl: ${theme.radius.xl}px;
   --shadow-e1: ${theme.shadow.e1};
-  --shadow-e2: ${theme.shadow.e2};
-}
+  --shadow-e2: ${theme.shadow.e2};`;
 
-/* Target HeroUI's light theme class and default (no class) */
-${sel} {
-  /* HeroUI Primary Color Override - HSL Format */
+  const herouiVars = `  /* HeroUI Primary Color Override - HSL Format */
   --heroui-primary: ${hexToHeroUIHSL(theme.colors.brand)} !important;
   --heroui-primary-50: ${generateHeroUIColorScale(theme.colors.brand)["50"]} !important;
   --heroui-primary-100: ${generateHeroUIColorScale(theme.colors.brand)["100"]} !important;
@@ -227,114 +229,157 @@ ${sel} {
   --heroui-radius-large: ${theme.radius.lg}px !important;
   --heroui-box-shadow-small: ${theme.shadow.e1} !important;
   --heroui-box-shadow-medium: ${theme.shadow.e2} !important;
-  --heroui-box-shadow-large: ${theme.shadow.e2} !important;
+  --heroui-box-shadow-large: ${theme.shadow.e2} !important;`;
+
+  const herouiVarsBlock = scope
+    ? `${scope} {
+${herouiVars}
 }
 
+body:has(${scope}) {
+${herouiVars}
+}`
+    : `html.light,
+html:not(.dark) {
+${herouiVars}
+}`;
+
+  // Overrides de clase por substring + flat-hex: SOLO en modo sin scope
+  // (portal de clientes, comportamiento histórico intacto).
+  const classOverrides = scope
+    ? ""
+    : `
+
 /* Ultra high specificity HeroUI component overrides */
-${bodyPrefix}.bg-primary,
-${bodyPrefix}[data-slot="base"].bg-primary,
-${bodyPrefix}button.bg-primary,
-${bodyPrefix}[data-color="primary"],
-${bodyPrefix}.heroui-button[data-color="primary"],
-${bodyPrefix}*[class*="bg-primary"] {
+html body .bg-primary,
+html body [data-slot="base"].bg-primary,
+html body button.bg-primary,
+html body [data-color="primary"],
+html body .heroui-button[data-color="primary"],
+html body *[class*="bg-primary"] {
   background-color: ${theme.colors.brand} !important;
 }
 
-${prefix}.text-primary-foreground,
-${prefix}[data-slot="base"].text-primary-foreground,
-${prefix}button.text-primary-foreground {
+html .text-primary-foreground,
+html [data-slot="base"].text-primary-foreground,
+html button.text-primary-foreground {
   color: hsl(var(--heroui-primary-foreground)) !important;
 }
 
-${prefix}.bg-secondary,
-${prefix}[data-slot="base"].bg-secondary,
-${prefix}button.bg-secondary,
-${prefix}[data-color="secondary"],
-${prefix}.heroui-button[data-color="secondary"],
-${prefix}*[class*="bg-secondary"] {
+html .bg-secondary,
+html [data-slot="base"].bg-secondary,
+html button.bg-secondary,
+html [data-color="secondary"],
+html .heroui-button[data-color="secondary"],
+html *[class*="bg-secondary"] {
   background-color: ${theme.colors.accent} !important;
 }
 
-${prefix}.text-secondary-foreground,
-${prefix}[data-slot="base"].text-secondary-foreground,
-${prefix}button.text-secondary-foreground {
+html .text-secondary-foreground,
+html [data-slot="base"].text-secondary-foreground,
+html button.text-secondary-foreground {
   color: hsl(var(--heroui-secondary-foreground)) !important;
 }
 
-${prefix}.bg-default,
-${prefix}[data-slot="base"].bg-default,
-${prefix}button.bg-default,
-${prefix}[data-color="default"],
-${prefix}.heroui-button[data-color="default"],
-${prefix}*[class*="bg-default"] {
+html .bg-default,
+html [data-slot="base"].bg-default,
+html button.bg-default,
+html [data-color="default"],
+html .heroui-button[data-color="default"],
+html *[class*="bg-default"] {
   background-color: ${theme.colors.surface["2"]} !important;
 }
 
-${prefix}.text-default-foreground,
-${prefix}[data-slot="base"].text-default-foreground {
+html .text-default-foreground,
+html [data-slot="base"].text-default-foreground {
   color: ${theme.colors.text.primary} !important;
 }
 
-${prefix}.bg-default-100 {
+html .bg-default-100 {
   background-color: ${theme.colors.surface["2"]} !important;
 }
 
-${prefix}.bg-default-200 {
+html .bg-default-200 {
   background-color: ${theme.colors.fill} !important;
 }
 
-${prefix}.text-default-600 {
+html .text-default-600 {
   color: ${theme.colors.text.secondary} !important;
 }
 
-${prefix}.border-default {
+html .border-default {
   border-color: ${theme.colors.border} !important;
 }
 
-${prefix}.text-foreground {
+html .text-foreground {
   color: ${theme.colors.text.primary} !important;
 }
 
-${prefix}.text-primary {
+html .text-primary {
   color: ${theme.colors.brand} !important;
 }
 
-${prefix}.text-secondary {
+html .text-secondary {
   color: ${theme.colors.text.secondary} !important;
+}`;
+
+  // Fuentes: sin scope, el bloque histórico por control (!important). Con
+  // scope, una sola regla ligera en la raíz del scope — el preflight de
+  // Tailwind da font-family: inherit a los form controls, así que buttons e
+  // inputs la heredan sin !important y font-medium/font-semibold sobreviven.
+  const fontRules = scope
+    ? `/* Fuente base del shell (los form controls heredan via preflight) */
+${scope} {
+  font-family: ${bodyFontCSS};
 }
 
+body:has(${scope}) {
+  font-family: ${bodyFontCSS};
+}`
+    : `/* HeroUI Component Font Overrides */
+html body button,
+html body .heroui-button,
+html body [data-slot="base"],
+html body input,
+html body textarea,
+html body .heroui-input input,
+html body .heroui-textarea textarea,
+html body .heroui-chip,
+html body .heroui-chip span,
+html body [role="button"],
+html body .heroui-navbar-item,
+html body .heroui-link {
+  font-family: ${bodyFontCSS} !important;
+  font-weight: ${theme.fonts.body.weight} !important;
+}`;
+
+  const css = `
+${fontsImport}
+/* Generated theme CSS for ${theme.meta.name} */
+${scope ?? ":root"} {
+${customVars}
+}
+
+/* Target HeroUI's light theme class and default (no class) */
+${herouiVarsBlock}${classOverrides}
+
 /* Custom utility classes */
-.bg-brand { background-color: ${theme.colors.brand} !important; }
-.bg-accent { background-color: ${theme.colors.accent} !important; }
-.text-brand { color: ${theme.colors.brand} !important; }
-.text-accent { color: ${theme.colors.accent} !important; }
+${utilPrefix}.bg-brand { background-color: ${theme.colors.brand} !important; }
+${utilPrefix}.bg-accent { background-color: ${theme.colors.accent} !important; }
+${utilPrefix}.text-brand { color: ${theme.colors.brand} !important; }
+${utilPrefix}.text-accent { color: ${theme.colors.accent} !important; }
 
 /* Font family overrides */
-.font-heading {
+${utilPrefix}.font-heading {
   font-family: ${headingFontCSS} !important;
   font-weight: ${theme.fonts.heading.weight} !important;
 }
-.font-body {
+${utilPrefix}.font-body {
   font-family: ${bodyFontCSS} !important;
   font-weight: ${theme.fonts.body.weight} !important;
 }
 
-/* HeroUI Component Font Overrides */
-${bodyPrefix}button,
-${bodyPrefix}.heroui-button,
-${bodyPrefix}[data-slot="base"],
-${bodyPrefix}input,
-${bodyPrefix}textarea,
-${bodyPrefix}.heroui-input input,
-${bodyPrefix}.heroui-textarea textarea,
-${bodyPrefix}.heroui-chip,
-${bodyPrefix}.heroui-chip span,
-${bodyPrefix}[role="button"],
-${bodyPrefix}.heroui-navbar-item,
-${bodyPrefix}.heroui-link {
-  font-family: ${bodyFontCSS} !important;
-  font-weight: ${theme.fonts.body.weight} !important;
-}
+${fontRules}
 
 /* Body background uses theme surface color */
 body {
@@ -408,3 +453,34 @@ export function renderTrainerThemeCSS(context: TenantMetadata): string | null {
     return null;
   }
 }
+
+// Fallback monocromo del shell de trainer (login/register o sesión sin
+// tenant): el bloque slate histórico, intacto. HeroUI resuelve --heroui-*
+// dentro de hsl(), así que los valores DEBEN ser triples HSL (RGB aquí
+// produjo marrón — no repetir).
+const TRAINER_FALLBACK_VARS = `    --heroui-primary-50: 210 40% 98% !important;
+    --heroui-primary-100: 210 40% 96% !important;
+    --heroui-primary-200: 214 32% 91% !important;
+    --heroui-primary-300: 213 27% 84% !important;
+    --heroui-primary-400: 215 20% 65% !important;
+    --heroui-primary-500: 215 16% 47% !important;
+    --heroui-primary-600: 215 19% 35% !important;
+    --heroui-primary-700: 215 25% 27% !important;
+    --heroui-primary-800: 217 33% 18% !important;
+    --heroui-primary-900: 222 47% 11% !important;
+    --heroui-primary: 222 47% 11% !important;
+    --heroui-primary-foreground: 0 0% 100% !important;`;
+
+// Dos bloques con el mismo cuerpo (no una lista con coma): un parser sin
+// :has() invalidaría la lista ENTERA y perdería también .trainer-app. El
+// bloque body:has(...) alcanza los portals de HeroUI (modal/popover/
+// dropdown), que montan en document.body fuera del wrapper.
+export const TRAINER_FALLBACK_CSS = `
+  .trainer-app {
+${TRAINER_FALLBACK_VARS}
+  }
+
+  body:has(.trainer-app) {
+${TRAINER_FALLBACK_VARS}
+  }
+`;

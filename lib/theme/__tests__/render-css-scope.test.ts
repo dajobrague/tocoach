@@ -24,16 +24,15 @@ describe("generateThemeCSS scope", () => {
     expect(css).toContain("html body");
   });
 
-  it("con scope .trainer-app los bloques body-prefixed no generan selectores muertos '.trainer-app body'", () => {
+  it("con scope .trainer-app no hay selectores muertos '.trainer-app body' ni bludgeons de clase", () => {
     const css = generateThemeCSS(defaultTheme, { scope: ".trainer-app" });
 
     // body es ANCESTOR de .trainer-app, no descendiente — este selector
     // nunca podría matchear nada y dejaba ganar la hoja de marca default.
     expect(css).not.toContain(".trainer-app body");
-    // Debe existir una forma equivalente que sí funcione dentro del scope.
-    expect(css).toMatch(
-      /\.trainer-app \*\[class\*="bg-primary"\]|\.trainer-app button/
-    );
+    // En modo scoped las variables HeroUI hacen todo el trabajo: los
+    // overrides por substring aplanaban tints/hover/variants a un sólido.
+    expect(css).not.toContain("[class*=");
   });
 
   it("primary-foreground ya no es blanco fijo para marcas claras", () => {
