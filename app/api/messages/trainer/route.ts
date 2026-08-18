@@ -44,13 +44,19 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Get all clients for this trainer's tenant
+      // Get all clients for this trainer's tenant, each with its latest
+      // message embedded (1 per client via referencedTable limit).
       // Note: clients.tenant stores the trainer_id (UUID) not tenant.id
       const { data: clients, error: clientsError } = await supabase
         .from("clients")
-        .select("id, name, last_name, email, profile_picture_url")
+        .select(
+          "id, name, last_name, email, profile_picture_url, messages(message, created_at, sender_type)"
+        )
         .eq("tenant", session.trainer_id)
-        .order("name");
+        .eq("messages.tenant_slug", trainer.tenant_host)
+        .order("name")
+        .order("created_at", { referencedTable: "messages", ascending: false })
+        .limit(1, { referencedTable: "messages" });
 
       console.log("[Trainer Messages] Querying with:", {
         trainerId: session.trainer_id,
@@ -67,40 +73,48 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Get unread message counts and last message for each client
-      const clientsWithMessages = await Promise.all(
-        clients.map(async (client) => {
-          // Get last message
-          const { data: lastMessage } = await supabase
-            .from("messages")
-            .select("message, created_at, sender_type")
-            .eq("client_id", parseInt(client.id))
-            .eq("tenant_slug", trainer.tenant_host)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single();
+      // Unread counts for ALL clients in one query: only unread rows come
+      // back (few by nature), counted per client here.
+      const clientIds = clients.map((client) => Number(client.id));
 
-          // Get unread count (messages from client that trainer hasn't read)
-          const { count: unreadCount } = await supabase
-            .from("messages")
-            .select("*", { count: "exact", head: true })
-            .eq("client_id", parseInt(client.id))
-            .eq("tenant_slug", trainer.tenant_host)
-            .eq("sender_type", "client")
-            .is("read_at", null);
+      let unreadByClient = new Map<number, number>();
 
-          return {
-            id: client.id,
-            full_name: `${client.name} ${client.last_name || ""}`.trim(),
-            email: client.email,
-            avatar_url: client.profile_picture_url,
-            lastMessage: lastMessage?.message || null,
-            lastMessageAt: lastMessage?.created_at || null,
-            lastMessageSender: lastMessage?.sender_type || null,
-            unreadCount: unreadCount || 0,
-          };
-        })
-      );
+      if (clientIds.length > 0) {
+        const { data: unreadRows, error: unreadError } = await supabase
+          .from("messages")
+          .select("client_id")
+          .eq("tenant_slug", trainer.tenant_host)
+          .eq("sender_type", "client")
+          .is("read_at", null)
+          .in("client_id", clientIds);
+
+        if (unreadError) {
+          console.error("Error fetching unread counts:", unreadError);
+        } else {
+          unreadByClient = (unreadRows ?? []).reduce((acc, row) => {
+            const key = Number(row.client_id);
+
+            acc.set(key, (acc.get(key) ?? 0) + 1);
+
+            return acc;
+          }, new Map<number, number>());
+        }
+      }
+
+      const clientsWithMessages = clients.map((client) => {
+        const lastMessage = client.messages?.[0] ?? null;
+
+        return {
+          id: client.id,
+          full_name: `${client.name} ${client.last_name || ""}`.trim(),
+          email: client.email,
+          avatar_url: client.profile_picture_url,
+          lastMessage: lastMessage?.message || null,
+          lastMessageAt: lastMessage?.created_at || null,
+          lastMessageSender: lastMessage?.sender_type || null,
+          unreadCount: unreadByClient.get(Number(client.id)) ?? 0,
+        };
+      });
 
       // Sort by last message time (most recent first)
       clientsWithMessages.sort((a, b) => {

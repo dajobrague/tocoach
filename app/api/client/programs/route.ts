@@ -107,141 +107,157 @@ export async function GET(request: NextRequest) {
     // Create a map of programs by ID for easy lookup
     const programsMap = new Map((programs || []).map((p) => [p.id, p]));
 
-    // For each program, fetch sessions and exercises
+    // Batch the per-program fan-out: one query per LEVEL (sessions,
+    // session_exercises, exercises, scheduled_sessions) instead of 4 per
+    // program.
     const workoutPrograms: WorkoutProgram[] = [];
+    const validClientPrograms = clientPrograms.filter((clientProgram) => {
+      if (programsMap.has(clientProgram.program_id)) return true;
 
-    for (const clientProgram of clientPrograms) {
-      const program = programsMap.get(clientProgram.program_id);
+      console.warn(
+        "[Client Programs API] Program not found for client_program:",
+        clientProgram.id,
+        "program_id:",
+        clientProgram.program_id
+      );
 
-      if (!program) {
-        console.warn(
-          "[Client Programs API] Program not found for client_program:",
-          clientProgram.id,
-          "program_id:",
-          clientProgram.program_id
-        );
-        continue;
-      }
+      return false;
+    });
 
-      const programId = clientProgram.program_id;
-
-      // Fetch sessions for this program
-      const { data: sessions, error: sessionsError } = await supabase
+    if (validClientPrograms.length > 0) {
+      const validProgramIds = validClientPrograms.map((cp) => cp.program_id);
+      const { data: allSessions, error: sessionsError } = await supabase
         .from("sessions")
         .select("*")
-        .eq("program_id", programId)
+        .in("program_id", validProgramIds)
         .order("session_order", { ascending: true });
 
       if (sessionsError) {
+        // Same behavior as the old per-program loop on a sessions error:
+        // the affected programs are skipped (here: all of them).
         console.error(
           "[Client Programs API] Error fetching sessions:",
           sessionsError
         );
-        continue;
-      }
+      } else {
+        const sessions: any[] = allSessions || [];
 
-      console.log(
-        "[Client Programs API] Found",
-        sessions?.length || 0,
-        "sessions for program",
-        programId
-      );
+        console.log(
+          "[Client Programs API] Found",
+          sessions.length,
+          "sessions across",
+          validClientPrograms.length,
+          "programs"
+        );
 
-      // Fetch session exercises for all sessions
-      const sessionIds = sessions?.map((s) => s.id) || [];
-      let sessionExercises: any[] = [];
+        const allSessionIds = sessions.map((s) => s.id);
+        const weekRange = getCurrentWeekRange();
 
-      if (sessionIds.length > 0) {
-        // Fetch session_exercises first
-        const { data: sessionExercisesData, error: exercisesError } =
-          await supabase
-            .from("session_exercises")
-            .select("*")
-            .in("session_id", sessionIds)
-            .order("exercise_order", { ascending: true });
+        // session_exercises + scheduled_sessions only depend on the session
+        // ids, so they run in parallel.
+        let sessionExercises: any[] = [];
+        let allScheduled: any[] = [];
 
-        if (exercisesError) {
-          console.error(
-            "[Client Programs API] Error fetching session exercises:",
-            exercisesError
-          );
-        } else if (sessionExercisesData && sessionExercisesData.length > 0) {
-          // Fetch the actual exercises separately
-          const exerciseIds = sessionExercisesData.map(
-            (se: any) => se.exercise_id
-          );
-          const { data: exercisesData, error: exercisesDataError } =
-            await supabase.from("exercises").select("*").in("id", exerciseIds);
+        if (allSessionIds.length > 0) {
+          // Scheduled sessions: filtramos por session_id (las sesiones de
+          // estos programas), no por client_program_id: los flujos actuales
+          // (exercise-log save, /start, /complete vía
+          // upsert_scheduled_session) dejan client_program_id NULL, así que
+          // ese filtro nunca matcheaba filas creadas por el cliente y
+          // `completed` salía siempre false.
+          const [exercisesResult, scheduledResult] = await Promise.all([
+            supabase
+              .from("session_exercises")
+              .select("*")
+              .in("session_id", allSessionIds)
+              .order("exercise_order", { ascending: true }),
+            supabase
+              .from("scheduled_sessions")
+              .select("*")
+              .eq("client_id", clientId)
+              .in("session_id", allSessionIds)
+              .gte(
+                "scheduled_date",
+                weekRange.start.toISOString().split("T")[0]
+              )
+              .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]),
+          ]);
 
-          if (exercisesDataError) {
+          if (scheduledResult.error) {
             console.error(
-              "[Client Programs API] Error fetching exercises data:",
-              exercisesDataError
+              "[Client Programs API] Error fetching scheduled sessions:",
+              scheduledResult.error
             );
           } else {
-            // Create a map of exercises by ID
-            const exercisesMap = new Map(
-              (exercisesData || []).map((e: any) => [e.id, e])
-            );
+            allScheduled = scheduledResult.data || [];
+          }
 
-            // Attach exercise data to session exercises
-            sessionExercises = sessionExercisesData.map((se: any) => ({
-              ...se,
-              exercise: exercisesMap.get(se.exercise_id),
-            }));
-            console.log(
-              "[Client Programs API] Found",
-              sessionExercises.length,
-              "exercises"
+          if (exercisesResult.error) {
+            console.error(
+              "[Client Programs API] Error fetching session exercises:",
+              exercisesResult.error
             );
+          } else if (exercisesResult.data && exercisesResult.data.length > 0) {
+            const sessionExercisesData = exercisesResult.data;
+            const exerciseIds = [
+              ...new Set(sessionExercisesData.map((se: any) => se.exercise_id)),
+            ];
+            const { data: exercisesData, error: exercisesDataError } =
+              await supabase
+                .from("exercises")
+                .select("*")
+                .in("id", exerciseIds);
+
+            if (exercisesDataError) {
+              console.error(
+                "[Client Programs API] Error fetching exercises data:",
+                exercisesDataError
+              );
+            } else {
+              const exercisesMap = new Map(
+                (exercisesData || []).map((e: any) => [e.id, e])
+              );
+
+              sessionExercises = sessionExercisesData.map((se: any) => ({
+                ...se,
+                exercise: exercisesMap.get(se.exercise_id),
+              }));
+              console.log(
+                "[Client Programs API] Found",
+                sessionExercises.length,
+                "exercises"
+              );
+            }
           }
         }
-      }
 
-      // Map exercises to their sessions
-      const sessionsWithExercises = (sessions || []).map((session) => ({
-        ...session,
-        session_exercises: sessionExercises.filter(
-          (se) => se.session_id === session.id
-        ),
-      }));
-
-      // Fetch scheduled sessions for current week to check completion status.
-      // Filtramos por session_id (las sesiones de ESTE programa), no por
-      // client_program_id: los flujos actuales (exercise-log save, /start,
-      // /complete vía upsert_scheduled_session) dejan client_program_id
-      // NULL, así que ese filtro nunca matcheaba filas creadas por el
-      // cliente y `completed` salía siempre false.
-      const weekRange = getCurrentWeekRange();
-      let scheduledSessions: any[] | null = null;
-
-      if (sessionIds.length > 0) {
-        const { data: scheduledData, error: scheduledError } = await supabase
-          .from("scheduled_sessions")
-          .select("*")
-          .eq("client_id", clientId)
-          .in("session_id", sessionIds)
-          .gte("scheduled_date", weekRange.start.toISOString().split("T")[0])
-          .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]);
-
-        if (scheduledError) {
-          console.error(
-            "[Client Programs API] Error fetching scheduled sessions:",
-            scheduledError
+        for (const clientProgram of validClientPrograms) {
+          const program = programsMap.get(clientProgram.program_id);
+          const programSessions = sessions.filter(
+            (session) => session.program_id === clientProgram.program_id
           );
+          const programSessionIds = new Set(
+            programSessions.map((session) => session.id)
+          );
+          const sessionsWithExercises = programSessions.map((session) => ({
+            ...session,
+            session_exercises: sessionExercises.filter(
+              (se) => se.session_id === session.id
+            ),
+          }));
+          const scheduledSessions = allScheduled.filter((ss) =>
+            programSessionIds.has(ss.session_id)
+          );
+
+          const workoutProgram = transformToWorkoutProgram(
+            { ...clientProgram, program } as any,
+            sessionsWithExercises,
+            scheduledSessions
+          );
+
+          workoutPrograms.push(workoutProgram);
         }
-
-        scheduledSessions = scheduledData;
       }
-
-      // Transform to UI format
-      const workoutProgram = transformToWorkoutProgram(
-        { ...clientProgram, program } as any,
-        sessionsWithExercises,
-        scheduledSessions || []
-      );
-
-      workoutPrograms.push(workoutProgram);
     }
 
     console.log(
