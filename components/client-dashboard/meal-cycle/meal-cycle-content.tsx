@@ -10,7 +10,10 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { DaySummaryCard } from "@/components/client-dashboard/meal-cycle/day-summary-card";
-import { GoalsOnlyView } from "@/components/client-dashboard/meal-cycle/goals-only-view";
+import {
+  GoalCard,
+  GoalsOnlyView,
+} from "@/components/client-dashboard/meal-cycle/goals-only-view";
 import { PdfDietView } from "@/components/client-dashboard/meal-cycle/pdf-diet-view";
 import { dayPlannedTotals } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { MealCycleDayPanel } from "@/components/client-dashboard/meal-cycle/meal-cycle-day-panel";
@@ -215,9 +218,33 @@ export function MealCycleContent() {
     menus.length > 1 &&
     (needsChoice || chooserFor === selectedDate);
 
+  // Sección Objetivos (visibilidad "goals") en el TOP de la página y ligada
+  // al día: attachDayGoals ya resolvió selectedDay.targets al preset asignado
+  // a ese día del ciclo (o al objetivo general si el día no tiene uno). Se
+  // muestra SOLO ese objetivo — no la lista completa (petición 18-ago).
+  const dayGoal =
+    data.sections?.includes("goals") === true &&
+    selectedDay !== null &&
+    selectedDay.targets !== null &&
+    selectedDay.targets !== undefined
+      ? {
+          name: selectedDay.targetName ?? "Objetivo diario",
+          values: selectedDay.targets,
+        }
+      : null;
+
   return (
     <MealCycleShell>
       <div className="flex flex-col gap-4">
+        {dayGoal !== null ? (
+          <GoalCard
+            highlight
+            icon="solar:target-bold"
+            name={dayGoal.name}
+            values={dayGoal.values}
+          />
+        ) : null}
+
         <WeekDateSelector
           datesWithActivity={datesWithActivity}
           maxBackDays={MAX_BACK_DAYS}
@@ -281,21 +308,6 @@ export function MealCycleContent() {
             )}
           </>
         )}
-
-        {/* Trainer chose plan + Objetivos → la sección de objetivos se apila
-            debajo del plan, igual que el PDF (el API ya adjunta goals y
-            fallback.presets para este caso; solo faltaba renderizarla —
-            antes Objetivos únicamente aparecía cuando NO había plan
-            visible). Mismo orden relativo que la vista sin plan: objetivos
-            primero, PDF después. */}
-        {data.sections?.includes("goals") === true &&
-        ((data.goals ?? null) !== null ||
-          (data.fallback?.presets ?? []).length > 0) ? (
-          <GoalsOnlyView
-            goals={data.goals ?? null}
-            presets={data.fallback?.presets ?? []}
-          />
-        ) : null}
 
         {/* Trainer chose plan + PDF → the document rides along under the plan. */}
         {data.sections?.includes("pdf") === true &&
