@@ -269,27 +269,62 @@ export class MealCycleService {
     const source = slots.filter((slot) => slot.day_index === sourceDayIndex);
     const target = slots.filter((slot) => slot.day_index === targetDayIndex);
 
-    // Replace: remove the target day's slots (options cascade-delete).
-    for (const slot of target) {
-      await this.deleteSlot(tenantHost, slot.id);
+    // Replace: remove the target day's slots (options cascade-delete) in one
+    // batched delete.
+    if (target.length > 0) {
+      const { error: deleteError } = await this.client
+        .from(SLOTS_TABLE)
+        .delete()
+        .eq("tenant_host", tenantHost)
+        .in(
+          "id",
+          target.map((slot) => slot.id)
+        );
+
+      if (deleteError !== null) {
+        throw new Error(
+          `MealCycleService.copyDay delete failed: ${deleteError.message}`
+        );
+      }
     }
 
-    // Recreate source slots on the target day, copying options verbatim.
-    const options = new MealSlotOptionService(this.client);
-    let position = 0;
+    // Recreate source slots on the target day with ONE bulk insert, then copy
+    // all their options in one read + one insert. PostgREST returns inserted
+    // rows in payload order, so source[i] maps to created[i].
+    if (source.length > 0) {
+      const { data: createdData, error: insertError } = await this.client
+        .from(SLOTS_TABLE)
+        .insert(
+          source.map((slot, index) => ({
+            cycle_id: cycleId,
+            tenant_host: tenantHost,
+            day_index: targetDayIndex,
+            label: slot.label,
+            position: index,
+          }))
+        )
+        .select();
 
-    for (const slot of source) {
-      const created = await this.addSlot(tenantHost, cycleId, {
-        dayIndex: targetDayIndex,
-        label: slot.label,
-        position,
+      if (insertError !== null) {
+        throw new Error(
+          `MealCycleService.copyDay insert failed: ${insertError.message}`
+        );
+      }
+
+      const created = (createdData ?? []) as MealSlotRow[];
+      const targetSlotIdBySourceSlotId = new Map<string, string>();
+
+      source.forEach((slot, index) => {
+        const createdSlot = created[index];
+
+        if (createdSlot !== undefined) {
+          targetSlotIdBySourceSlotId.set(slot.id, createdSlot.id);
+        }
       });
 
-      position += 1;
+      const options = new MealSlotOptionService(this.client);
 
-      if (created !== null) {
-        await options.copyOptionsToSlot(tenantHost, slot.id, created.id);
-      }
+      await options.copyOptionsToSlots(tenantHost, targetSlotIdBySourceSlotId);
     }
 
     // The copied day inherits the source day's objective and name too.
@@ -354,16 +389,52 @@ export class MealCycleService {
 
     const slots = (data ?? []) as MealSlotRow[];
 
-    // Drop the removed day's slots (their options cascade-delete).
-    for (const slot of slots.filter((s) => s.day_index === dayIndex)) {
-      await this.deleteSlot(tenantHost, slot.id);
+    // Drop the removed day's slots (their options cascade-delete) in one
+    // batched delete.
+    const removedIds = slots
+      .filter((s) => s.day_index === dayIndex)
+      .map((s) => s.id);
+
+    if (removedIds.length > 0) {
+      const { error: deleteError } = await this.client
+        .from(SLOTS_TABLE)
+        .delete()
+        .eq("tenant_host", tenantHost)
+        .in("id", removedIds);
+
+      if (deleteError !== null) {
+        throw new Error(
+          `MealCycleService.removeDay delete failed: ${deleteError.message}`
+        );
+      }
     }
 
-    // Renumber every later day down by one so there are no gaps.
+    // Renumber every later day down by one so there are no gaps — one update
+    // per day (keyed by slot ids, so updates can't collide) instead of three
+    // queries per slot.
+    const slotIdsByDay = new Map<number, string[]>();
+
     for (const slot of slots.filter((s) => s.day_index > dayIndex)) {
-      await this.updateSlot(tenantHost, slot.id, {
-        dayIndex: slot.day_index - 1,
-      });
+      const ids = slotIdsByDay.get(slot.day_index) ?? [];
+
+      ids.push(slot.id);
+      slotIdsByDay.set(slot.day_index, ids);
+    }
+
+    for (const [day, ids] of [...slotIdsByDay.entries()].sort(
+      (a, b) => a[0] - b[0]
+    )) {
+      const { error: renumberError } = await this.client
+        .from(SLOTS_TABLE)
+        .update({ day_index: day - 1 })
+        .eq("tenant_host", tenantHost)
+        .in("id", ids);
+
+      if (renumberError !== null) {
+        throw new Error(
+          `MealCycleService.removeDay renumber failed: ${renumberError.message}`
+        );
+      }
     }
 
     await this.update(tenantHost, cycleId, {
@@ -487,12 +558,33 @@ export class MealCycleService {
     }
 
     // Slots keep their day_index if the day didn't move; multiple slots share a
-    // day and all remap together (no unique constraint on day_index).
+    // day and all remap together (no unique constraint on day_index). One
+    // update per moved day, keyed by the slot ids captured above — id-based
+    // updates can't collide even though days swap indices.
+    const slotIdsByNextDay = new Map<number, string[]>();
+
     for (const slot of (data ?? []) as MealSlotRow[]) {
       const nextDay = newIndexByOld.get(slot.day_index);
 
       if (nextDay !== undefined && nextDay !== slot.day_index) {
-        await this.updateSlot(tenantHost, slot.id, { dayIndex: nextDay });
+        const ids = slotIdsByNextDay.get(nextDay) ?? [];
+
+        ids.push(slot.id);
+        slotIdsByNextDay.set(nextDay, ids);
+      }
+    }
+
+    for (const [nextDay, ids] of slotIdsByNextDay) {
+      const { error: moveError } = await this.client
+        .from(SLOTS_TABLE)
+        .update({ day_index: nextDay })
+        .eq("tenant_host", tenantHost)
+        .in("id", ids);
+
+      if (moveError !== null) {
+        throw new Error(
+          `MealCycleService.reorderDay move failed: ${moveError.message}`
+        );
       }
     }
 
