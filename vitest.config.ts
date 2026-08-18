@@ -7,6 +7,16 @@ const root = resolve(__dirname);
 // Path aliases mirror tsconfig.json "paths". The specific entries must precede
 // the catch-all "@" so Vite matches the most specific alias first.
 export default defineConfig({
+  // tsconfig.json sets "jsx": "preserve" (Next.js compiles JSX itself), but
+  // Vite's oxc transform picks that up too and leaves JSX untouched,
+  // producing invalid JS for any .tsx test file. Override the transform mode
+  // here — this doesn't change tsconfig or affect the Next.js build, and is a
+  // no-op for the existing .ts tests (none contain JSX).
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+    },
+  },
   resolve: {
     alias: {
       "@/components": resolve(root, "components"),
