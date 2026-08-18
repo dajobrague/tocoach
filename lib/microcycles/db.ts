@@ -265,6 +265,79 @@ export async function loadMicrocycleWithSlots(
   };
 }
 
+/**
+ * Forma batched de {@link loadMicrocycleWithSlots} para varios programas:
+ * 2 queries totales (microcycles + slots) en vez de 2 por programa. Devuelve
+ * un map por client_program_id; los programas sin microciclo simplemente no
+ * aparecen (mismo contrato que el null del loader individual). Ante un error
+ * de query se loguea y se devuelve lo acumulable (map vacío) — los callers ya
+ * tratan la ausencia como "programa sin ciclo".
+ */
+export async function loadMicrocyclesWithSlots(
+  supabase: Supabase,
+  clientProgramIds: string[],
+  correlationId: string
+): Promise<Map<string, MicrocycleWithSlots>> {
+  const out = new Map<string, MicrocycleWithSlots>();
+
+  if (clientProgramIds.length === 0) return out;
+
+  const { data: microcycles, error: microcyclesError } = await supabase
+    .from("microcycles")
+    .select("*")
+    .in("client_program_id", clientProgramIds);
+
+  if (microcyclesError) {
+    console.error(`${LOG_PREFIX} Error fetching microcycles:`, {
+      correlationId,
+      clientProgramIds,
+      error: microcyclesError.message,
+    });
+
+    return out;
+  }
+
+  const rows = (microcycles ?? []) as Microcycle[];
+
+  if (rows.length === 0) return out;
+
+  const { data: slots, error: slotsError } = await supabase
+    .from("microcycle_slots")
+    .select("*")
+    .in(
+      "microcycle_id",
+      rows.map((m) => m.id)
+    )
+    .order("day_index", { ascending: true });
+
+  if (slotsError) {
+    console.error(`${LOG_PREFIX} Error fetching microcycle_slots:`, {
+      correlationId,
+      error: slotsError.message,
+    });
+
+    return out;
+  }
+
+  const slotsByMicrocycle = new Map<string, MicrocycleSlot[]>();
+
+  for (const slot of (slots ?? []) as MicrocycleSlot[]) {
+    const list = slotsByMicrocycle.get(slot.microcycle_id) ?? [];
+
+    list.push(slot);
+    slotsByMicrocycle.set(slot.microcycle_id, list);
+  }
+
+  for (const microcycle of rows) {
+    out.set(microcycle.client_program_id, {
+      ...microcycle,
+      slots: slotsByMicrocycle.get(microcycle.id) ?? [],
+    });
+  }
+
+  return out;
+}
+
 export async function upsertMicrocycle(
   supabase: Supabase,
   ownedProgram: OwnedProgram,

@@ -11,7 +11,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
   loadAllActiveOwnedPrograms,
-  loadMicrocycleWithSlots,
+  loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
@@ -296,12 +296,17 @@ async function resolveMicrocycleSlot(
   date: string,
   correlationId: string
 ): Promise<{ sessionId: string } | null> {
+  // 2 queries totales para todos los microciclos (antes: 2 por programa
+  // hasta encontrar match). El orden de precedencia lo sigue dando el array
+  // `programs`.
+  const microcyclesByProgram = await loadMicrocyclesWithSlots(
+    supabase,
+    programs.map((program) => program.id),
+    correlationId
+  );
+
   for (const program of programs) {
-    const microcycle = await loadMicrocycleWithSlots(
-      supabase,
-      program.id,
-      correlationId
-    );
+    const microcycle = microcyclesByProgram.get(program.id);
 
     if (!microcycle?.start_date) continue;
     if (date < microcycle.start_date) continue;

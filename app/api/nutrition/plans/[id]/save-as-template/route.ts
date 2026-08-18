@@ -95,19 +95,53 @@ export async function POST(
       );
     }
 
-    // Clone days from the source plan
+    // Clone the plan tree level by level — one read + one bulk insert per
+    // level (days, meals, options, ingredients) instead of one round trip
+    // per row. PostgREST returns inserted rows in payload order, which is
+    // what makes the old→new id mapping by index safe.
     const { data: sourceDays } = await supabase
       .from("nutrition_days")
       .select("*")
       .eq("nutrition_plan_id", planId)
       .order("day_order", { ascending: true });
 
-    if (sourceDays && sourceDays.length > 0) {
-      for (const sourceDay of sourceDays) {
-        // Create new day (no macros, no weekdays - templates are structure only)
-        const { data: newDay, error: dayError } = await supabase
-          .from("nutrition_days")
-          .insert({
+    cloneTree: if (sourceDays && sourceDays.length > 0) {
+      const sourceDayIds = sourceDays.map((d) => d.id);
+      const { data: sourceMealsData } = await supabase
+        .from("nutrition_meals")
+        .select("*")
+        .in("nutrition_day_id", sourceDayIds)
+        .order("meal_order", { ascending: true });
+
+      const sourceMeals = sourceMealsData || [];
+      const sourceMealIds = sourceMeals.map((m) => m.id);
+
+      let sourceOptions: any[] = [];
+      let sourceIngredients: any[] = [];
+
+      if (sourceMealIds.length > 0) {
+        const [optionsResult, ingredientsResult] = await Promise.all([
+          supabase
+            .from("nutrition_meal_options")
+            .select("*")
+            .in("meal_id", sourceMealIds)
+            .order("option_order", { ascending: true }),
+          supabase
+            .from("nutrition_ingredients")
+            .select("*")
+            .in("nutrition_meal_id", sourceMealIds)
+            .order("ingredient_order", { ascending: true }),
+        ]);
+
+        sourceOptions = optionsResult.data || [];
+        sourceIngredients = ingredientsResult.data || [];
+      }
+
+      // 1. Days (no macros, no weekdays - templates are structure only)
+      const { data: newDays, error: dayError } = await supabase
+        .from("nutrition_days")
+        .insert(
+          sourceDays.map((sourceDay) => ({
             tenant_host: tenant.host,
             nutrition_plan_id: template.id,
             day_label: sourceDay.day_label,
@@ -117,171 +151,198 @@ export async function POST(
             fats: 0,
             calories: 0,
             weekdays: [],
-          })
-          .select()
-          .single();
+          }))
+        )
+        .select("id");
 
-        if (dayError || !newDay) {
-          console.error(
-            "[Save Nutrition Template API] Error cloning day:",
-            dayError
-          );
-          continue;
-        }
+      if (dayError || !newDays) {
+        console.error(
+          "[Save Nutrition Template API] Error cloning days:",
+          dayError
+        );
+        break cloneTree;
+      }
 
-        // Clone meals for this day
-        const { data: sourceMeals } = await supabase
-          .from("nutrition_meals")
-          .select("*")
-          .eq("nutrition_day_id", sourceDay.id)
-          .order("meal_order", { ascending: true });
+      const newDayIdBySourceDayId = new Map<string, string>(
+        sourceDays.map((sourceDay, index) => [sourceDay.id, newDays[index]?.id])
+      );
 
-        if (sourceMeals && sourceMeals.length > 0) {
-          for (const sourceMeal of sourceMeals) {
-            // Create new meal (no macros)
-            const { data: newMeal, error: mealError } = await supabase
-              .from("nutrition_meals")
-              .insert({
-                tenant_host: tenant.host,
-                nutrition_day_id: newDay.id,
-                label: sourceMeal.label,
-                meal_order: sourceMeal.meal_order,
-                notes: sourceMeal.notes,
-                protein: 0,
-                carbs: 0,
-                fats: 0,
-                calories: 0,
-                image_url: sourceMeal.image_url ?? null,
-                has_alternatives: sourceMeal.has_alternatives ?? false,
-              })
-              .select()
-              .single();
+      // 2. Meals (no macros)
+      const mealsToClone = sourceMeals.filter((sourceMeal) =>
+        newDayIdBySourceDayId.has(sourceMeal.nutrition_day_id)
+      );
 
-            if (mealError || !newMeal) {
-              console.error(
-                "[Save Nutrition Template API] Error cloning meal:",
-                mealError
-              );
-              continue;
-            }
+      if (mealsToClone.length === 0) break cloneTree;
 
-            const { data: sourceOptions } = await supabase
-              .from("nutrition_meal_options")
-              .select("*")
-              .eq("meal_id", sourceMeal.id)
-              .order("option_order", { ascending: true });
+      const { data: newMeals, error: mealError } = await supabase
+        .from("nutrition_meals")
+        .insert(
+          mealsToClone.map((sourceMeal) => ({
+            tenant_host: tenant.host,
+            nutrition_day_id: newDayIdBySourceDayId.get(
+              sourceMeal.nutrition_day_id
+            ),
+            label: sourceMeal.label,
+            meal_order: sourceMeal.meal_order,
+            notes: sourceMeal.notes,
+            protein: 0,
+            carbs: 0,
+            fats: 0,
+            calories: 0,
+            image_url: sourceMeal.image_url ?? null,
+            has_alternatives: sourceMeal.has_alternatives ?? false,
+          }))
+        )
+        .select("id");
 
-            const optionIdMap = new Map<string, string>();
+      if (mealError || !newMeals) {
+        console.error(
+          "[Save Nutrition Template API] Error cloning meals:",
+          mealError
+        );
+        break cloneTree;
+      }
 
-            if (sourceOptions && sourceOptions.length > 0) {
-              for (const sourceOption of sourceOptions) {
-                const { data: newOption, error: optErr } = await supabase
-                  .from("nutrition_meal_options")
-                  .insert({
-                    meal_id: newMeal.id,
-                    name: sourceOption.name,
-                    option_order: sourceOption.option_order,
-                    protein: sourceOption.protein,
-                    carbs: sourceOption.carbs,
-                    fats: sourceOption.fats,
-                    calories: sourceOption.calories,
-                    image_url: sourceOption.image_url ?? null,
-                  })
-                  .select("id")
-                  .single();
+      const newMealIdBySourceMealId = new Map<string, string>(
+        mealsToClone.map((sourceMeal, index) => [
+          sourceMeal.id,
+          newMeals[index]?.id,
+        ])
+      );
 
-                if (optErr || !newOption) {
-                  console.error(
-                    "[Save Nutrition Template API] Error cloning option:",
-                    optErr
-                  );
-                  continue;
-                }
+      // 3. Options: clone the source options; meals WITHOUT options get the
+      // same "Opción 1" fallback as before (macros 0 like the new meal row,
+      // image from the source meal).
+      const sourceOptionsByMeal = new Map<string, any[]>();
 
-                optionIdMap.set(sourceOption.id, newOption.id);
-              }
-            } else {
-              const { data: fallbackOption, error: fbErr } = await supabase
-                .from("nutrition_meal_options")
-                .insert({
-                  meal_id: newMeal.id,
-                  name: "Opción 1",
-                  option_order: 1,
-                  protein: newMeal.protein ?? null,
-                  carbs: newMeal.carbs ?? null,
-                  fats: newMeal.fats ?? null,
-                  calories: newMeal.calories ?? null,
-                  image_url: newMeal.image_url ?? null,
-                })
-                .select("id")
-                .single();
+      for (const sourceOption of sourceOptions) {
+        const list = sourceOptionsByMeal.get(sourceOption.meal_id) ?? [];
 
-              if (fbErr || !fallbackOption) {
-                console.error(
-                  "[Save Nutrition Template API] Error creating default option:",
-                  fbErr
-                );
-                continue;
-              }
-            }
+        list.push(sourceOption);
+        sourceOptionsByMeal.set(sourceOption.meal_id, list);
+      }
 
-            const { data: sourceIngredients } = await supabase
-              .from("nutrition_ingredients")
-              .select("*")
-              .eq("nutrition_meal_id", sourceMeal.id)
-              .order("ingredient_order", { ascending: true });
+      const optionRows: any[] = [];
+      const optionSourceIds: (string | null)[] = [];
 
-            if (sourceIngredients && sourceIngredients.length > 0) {
-              const { data: firstNewOption } = await supabase
-                .from("nutrition_meal_options")
-                .select("id")
-                .eq("meal_id", newMeal.id)
-                .order("option_order", { ascending: true })
-                .limit(1)
-                .maybeSingle();
+      for (const sourceMeal of mealsToClone) {
+        const newMealId = newMealIdBySourceMealId.get(sourceMeal.id);
+        const mealOptions = sourceOptionsByMeal.get(sourceMeal.id) ?? [];
 
-              const defaultNewOptionId = firstNewOption?.id;
-
-              if (!defaultNewOptionId) {
-                console.error(
-                  "[Save Nutrition Template API] No option for ingredients"
-                );
-                continue;
-              }
-
-              const ingredientsToInsert = sourceIngredients.map((ing) => {
-                const newOptId =
-                  ing.option_id && optionIdMap.has(ing.option_id)
-                    ? optionIdMap.get(ing.option_id)!
-                    : defaultNewOptionId;
-
-                return {
-                  tenant_host: tenant.host,
-                  nutrition_meal_id: newMeal.id,
-                  option_id: newOptId,
-                  name: ing.name,
-                  quantity: ing.quantity,
-                  unit: ing.unit,
-                  ingredient_order: ing.ingredient_order,
-                  protein: ing.protein,
-                  carbs: ing.carbs,
-                  fats: ing.fats,
-                  calories: ing.calories,
-                };
-              });
-
-              const { error: ingErr } = await supabase
-                .from("nutrition_ingredients")
-                .insert(ingredientsToInsert);
-
-              if (ingErr) {
-                console.error(
-                  "[Save Nutrition Template API] Error cloning ingredients:",
-                  ingErr
-                );
-              }
-            }
+        if (mealOptions.length > 0) {
+          for (const sourceOption of mealOptions) {
+            optionRows.push({
+              meal_id: newMealId,
+              name: sourceOption.name,
+              option_order: sourceOption.option_order,
+              protein: sourceOption.protein,
+              carbs: sourceOption.carbs,
+              fats: sourceOption.fats,
+              calories: sourceOption.calories,
+              image_url: sourceOption.image_url ?? null,
+            });
+            optionSourceIds.push(sourceOption.id);
           }
+        } else {
+          optionRows.push({
+            meal_id: newMealId,
+            name: "Opción 1",
+            option_order: 1,
+            protein: 0,
+            carbs: 0,
+            fats: 0,
+            calories: 0,
+            image_url: sourceMeal.image_url ?? null,
+          });
+          optionSourceIds.push(null);
+        }
+      }
+
+      const { data: newOptions, error: optErr } = await supabase
+        .from("nutrition_meal_options")
+        .insert(optionRows)
+        .select("id, meal_id, option_order");
+
+      if (optErr || !newOptions) {
+        console.error(
+          "[Save Nutrition Template API] Error cloning options:",
+          optErr
+        );
+        break cloneTree;
+      }
+
+      const optionIdMap = new Map<string, string>();
+
+      optionSourceIds.forEach((sourceOptionId, index) => {
+        const newOptionId = newOptions[index]?.id;
+
+        if (sourceOptionId && newOptionId) {
+          optionIdMap.set(sourceOptionId, newOptionId);
+        }
+      });
+
+      // Default option per NEW meal = its first option by option_order
+      // (same rule as the old per-meal lookup).
+      const defaultOptionByNewMealId = new Map<string, string>();
+
+      for (const option of newOptions) {
+        const current = defaultOptionByNewMealId.get(option.meal_id);
+        const currentOrder = current
+          ? newOptions.find((o) => o.id === current)?.option_order
+          : undefined;
+
+        if (currentOrder === undefined || option.option_order < currentOrder) {
+          defaultOptionByNewMealId.set(option.meal_id, option.id);
+        }
+      }
+
+      // 4. Ingredients, remapped to their cloned option (or the meal's
+      // default option when the source row has no/unknown option_id).
+      const ingredientsToInsert = sourceIngredients
+        .map((ing) => {
+          const newMealId = newMealIdBySourceMealId.get(ing.nutrition_meal_id);
+
+          if (!newMealId) return null;
+
+          const newOptId =
+            ing.option_id && optionIdMap.has(ing.option_id)
+              ? optionIdMap.get(ing.option_id)!
+              : defaultOptionByNewMealId.get(newMealId);
+
+          if (!newOptId) {
+            console.error(
+              "[Save Nutrition Template API] No option for ingredients"
+            );
+
+            return null;
+          }
+
+          return {
+            tenant_host: tenant.host,
+            nutrition_meal_id: newMealId,
+            option_id: newOptId,
+            name: ing.name,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            ingredient_order: ing.ingredient_order,
+            protein: ing.protein,
+            carbs: ing.carbs,
+            fats: ing.fats,
+            calories: ing.calories,
+          };
+        })
+        .filter(Boolean);
+
+      if (ingredientsToInsert.length > 0) {
+        const { error: ingErr } = await supabase
+          .from("nutrition_ingredients")
+          .insert(ingredientsToInsert);
+
+        if (ingErr) {
+          console.error(
+            "[Save Nutrition Template API] Error cloning ingredients:",
+            ingErr
+          );
         }
       }
     }

@@ -185,10 +185,17 @@ async function loadCoachComments(
   return map;
 }
 
-// Calcula el PR sobre exercise_log_sets: set con weight_kg más alto, con
-// desempate por reps. Devuelve también la fecha de la sesión que ganó
-// (scheduled_sessions.scheduled_date del exercise_log padre).
+// Calcula el PR (set con weight_kg más alto, desempate por reps) sobre los
+// logs FINALIZADOS del cliente para este ejercicio. Devuelve también la
+// fecha de la sesión que ganó (scheduled_sessions.scheduled_date).
 // Si el cliente todavía no tiene sets registrados con peso → null.
+//
+// La query parte de exercise_logs (índice compuesto client_id+exercise_id)
+// con los sets embebidos, y el máximo se calcula aquí. La versión anterior
+// partía de exercise_log_sets ordenando por weight_kg (sin índice) con
+// filtros en la tabla padre: Postgres hacía un seq scan de la tabla COMPLETA
+// de sets en cada llamada — era la query más cara de toda la app (~180-300ms
+// por vista de historial).
 //
 // Solo cuentan los logs FINALIZADOS: antes un autosave podía ganar el PR — el
 // cliente teclea "100" camino a "10" y el guardado automático lo dejaba como su
@@ -202,18 +209,13 @@ async function loadPersonalRecord(
   correlationId: string
 ): Promise<ExerciseHistoryResponse["pr"]> {
   const { data, error } = await supabase
-    .from("exercise_log_sets")
+    .from("exercise_logs")
     .select(
-      "reps, weight_kg, exercise_logs!inner(client_id, exercise_id, finalized_at, scheduled_sessions!inner(scheduled_date))"
+      "scheduled_sessions!inner(scheduled_date), exercise_log_sets(reps, weight_kg)"
     )
-    .eq("exercise_logs.client_id", clientId)
-    .eq("exercise_logs.exercise_id", exerciseId)
-    .not("exercise_logs.finalized_at", "is", null)
-    .not("weight_kg", "is", null)
-    .order("weight_kg", { ascending: false, nullsFirst: false })
-    .order("reps", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("client_id", clientId)
+    .eq("exercise_id", exerciseId)
+    .not("finalized_at", "is", null);
 
   if (error) {
     console.warn(`${LOG_PREFIX} Failed to compute PR, returning null:`, {
@@ -226,16 +228,28 @@ async function loadPersonalRecord(
     return null;
   }
 
-  if (!data || data.weight_kg === null) return null;
+  let best: { weight_kg: number; reps: number; achieved_at: string } | null =
+    null;
 
-  const log = (data as any).exercise_logs;
-  const achievedAt: string = log?.scheduled_sessions?.scheduled_date ?? "";
+  for (const log of (data ?? []) as any[]) {
+    const achievedAt: string = log?.scheduled_sessions?.scheduled_date ?? "";
 
-  const reps = data.reps ?? 0;
+    for (const set of log.exercise_log_sets ?? []) {
+      if (set.weight_kg === null || set.weight_kg === undefined) continue;
 
-  return {
-    weight_kg: data.weight_kg as number,
-    reps,
-    achieved_at: achievedAt,
-  };
+      // Mismo desempate que el ORDER BY anterior (weight desc, reps desc con
+      // nulls al final): reps null compite como 0 y se devuelve como 0.
+      const reps = set.reps ?? 0;
+
+      if (
+        best === null ||
+        set.weight_kg > best.weight_kg ||
+        (set.weight_kg === best.weight_kg && reps > best.reps)
+      ) {
+        best = { weight_kg: set.weight_kg, reps, achieved_at: achievedAt };
+      }
+    }
+  }
+
+  return best;
 }
