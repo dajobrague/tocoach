@@ -469,7 +469,8 @@ export default function ClientsContent() {
 
                     {/* Add Button */}
                     <Button
-                      className="sm:w-auto w-full bg-black text-white hover:bg-slate-800"
+                      className="sm:w-auto w-full"
+                      color="primary"
                       size="md"
                       startContent={
                         <Icon icon="solar:user-plus-bold" width={18} />
@@ -488,8 +489,8 @@ export default function ClientsContent() {
                     <Button
                       className={
                         statusFilter === "all"
-                          ? "bg-black text-white hover:bg-slate-800"
-                          : "bg-gray-100"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-default-100 text-default-600 hover:bg-default-200"
                       }
                       size="sm"
                       variant={statusFilter === "all" ? "solid" : "flat"}
@@ -559,8 +560,8 @@ export default function ClientsContent() {
                     <Button
                       className={
                         checkInSortMode === "default"
-                          ? "bg-black text-white hover:bg-slate-800"
-                          : "bg-gray-100"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-default-100 text-default-600 hover:bg-default-200"
                       }
                       size="sm"
                       variant={checkInSortMode === "default" ? "solid" : "flat"}

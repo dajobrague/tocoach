@@ -493,7 +493,7 @@ export default function AddClientModal({
             Cancelar
           </Button>
           <Button
-            className="bg-black text-white hover:bg-slate-800"
+            color="primary"
             isLoading={isLoading}
             startContent={
               !isLoading ? (

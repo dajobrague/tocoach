@@ -396,11 +396,7 @@ export default function EditClientModal({
           <Button color="default" variant="light" onPress={handleClose}>
             Cancelar
           </Button>
-          <Button
-            className="bg-blue-600 text-white"
-            isLoading={isLoading}
-            onPress={handleSubmit}
-          >
+          <Button color="primary" isLoading={isLoading} onPress={handleSubmit}>
             Guardar Cambios
           </Button>
         </ModalFooter>
