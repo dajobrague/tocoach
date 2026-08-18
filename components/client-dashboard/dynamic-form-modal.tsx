@@ -1658,6 +1658,24 @@ export function DynamicFormModal({
                     {configError}
                   </p>
                 </div>
+              ) : !isViewMode && visibleQuestions.length === 0 ? (
+                // Config sin NINGUNA pregunta activa (el trainer las desactivó
+                // todas). Sin esta rama caía al render normal: sección vacía →
+                // "¡Todas las preguntas contestadas!" + botón Enviar, y el
+                // cliente reportaba "no salen las casillas" creyendo que era
+                // un bug. Mensaje honesto y sin submit (ver ModalFooter).
+                <div className="flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 rounded-full bg-default-100 flex items-center justify-center mb-4">
+                    <Icon
+                      className="text-foreground/40 text-3xl"
+                      icon="solar:clipboard-list-bold"
+                    />
+                  </div>
+                  <p className="text-sm text-foreground/60 font-body max-w-xs">
+                    Tu entrenador aún no ha activado ninguna casilla en este
+                    formulario. Escríbele para que la configure.
+                  </p>
+                </div>
               ) : (
                 <div className="max-w-2xl mx-auto w-full space-y-6">
                   {(isViewMode
@@ -1778,7 +1796,8 @@ export function DynamicFormModal({
                   <span>{submitError}</span>
                 </div>
               )}
-              {isViewMode ? (
+              {isViewMode ||
+              (!isLoading && !configError && visibleQuestions.length === 0) ? (
                 <div className="flex justify-end w-full">
                   <Button color="primary" onPress={onModalClose}>
                     Cerrar
