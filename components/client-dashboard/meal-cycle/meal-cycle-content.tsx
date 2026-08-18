@@ -2,8 +2,7 @@
 
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
-import { Card, CardBody, Spinner } from "@heroui/react";
-import { Icon } from "@iconify/react";
+import { Spinner } from "@heroui/react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -25,6 +24,7 @@ import {
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
 import { ShoppingListSection } from "@/components/client-dashboard/shopping-list/shopping-list-section";
 import { WeekDateSelector } from "@/components/client-dashboard/workouts/week-date-selector";
+import { CenteredState } from "@/components/shared/centered-state";
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
   useClientMealCycleWeek,
@@ -62,28 +62,6 @@ function MealCycleShell({ children }: { children: ReactNode }) {
       </div>
       <ClientBottomNav />
     </>
-  );
-}
-
-function CenteredState({
-  icon,
-  title,
-  subtitle,
-}: {
-  icon: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <Card className="mt-6">
-      <CardBody className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-        <Icon className="text-default-400" icon={icon} width={44} />
-        <p className="text-lg font-semibold text-foreground">{title}</p>
-        {subtitle !== undefined ? (
-          <p className="max-w-sm text-sm text-default-500">{subtitle}</p>
-        ) : null}
-      </CardBody>
-    </Card>
   );
 }
 

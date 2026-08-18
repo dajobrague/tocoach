@@ -9,6 +9,7 @@ import { Button, Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { OutlineChip } from "@/components/shared/outline-chip";
 import { thumbnailUrl } from "@/lib/utils/avatar";
 
 /** "Día de entreno" when named, "Día N" otherwise. */
@@ -35,28 +36,6 @@ function Thumb({ className, url }: { className: string; url: string }) {
       src={failed || resized === url ? url : resized}
       onError={() => setFailed(true)}
     />
-  );
-}
-
-/** Outline chip — border + tinted text over the card background, so it stays
- *  readable on any tenant theme (a filled tint can swallow same-hue text). */
-function StatusChip({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone: "primary" | "muted";
-}) {
-  return (
-    <span
-      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-        tone === "primary"
-          ? "border-primary/50 text-primary"
-          : "border-default-300 text-default-500"
-      }`}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -171,7 +150,9 @@ function MenuCard({
               {menuLabel(menu)}
             </p>
             {isRecommended ? (
-              <StatusChip tone="primary">Recomendado</StatusChip>
+              <OutlineChip className="!px-1.5 !text-[10px]" tone="primary">
+                Recomendado
+              </OutlineChip>
             ) : null}
           </div>
           <p className="text-xs text-default-500 tabular-nums">
@@ -341,9 +322,12 @@ export function MenuBar({
                 ? menuLabel(effective)
                 : `Día ${day.dayIndex + 1}`}
             </p>
-            <StatusChip tone={confirmed ? "primary" : "muted"}>
+            <OutlineChip
+              className="!px-1.5 !text-[10px]"
+              tone={confirmed ? "primary" : "muted"}
+            >
               {confirmed ? "Elegido por ti" : "Recomendado"}
-            </StatusChip>
+            </OutlineChip>
           </div>
         </div>
         {onChange !== undefined ? (
