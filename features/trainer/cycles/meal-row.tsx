@@ -27,6 +27,8 @@ interface MealRowProps {
   onAddComponent: () => void;
   /** Add an alternative to an existing component. */
   onAddAlternative: (groupIndex: number) => void;
+  /** Promote an alternative: the component's option ids, new primary first. */
+  onMakePrimary: (orderedOptionIds: string[]) => void;
   onRemoveSlot: () => void;
   onRemoveOption: (optionId: string) => void;
   onEditPortions: (option: SlotOption) => void;
@@ -40,6 +42,7 @@ export function MealRow({
   disabled,
   onAddComponent,
   onAddAlternative,
+  onMakePrimary,
   onRemoveSlot,
   onRemoveOption,
   onEditPortions,
@@ -181,6 +184,14 @@ export function MealRow({
                 disabled={disabled}
                 onAddAlternative={() => onAddAlternative(component.groupIndex)}
                 onEditPortions={onEditPortions}
+                onMakePrimary={(option) =>
+                  onMakePrimary([
+                    option.id,
+                    ...component.options
+                      .filter((item) => item.id !== option.id)
+                      .map((item) => item.id),
+                  ])
+                }
                 onRemoveOption={onRemoveOption}
               />
             ))}
@@ -192,7 +203,7 @@ export function MealRow({
                 onClick={onAddComponent}
               >
                 <Icon icon="solar:add-circle-linear" width={16} />
-                Añadir recetas o alimentos a esta comida
+                Añadir alimento que se suma a esta comida
               </button>
             )}
           </>
@@ -206,12 +217,14 @@ function ComponentBlock({
   component,
   disabled,
   onAddAlternative,
+  onMakePrimary,
   onRemoveOption,
   onEditPortions,
 }: {
   component: { groupIndex: number; options: SlotOption[] };
   disabled: boolean;
   onAddAlternative: () => void;
+  onMakePrimary: (option: SlotOption) => void;
   onRemoveOption: (optionId: string) => void;
   onEditPortions: (option: SlotOption) => void;
 }) {
@@ -243,6 +256,14 @@ function ComponentBlock({
             protein_g={primary.item_snapshot.totals.protein_g}
           />
         </div>
+        {alternatives.length > 0 && (
+          <span
+            className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+            title="Esta opción cuenta en los totales del plan; el cliente puede elegir cualquiera de las alternativas"
+          >
+            Por defecto
+          </span>
+        )}
         <span
           className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums"
           data-testid="option-kcal"
@@ -327,18 +348,40 @@ function ComponentBlock({
                 {optionKcal(alt)} kcal
               </span>
               {disabled ? null : (
-                <button
-                  aria-label={`Quitar ${alt.item_snapshot.name}`}
-                  className="shrink-0 text-default-400 hover:text-danger"
-                  type="button"
-                  onClick={() => onRemoveOption(alt.id)}
-                >
-                  <Icon icon="solar:close-circle-linear" width={15} />
-                </button>
+                <>
+                  <button
+                    className="shrink-0 text-[11px] font-medium text-default-400 hover:text-emerald-700"
+                    title="Hacer que esta alternativa cuente en los totales del plan"
+                    type="button"
+                    onClick={() => onMakePrimary(alt)}
+                  >
+                    Hacer principal
+                  </button>
+                  <button
+                    aria-label={`Quitar ${alt.item_snapshot.name}`}
+                    className="shrink-0 text-default-400 hover:text-danger"
+                    type="button"
+                    onClick={() => onRemoveOption(alt.id)}
+                  >
+                    <Icon icon="solar:close-circle-linear" width={15} />
+                  </button>
+                </>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {disabled ? null : (
+        <button
+          className="mt-1.5 flex items-center gap-1 pl-[3.25rem] text-[11px] font-medium text-blue-600 hover:text-blue-700"
+          title="El cliente elige una entre las alternativas; solo la principal cuenta en los totales"
+          type="button"
+          onClick={onAddAlternative}
+        >
+          <Icon icon="solar:posts-carousel-vertical-linear" width={13} />
+          Añadir alternativa (el cliente elige una)
+        </button>
       )}
     </div>
   );

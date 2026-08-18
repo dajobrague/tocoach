@@ -20,6 +20,20 @@ export const DEFAULT_TARGETS: MacroTotals = {
   fat_g: 60,
 };
 
+/** Calories implied by a macro split: protein and carbs at 4 kcal/g, fat at 9.
+ *  Non-finite inputs count as 0 so partially-typed forms stay stable. */
+export function kcalFromMacros(
+  protein_g: number,
+  carbs_g: number,
+  fat_g: number
+): number {
+  const protein = Number.isFinite(protein_g) ? protein_g : 0;
+  const carbs = Number.isFinite(carbs_g) ? carbs_g : 0;
+  const fat = Number.isFinite(fat_g) ? fat_g : 0;
+
+  return Math.round(protein * 4 + carbs * 4 + fat * 9);
+}
+
 /** Percentage of a target, clamped to [0, 100] for bar widths. */
 export function pct(value: number, target: number): number {
   if (target <= 0) return 0;

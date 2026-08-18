@@ -15,6 +15,8 @@ export interface MockClient {
   goals: string[];
   phone?: string;
   dob?: string;
+  sex?: "male" | "female" | null;
+  heightCm?: number | null;
   nationalId?: string;
   tenantSlug?: string;
   location?: {

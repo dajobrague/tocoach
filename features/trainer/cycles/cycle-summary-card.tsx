@@ -19,6 +19,7 @@ interface CycleSummaryCardProps {
   onArchive: () => void;
   onRename: (name: string) => void;
   onChangeStartDate: (date: string) => void;
+  onSaveTemplate: () => void;
   targets: MacroTotals;
 }
 
@@ -37,6 +38,7 @@ export function CycleSummaryCard({
   onArchive,
   onRename,
   onChangeStartDate,
+  onSaveTemplate,
   targets,
 }: CycleSummaryCardProps) {
   const status = CYCLE_STATUS[cycle.status];
@@ -218,6 +220,15 @@ export function CycleSummaryCard({
                 Activar
               </Button>
             )}
+            <Button
+              isDisabled={isUpdating}
+              size="sm"
+              startContent={<Icon icon="solar:copy-linear" width={15} />}
+              variant="light"
+              onPress={onSaveTemplate}
+            >
+              Guardar plantilla
+            </Button>
             {cycle.status !== "archived" && (
               <Button
                 isDisabled={isUpdating}

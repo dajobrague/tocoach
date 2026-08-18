@@ -14,6 +14,8 @@ interface RecipeListProps {
   onOpen?: (id: string) => void;
   onDelete?: (recipe: RecipeListItem) => void;
   onCreate?: () => void;
+  /** Folder view only: per-card "move to folder" action. */
+  onMove?: (recipe: RecipeListItem) => void;
 }
 
 const GRID =
@@ -26,6 +28,7 @@ export function RecipeList({
   onOpen,
   onDelete,
   onCreate,
+  onMove,
 }: RecipeListProps) {
   if (isLoading) {
     return (
@@ -78,6 +81,7 @@ export function RecipeList({
           recipe={recipe}
           {...(onOpen !== undefined ? { onOpen } : {})}
           {...(onDelete !== undefined ? { onDelete } : {})}
+          {...(onMove !== undefined ? { onMove } : {})}
         />
       ))}
     </div>

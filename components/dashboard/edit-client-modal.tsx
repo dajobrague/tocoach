@@ -29,6 +29,8 @@ interface EditClientModalProps {
     phone?: string;
     occupation?: string;
     dob?: string;
+    sex?: string;
+    heightCm?: string;
     city?: string;
     state?: string;
     country?: string;
@@ -56,6 +58,8 @@ export default function EditClientModal({
     phone: "",
     occupation: "",
     dob: "",
+    sex: "",
+    heightCm: "",
     city: "",
     state: "",
     country: "",
@@ -77,6 +81,8 @@ export default function EditClientModal({
         phone: clientData.phone || "",
         occupation: clientData.occupation || "",
         dob: clientData.dob || "",
+        sex: clientData.sex || "",
+        heightCm: clientData.heightCm || "",
         city: clientData.city || "",
         state: clientData.state || "",
         country: clientData.country || "",
@@ -254,6 +260,23 @@ export default function EditClientModal({
                   type="date"
                   value={formData.dob}
                   onChange={(e) => handleChange("dob", e.target.value)}
+                />
+                <Select
+                  label="Sexo"
+                  placeholder="Selecciona"
+                  selectedKeys={formData.sex ? [formData.sex] : []}
+                  onChange={(e) => handleChange("sex", e.target.value)}
+                >
+                  <SelectItem key="male">Hombre</SelectItem>
+                  <SelectItem key="female">Mujer</SelectItem>
+                </Select>
+                <Input
+                  endContent={<span className="text-xs text-gray-400">cm</span>}
+                  label="Altura"
+                  placeholder="Ej: 175"
+                  type="number"
+                  value={formData.heightCm}
+                  onChange={(e) => handleChange("heightCm", e.target.value)}
                 />
               </div>
             </div>

@@ -34,6 +34,7 @@ interface SelectedDayEditorProps {
   onAddSlot: (label?: string) => void;
   onAddComponent: (slotId: string) => void;
   onAddAlternative: (slotId: string, groupIndex: number) => void;
+  onMakePrimary: (slotId: string, orderedOptionIds: string[]) => void;
   onRemoveSlot: (slotId: string) => void;
   onRemoveOption: (slotId: string, optionId: string) => void;
   onEditPortions: (slotId: string, option: SlotOption) => void;
@@ -132,6 +133,7 @@ export function SelectedDayEditor({
   onAddSlot,
   onAddComponent,
   onAddAlternative,
+  onMakePrimary,
   onRemoveSlot,
   onRemoveOption,
   onEditPortions,
@@ -199,6 +201,9 @@ export function SelectedDayEditor({
                   }
                   onAddComponent={() => onAddComponent(slot.id)}
                   onEditPortions={(option) => onEditPortions(slot.id, option)}
+                  onMakePrimary={(orderedOptionIds) =>
+                    onMakePrimary(slot.id, orderedOptionIds)
+                  }
                   onRelabel={(label) => onRelabelSlot(slot.id, label)}
                   onRemoveOption={(optionId) =>
                     onRemoveOption(slot.id, optionId)

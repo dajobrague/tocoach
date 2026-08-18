@@ -16,6 +16,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { BmrCalculator } from "./bmr-calculator";
 import { DEFAULT_TARGETS } from "./cycle-math";
 import { GoalsModal } from "./goals-modal";
 import { PresetModal } from "./preset-modal";
@@ -42,6 +43,8 @@ export function GoalsSection({ clientId }: { clientId: number }) {
   const [presetOpen, setPresetOpen] = useState(false);
   const [editingPreset, setEditingPreset] = useState<GoalPreset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GoalPreset | null>(null);
+  // Live estimate from the calculator, surfaced as a reference in the modal.
+  const [basalKcal, setBasalKcal] = useState<number | null>(null);
 
   const presets = presetsQuery.data ?? [];
   const defaults = goals ?? DEFAULT_TARGETS;
@@ -80,39 +83,49 @@ export function GoalsSection({ clientId }: { clientId: number }) {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-      <Card className="border border-gray-200 bg-white shadow-sm">
-        <CardBody className="gap-4 p-5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Icon
-                className="text-emerald-600"
-                icon="solar:target-linear"
-                width={18}
-              />
-              <h3 className="text-sm font-semibold text-gray-900">
-                Metas por defecto
-              </h3>
+      <div className="flex flex-col gap-5">
+        <Card className="border border-gray-200 bg-white shadow-sm">
+          <CardBody className="gap-4 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Icon
+                  className="text-emerald-600"
+                  icon="solar:target-linear"
+                  width={18}
+                />
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Metas por defecto
+                </h3>
+              </div>
+              <Button
+                size="sm"
+                startContent={<Icon icon="solar:pen-2-linear" width={15} />}
+                variant="bordered"
+                onPress={() => setGoalsOpen(true)}
+              >
+                Editar
+              </Button>
             </div>
-            <Button
-              size="sm"
-              startContent={<Icon icon="solar:pen-2-linear" width={15} />}
-              variant="bordered"
-              onPress={() => setGoalsOpen(true)}
-            >
-              Editar
-            </Button>
-          </div>
 
-          <p className="text-xs text-default-500">
-            Se usan en los días sin objetivo asignado.
-            {goals === null || goals === undefined
-              ? " (mostrando los valores por defecto)"
-              : ""}
-          </p>
+            <p className="text-xs text-default-500">
+              Se usan en los días sin objetivo asignado.
+              {goals === null || goals === undefined
+                ? " (mostrando los valores por defecto)"
+                : ""}
+            </p>
 
-          <MacroStrip goals={defaults} />
-        </CardBody>
-      </Card>
+            <MacroStrip goals={defaults} />
+          </CardBody>
+        </Card>
+
+        <BmrCalculator
+          applying={saveGoals.isPending}
+          clientId={clientId}
+          currentKcal={goals?.kcal ?? null}
+          onApply={(kcal) => saveGoals.mutate({ ...defaults, kcal })}
+          onResultChange={setBasalKcal}
+        />
+      </div>
 
       <Card className="border border-gray-200 bg-white shadow-sm lg:col-span-2">
         <CardBody className="gap-4 p-5">
@@ -203,6 +216,7 @@ export function GoalsSection({ clientId }: { clientId: number }) {
       </Card>
 
       <GoalsModal
+        basalKcal={basalKcal}
         initial={defaults}
         isCustom={goals !== null && goals !== undefined}
         isOpen={goalsOpen}

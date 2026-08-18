@@ -37,6 +37,9 @@ import {
   fetchDietPdf,
   fetchClientGoals,
   fetchCycleTree,
+  deleteCycleTemplate,
+  fetchCycleTemplates,
+  instantiateCycleTemplate,
   listCycles,
   listGoalPresets,
   removeDay,
@@ -44,14 +47,17 @@ import {
   reorderDay,
   saveClientGoals,
   saveClientVisibility,
+  saveCycleAsTemplate,
   searchFoods,
   searchRecipes,
   updateCycle,
   updateGoalPreset,
   updateOptionIngredients,
   updateOptionPortions,
+  updateOptionPosition,
   updateSlot,
   uploadDietPdf,
+  type CycleTemplateSummary,
   type OptionIngredientEdit,
 } from "./cycle-api";
 
@@ -356,6 +362,20 @@ export function useCycleMutations(cycleId: string) {
       copyDay(cycleId, vars.sourceDayIndex, vars.targetDayIndex),
     onSuccess: invalidate,
   });
+  // Promote an alternative to primary. Options historically share position 0
+  // (primary = insert order), so the whole component gets renumbered with the
+  // promoted option first — a swap of two equal positions would be a no-op.
+  const makePrimaryM = useMutation({
+    mutationFn: async (vars: {
+      slotId: string;
+      orderedOptionIds: string[];
+    }) => {
+      for (const [index, optionId] of vars.orderedOptionIds.entries()) {
+        await updateOptionPosition(cycleId, vars.slotId, optionId, index);
+      }
+    },
+    onSettled: invalidate,
+  });
   // Add/remove day change duration_days, which lives on the cycle summary too,
   // so refresh both the tree and any cached cycle lists.
   const invalidateDays = () => {
@@ -433,11 +453,59 @@ export function useCycleMutations(cycleId: string) {
     deleteOptionM,
     updateOptionPortionsM,
     updateOptionIngredientsM,
+    makePrimaryM,
     copyDayM,
     addDayM,
     removeDayM,
     reorderDayM,
   };
+}
+
+const TEMPLATES_KEY = ["cycle-templates"];
+
+/** The tenant's meal-plan templates (for the new-plan modal picker). */
+export function useCycleTemplates(enabled: boolean) {
+  return useQuery<CycleTemplateSummary[]>({
+    queryKey: TEMPLATES_KEY,
+    queryFn: fetchCycleTemplates,
+    enabled,
+  });
+}
+
+export function useSaveCycleAsTemplate(cycleId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (name: string) => saveCycleAsTemplate(cycleId, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  });
+}
+
+export function useInstantiateTemplate(clientId: number) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (vars: {
+      templateId: string;
+      name?: string;
+      startDate?: string;
+    }) =>
+      instantiateCycleTemplate(vars.templateId, {
+        clientId,
+        ...(vars.name !== undefined ? { name: vars.name } : {}),
+        ...(vars.startDate !== undefined ? { startDate: vars.startDate } : {}),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: cyclesKey(clientId) }),
+  });
+}
+
+export function useDeleteCycleTemplate() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (templateId: string) => deleteCycleTemplate(templateId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  });
 }
 
 export function useRecipeSearch(query: string) {

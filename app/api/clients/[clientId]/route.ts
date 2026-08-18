@@ -52,6 +52,16 @@ export async function PUT(
       zip: body.zip || null,
       national_id: body.nationalId || null,
       status: body.status || "Activo",
+      // BMR profile fields (see /bmr endpoint); tolerate older callers that
+      // don't send them by keeping the stored value.
+      sex:
+        body.sex === "male" || body.sex === "female"
+          ? body.sex
+          : (existingClient.sex ?? null),
+      height_cm:
+        Number.isFinite(Number(body.heightCm)) && Number(body.heightCm) > 0
+          ? Number(body.heightCm)
+          : (existingClient.height_cm ?? null),
     };
 
     const { data: updatedClient, error: updateError } = await (

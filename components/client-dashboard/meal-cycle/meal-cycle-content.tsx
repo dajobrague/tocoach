@@ -23,6 +23,7 @@ import {
   mondayOf,
 } from "@/components/client-dashboard/meal-cycle/meal-cycle-week-helpers";
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
+import { ShoppingListSection } from "@/components/client-dashboard/shopping-list/shopping-list-section";
 import { WeekDateSelector } from "@/components/client-dashboard/workouts/week-date-selector";
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
@@ -290,6 +291,9 @@ export function MealCycleContent() {
             url={data.fallback.pdf.url}
           />
         ) : null}
+
+        {/* Products-only shopping list for the active plan (Jul 28 call). */}
+        <ShoppingListSection />
       </div>
 
       <RecipeOptionDetail

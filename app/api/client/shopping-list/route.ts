@@ -1,4 +1,6 @@
 import type { ClientSession } from "@/lib/auth/client-session";
+import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -90,10 +92,11 @@ export async function GET(request: NextRequest) {
       to: range.to,
       menuChoices,
     });
+    const enriched = await attachImages(supabase, tenant?.host ?? "", items);
 
     return NextResponse.json({
       success: true,
-      data: { from: range.from, to: range.to, items },
+      data: { from: range.from, to: range.to, items: enriched },
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} fetch error:`, {
@@ -106,6 +109,100 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Attach product photos from the tenant's ingredient cache (image_url comes
+ * from OpenFoodFacts). Snapshot lines carry name+brand but no ingredient id,
+ * so the match is exact (name, brand) case-insensitive, falling back to a
+ * brand-less cache row with the same name. Best-effort: a lookup failure
+ * degrades to no images, never to an error.
+ */
+async function attachImages(
+  supabase: SupabaseClient,
+  tenantHost: string,
+  items: ShoppingListItem[]
+): Promise<ShoppingListItem[]> {
+  if (items.length === 0 || tenantHost.length === 0) {
+    return items;
+  }
+
+  try {
+    const names = [...new Set(items.map((item) => item.name))];
+    const { data } = await supabase
+      .from("ingredients")
+      .select("name, brand, image_url")
+      .eq("tenant_host", tenantHost)
+      .in("name", names);
+
+    const byKey = new Map<string, string>();
+    // Snapshot lines often carry no brand while the cache row does (OFF
+    // products), so an exact (name, brand) miss falls back to any cached
+    // row under the same name — recovering the photo AND the brand from
+    // that row, so the list can display "Quaker" even though the frozen
+    // line never stored it. A row with a photo beats one without.
+    const byName = new Map<
+      string,
+      { url: string | null; brand: string | null }
+    >();
+
+    for (const row of (data ?? []) as {
+      name: string | null;
+      brand: string | null;
+      image_url: string | null;
+    }[]) {
+      const url =
+        typeof row.image_url === "string" && row.image_url.length > 0
+          ? row.image_url
+          : null;
+      const brand = (row.brand?.trim() ?? "").length > 0 ? row.brand : null;
+
+      if (url === null && brand === null) continue;
+      const nameKey = `${row.name ?? ""}`.trim().toLowerCase();
+
+      if (url !== null) {
+        const key = imageKey(row.name ?? "", row.brand);
+
+        if (byKey.has(key) === false) byKey.set(key, url);
+      }
+
+      const existing = byName.get(nameKey);
+
+      if (existing === undefined) {
+        byName.set(nameKey, { url, brand });
+      } else if (existing.url === null && url !== null) {
+        byName.set(nameKey, { url, brand: existing.brand ?? brand });
+      }
+    }
+
+    return items.map((item) => {
+      const exact = byKey.get(imageKey(item.name, item.brand));
+
+      if (exact !== undefined) {
+        return { ...item, imageUrl: exact };
+      }
+
+      const fallback = byName.get(item.name.trim().toLowerCase());
+
+      if (fallback === undefined) {
+        return { ...item, imageUrl: null };
+      }
+
+      return {
+        ...item,
+        imageUrl: fallback.url,
+        brand: item.brand ?? fallback.brand,
+      };
+    });
+  } catch {
+    return items;
+  }
+}
+
+function imageKey(name: string, brand: string | null | undefined): string {
+  const trimmedBrand = brand?.trim().toLowerCase() ?? "";
+
+  return `${name.trim().toLowerCase()}|${trimmedBrand}`;
 }
 
 /**

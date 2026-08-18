@@ -108,6 +108,8 @@ export async function GET(
       goals: [], // TODO: Add goals from a separate table if needed
       phone: client.phone,
       dob: client.dob,
+      sex: client.sex ?? null,
+      heightCm: client.height_cm !== null ? Number(client.height_cm) : null,
       nationalId: client.national_id,
       location,
       tenantSlug: tenant?.slug || session.tenant_host || "",

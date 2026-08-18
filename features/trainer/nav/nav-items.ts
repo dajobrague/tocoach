@@ -34,12 +34,8 @@ export const TRAINER_NAV: TrainerNavSection[] = [
         icon: "solar:users-group-rounded-linear",
         href: "/trainer/dashboard/clients",
       },
-      {
-        key: "messaging",
-        title: "Mensajería",
-        icon: "solar:chat-round-dots-linear",
-        href: "/trainer/dashboard/messaging",
-      },
+      // Messaging left the menu on purpose: it lives as an icon-only
+      // shortcut beside the notifications bell (MessagingNavButton).
     ],
   },
   {

@@ -4,6 +4,7 @@ import {
   SHOPPING_RANGE_OPTIONS,
   checkedStorageKey,
   computeRange,
+  dedupeProducts,
   formatItemLine,
   formatQuantity,
   itemKey,
@@ -15,6 +16,55 @@ import {
  * the range math and the per-range localStorage key are unit-tested directly
  * (the no-jsdom convention).
  */
+
+describe("dedupeProducts — products only, no quantities", () => {
+  it("merges same-name lines across units into one product", () => {
+    const products = dedupeProducts([
+      { name: "Avena", brand: null },
+      { name: "Avena", brand: null },
+      { name: "Huevos", brand: null },
+    ]);
+
+    expect(products.map((p) => p.name)).toEqual(["Avena", "Huevos"]);
+  });
+
+  it("keeps different brands as separate products", () => {
+    const products = dedupeProducts([
+      { name: "Yogur griego", brand: "Hacendado" },
+      { name: "Yogur griego", brand: "Fage" },
+      { name: "Yogur griego", brand: "Hacendado" },
+    ]);
+
+    expect(products.map((p) => p.brand)).toEqual(["Hacendado", "Fage"]);
+  });
+
+  it("dedupes case-insensitively and treats missing brand as null", () => {
+    const products = dedupeProducts([
+      { name: "avena" },
+      { name: "Avena", brand: null },
+    ]);
+
+    expect(products).toHaveLength(1);
+  });
+
+  it("keeps the first non-null photo among merged lines", () => {
+    const products = dedupeProducts([
+      { name: "Avena", brand: null, imageUrl: null },
+      { name: "Avena", brand: null, imageUrl: "https://img/avena.jpg" },
+    ]);
+
+    expect(products[0]?.imageUrl).toBe("https://img/avena.jpg");
+  });
+
+  it("never merges a spaced name into a name+brand pair", () => {
+    const products = dedupeProducts([
+      { name: "Yogur griego", brand: null },
+      { name: "Yogur", brand: "griego" },
+    ]);
+
+    expect(products).toHaveLength(2);
+  });
+});
 
 describe("formatQuantity — rounds away float noise", () => {
   it("rounds 1.4999 to 1.5", () => {

@@ -9,6 +9,7 @@ import { useClientData } from "./client-data-provider";
 import { ClientHeader } from "./client-header";
 
 import { useSupplements } from "@/lib/hooks/use-client-queries";
+import { normalizeProductUrl } from "@/lib/supplements/product-url";
 import { ClientSupplementAssignment } from "@/types/supplements";
 
 function getTimingIcon(timing: string): string {
@@ -103,6 +104,9 @@ function SupplementCard({
   assignment: ClientSupplementAssignment;
 }) {
   const productImage = assignment.supplement?.images?.[0];
+  const productUrl = normalizeProductUrl(
+    assignment.supplement?.product_url ?? ""
+  );
 
   return (
     <article className="rounded-2xl border border-default-200 bg-content1 p-4 shadow-sm">
@@ -183,6 +187,22 @@ function SupplementCard({
             </div>
           </div>
         </div>
+      )}
+
+      {productUrl.length > 0 && (
+        <a
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-default-200 bg-default-50 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-default-100"
+          href={productUrl}
+          rel="noopener noreferrer"
+          style={{ fontFamily: "var(--font-body)", fontWeight: 600 }}
+          target="_blank"
+        >
+          <Icon
+            className="text-base text-default-500"
+            icon="solar:link-linear"
+          />
+          Ver producto
+        </a>
       )}
     </article>
   );

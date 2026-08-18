@@ -33,6 +33,7 @@ import { MealPlanHeader } from "./meal-plan-header";
 import { NewCycleModal } from "./new-cycle-modal";
 import { PickerDrawer } from "./picker-drawer";
 import { RemoveDayModal } from "./remove-day-modal";
+import { SaveTemplateModal } from "./save-template-modal";
 import { SelectedDayEditor } from "./selected-day-editor";
 import {
   useAssignDayTarget,
@@ -40,11 +41,17 @@ import {
   useClientGoals,
   useCreateCycle,
   useCycleMutations,
+  useCycleTemplates,
   useCycleTree,
+  useDeleteCycleTemplate,
   useGoalPresets,
+  useInstantiateTemplate,
   useRenameDay,
+  useSaveCycleAsTemplate,
   useUpdateCycle,
 } from "./use-cycles";
+
+import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
 interface CycleBuilderContentProps {
   clientId: number;
@@ -96,6 +103,13 @@ export function CycleBuilderContent({
   const [removeDayTarget, setRemoveDayTarget] = useState<number | null>(null);
   const [addDayOpen, setAddDayOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+
+  // Templates load lazily: only once the new-plan modal is opened.
+  const templatesQuery = useCycleTemplates(newOpen);
+  const saveTemplateM = useSaveCycleAsTemplate(activeId ?? "none");
+  const instantiateM = useInstantiateTemplate(clientId);
+  const deleteTemplateM = useDeleteCycleTemplate();
 
   useEffect(() => {
     setSelectedDay(0);
@@ -294,6 +308,10 @@ export function CycleBuilderContent({
               onArchive={() => setArchiveOpen(true)}
               onChangeStartDate={(startDate) => update.mutate({ startDate })}
               onRename={(name) => update.mutate({ name })}
+              onSaveTemplate={() => {
+                saveTemplateM.reset();
+                setSaveTemplateOpen(true);
+              }}
             />
 
             <DaySelector
@@ -312,7 +330,7 @@ export function CycleBuilderContent({
                 assignedPresetId={assignedPresetId}
                 day={day}
                 dayName={(tree.day_names ?? {})[String(day.dayIndex)] ?? null}
-                disabled={disabled === true}
+                disabled={disabled === true || mutations.makePrimaryM.isPending}
                 presets={presetList}
                 targets={dayTargets}
                 onAddAlternative={(slotId, groupIndex) =>
@@ -349,6 +367,9 @@ export function CycleBuilderContent({
                 onEditPortions={(slotId, option) =>
                   setEditing({ slotId, option })
                 }
+                onMakePrimary={(slotId, orderedOptionIds) =>
+                  mutations.makePrimaryM.mutate({ slotId, orderedOptionIds })
+                }
                 onRelabelSlot={(slotId, label) =>
                   mutations.updateSlotM.mutate({ slotId, patch: { label } })
                 }
@@ -367,9 +388,47 @@ export function CycleBuilderContent({
 
       <NewCycleModal
         isOpen={newOpen}
-        pending={create.isPending}
+        pending={create.isPending || instantiateM.isPending}
+        templates={templatesQuery.data ?? []}
         onClose={() => setNewOpen(false)}
         onCreate={handleCreate}
+        onCreateFromTemplate={(input) =>
+          instantiateM.mutate(
+            {
+              templateId: input.templateId,
+              name: input.name,
+              ...(input.startDate !== undefined
+                ? { startDate: input.startDate }
+                : {}),
+            },
+            {
+              onSuccess: (cycle) => {
+                setSelectedId(cycle.id);
+                setNewOpen(false);
+              },
+            }
+          )
+        }
+        onDeleteTemplate={(templateId) => {
+          confirmAfterPress(
+            "¿Eliminar esta plantilla? Los planes ya creados con ella no se ven afectados."
+          ).then((confirmed) => {
+            if (confirmed) deleteTemplateM.mutate(templateId);
+          });
+        }}
+      />
+
+      <SaveTemplateModal
+        error={saveTemplateM.error?.message ?? null}
+        initialName={tree?.name ?? ""}
+        isOpen={saveTemplateOpen}
+        saving={saveTemplateM.isPending}
+        onClose={() => setSaveTemplateOpen(false)}
+        onSave={(name) =>
+          saveTemplateM.mutate(name, {
+            onSuccess: () => setSaveTemplateOpen(false),
+          })
+        }
       />
 
       <PickerDrawer

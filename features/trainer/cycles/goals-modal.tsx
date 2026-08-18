@@ -14,12 +14,16 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { kcalFromMacros } from "./cycle-math";
+
 interface GoalsModalProps {
   isOpen: boolean;
   /** Current effective targets to prefill (saved goals, or app defaults). */
   initial: NutritionGoals;
   /** True when the client already has saved goals (vs. showing defaults). */
   isCustom: boolean;
+  /** Live estimate from the calorie calculator, shown as a reference. */
+  basalKcal?: number | null;
   saving: boolean;
   onClose: () => void;
   onSave: (goals: NutritionGoals) => void;
@@ -40,6 +44,7 @@ export function GoalsModal({
   isOpen,
   initial,
   isCustom,
+  basalKcal = null,
   saving,
   onClose,
   onSave,
@@ -62,6 +67,26 @@ export function GoalsModal({
       });
     }
   }, [isOpen, initial]);
+
+  // Macro edits recompute kcal (4/4/9); direct kcal edits are kept as typed.
+  const setField = (key: keyof NutritionGoals, value: string) => {
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+
+      if (key === "kcal") return next;
+
+      return {
+        ...next,
+        kcal: String(
+          kcalFromMacros(
+            Number(next.protein_g),
+            Number(next.carbs_g),
+            Number(next.fat_g)
+          )
+        ),
+      };
+    });
+  };
 
   const values = {
     kcal: Number(draft.kcal),
@@ -120,12 +145,38 @@ export function GoalsModal({
                 type="number"
                 value={draft[field.key]}
                 variant="bordered"
-                onValueChange={(value) =>
-                  setDraft((prev) => ({ ...prev, [field.key]: value }))
-                }
+                onValueChange={(value) => setField(field.key, value)}
               />
             ))}
           </div>
+
+          <p className="text-xs text-default-400">
+            Las calorías se recalculan desde los macros (proteína y
+            carbohidratos ×4, grasa ×9). Puedes ajustarlas a mano después.
+          </p>
+
+          {basalKcal !== null && (
+            <div className="flex items-center justify-between rounded-medium bg-gray-50 px-3 py-2">
+              <span className="text-xs text-default-500">
+                Basal estimado del cliente
+              </span>
+              <span className="text-xs font-semibold text-gray-900 tabular-nums">
+                {basalKcal.toLocaleString("es")} kcal
+                {Number.isInteger(values.kcal) && values.kcal > 0 && (
+                  <span
+                    className={
+                      values.kcal >= basalKcal
+                        ? "ml-1 font-medium text-emerald-600"
+                        : "ml-1 font-medium text-amber-600"
+                    }
+                  >
+                    ({values.kcal >= basalKcal ? "+" : ""}
+                    {values.kcal - basalKcal} en metas)
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
         </ModalBody>
         <ModalFooter>
           <Button isDisabled={saving} variant="light" onPress={onClose}>

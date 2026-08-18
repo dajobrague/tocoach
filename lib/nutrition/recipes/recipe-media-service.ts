@@ -7,6 +7,10 @@ import { RecipeService } from "./recipe-service";
 const TABLE = "recipe_media";
 const BUCKET = "recipe-media";
 
+/** The storage bucket recipe media lives in (shared by all tenants —
+ *  single Supabase project), exported for the community copy flows. */
+export const RECIPE_MEDIA_BUCKET = BUCKET;
+
 export type RecipeMediaType = "image" | "video";
 export type RecipeMediaOrientation = "vertical" | "horizontal";
 
@@ -230,7 +234,7 @@ function extensionOf(filename: string): string {
 }
 
 /** Extract the in-bucket object path from a public storage URL. */
-function storagePathFromUrl(url: string): string | null {
+export function storagePathFromUrl(url: string): string | null {
   const marker = `/${BUCKET}/`;
   const idx = url.indexOf(marker);
 

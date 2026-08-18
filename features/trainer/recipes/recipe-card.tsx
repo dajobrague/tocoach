@@ -11,9 +11,16 @@ interface RecipeCardProps {
   recipe: RecipeListItem;
   onOpen?: (id: string) => void;
   onDelete?: (recipe: RecipeListItem) => void;
+  /** Folder view only: opens the "Mover a carpeta" dialog. */
+  onMove?: (recipe: RecipeListItem) => void;
 }
 
-export function RecipeCard({ recipe, onOpen, onDelete }: RecipeCardProps) {
+export function RecipeCard({
+  recipe,
+  onOpen,
+  onDelete,
+  onMove,
+}: RecipeCardProps) {
   const hasThumbnail =
     recipe.thumbnailUrl !== undefined &&
     recipe.thumbnailUrl !== null &&
@@ -35,6 +42,20 @@ export function RecipeCard({ recipe, onOpen, onDelete }: RecipeCardProps) {
           onPress={() => onDelete(recipe)}
         >
           <Icon icon="solar:trash-bin-trash-linear" width={17} />
+        </Button>
+      )}
+
+      {onMove !== undefined && (
+        <Button
+          isIconOnly
+          aria-label={`Mover ${recipe.name} a otra carpeta`}
+          className="absolute right-11 top-2 z-10 bg-white/90 text-default-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 focus:opacity-100"
+          radius="full"
+          size="sm"
+          variant="light"
+          onPress={() => onMove(recipe)}
+        >
+          <Icon icon="solar:folder-linear" width={16} />
         </Button>
       )}
 

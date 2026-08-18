@@ -310,6 +310,51 @@ export function updateCycle(
   return sendJson<CycleSummary>(`${BASE}/${cycleId}`, "PATCH", body);
 }
 
+// ─── Templates ──────────────────────────────────────────────────────────────
+
+export interface CycleTemplateSummary {
+  id: string;
+  name: string;
+  duration_days: number;
+  /** Total meal slots across all days (quick size cue in pickers). */
+  meals: number;
+  created_at: string;
+}
+
+export function fetchCycleTemplates(): Promise<CycleTemplateSummary[]> {
+  return getJson<CycleTemplateSummary[]>("/api/meal-cycle-templates");
+}
+
+export function saveCycleAsTemplate(
+  cycleId: string,
+  name: string
+): Promise<CycleTemplateSummary> {
+  return sendJson<CycleTemplateSummary>(
+    `${BASE}/${cycleId}/save-as-template`,
+    "POST",
+    { name }
+  );
+}
+
+export function instantiateCycleTemplate(
+  templateId: string,
+  input: { clientId: number; name?: string; startDate?: string }
+): Promise<CycleSummary> {
+  return sendJson<CycleSummary>(
+    `/api/meal-cycle-templates/${templateId}/instantiate`,
+    "POST",
+    {
+      clientId: input.clientId,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
+    }
+  );
+}
+
+export function deleteCycleTemplate(templateId: string): Promise<unknown> {
+  return sendJson<unknown>(`/api/meal-cycle-templates/${templateId}`, "DELETE");
+}
+
 export function addSlot(
   cycleId: string,
   input: { dayIndex: number; label?: string; position?: number }
@@ -432,6 +477,22 @@ export function updateOptionPortions(
         ? { trainer_comment: trainerComment }
         : {}),
     }
+  );
+}
+
+/** Move an option within its slot. Options are historically all inserted at
+ *  position 0 (ties broken by insert order), so promoting an alternative to
+ *  primary renumbers its whole component with explicit positions. */
+export function updateOptionPosition(
+  cycleId: string,
+  slotId: string,
+  optionId: string,
+  position: number
+): Promise<SlotOption> {
+  return sendJson<SlotOption>(
+    `${BASE}/${cycleId}/slots/${slotId}/options/${optionId}`,
+    "PATCH",
+    { position }
   );
 }
 
