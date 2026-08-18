@@ -16,4 +16,15 @@ describe("pickForegroundHSL", () => {
   it("con hex inválido cae a blanco (comportamiento actual)", () => {
     expect(pickForegroundHSL("garbage")).toBe("0 0% 100%");
   });
+
+  it("elige blanco cuando supera el piso 3:1 aunque el oscuro contraste más", () => {
+    // Regla ii: blanco gana si alcanza 3.0:1 — la convención pre-branch (y
+    // el danger=white hardcodeado de HeroUI) para rojos/verdes saturados.
+    expect(pickForegroundHSL("#ef4444")).toBe("0 0% 100%"); // 3.76:1
+    expect(pickForegroundHSL("#059669")).toBe("0 0% 100%"); // 3.77:1
+  });
+
+  it("mantiene oscuro bajo el piso 3:1 (teal david-train)", () => {
+    expect(pickForegroundHSL("#14b8a6")).toBe("222 47% 11%"); // blanco 2.49:1
+  });
 });

@@ -126,17 +126,26 @@ const DARK_FOREGROUND_HSL = "222 47% 11%"; // slate-900, ya usado como neutro os
 const LIGHT_FOREGROUND_HSL = "0 0% 100%";
 
 /**
- * Elige el foreground (HSL triple) con mayor contraste WCAG sobre `hex`.
- * Sustituye el blanco fijo de --heroui-primary-foreground: con primarios
- * pastel, texto blanco era ilegible (regla documentada en
+ * Elige el foreground (HSL triple) sobre `hex`: blanco siempre que alcance
+ * el piso de accesibilidad 3.0:1 (la convención de botón sólido — y el
+ * danger=white hardcodeado de HeroUI); oscuro solo por debajo de ese piso.
+ * Cuando blanco < 3.0, oscuro vs #0f172a es demostrablemente >= 4.16:1, así
+ * que ningún label puede quedar bajo 3:1. Con primarios pastel el texto
+ * blanco era ilegible (regla documentada en
  * components/client-dashboard/dashboard-content.tsx:398-416).
  */
 export function pickForegroundHSL(hex: string): string {
-  try {
-    const white = getContrastRatio("#ffffff", hex);
-    const dark = getContrastRatio("#0f172a", hex);
+  // getContrastRatio devuelve 1 con hex inválido (nunca lanza): sin este
+  // guard, 1 < 3.0 elegiría oscuro y rompería el fallback histórico a
+  // blanco para valores corruptos.
+  if (!/^#?[a-f\d]{6}$/i.test(hex)) {
+    return LIGHT_FOREGROUND_HSL;
+  }
 
-    return dark > white ? DARK_FOREGROUND_HSL : LIGHT_FOREGROUND_HSL;
+  try {
+    return getContrastRatio("#ffffff", hex) >= 3.0
+      ? LIGHT_FOREGROUND_HSL
+      : DARK_FOREGROUND_HSL;
   } catch {
     return LIGHT_FOREGROUND_HSL;
   }
