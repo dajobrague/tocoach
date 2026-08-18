@@ -818,8 +818,8 @@ export function DayDetail({
         />
         <p className="text-sm capitalize text-gray-600">
           {formatDateLong(day.date)} — día de descanso
-          {day.recommendedSessionName != null
-            ? ` · recomendado: ${day.recommendedSessionName}`
+          {day.recommendedSessionNames.length > 0
+            ? ` · recomendado: ${day.recommendedSessionNames.join(" + ")}`
             : ""}
         </p>
       </section>
@@ -827,19 +827,23 @@ export function DayDetail({
   }
 
   // Sin línea de fecha sobre las tarjetas (la fecha ya se ve seleccionada en
-  // la tira/grilla); el chip "Recomendado" se conserva solo cuando aplica.
-  const showRecommended =
-    day.recommendedSessionName != null &&
-    !day.sessions.some(
-      (s) => s.scheduledSession.session?.name === day.recommendedSessionName
-    );
+  // la tira/grilla); el chip "Recomendado" lista SOLO las prescripciones que
+  // no aparecen entre las sesiones del día (con dos programas puede faltar
+  // una y estar la otra). Matching por ID, no por nombre: dos programas
+  // pueden tener sesiones homónimas y el nombre taparía la ausente.
+  const missingRecommended = day.recommendedSessions
+    .filter(
+      (rec) =>
+        !day.sessions.some((s) => s.scheduledSession.session?.id === rec.id)
+    )
+    .map((rec) => rec.name);
 
   return (
     <div className="flex flex-col gap-3">
-      {showRecommended ? (
+      {missingRecommended.length > 0 ? (
         <div className="flex justify-end">
           <span className="whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
-            Recomendado: {day.recommendedSessionName}
+            Recomendado: {missingRecommended.join(" + ")}
           </span>
         </div>
       ) : null}

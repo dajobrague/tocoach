@@ -11,7 +11,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
   loadAllActiveOwnedPrograms,
-  loadMicrocycleWithSlots,
+  loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
@@ -84,8 +84,16 @@ interface ResolvedDay {
    * Reglas:
    *   - Se calcula desde el slot del microciclo para esa fecha.
    *   - null = no hay recomendación (rest day o sin microciclo/programa).
+   *   - Con varios programas activos es la del programa PRIMARIO; el
+   *     campo se mantiene por compatibilidad con bundles viejos.
    */
   trainer_recommended_session_id: string | null;
+  /**
+   * TODAS las sesiones recomendadas para el día, una por programa activo
+   * que prescribe esta fecha (orden primario-primero, sin duplicados).
+   * Con fuerza + cardio el mismo día, ambas llevan el badge "Recomendado".
+   */
+  trainer_recommended_session_ids: string[];
 }
 
 function isYmd(s: unknown): s is string {
@@ -181,32 +189,41 @@ export async function GET(
       return programsCache;
     };
 
-    // ── Compute the microcycle's recommendation for this date ─────────
-    // Siempre desde el slot del microciclo. Las filas reales son
-    // actividad del cliente, no prescripción.
+    // ── Compute the microcycle's recommendations for this date ────────
+    // Siempre desde los slots del microciclo (uno por programa activo).
+    // Las filas reales son actividad del cliente, no prescripción.
     const recPrograms = await loadPrograms();
-    const recSlotMatch = await resolveMicrocycleSlot(
+    const recSlotMatches = await resolveMicrocycleSlots(
       supabase,
       recPrograms,
       date,
       correlationId
     );
+    const trainerRecommendedSessionIds: string[] = recSlotMatches.map(
+      (m) => m.sessionId
+    );
     const trainerRecommendedSessionId: string | null =
-      recSlotMatch?.sessionId ?? null;
+      trainerRecommendedSessionIds[0] ?? null;
 
     // ── Compute current state for the PRESCRIBED session ──────────────
     // Si existe una fila real para esta fecha con su propia sesión,
     // construimos el día desde los session_exercises de esa sesión
     // (template data). Esto preserva el render de divergencia: el
     // cliente ve lo que efectivamente entrenó.
-    // First scheduled_sessions row with exercises wins; additional
-    // same-date sessions are not rendered here.
-    const realRow = ssRows.find(
+    // Con días fusionados puede haber varias filas reales el mismo día y
+    // la query no trae .order(): elegimos DETERMINISTA — la recomendada
+    // primaria si el cliente la entrenó, si no la de id menor. Las demás
+    // sesiones del día no se renderizan aquí.
+    const rowsWithExercises = ssRows.filter(
       (r) =>
         r.session &&
         Array.isArray(r.session.session_exercises) &&
         r.session.session_exercises.length > 0
     );
+    const realRow =
+      rowsWithExercises.find(
+        (r) => r.session_id === trainerRecommendedSessionIds[0]
+      ) ?? [...rowsWithExercises].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 
     if (realRow) {
       const sessionRow = realRow.session as any;
@@ -216,7 +233,7 @@ export async function GET(
         "session",
         sessionRow,
         sessExercises,
-        trainerRecommendedSessionId
+        trainerRecommendedSessionIds
       );
 
       return NextResponse.json({
@@ -225,12 +242,16 @@ export async function GET(
       });
     }
 
-    // 2. No real row — derive from microcycle template. Reuse the slot
+    // 2. No real row — derive from microcycle template. Reuse the slots
     //    already resolved above (same supabase/programs/date → identical
-    //    result) instead of re-querying.
-    const slotMatch = recSlotMatch;
-
-    if (slotMatch) {
+    //    result) instead of re-querying. El día "por defecto" es la
+    //    prescripción del programa PRIMARIO; el resto de recomendadas
+    //    viajan en trainer_recommended_session_ids y el cliente las abre
+    //    desde la lista de sesiones. Si la sesión del primario no carga
+    //    (borrada/corrupta), caemos a la siguiente recomendada en vez de
+    //    declarar "rest" con badges de recomendado vivos — sería
+    //    contradictorio.
+    for (const slotMatch of recSlotMatches) {
       const { data: sessionDetail } = await supabase
         .from("sessions")
         .select(
@@ -250,7 +271,7 @@ export async function GET(
           "template",
           sessionDetail as any,
           ((sessionDetail as any).session_exercises ?? []) as any[],
-          trainerRecommendedSessionId
+          trainerRecommendedSessionIds
         );
 
         return NextResponse.json({
@@ -269,6 +290,7 @@ export async function GET(
         session: null,
         exercises: [],
         trainer_recommended_session_id: trainerRecommendedSessionId,
+        trainer_recommended_session_ids: trainerRecommendedSessionIds,
       } satisfies ResolvedDay,
     });
   } catch (error) {
@@ -283,25 +305,34 @@ export async function GET(
 
 /**
  * Camina los programas activos del cliente, carga sus microciclos, y
- * devuelve la sesión que el slot del microciclo recomienda para `date`.
- * El primer programa con un slot válido gana (programs vienen ordenados
- * desc por start_date upstream — el más reciente tiene precedencia).
+ * devuelve TODAS las sesiones que los slots recomiendan para `date` — una
+ * por programa activo que prescribe ese día, en orden primario-primero
+ * (programs vienen ordenados por compareProgramPriority upstream) y sin
+ * duplicar la misma sesión.
  *
- * El ancla del modulo es `microcycle.start_date` (no `program.start_date`)
+ * El ancla del módulo es `microcycle.start_date` (no `program.start_date`)
  * desde la migración 108: el trainer escoge cuándo arranca el ciclo.
  */
-async function resolveMicrocycleSlot(
+async function resolveMicrocycleSlots(
   supabase: ReturnType<typeof createSupabaseClient>,
   programs: Awaited<ReturnType<typeof loadAllActiveOwnedPrograms>>,
   date: string,
   correlationId: string
-): Promise<{ sessionId: string } | null> {
+): Promise<Array<{ sessionId: string }>> {
+  const matches: Array<{ sessionId: string }> = [];
+  const seen = new Set<string>();
+
+  // 2 queries totales para todos los microciclos (antes: 2 por programa).
+  // El walk completo sigue siendo necesario (todas las recomendadas del
+  // día); el orden de precedencia lo da el array `programs`.
+  const microcyclesByProgram = await loadMicrocyclesWithSlots(
+    supabase,
+    programs.map((program) => program.id),
+    correlationId
+  );
+
   for (const program of programs) {
-    const microcycle = await loadMicrocycleWithSlots(
-      supabase,
-      program.id,
-      correlationId
-    );
+    const microcycle = microcyclesByProgram.get(program.id);
 
     if (!microcycle?.start_date) continue;
     if (date < microcycle.start_date) continue;
@@ -311,11 +342,13 @@ async function resolveMicrocycleSlot(
     const slot = microcycle.slots.find((s) => s.day_index === dayIndex);
 
     if (!slot?.session_id) continue;
+    if (seen.has(slot.session_id)) continue;
 
-    return { sessionId: slot.session_id };
+    seen.add(slot.session_id);
+    matches.push({ sessionId: slot.session_id });
   }
 
-  return null;
+  return matches;
 }
 
 function makeResolvedDay(
@@ -342,7 +375,7 @@ function makeResolvedDay(
       uploaded_video_url?: string | null;
     };
   }>,
-  trainerRecommendedSessionId: string | null
+  trainerRecommendedSessionIds: string[]
 ): ResolvedDay {
   const exercises = [...raws]
     .sort((a, b) => a.exercise_order - b.exercise_order)
@@ -404,7 +437,8 @@ function makeResolvedDay(
     source,
     session: session ? { id: session.id, name: session.name } : null,
     exercises,
-    trainer_recommended_session_id: trainerRecommendedSessionId,
+    trainer_recommended_session_id: trainerRecommendedSessionIds[0] ?? null,
+    trainer_recommended_session_ids: trainerRecommendedSessionIds,
   };
 }
 

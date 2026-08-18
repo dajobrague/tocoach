@@ -82,89 +82,124 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Process program templates with counts
-    const programTemplatesWithCounts = await Promise.all(
-      programTemplates.map(async (template: any) => {
-        // Count sessions
-        const { count: sessionCount } = await supabase
-          .from("sessions")
-          .select("*", { count: "exact", head: true })
-          .eq("program_id", template.id);
+    // Process program templates with counts — 2 batched queries for ALL
+    // templates instead of 3 per template (the session ids double as the
+    // session count).
+    const countByKey = (rows: any[], key: string) =>
+      rows.reduce((acc: Map<any, number>, row: any) => {
+        acc.set(row[key], (acc.get(row[key]) ?? 0) + 1);
 
-        // Count exercises across all sessions
-        const { data: sessions } = await supabase
-          .from("sessions")
-          .select("id")
-          .eq("program_id", template.id);
+        return acc;
+      }, new Map<any, number>());
 
-        let exerciseCount = 0;
+    let sessionCountByProgram = new Map<any, number>();
+    let exerciseCountByProgram = new Map<any, number>();
 
-        if (sessions && sessions.length > 0) {
-          const sessionIds = sessions.map((s: any) => s.id);
-          const { count } = await supabase
-            .from("session_exercises")
-            .select("*", { count: "exact", head: true })
-            .in("session_id", sessionIds);
+    if (programTemplates.length > 0) {
+      const templateIds = programTemplates.map((t: any) => t.id);
+      const { data: sessionRows } = await supabase
+        .from("sessions")
+        .select("id, program_id")
+        .in("program_id", templateIds);
 
-          exerciseCount = count || 0;
-        }
+      sessionCountByProgram = countByKey(sessionRows || [], "program_id");
 
-        return {
-          id: template.id,
-          name: template.name,
-          description: template.description,
-          templateType: "program", // Distinguish from nutrition
-          type: template.metadata?.type || "Strength",
-          category: template.metadata?.category || "strength",
-          division: template.metadata?.division,
-          goal: template.metadata?.goal,
-          sessionsPerWeek: template.metadata?.sessions_per_week,
-          sessionCount: sessionCount || 0,
-          exerciseCount,
-          createdAt: template.created_at,
-          updatedAt: template.updated_at,
-        };
+      const sessionIds = (sessionRows || []).map((s: any) => s.id);
+
+      if (sessionIds.length > 0) {
+        const { data: exerciseRows } = await supabase
+          .from("session_exercises")
+          .select("session_id")
+          .in("session_id", sessionIds);
+
+        const programBySession = new Map(
+          (sessionRows || []).map((s: any) => [s.id, s.program_id])
+        );
+
+        exerciseCountByProgram = (exerciseRows || []).reduce(
+          (acc: Map<any, number>, row: any) => {
+            const programId = programBySession.get(row.session_id);
+
+            if (programId !== undefined) {
+              acc.set(programId, (acc.get(programId) ?? 0) + 1);
+            }
+
+            return acc;
+          },
+          new Map<any, number>()
+        );
+      }
+    }
+
+    const programTemplatesWithCounts = programTemplates.map(
+      (template: any) => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        templateType: "program", // Distinguish from nutrition
+        type: template.metadata?.type || "Strength",
+        category: template.metadata?.category || "strength",
+        division: template.metadata?.division,
+        goal: template.metadata?.goal,
+        sessionsPerWeek: template.metadata?.sessions_per_week,
+        sessionCount: sessionCountByProgram.get(template.id) ?? 0,
+        exerciseCount: exerciseCountByProgram.get(template.id) ?? 0,
+        createdAt: template.created_at,
+        updatedAt: template.updated_at,
       })
     );
 
-    // Process nutrition templates with counts
-    const nutritionTemplatesWithCounts = await Promise.all(
-      nutritionTemplates.map(async (template: any) => {
-        // Count days
-        const { count: dayCount } = await supabase
-          .from("nutrition_days")
-          .select("*", { count: "exact", head: true })
-          .eq("nutrition_plan_id", template.id);
+    // Process nutrition templates with counts — same batching.
+    let dayCountByPlan = new Map<any, number>();
+    let mealCountByPlan = new Map<any, number>();
 
-        // Count meals across all days
-        const { data: days } = await supabase
-          .from("nutrition_days")
-          .select("id")
-          .eq("nutrition_plan_id", template.id);
+    if (nutritionTemplates.length > 0) {
+      const planIds = nutritionTemplates.map((t: any) => t.id);
+      const { data: dayRows } = await supabase
+        .from("nutrition_days")
+        .select("id, nutrition_plan_id")
+        .in("nutrition_plan_id", planIds);
 
-        let mealCount = 0;
+      dayCountByPlan = countByKey(dayRows || [], "nutrition_plan_id");
 
-        if (days && days.length > 0) {
-          const dayIds = days.map((d: any) => d.id);
-          const { count } = await supabase
-            .from("nutrition_meals")
-            .select("*", { count: "exact", head: true })
-            .in("nutrition_day_id", dayIds);
+      const dayIds = (dayRows || []).map((d: any) => d.id);
 
-          mealCount = count || 0;
-        }
+      if (dayIds.length > 0) {
+        const { data: mealRows } = await supabase
+          .from("nutrition_meals")
+          .select("nutrition_day_id")
+          .in("nutrition_day_id", dayIds);
 
-        return {
-          id: template.id,
-          name: template.name,
-          description: template.notes,
-          templateType: "nutrition", // Distinguish from program
-          category: "nutrition",
-          dayCount: dayCount || 0,
-          mealCount,
-          createdAt: template.created_at,
-          updatedAt: template.updated_at,
-        };
+        const planByDay = new Map(
+          (dayRows || []).map((d: any) => [d.id, d.nutrition_plan_id])
+        );
+
+        mealCountByPlan = (mealRows || []).reduce(
+          (acc: Map<any, number>, row: any) => {
+            const planId = planByDay.get(row.nutrition_day_id);
+
+            if (planId !== undefined) {
+              acc.set(planId, (acc.get(planId) ?? 0) + 1);
+            }
+
+            return acc;
+          },
+          new Map<any, number>()
+        );
+      }
+    }
+
+    const nutritionTemplatesWithCounts = nutritionTemplates.map(
+      (template: any) => ({
+        id: template.id,
+        name: template.name,
+        description: template.notes,
+        templateType: "nutrition", // Distinguish from program
+        category: "nutrition",
+        dayCount: dayCountByPlan.get(template.id) ?? 0,
+        mealCount: mealCountByPlan.get(template.id) ?? 0,
+        createdAt: template.created_at,
+        updatedAt: template.updated_at,
       })
     );
 

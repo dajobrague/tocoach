@@ -68,6 +68,12 @@ export interface ResolvedDay {
    * start_date del ciclo).
    */
   trainer_recommended_session_id: string | null;
+  /**
+   * TODAS las recomendadas del día — una por programa activo que
+   * prescribe la fecha (fuerza + cardio el mismo día = dos badges).
+   * Opcional para tolerar respuestas de servidor pre-Fase-2 cacheadas.
+   */
+  trainer_recommended_session_ids?: string[];
 }
 
 interface UseResolvedDayPrescription {

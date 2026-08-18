@@ -54,21 +54,26 @@ export async function GET(
         );
       }
 
-      // For each session, fetch exercises
-      const sessionsWithExercises = await Promise.all(
-        (sessions || []).map(async (session: any) => {
-          const { data: sessionExercises } = await supabase
-            .from("session_exercises")
-            .select("*, exercises(*)")
-            .eq("session_id", session.id)
-            .order("exercise_order", { ascending: true });
+      // Exercises for ALL sessions in one query, grouped in JS.
+      const sessionIds = (sessions || []).map((s: any) => s.id);
+      let allSessionExercises: any[] = [];
 
-          return {
-            ...session,
-            exercises: sessionExercises || [],
-          };
-        })
-      );
+      if (sessionIds.length > 0) {
+        const { data: sessionExercises } = await supabase
+          .from("session_exercises")
+          .select("*, exercises(*)")
+          .in("session_id", sessionIds)
+          .order("exercise_order", { ascending: true });
+
+        allSessionExercises = sessionExercises || [];
+      }
+
+      const sessionsWithExercises = (sessions || []).map((session: any) => ({
+        ...session,
+        exercises: allSessionExercises.filter(
+          (se) => se.session_id === session.id
+        ),
+      }));
 
       return NextResponse.json({
         success: true,
@@ -115,57 +120,77 @@ export async function GET(
         );
       }
 
-      // For each day, fetch meals and ingredients
-      const daysWithMeals = await Promise.all(
-        (days || []).map(async (day: any) => {
-          const { data: meals } = await supabase
-            .from("nutrition_meals")
-            .select("*")
-            .eq("nutrition_day_id", day.id)
-            .order("meal_order", { ascending: true });
+      // Fetch each level of the tree once (meals, options, ingredients) and
+      // assemble in JS — 3 queries total instead of one per row per level.
+      const dayIds = (days || []).map((d: any) => d.id);
+      let allMeals: any[] = [];
+      let allOptions: any[] = [];
+      let allIngredients: any[] = [];
 
-          const mealsWithOptions = await Promise.all(
-            (meals || []).map(async (meal: any) => {
-              const { data: options } = await supabase
-                .from("nutrition_meal_options")
-                .select("*")
-                .eq("meal_id", meal.id)
-                .order("option_order", { ascending: true });
+      if (dayIds.length > 0) {
+        const { data: meals } = await supabase
+          .from("nutrition_meals")
+          .select("*")
+          .in("nutrition_day_id", dayIds)
+          .order("meal_order", { ascending: true });
 
-              const optionsWithIngredients = await Promise.all(
-                (options || []).map(async (opt: any) => {
-                  const { data: ingredients } = await supabase
-                    .from("nutrition_ingredients")
-                    .select("*")
-                    .eq("option_id", opt.id)
-                    .order("ingredient_order", { ascending: true });
+        allMeals = meals || [];
+      }
 
-                  return {
-                    ...opt,
-                    ingredients: ingredients || [],
-                  };
-                })
-              );
+      const mealIds = allMeals.map((m) => m.id);
 
-              const ingredients = optionsWithIngredients.flatMap(
-                (opt: { ingredients: unknown[] }) => opt.ingredients
-              );
+      if (mealIds.length > 0) {
+        const { data: options } = await supabase
+          .from("nutrition_meal_options")
+          .select("*")
+          .in("meal_id", mealIds)
+          .order("option_order", { ascending: true });
 
-              return {
-                ...meal,
-                has_alternatives: meal.has_alternatives ?? false,
-                options: optionsWithIngredients,
-                ingredients,
-              };
-            })
-          );
+        allOptions = options || [];
+      }
 
-          return {
-            ...day,
-            meals: mealsWithOptions,
-          };
-        })
-      );
+      const optionIds = allOptions.map((o) => o.id);
+
+      if (optionIds.length > 0) {
+        const { data: ingredients } = await supabase
+          .from("nutrition_ingredients")
+          .select("*")
+          .in("option_id", optionIds)
+          .order("ingredient_order", { ascending: true });
+
+        allIngredients = ingredients || [];
+      }
+
+      const daysWithMeals = (days || []).map((day: any) => {
+        const mealsWithOptions = allMeals
+          .filter((meal) => meal.nutrition_day_id === day.id)
+          .map((meal) => {
+            const optionsWithIngredients = allOptions
+              .filter((opt) => opt.meal_id === meal.id)
+              .map((opt) => ({
+                ...opt,
+                ingredients: allIngredients.filter(
+                  (ing) => ing.option_id === opt.id
+                ),
+              }));
+
+            const ingredients = optionsWithIngredients.flatMap(
+              (opt: { ingredients: unknown[] }) => opt.ingredients
+            );
+
+            return {
+              ...meal,
+              has_alternatives: meal.has_alternatives ?? false,
+              options: optionsWithIngredients,
+              ingredients,
+            };
+          });
+
+        return {
+          ...day,
+          meals: mealsWithOptions,
+        };
+      });
 
       return NextResponse.json({
         success: true,

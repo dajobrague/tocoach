@@ -30,6 +30,13 @@ const nextConfig = {
   poweredByHeader: false,
   output: "standalone",
 
+  // ~200 archivos importan del barrel de @heroui/react; sin esto cada uno
+  // arrastra el barrel completo al grafo de módulos. Next lo reescribe a
+  // imports directos por componente en build.
+  experimental: {
+    optimizePackageImports: ["@heroui/react"],
+  },
+
   // Temporarily disable type checking during build for faster deployment
   typescript: {
     ignoreBuildErrors: true,

@@ -12,6 +12,43 @@ function getSupabaseClient() {
   );
 }
 
+// slug → host con cache en módulo (TTL 60s, mismo patrón que el tenant
+// cache del middleware). El header del portal consulta este endpoint en
+// cada pantalla; sin cache cada poll pagaba un lookup extra de tenants.
+// Solo se cachean aciertos: la ruta es autenticada, los slugs son reales.
+const tenantHostCache = new Map<string, { host: string; expires: number }>();
+const TENANT_HOST_TTL_MS = 60_000;
+
+async function resolveTenantHost(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  tenantSlug: string
+): Promise<string | null> {
+  const cached = tenantHostCache.get(tenantSlug);
+
+  if (cached && cached.expires > Date.now()) {
+    return cached.host;
+  }
+
+  tenantHostCache.delete(tenantSlug);
+
+  const { data: tenant, error } = await supabase
+    .from("tenants")
+    .select("host")
+    .eq("slug", tenantSlug)
+    .single();
+
+  if (error || !tenant?.host) {
+    return null;
+  }
+
+  tenantHostCache.set(tenantSlug, {
+    host: tenant.host,
+    expires: Date.now() + TENANT_HOST_TTL_MS,
+  });
+
+  return tenant.host;
+}
+
 // GET - Fetch messages for a client
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +62,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
     const tenantSlug = searchParams.get("tenantSlug");
+    const countOnly = searchParams.get("countOnly") === "true";
     const limit = parseInt(searchParams.get("limit") || "50");
 
     if (!clientId || !tenantSlug) {
@@ -48,16 +86,38 @@ export async function GET(request: NextRequest) {
 
     // Get the actual tenant host from the slug
     // tenant_slug in messages table stores the host (e.g., brachod7197.localhost), not the slug
-    const { data: tenant, error: tenantError } = await supabase
-      .from("tenants")
-      .select("host")
-      .eq("slug", tenantSlug)
-      .single();
+    const tenantHost = await resolveTenantHost(supabase, tenantSlug);
 
-    if (tenantError || !tenant) {
+    if (!tenantHost) {
       console.error("[Messages GET] Tenant not found for slug:", tenantSlug);
 
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Modo conteo (badge de no-leídos): count exact + head — cero filas
+    // transferidas. Antes el header bajaba el historial (limit 50 MÁS
+    // ANTIGUO, ascending) y contaba en el cliente: pagaba todo el payload
+    // y además dejaba de ver no-leídos cuando la conversación superaba
+    // los 50 mensajes.
+    if (countOnly) {
+      const { count, error: countError } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", clientId)
+        .eq("tenant_slug", tenantHost)
+        .eq("sender_type", "trainer")
+        .is("read_at", null);
+
+      if (countError) {
+        console.error("Error counting unread messages:", countError);
+
+        return NextResponse.json(
+          { error: "Failed to count unread messages" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ unreadCount: count ?? 0 });
     }
 
     // Fetch messages using the actual tenant host
@@ -65,7 +125,7 @@ export async function GET(request: NextRequest) {
       .from("messages")
       .select("*")
       .eq("client_id", clientId)
-      .eq("tenant_slug", tenant.host)
+      .eq("tenant_slug", tenantHost)
       .order("created_at", { ascending: true })
       .limit(limit);
 
@@ -121,13 +181,9 @@ export async function POST(request: NextRequest) {
 
     // Get the actual tenant host from the slug
     // tenant_slug in messages table stores the host (e.g., brachod7197.localhost), not the slug
-    const { data: tenant, error: tenantError } = await supabase
-      .from("tenants")
-      .select("host")
-      .eq("slug", tenantSlug)
-      .single();
+    const tenantHost = await resolveTenantHost(supabase, tenantSlug);
 
-    if (tenantError || !tenant) {
+    if (!tenantHost) {
       console.error("[Messages POST] Tenant not found for slug:", tenantSlug);
 
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
@@ -137,7 +193,7 @@ export async function POST(request: NextRequest) {
     const { data: newMessage, error } = await supabase
       .from("messages")
       .insert({
-        tenant_slug: tenant.host,
+        tenant_slug: tenantHost,
         client_id: clientId,
         sender_type: "client",
         sender_id: clientId,
@@ -165,7 +221,7 @@ export async function POST(request: NextRequest) {
       const { data: trainer } = await supabase
         .from("trainers")
         .select("id")
-        .eq("tenant_host", tenant.host)
+        .eq("tenant_host", tenantHost)
         .maybeSingle();
 
       if (!trainer?.id) {

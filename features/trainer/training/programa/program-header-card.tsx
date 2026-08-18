@@ -166,24 +166,41 @@ export function ProgramHeaderCard({
                   </button>
                 )}
                 {program.status === "active" ? (
-                  <button
-                    className="group/status"
-                    title="Desactivar programa"
-                    type="button"
-                    onClick={() => setDeactivateOpen(true)}
-                  >
-                    <Chip
-                      className="cursor-pointer transition-opacity group-hover/status:opacity-80"
-                      color={status.color}
-                      endContent={
-                        <Icon icon="solar:alt-arrow-down-linear" width={11} />
-                      }
-                      size="sm"
-                      variant="flat"
+                  <>
+                    <button
+                      className="group/status"
+                      title="Desactivar programa"
+                      type="button"
+                      onClick={() => setDeactivateOpen(true)}
                     >
-                      {status.label}
-                    </Chip>
-                  </button>
+                      <Chip
+                        className="cursor-pointer transition-opacity group-hover/status:opacity-80"
+                        color={status.color}
+                        endContent={
+                          <Icon icon="solar:alt-arrow-down-linear" width={11} />
+                        }
+                        size="sm"
+                        variant="flat"
+                      >
+                        {status.label}
+                      </Chip>
+                    </button>
+                    {/* Ancla del microciclo: el plan semanal y el "plan del
+                        día" parten de este programa. Informativo. */}
+                    {program.isPrimary === true ? (
+                      <Chip
+                        className="border-default-300 text-default-500"
+                        size="sm"
+                        title="Programa principal: ancla del plan semanal"
+                        variant="bordered"
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          <Icon icon="solar:star-bold" width={10} />
+                          Principal
+                        </span>
+                      </Chip>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     <Chip color={status.color} size="sm" variant="flat">

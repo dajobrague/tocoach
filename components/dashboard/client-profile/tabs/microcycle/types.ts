@@ -90,11 +90,15 @@ export interface DayMetrics {
    */
   sessions: SessionEntry[];
   /**
-   * Sesión que el trainer recomienda para el día (microciclo). null =
-   * rest day. Se usa para anotar "Recomendado: X" en el header del día
-   * cuando no aparece en `sessions`.
+   * TODAS las prescripciones del template para el día (filas virtuales
+   * `template:*`, capturadas ANTES del filtro de visibilidad) — una por
+   * programa activo que prescribe la fecha, orden primario-primero.
+   * Vacío = rest day. El matching aguas abajo es por ID: los nombres
+   * pueden colisionar entre programas ("Día 1" de fuerza y de cardio).
    */
-  recommendedSessionName: string | null;
+  recommendedSessions: Array<{ id: string; name: string }>;
+  /** Nombres de recommendedSessions, para labels de una línea. */
+  recommendedSessionNames: string[];
   isToday: boolean;
   isFuture: boolean;
 }

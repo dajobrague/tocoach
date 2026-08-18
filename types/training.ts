@@ -42,6 +42,8 @@ export interface ClientProgram {
   start_date: string;
   end_date?: string;
   status: "active" | "completed" | "paused" | "cancelled";
+  /** Ancla explícita del microciclo (migración 20260817120000). */
+  is_primary?: boolean;
   progress_percentage: number;
   notes?: string;
   created_at: string;
@@ -222,6 +224,9 @@ export interface WorkoutProgram {
   /** Refleja client_programs.status — el fetch del trainer trae active Y
    *  paused (los pausados se listan aparte y pueden reactivarse). */
   status: "active" | "paused" | "completed" | "cancelled";
+  /** Ancla del microciclo (client_programs.is_primary): a lo sumo un
+   *  activo por cliente. El seguimiento/plan del día parten de él. */
+  isPrimary?: boolean;
   notes?: string | undefined;
   sessions: WorkoutSession[];
   // Database IDs
