@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { validateSlugFormat } from "@/lib/tenant/slug";
 
 // Tables that hold a trainer's data and cascade off `tenants.host`. If
 // the trainer already has rows in any of these, changing `tenants.host`
@@ -33,6 +34,16 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedSlug = slug.toLowerCase().trim();
+
+    if (!validateSlugFormat(normalizedSlug)) {
+      return NextResponse.json(
+        {
+          error:
+            "El dominio solo puede contener letras minúsculas, números y guiones (3-30 caracteres)",
+        },
+        { status: 400 }
+      );
+    }
 
     // No-op: the trainer is "changing" to the slug they already own.
     if (normalizedSlug === session.tenant_host) {
