@@ -18,6 +18,7 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CommunityShareCard } from "./community-share-card";
 import { DeleteRecipeModal } from "./delete-recipe-modal";
 import { EditorHeaderActions } from "./editor-header-actions";
 import { IngredientsSection } from "./ingredients-section";
@@ -425,6 +426,8 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
               ready={checklist.ready}
               onPublish={publish}
             />
+
+            <CommunityShareCard recipeId={recipeId} />
           </aside>
         </div>
       </div>

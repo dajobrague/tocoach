@@ -112,6 +112,15 @@ export function RecipeLibraryContent() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
+              startContent={<Icon icon="solar:global-linear" width={20} />}
+              variant="bordered"
+              onPress={() =>
+                router.push("/trainer/dashboard/recipes/community")
+              }
+            >
+              Comunidad
+            </Button>
+            <Button
               startContent={
                 <Icon icon="solar:download-minimalistic-linear" width={20} />
               }
