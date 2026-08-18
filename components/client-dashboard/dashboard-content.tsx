@@ -10,11 +10,7 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import {
-  chartPeriodCountForRange,
-  daysToFetchForChartRange,
-  getChartDateRange,
-} from "@/lib/forms/chart-helpers";
+import { daysToFetchForChartRange } from "@/lib/forms/chart-helpers";
 import {
   formResponsesToSubmittedAtPayload,
   getLocalTodayYmd,
@@ -22,6 +18,7 @@ import {
 } from "@/lib/forms/client-helpers";
 import {
   formatScheduleDescription,
+  getCheckInPeriodStart,
   getScheduleOrDefault,
   isCheckInDue,
 } from "@/lib/forms/schedule";
@@ -36,6 +33,20 @@ import { useFormResponses } from "@/lib/hooks/use-client-queries";
 const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
   ...DEFAULT_CHECKIN_SCHEDULE,
 };
+
+/**
+ * Días de historial de hábitos que necesita la home: los 3 day-cards
+ * de "Registro Diario" solo miran hoy y los 2 días anteriores; 7 días
+ * cubre cualquier skew entre el YMD local del cliente y el start_date
+ * UTC del fetch.
+ */
+const HABITS_FETCH_DAYS = 7;
+
+/**
+ * Piso de la ventana de fetch de check-ins (cubre cadencia semanal +
+ * grace period típico + skew de huso horario).
+ */
+const MIN_CHECKIN_FETCH_DAYS = 14;
 
 // Code-split: recharts (ChartsSection) y el modal de formularios (1.800+
 // líneas) quedan fuera del chunk crítico del portal — el dashboard pinta
@@ -128,44 +139,40 @@ export function DashboardContent() {
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
 
-  const chartPeriodCount = useMemo(() => {
+  // Ventana de fetch de check-ins, DESACOPLADA del selector de período
+  // de Progreso: las gráficas leen de su propio endpoint (query
+  // `chartsSnapshot` en charts-section), así que aquí solo hace falta
+  // lo que `isCheckInDue` consulta — respuestas dentro de la ventana
+  // abierta, que arranca en el trigger del período actual
+  // (getCheckInPeriodStart). Fetch desde ese trigger (+3 días de buffer
+  // vía daysToFetchForChartRange). Antes esta ventana seguía al
+  // selector y podía pedir ~365 días de respuestas completas solo para
+  // pintar el banner y 3 day-cards.
+  const checkinFetchDays = useMemo(() => {
     try {
-      return chartPeriodCountForRange(selectedPeriod, checkinSchedule);
-    } catch {
-      return chartPeriodCountForRange(
-        selectedPeriod,
-        FALLBACK_CHECKIN_SCHEDULE
+      const periodStart = getCheckInPeriodStart(checkinSchedule);
+
+      return Math.max(
+        MIN_CHECKIN_FETCH_DAYS,
+        daysToFetchForChartRange(periodStart)
       );
-    }
-  }, [selectedPeriod, checkinSchedule]);
-
-  const fetchDays = useMemo(() => {
-    try {
-      const { from } = getChartDateRange(checkinSchedule, chartPeriodCount);
-
-      return Math.max(14, daysToFetchForChartRange(from), 7);
     } catch {
-      const { from } = getChartDateRange(
-        FALLBACK_CHECKIN_SCHEDULE,
-        chartPeriodCount
-      );
-
-      return Math.max(14, daysToFetchForChartRange(from), 7);
+      return MIN_CHECKIN_FETCH_DAYS;
     }
-  }, [checkinSchedule, chartPeriodCount]);
+  }, [checkinSchedule]);
 
-  // ─── TanStack Query: cached data fetching (range from schedule periods) ─
+  // ─── TanStack Query: cached data fetching (ventana mínima por consumer) ─
   const {
     data: weeklyResponses = [] as FormResponse[],
     isLoading: isLoadingWeekly,
     isError: isErrorWeekly,
-  } = useFormResponses(clientId, "checkins", fetchDays);
+  } = useFormResponses(clientId, "checkins", checkinFetchDays);
 
   const {
     data: dailyResponses = [] as FormResponse[],
     isLoading: isLoadingDaily,
     isError: isErrorDaily,
-  } = useFormResponses(clientId, "habits", fetchDays);
+  } = useFormResponses(clientId, "habits", HABITS_FETCH_DAYS);
 
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
   const isErrorForms = isErrorWeekly || isErrorDaily;
@@ -234,9 +241,8 @@ export function DashboardContent() {
     };
   }, []);
 
-  // Indexa las respuestas diarias por `response_date` una sola vez.
-  // Antes hacíamos `dailyResponses.find()` en `dailyFormDays` — con
-  // `fetchDays` hasta ~365 días eso era O(n·m) por render.
+  // Indexa las respuestas diarias por `response_date` una sola vez
+  // (evita un `find()` por card en cada render de `dailyFormDays`).
   const responsesByDate = useMemo(() => {
     const map = new Map<string, FormResponse>();
 
