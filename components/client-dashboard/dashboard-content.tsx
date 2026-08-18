@@ -3,13 +3,12 @@
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import { ChartsSection } from "@/components/client-dashboard/charts-section";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   chartPeriodCountForRange,
@@ -37,6 +36,34 @@ import { useFormResponses } from "@/lib/hooks/use-client-queries";
 const FALLBACK_CHECKIN_SCHEDULE: CheckInSchedule = {
   ...DEFAULT_CHECKIN_SCHEDULE,
 };
+
+// Code-split: recharts (ChartsSection) y el modal de formularios (1.800+
+// líneas) quedan fuera del chunk crítico del portal — el dashboard pinta
+// y los chunks llegan después (charts con skeleton; el modal se descarga
+// al abrirse).
+const ChartsSection = dynamic(
+  () =>
+    import("@/components/client-dashboard/charts-section").then(
+      (m) => m.ChartsSection
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <div className="h-48 rounded-xl bg-default-100 animate-pulse" />
+        <div className="h-48 rounded-xl bg-default-100 animate-pulse" />
+      </div>
+    ),
+  }
+);
+
+const DynamicFormModal = dynamic(
+  () =>
+    import("@/components/client-dashboard/dynamic-form-modal").then(
+      (m) => m.DynamicFormModal
+    ),
+  { ssr: false }
+);
 
 /**
  * Opciones del selector de período de Progreso. Las keys deben matchear
@@ -473,45 +500,51 @@ export function DashboardContent() {
               exitoso — era la queja #1 de los clientes. El modal
               espera el await antes de cerrar, así garantizamos que
               el refetch llegó antes de que el usuario navegue. */}
-          <DynamicFormModal
-            clientId={clientId}
-            formType="checkins"
-            isOpen={showWeeklyFormModal}
-            schedule={checkinSchedule}
-            onClose={() => setShowWeeklyFormModal(false)}
-            onSuccess={async () => {
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: ["client", "formResponses", clientId, "checkins"],
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["client", "formConfig", clientId, "checkins"],
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["client", "chartsSnapshot", String(clientId)],
-                }),
-              ]);
-            }}
-          />
+          {showWeeklyFormModal && (
+            <DynamicFormModal
+              isOpen
+              clientId={clientId}
+              formType="checkins"
+              schedule={checkinSchedule}
+              onClose={() => setShowWeeklyFormModal(false)}
+              onSuccess={async () => {
+                await Promise.all([
+                  queryClient.invalidateQueries({
+                    queryKey: ["client", "formResponses", clientId, "checkins"],
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: ["client", "formConfig", clientId, "checkins"],
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: ["client", "chartsSnapshot", String(clientId)],
+                  }),
+                ]);
+              }}
+            />
+          )}
 
-          {/* Daily Habits Modal — mismo patrón que el check-in. */}
-          <DynamicFormModal
-            clientId={clientId}
-            formType="habits"
-            isOpen={selectedDayForForm !== null}
-            targetDate={selectedDayForForm ?? undefined}
-            onClose={() => setSelectedDayForForm(null)}
-            onSuccess={async () => {
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: ["client", "formResponses", clientId, "habits"],
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["client", "chartsSnapshot", String(clientId)],
-                }),
-              ]);
-            }}
-          />
+          {/* Daily Habits Modal — mismo patrón que el check-in. Montado solo
+              al abrir: así el chunk del modal no se descarga hasta que hace
+              falta. */}
+          {selectedDayForForm !== null && (
+            <DynamicFormModal
+              isOpen
+              clientId={clientId}
+              formType="habits"
+              targetDate={selectedDayForForm}
+              onClose={() => setSelectedDayForForm(null)}
+              onSuccess={async () => {
+                await Promise.all([
+                  queryClient.invalidateQueries({
+                    queryKey: ["client", "formResponses", clientId, "habits"],
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: ["client", "chartsSnapshot", String(clientId)],
+                  }),
+                ]);
+              }}
+            />
+          )}
 
           {/* Progress Section */}
           <div className="px-4 space-y-4">
