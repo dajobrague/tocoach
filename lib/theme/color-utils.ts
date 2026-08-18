@@ -119,3 +119,25 @@ export function generateHeroUIColorScale(
 
   return scale;
 }
+
+import { getContrastRatio } from "./contrast";
+
+const DARK_FOREGROUND_HSL = "222 47% 11%"; // slate-900, ya usado como neutro oscuro del sistema
+const LIGHT_FOREGROUND_HSL = "0 0% 100%";
+
+/**
+ * Elige el foreground (HSL triple) con mayor contraste WCAG sobre `hex`.
+ * Sustituye el blanco fijo de --heroui-primary-foreground: con primarios
+ * pastel, texto blanco era ilegible (regla documentada en
+ * components/client-dashboard/dashboard-content.tsx:398-416).
+ */
+export function pickForegroundHSL(hex: string): string {
+  try {
+    const white = getContrastRatio("#ffffff", hex);
+    const dark = getContrastRatio("#0f172a", hex);
+
+    return dark > white ? DARK_FOREGROUND_HSL : LIGHT_FOREGROUND_HSL;
+  } catch {
+    return LIGHT_FOREGROUND_HSL;
+  }
+}
