@@ -297,7 +297,7 @@ export default function AyudaContent({
                     type="button"
                     onClick={() => setSubmitResult(null)}
                   >
-                    <Icon icon="solar:close-linear" width={18} />
+                    <Icon icon="solar:close-circle-linear" width={18} />
                   </button>
                 </div>
               )}

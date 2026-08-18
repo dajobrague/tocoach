@@ -2640,7 +2640,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         onClick={() => setActiveSubTab("setup")}
       >
         <span className="flex items-center gap-1.5">
-          <Icon icon="solar:dish-bold" width={16} />
+          <Icon icon="solar:plate-bold" width={16} />
           Plan Nutricional
         </span>
       </button>
@@ -2704,7 +2704,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         <div className="flex flex-col items-center justify-center py-20">
           <Icon
             className="text-gray-300 mb-4"
-            icon="solar:dish-linear"
+            icon="solar:plate-linear"
             width={64}
           />
           <p className="text-gray-500 text-lg mb-4">
@@ -3679,7 +3679,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                 <div className="text-center py-8">
                                   <Icon
                                     className="text-gray-300 mx-auto mb-2"
-                                    icon="solar:dish-linear"
+                                    icon="solar:plate-linear"
                                     width={48}
                                   />
                                   <p className="text-sm text-gray-500">
@@ -3806,7 +3806,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                         />
                                                         <Icon
                                                           className="text-slate-600 flex-shrink-0"
-                                                          icon="solar:dish-bold"
+                                                          icon="solar:plate-bold"
                                                           width={20}
                                                         />
                                                         {editingMealName ===
@@ -5383,7 +5383,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
               <div className="bg-slate-50 p-2 rounded-lg">
                 <Icon
                   className="text-slate-600 text-xl"
-                  icon="solar:dish-bold"
+                  icon="solar:plate-bold"
                 />
               </div>
               <div>

@@ -582,7 +582,11 @@ export function SaveTemplateModal({
     <Modal isOpen={isOpen} placement="center" size="sm" onClose={onClose}>
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
-          <Icon className="text-gray-700" icon="solar:save-bold" width={20} />
+          <Icon
+            className="text-gray-700"
+            icon="solar:diskette-bold"
+            width={20}
+          />
           Guardar como plantilla
         </ModalHeader>
         <ModalBody className="gap-3">

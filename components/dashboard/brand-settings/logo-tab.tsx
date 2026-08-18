@@ -163,7 +163,7 @@ export default function BrandLogoTab() {
               variant="light"
               onPress={() => setMessage(null)}
             >
-              <Icon icon="solar:close-linear" width={18} />
+              <Icon icon="solar:close-circle-linear" width={18} />
             </Button>
           }
           startContent={
@@ -303,7 +303,7 @@ export default function BrandLogoTab() {
           isDisabled={isUploading}
           isLoading={isSaving}
           size="lg"
-          startContent={<Icon icon="solar:floppy-disk-linear" />}
+          startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSave}
         >
           {isSaving

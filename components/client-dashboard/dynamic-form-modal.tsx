@@ -1043,7 +1043,7 @@ export function DynamicFormModal({
                   <>
                     <Icon
                       className="text-primary mx-auto mb-3 animate-spin"
-                      icon="solar:loading-linear"
+                      icon="solar:refresh-linear"
                       width={40}
                     />
                     <p className="text-sm font-semibold text-foreground/60 font-body">
@@ -1404,7 +1404,7 @@ export function DynamicFormModal({
                                 {subIsUploading ? (
                                   <Icon
                                     className="text-primary mx-auto animate-spin"
-                                    icon="solar:loading-linear"
+                                    icon="solar:refresh-linear"
                                     width={24}
                                   />
                                 ) : (
@@ -1638,7 +1638,7 @@ export function DynamicFormModal({
                   <div className="text-center">
                     <Icon
                       className="text-primary text-4xl animate-spin mx-auto mb-3"
-                      icon="solar:loading-linear"
+                      icon="solar:refresh-linear"
                       width={48}
                     />
                     <p className="text-sm text-foreground/60 font-body">

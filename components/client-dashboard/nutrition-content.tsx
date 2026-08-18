@@ -1519,7 +1519,10 @@ function MealCard({
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="flex-shrink-0 rounded-xl bg-primary/10 p-2.5">
-                <Icon className="text-primary text-lg" icon="solar:dish-bold" />
+                <Icon
+                  className="text-primary text-lg"
+                  icon="solar:plate-bold"
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-bold text-foreground font-heading">

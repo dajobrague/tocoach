@@ -3142,7 +3142,7 @@ export default function TemplateDetailModal({
                     <div className="text-center py-8 text-gray-400">
                       <Icon
                         className="mx-auto mb-3"
-                        icon="solar:salad-linear"
+                        icon="solar:leaf-linear"
                         width={48}
                       />
                       <p className="text-gray-600 font-medium">

@@ -194,7 +194,7 @@ export default function BrandDomainTab() {
               variant="light"
               onPress={() => setMessage(null)}
             >
-              <Icon icon="solar:close-linear" width={18} />
+              <Icon icon="solar:close-circle-linear" width={18} />
             </Button>
           }
           startContent={
@@ -384,7 +384,7 @@ export default function BrandDomainTab() {
           isDisabled={!isAvailable || isChecking || !hasChanges}
           isLoading={isSaving}
           size="lg"
-          startContent={<Icon icon="solar:floppy-disk-linear" />}
+          startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSaveClick}
         >
           {isSaving ? "Guardando..." : "Guardar Cambios"}

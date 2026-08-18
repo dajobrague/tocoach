@@ -468,7 +468,7 @@ export function ProfileContent() {
               )}
               {dobFormatted && (
                 <MetadataRow
-                  icon="solar:cake-bold"
+                  icon="solar:gift-bold"
                   label="Fecha de nacimiento"
                   value={dobFormatted}
                 />
