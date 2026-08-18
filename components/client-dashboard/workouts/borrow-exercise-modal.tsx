@@ -158,6 +158,8 @@ export function BorrowExerciseModal({
                               <img
                                 alt=""
                                 className="h-9 w-9 shrink-0 rounded-md object-cover"
+                                decoding="async"
+                                loading="lazy"
                                 src={exercise.imageUrl}
                               />
                             ) : (

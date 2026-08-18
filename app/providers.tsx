@@ -43,6 +43,37 @@ function makeQueryClient() {
 
 let browserQueryClient: QueryClient | undefined = undefined;
 
+// Registra el bundle offline de iconos (los ~260 que usa el código) en
+// Iconify apenas hidrata el cliente, vía import dinámico: el chunk queda
+// FUERA del bundle crítico y, una vez cargado, los iconos renderizan sin
+// tocar api.iconify.design (que hasta ahora era una dependencia de terceros
+// en runtime para 200+ archivos). Los iconos que no estén en el bundle
+// siguen resolviendo por la API como fallback. Regenerar con
+// scripts/generate-icon-bundle.mjs cuando se añadan iconos nuevos.
+let iconsRegistered = false;
+
+function useOfflineIcons() {
+  React.useEffect(() => {
+    if (iconsRegistered) return;
+    iconsRegistered = true;
+
+    void Promise.all([
+      import("@iconify/react"),
+      import("@/lib/icons/offline-icons"),
+    ])
+      .then(([{ addCollection }, { offlineCollections }]) => {
+        for (const collection of offlineCollections) {
+          addCollection(collection);
+        }
+      })
+      .catch((error) => {
+        // Sin bundle no pasa nada grave: los iconos siguen llegando por la
+        // API de Iconify como siempre.
+        console.warn("[Icons] offline bundle failed to load:", error);
+      });
+  }, []);
+}
+
 function getQueryClient() {
   if (typeof window === "undefined") {
     // Server: always make a new query client
@@ -58,6 +89,8 @@ function getQueryClient() {
 export function Providers({ children, themeProps }: ProvidersProps) {
   const router = useRouter();
   const queryClient = getQueryClient();
+
+  useOfflineIcons();
 
   return (
     <QueryClientProvider client={queryClient}>

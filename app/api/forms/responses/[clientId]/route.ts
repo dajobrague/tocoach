@@ -24,9 +24,12 @@ export async function GET(
   const supabase = createSupabaseClient();
 
   try {
-    // Check for either trainer or client session
-    const trainerSession = await getTrainerSession();
-    const clientSession = await getClientSession();
+    // Check for either trainer or client session (independientes entre
+    // sí — se verifican en paralelo).
+    const [trainerSession, clientSession] = await Promise.all([
+      getTrainerSession(),
+      getClientSession(),
+    ]);
 
     if (!trainerSession && !clientSession) {
       return NextResponse.json(
@@ -119,6 +122,21 @@ export async function GET(
     }
     if (endDate) {
       query = query.lte("response_date", endDate);
+    }
+
+    // Sin rango explícito la query era unbounded: viajaba el historial
+    // COMPLETO del cliente en cada request. Default server-side:
+    // últimos 90 días + cap de 500 filas. Como el order de abajo es
+    // newest-first, el cap conserva las respuestas más recientes —
+    // mismo contrato de orden que siempre devolvió este endpoint (los
+    // consumers que quieren ascendente re-ordenan en local). Un caller
+    // que pase start_date/end_date conserva su rango exacto sin cap.
+    if (!startDate && !endDate) {
+      const defaultStart = new Date(Date.now() - 90 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+
+      query = query.gte("response_date", defaultStart).limit(500);
     }
 
     const { data: responses, error } = await query.order("response_date", {

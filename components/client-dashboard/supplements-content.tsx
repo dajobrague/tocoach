@@ -116,6 +116,7 @@ function SupplementCard({
             <img
               alt={assignment.supplement_name}
               className="h-full w-full object-cover"
+              decoding="async"
               loading="lazy"
               src={productImage}
             />

@@ -30,6 +30,7 @@ function Thumb({ className, url }: { className: string; url: string }) {
     <img
       alt=""
       className={className}
+      decoding="async"
       loading="lazy"
       src={failed || resized === url ? url : resized}
       onError={() => setFailed(true)}
@@ -90,6 +91,7 @@ function MenuImageSlide({
             <img
               alt=""
               className="h-20 w-28 object-cover"
+              decoding="async"
               loading="lazy"
               src={image.url}
             />

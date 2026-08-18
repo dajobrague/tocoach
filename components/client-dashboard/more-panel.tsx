@@ -180,6 +180,7 @@ export function MorePanel({ isOpen, onClose }: MorePanelProps) {
                     <img
                       alt={fullName}
                       className="h-full w-full object-cover"
+                      decoding="async"
                       loading="lazy"
                       sizes={`${HEADER_AVATAR_PX}px`}
                       src={thumbnailUrl(

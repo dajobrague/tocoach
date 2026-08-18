@@ -114,6 +114,7 @@ export function RecipeOptionDetail({
                     <img
                       alt=""
                       className="h-52 w-full object-cover"
+                      decoding="async"
                       src={hero}
                     />
                   ) : (
@@ -163,6 +164,7 @@ export function RecipeOptionDetail({
                         <img
                           alt=""
                           className="h-14 w-14 object-cover"
+                          decoding="async"
                           loading="lazy"
                           src={m.url}
                         />

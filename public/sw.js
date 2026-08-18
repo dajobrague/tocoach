@@ -1,6 +1,7 @@
 // TopCoach Service Worker
 // Handles app shell caching and offline functionality
 // Updated: Excluded API routes and dynamic pages from caching
+// Updated: Runtime cache restricted to /_next/static/* (bounded per build)
 //
 // IMPORTANT — bumping the cache version:
 // When a deploy needs to invalidate cached bundles for all clients, bump
@@ -10,8 +11,8 @@
 // Pair this with the no-cache headers on /sw.js in next.config.js so the
 // new sw.js bytes actually reach the browser.
 
-const CACHE_NAME = "topcoach-v11";
-const STATIC_CACHE_NAME = "topcoach-static-v11";
+const CACHE_NAME = "topcoach-v12";
+const STATIC_CACHE_NAME = "topcoach-static-v12";
 
 // App shell files to cache
 // Note: Removed "/" from cache to allow dynamic routing to work properly
@@ -143,12 +144,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for static assets — ensures fresh code after deploys/rebuilds,
-  // with cache fallback for offline use
+  // Network-first, con cache fallback para uso offline.
+  //
+  // SOLO se escriben al cache respuestas de /_next/static/* — assets
+  // inmutables con hash de contenido en el nombre, acotados al tamaño de un
+  // build. Antes se cacheaba TODA respuesta 200 same-origin (imágenes,
+  // documentos, respuestas dinámicas) sin límite ni poda, y el cache crecía
+  // durante toda la vida del deploy. El resto de requests pasa directo a la
+  // red sin cachearse; el catch de abajo sigue sirviendo lo que SÍ esté
+  // cacheado (runtime cache + precache de STATIC_FILES) cuando no hay red.
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response && response.status === 200 && response.type === "basic") {
+        if (
+          url.pathname.startsWith("/_next/static/") &&
+          response &&
+          response.status === 200 &&
+          response.type === "basic"
+        ) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);

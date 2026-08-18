@@ -42,6 +42,7 @@ function OptionThumb({ option }: { option: MealSlotOptionRow }) {
     <img
       alt=""
       className="h-12 w-12 shrink-0 rounded-xl border border-default-200 object-cover"
+      decoding="async"
       loading="lazy"
       src={image}
     />
@@ -180,6 +181,7 @@ function CarouselOptionCard({
           <img
             alt=""
             className="h-24 w-full object-cover"
+            decoding="async"
             loading="lazy"
             src={image}
           />

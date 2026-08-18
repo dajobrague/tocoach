@@ -197,6 +197,7 @@ export function ClientBottomNav() {
                 <img
                   alt={firstName || "Perfil"}
                   className="h-full w-full object-cover"
+                  decoding="async"
                   loading="lazy"
                   sizes="48px"
                   src={thumbnailUrl(clientProfilePicture, AVATAR_THUMBNAIL_PX)}
