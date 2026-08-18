@@ -365,6 +365,7 @@ export function ProfileContent() {
                   <img
                     alt={fullName}
                     className="h-full w-full object-cover"
+                    decoding="async"
                     loading="lazy"
                     sizes={`${AVATAR_DISPLAY_PX}px`}
                     src={thumbnailUrl(avatarUrl, AVATAR_THUMB_PX)}

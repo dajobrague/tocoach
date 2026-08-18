@@ -536,6 +536,8 @@ function ExerciseRow({ exercise, status, onClick }: RowProps) {
         <img
           alt=""
           className="h-14 w-14 rounded-md object-cover shrink-0"
+          decoding="async"
+          loading="lazy"
           src={exercise.imageUrl}
         />
       ) : (

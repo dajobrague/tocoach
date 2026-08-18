@@ -22,7 +22,12 @@ export function ExerciseLogHero({ imageUrl, isCardio, onClose }: Props) {
     <div className="relative w-full h-[33vh] min-h-[180px] max-h-[320px] overflow-hidden">
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt="" className="w-full h-full object-cover" src={imageUrl} />
+        <img
+          alt=""
+          className="w-full h-full object-cover"
+          decoding="async"
+          src={imageUrl}
+        />
       ) : (
         <div
           className={`w-full h-full flex items-center justify-center ${typeStyle.iconBgClass}`}

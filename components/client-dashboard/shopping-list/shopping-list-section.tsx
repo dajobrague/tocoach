@@ -294,6 +294,7 @@ function ProductRow({
           <img
             alt=""
             className="h-full w-full object-cover"
+            decoding="async"
             loading="lazy"
             src={product.imageUrl}
           />
