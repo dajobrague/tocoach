@@ -154,64 +154,92 @@ export async function GET(
       }
     }
 
-    // For each program, fetch sessions and exercises
+    // Split client_programs into the ones we can render (program present in
+    // the map) and the missing ones, keeping the category-aware warn gate.
+    const validClientPrograms = clientPrograms.filter((clientProgram) => {
+      if (programsMap.has(clientProgram.program_id)) return true;
+
+      // When filtering by category, a missing entry in `programsMap` is
+      // EXPECTED for any clientProgram whose program belongs to a
+      // different category — the SQL filter on `metadata->>category`
+      // legitimately excluded it. Logging that as a warning produced
+      // hundreds of false-positive entries per day in Railway logs and
+      // drowned real referential-integrity issues. We only warn when
+      // `category` is unset (no filter), which is the same gate that
+      // the cleanup branch above uses for the same reason.
+      if (!category) {
+        console.warn(
+          "[Programs API] Program not found for client_program:",
+          clientProgram.id,
+          "program_id:",
+          clientProgram.program_id
+        );
+      }
+
+      return false;
+    });
+
+    // Batch the per-program fan-out: one query per LEVEL instead of 4 per
+    // program (sessions, session_exercises, exercises, scheduled_sessions).
     const workoutPrograms: WorkoutProgram[] = [];
+    const validProgramIds = validClientPrograms.map((cp) => cp.program_id);
+    const validClientProgramIds = validClientPrograms.map((cp) => cp.id);
 
-    for (const clientProgram of clientPrograms) {
-      const program = programsMap.get(clientProgram.program_id);
+    if (validClientPrograms.length > 0) {
+      const weekRange = getCurrentWeekRange();
+      const [sessionsResult, scheduledResult] = await Promise.all([
+        supabase
+          .from("sessions")
+          .select("*")
+          .in("program_id", validProgramIds)
+          .order("session_order", { ascending: true }),
+        supabase
+          .from("scheduled_sessions")
+          .select("*")
+          .eq("client_id", clientId)
+          .in("client_program_id", validClientProgramIds)
+          .gte("scheduled_date", weekRange.start.toISOString().split("T")[0])
+          .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]),
+      ]);
 
-      if (!program) {
-        // When filtering by category, a missing entry in `programsMap` is
-        // EXPECTED for any clientProgram whose program belongs to a
-        // different category — the SQL filter on `metadata->>category`
-        // legitimately excluded it. Logging that as a warning produced
-        // hundreds of false-positive entries per day in Railway logs and
-        // drowned real referential-integrity issues. We only warn when
-        // `category` is unset (no filter), which is the same gate that
-        // the cleanup branch above uses for the same reason.
-        if (!category) {
-          console.warn(
-            "[Programs API] Program not found for client_program:",
-            clientProgram.id,
-            "program_id:",
-            clientProgram.program_id
-          );
-        }
-        continue;
+      if (sessionsResult.error) {
+        // Same behavior as the old per-program loop on a sessions error:
+        // the affected programs are skipped (here: all of them).
+        console.error(
+          "[Programs API] Error fetching sessions:",
+          sessionsResult.error
+        );
       }
 
-      const programId = clientProgram.program_id;
-
-      // Fetch sessions for this program
-      const { data: sessions, error: sessionsError } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("program_id", programId)
-        .order("session_order", { ascending: true });
-
-      if (sessionsError) {
-        console.error("[Programs API] Error fetching sessions:", sessionsError);
-        continue;
+      if (scheduledResult.error) {
+        console.error(
+          "[Programs API] Error fetching scheduled sessions:",
+          scheduledResult.error
+        );
       }
+
+      const allSessions: any[] = sessionsResult.data || [];
+      const allScheduled: any[] = scheduledResult.data || [];
 
       console.log(
         "[Programs API] Found",
-        sessions?.length || 0,
-        "sessions for program",
-        programId
+        allSessions.length,
+        "sessions across",
+        validClientPrograms.length,
+        "programs"
       );
 
-      // Fetch session exercises for all sessions
-      const sessionIds = sessions?.map((s) => s.id) || [];
+      // session_exercises for every session, then their exercises — one
+      // query each.
+      const allSessionIds = allSessions.map((s) => s.id);
       let sessionExercises: any[] = [];
 
-      if (sessionIds.length > 0) {
-        // Fetch session_exercises first
+      if (allSessionIds.length > 0) {
         const { data: sessionExercisesData, error: exercisesError } =
           await supabase
             .from("session_exercises")
             .select("*")
-            .in("session_id", sessionIds)
+            .in("session_id", allSessionIds)
             .order("exercise_order", { ascending: true });
 
         if (exercisesError) {
@@ -220,10 +248,9 @@ export async function GET(
             exercisesError
           );
         } else if (sessionExercisesData && sessionExercisesData.length > 0) {
-          // Fetch the actual exercises separately
-          const exerciseIds = sessionExercisesData.map(
-            (se: any) => se.exercise_id
-          );
+          const exerciseIds = [
+            ...new Set(sessionExercisesData.map((se: any) => se.exercise_id)),
+          ];
           const { data: exercisesData, error: exercisesDataError } =
             await supabase.from("exercises").select("*").in("id", exerciseIds);
 
@@ -233,12 +260,10 @@ export async function GET(
               exercisesDataError
             );
           } else {
-            // Create a map of exercises by ID
             const exercisesMap = new Map(
               (exercisesData || []).map((e: any) => [e.id, e])
             );
 
-            // Attach exercise data to session exercises
             sessionExercises = sessionExercisesData.map((se: any) => ({
               ...se,
               exercise: exercisesMap.get(se.exercise_id),
@@ -252,39 +277,32 @@ export async function GET(
         }
       }
 
-      // Map exercises to their sessions
-      const sessionsWithExercises = (sessions || []).map((session) => ({
-        ...session,
-        session_exercises: sessionExercises.filter(
-          (se) => se.session_id === session.id
-        ),
-      }));
+      if (!sessionsResult.error) {
+        for (const clientProgram of validClientPrograms) {
+          const program = programsMap.get(clientProgram.program_id);
+          const sessionsWithExercises = allSessions
+            .filter(
+              (session) => session.program_id === clientProgram.program_id
+            )
+            .map((session) => ({
+              ...session,
+              session_exercises: sessionExercises.filter(
+                (se) => se.session_id === session.id
+              ),
+            }));
+          const scheduledSessions = allScheduled.filter(
+            (ss) => ss.client_program_id === clientProgram.id
+          );
 
-      // Fetch scheduled sessions for current week to check completion status
-      const weekRange = getCurrentWeekRange();
-      const { data: scheduledSessions, error: scheduledError } = await supabase
-        .from("scheduled_sessions")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("client_program_id", clientProgram.id)
-        .gte("scheduled_date", weekRange.start.toISOString().split("T")[0])
-        .lte("scheduled_date", weekRange.end.toISOString().split("T")[0]);
+          const workoutProgram = transformToWorkoutProgram(
+            { ...clientProgram, program } as any,
+            sessionsWithExercises,
+            scheduledSessions
+          );
 
-      if (scheduledError) {
-        console.error(
-          "[Programs API] Error fetching scheduled sessions:",
-          scheduledError
-        );
+          workoutPrograms.push(workoutProgram);
+        }
       }
-
-      // Transform to UI format
-      const workoutProgram = transformToWorkoutProgram(
-        { ...clientProgram, program } as any,
-        sessionsWithExercises,
-        scheduledSessions || []
-      );
-
-      workoutPrograms.push(workoutProgram);
     }
 
     console.log(
@@ -434,7 +452,9 @@ export async function POST(
 
       program = newProgram;
 
-      // Clone sessions and exercises from template
+      // Clone sessions and exercises from template — batched: one read of
+      // the template's exercises, one bulk insert of sessions, one bulk
+      // insert of session_exercises.
       const { data: templateSessions } = await supabase
         .from("sessions")
         .select("*")
@@ -442,46 +462,50 @@ export async function POST(
         .order("session_order", { ascending: true });
 
       if (templateSessions && templateSessions.length > 0) {
-        for (const templateSession of templateSessions) {
-          // Create new session
-          const { data: newSession, error: sessionError } = await supabase
-            .from("sessions")
-            .insert({
+        const templateSessionIds = templateSessions.map((ts) => ts.id);
+        const { data: templateExercises } = await supabase
+          .from("session_exercises")
+          .select("*")
+          .in("session_id", templateSessionIds)
+          .order("exercise_order", { ascending: true });
+
+        const sessionsToInsert = templateSessions.map((templateSession) => ({
+          tenant_host: tenant.host,
+          program_id: program.id,
+          trainer_id: session.trainer_id,
+          name: templateSession.name,
+          description: templateSession.description,
+          session_order: templateSession.session_order,
+          duration_minutes: templateSession.duration_minutes,
+          session_type: templateSession.session_type,
+          intensity_level: templateSession.intensity_level,
+          equipment_needed: templateSession.equipment_needed,
+          notes: templateSession.notes,
+          metadata: templateSession.metadata,
+        }));
+
+        const { data: newSessions, error: sessionError } = await supabase
+          .from("sessions")
+          .insert(sessionsToInsert)
+          .select();
+
+        if (sessionError || !newSessions) {
+          console.error("[Programs API] Error cloning sessions:", sessionError);
+        } else {
+          // PostgREST returns inserted rows in payload order — map each
+          // template session to its clone by index.
+          const newSessionIdByTemplateId = new Map<string, string>(
+            templateSessions.map((templateSession, index) => [
+              templateSession.id,
+              newSessions[index]?.id,
+            ])
+          );
+
+          const exercisesToInsert = (templateExercises || [])
+            .filter((ex) => newSessionIdByTemplateId.get(ex.session_id))
+            .map((ex) => ({
               tenant_host: tenant.host,
-              program_id: program.id,
-              trainer_id: session.trainer_id,
-              name: templateSession.name,
-              description: templateSession.description,
-              session_order: templateSession.session_order,
-              duration_minutes: templateSession.duration_minutes,
-              session_type: templateSession.session_type,
-              intensity_level: templateSession.intensity_level,
-              equipment_needed: templateSession.equipment_needed,
-              notes: templateSession.notes,
-              metadata: templateSession.metadata,
-            })
-            .select()
-            .single();
-
-          if (sessionError || !newSession) {
-            console.error(
-              "[Programs API] Error cloning session:",
-              sessionError
-            );
-            continue;
-          }
-
-          // Clone exercises for this session
-          const { data: templateExercises } = await supabase
-            .from("session_exercises")
-            .select("*")
-            .eq("session_id", templateSession.id)
-            .order("exercise_order", { ascending: true });
-
-          if (templateExercises && templateExercises.length > 0) {
-            const exercisesToInsert = templateExercises.map((ex) => ({
-              tenant_host: tenant.host,
-              session_id: newSession.id,
+              session_id: newSessionIdByTemplateId.get(ex.session_id),
               exercise_id: ex.exercise_id,
               exercise_order: ex.exercise_order,
               custom_name: ex.custom_name,
@@ -495,6 +519,7 @@ export async function POST(
               metadata: ex.metadata,
             }));
 
+          if (exercisesToInsert.length > 0) {
             await supabase.from("session_exercises").insert(exercisesToInsert);
           }
         }

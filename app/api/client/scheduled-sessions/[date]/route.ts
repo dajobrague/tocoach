@@ -11,7 +11,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
   loadAllActiveOwnedPrograms,
-  loadMicrocycleWithSlots,
+  loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
@@ -322,15 +322,18 @@ async function resolveMicrocycleSlots(
   const matches: Array<{ sessionId: string }> = [];
   const seen = new Set<string>();
 
-  // En paralelo: el walk completo es necesario (todas las recomendadas del
-  // día), pero secuencial costaba 2 round-trips POR programa en serie.
-  const microcycles = await Promise.all(
-    programs.map((program) =>
-      loadMicrocycleWithSlots(supabase, program.id, correlationId)
-    )
+  // 2 queries totales para todos los microciclos (antes: 2 por programa).
+  // El walk completo sigue siendo necesario (todas las recomendadas del
+  // día); el orden de precedencia lo da el array `programs`.
+  const microcyclesByProgram = await loadMicrocyclesWithSlots(
+    supabase,
+    programs.map((program) => program.id),
+    correlationId
   );
 
-  for (const microcycle of microcycles) {
+  for (const program of programs) {
+    const microcycle = microcyclesByProgram.get(program.id);
+
     if (!microcycle?.start_date) continue;
     if (date < microcycle.start_date) continue;
 

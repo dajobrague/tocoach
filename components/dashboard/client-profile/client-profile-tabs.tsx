@@ -1,16 +1,44 @@
 "use client";
 
+import { Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import dynamic from "next/dynamic";
 import { useRef } from "react";
 
-import AccessTab from "./tabs/access-tab";
-import ChartsTab from "./tabs/charts-tab";
-import FormsTab from "./tabs/forms-tab";
-import NeatTab from "./tabs/neat-tab";
-import { NutritionTabSwitch } from "./tabs/nutrition-tab-switch";
-import SupplementsTab from "./tabs/supplements-tab";
-import TrainingTabs from "./tabs/training-tabs";
 import { useUrlEnum } from "./use-url-state";
+
+// Cada tab se carga con next/dynamic: antes los 7 tabs (~12.000 líneas,
+// incluida la nutrition-tab de 5.600 y recharts/dnd-kit vía progreso)
+// entraban estáticamente al chunk inicial del perfil aunque solo se
+// renderiza uno. Con el split, abrir el perfil descarga solo el tab activo.
+const tabLoading = () => (
+  <div className="flex justify-center py-16">
+    <Spinner size="lg" />
+  </div>
+);
+
+const AccessTab = dynamic(() => import("./tabs/access-tab"), {
+  loading: tabLoading,
+});
+const ChartsTab = dynamic(() => import("./tabs/charts-tab"), {
+  loading: tabLoading,
+});
+const FormsTab = dynamic(() => import("./tabs/forms-tab"), {
+  loading: tabLoading,
+});
+const NeatTab = dynamic(() => import("./tabs/neat-tab"), {
+  loading: tabLoading,
+});
+const NutritionTabSwitch = dynamic(
+  () => import("./tabs/nutrition-tab-switch").then((m) => m.NutritionTabSwitch),
+  { loading: tabLoading }
+);
+const SupplementsTab = dynamic(() => import("./tabs/supplements-tab"), {
+  loading: tabLoading,
+});
+const TrainingTabs = dynamic(() => import("./tabs/training-tabs"), {
+  loading: tabLoading,
+});
 
 const TAB_ITEMS = [
   { key: "training", label: "Entrenamientos", icon: "solar:dumbbell-bold" },

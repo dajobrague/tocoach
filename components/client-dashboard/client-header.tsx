@@ -44,33 +44,51 @@ export function ClientHeader({
       userType: "client",
     });
 
-  // Load unread message count (fallback)
+  // Load unread message count (fallback). countOnly: el API devuelve solo
+  // el número (count exact + head en DB) — antes se bajaba el historial
+  // completo de mensajes en cada poll solo para contar en el cliente.
   const loadUnreadCount = async () => {
     try {
       const response = await clientFetch(
-        `/api/messages?clientId=${clientId}&tenantSlug=${tenantSlug}`
+        `/api/messages?clientId=${clientId}&tenantSlug=${tenantSlug}&countOnly=true`
       );
 
       if (response.ok) {
         const data = await response.json();
-        const unread =
-          data.messages?.filter(
-            (m: any) => m.sender_type === "trainer" && !m.read_at
-          ).length || 0;
 
-        setUnreadCount(unread);
+        setUnreadCount(data.unreadCount ?? 0);
       }
     } catch (error) {
       console.error("Error loading unread count:", error);
     }
   };
 
-  // Load unread count on mount and fallback poll every 30s
+  // Load unread count on mount; el poll es solo fallback (Realtime ya
+  // entrega los mensajes nuevos al instante vía useRealtimeMessages), así
+  // que 5 min basta — y con la pestaña oculta no se consulta.
   useEffect(() => {
     loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 30_000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadUnreadCount();
+      }
+    }, 300_000);
 
-    return () => clearInterval(interval);
+    // Al volver a la pestaña se refresca al instante: en móvil/PWA el
+    // background suspende timers y el websocket de Realtime, así que este
+    // es el momento en el que el badge puede estar desactualizado.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadUnreadCount();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [clientId, tenantSlug]);
 
   // Combine polled count with realtime count

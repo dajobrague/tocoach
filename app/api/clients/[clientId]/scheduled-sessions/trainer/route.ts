@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
-  loadMicrocycleWithSlots,
+  loadMicrocyclesWithSlots,
   loadOwnedProgramsByStatus,
 } from "@/lib/microcycles/db";
 
@@ -324,12 +324,15 @@ async function materializeTemplate(
   };
   const programCycles: ProgramCycle[] = [];
 
+  // 2 queries totales para todos los microciclos (antes: 2 por programa).
+  const microcyclesByProgram = await loadMicrocyclesWithSlots(
+    supabase,
+    programs.map((program) => program.id),
+    correlationId
+  );
+
   for (const program of programs) {
-    const microcycle = await loadMicrocycleWithSlots(
-      supabase,
-      program.id,
-      correlationId
-    );
+    const microcycle = microcyclesByProgram.get(program.id);
 
     // Ancla del ciclo: microcycle.start_date (controlable por el trainer
     // desde la migración 108) en vez de program.start_date. Si por algún

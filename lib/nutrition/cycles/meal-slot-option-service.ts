@@ -393,6 +393,66 @@ export class MealSlotOptionService {
     return source.length;
   }
 
+  /**
+   * Batched form of {@link copyOptionsToSlot} for day-level operations: copy
+   * every option of several source slots into their mapped target slot in two
+   * round trips (one read, one bulk insert) instead of per-slot/per-option
+   * queries. Snapshots, source refs, positions and group_index are preserved
+   * verbatim. The caller is responsible for having created the target slots
+   * inside the same tenant. Returns the number of options copied.
+   */
+  async copyOptionsToSlots(
+    tenantHost: string,
+    targetSlotIdBySourceSlotId: Map<string, string>
+  ): Promise<number> {
+    const sourceSlotIds = [...targetSlotIdBySourceSlotId.keys()];
+
+    if (sourceSlotIds.length === 0) {
+      return 0;
+    }
+
+    const { data, error } = await this.client
+      .from(OPTIONS_TABLE)
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .in("slot_id", sourceSlotIds)
+      .order("position", { ascending: true });
+
+    if (error !== null) {
+      throw new Error(
+        `MealSlotOptionService.copyOptionsToSlots failed: ${error.message}`
+      );
+    }
+
+    const source = (data ?? []) as MealSlotOptionRow[];
+
+    if (source.length === 0) {
+      return 0;
+    }
+
+    const rows = source.map((option) => ({
+      slot_id: targetSlotIdBySourceSlotId.get(option.slot_id),
+      tenant_host: tenantHost,
+      source_type: option.source_type,
+      source_ref_id: option.source_ref_id,
+      item_snapshot: option.item_snapshot,
+      position: option.position ?? 0,
+      group_index: option.group_index ?? 0,
+    }));
+
+    const { error: insertError } = await this.client
+      .from(OPTIONS_TABLE)
+      .insert(rows);
+
+    if (insertError !== null) {
+      throw new Error(
+        `MealSlotOptionService.copyOptionsToSlots insert failed: ${insertError.message}`
+      );
+    }
+
+    return rows.length;
+  }
+
   /** Delete an option (tenant-scoped). Returns null when not found. */
   async deleteOption(
     tenantHost: string,
