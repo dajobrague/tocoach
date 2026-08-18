@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CenteredState } from "../centered-state";
+import { IconTile } from "../icon-tile";
 import { OutlineChip } from "../outline-chip";
 import { SegmentedControl } from "../segmented-control";
 
@@ -53,5 +54,15 @@ describe("SegmentedControl", () => {
 
     expect(active.textContent).toBe("30 días");
     expect(active.className).toContain("bg-content1");
+  });
+});
+
+describe("IconTile", () => {
+  it("tone primary = tinte alpha + icono primary", () => {
+    const { container } = render(<IconTile icon="solar:pen-bold" />);
+    const tile = container.firstElementChild as HTMLElement;
+
+    expect(tile.className).toContain("bg-primary/10");
+    expect(tile.className).toContain("rounded-xl");
   });
 });
