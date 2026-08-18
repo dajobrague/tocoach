@@ -118,6 +118,84 @@ async function loadTenantMetadata(
   }
 }
 
+/**
+ * Load tenant metadata by `host` column with caching (no secrets).
+ * Mirror of `loadTenantMetadata`, but keyed on the real `tenants.host` value
+ * instead of `slug` — trainer routes carry no slug in the URL, only
+ * `TrainerSession.tenant_host`. Cached under a `host:` prefix so it can never
+ * collide with the slug-keyed cache entries above.
+ */
+export async function loadTenantMetadataByHost(
+  host: string
+): Promise<TenantMetadata | null> {
+  const normalizedHost = normalizeHost(host);
+  const cacheKey = `host:${normalizedHost}`;
+  const correlationId = `tenant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  // Check cache first
+  const cached = metadataCache.get(cacheKey);
+
+  if (cached && cached.expires > Date.now()) {
+    logTenantContext(cached.data, `${correlationId}-cache-hit`);
+
+    return cached.data;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("tenants")
+      .select(
+        "host, slug, theme_slug, theme_json, features, status, tables, stripe_customer_portal_conf, maintenance_reason, maintenance_until, logo_url"
+      )
+      .eq("host", normalizedHost)
+      .single();
+
+    if (error || !data) {
+      console.warn(
+        `[Tenant Loader] No tenant found for host: ${normalizedHost}`,
+        { correlationId }
+      );
+
+      return null;
+    }
+
+    const metadata: TenantMetadata = {
+      host: data.host,
+      slug: data.slug,
+      theme_slug: data.theme_slug,
+      theme_json: data.theme_json || {},
+      features: data.features || {},
+      status: data.status,
+      tables: data.tables || {},
+      stripe_customer_portal_conf: data.stripe_customer_portal_conf || {},
+      maintenance_reason: data.maintenance_reason,
+      maintenance_until: data.maintenance_until,
+      logo_url: data.logo_url,
+    };
+
+    // Cache metadata (no secrets)
+    metadataCache.set(cacheKey, {
+      data: metadata,
+      expires: Date.now() + CACHE_TTL,
+    });
+
+    logTenantContext(metadata, `${correlationId}-db-load`);
+
+    return metadata;
+  } catch (error) {
+    console.error(
+      `[Tenant Loader] Failed to load tenant for host: ${normalizedHost}`,
+      {
+        error: error instanceof Error ? error.message : "Unknown error",
+        correlationId,
+      }
+    );
+
+    return null;
+  }
+}
+
 // Airtable secret accessor removed - now using 100% Supabase architecture
 // Future: Add other secret accessors here if needed (Stripe, etc.)
 
@@ -167,14 +245,18 @@ export async function getWhitelistedDomains(): Promise<string[]> {
 }
 
 /**
- * Clear metadata cache for a specific slug (for testing/admin)
+ * Clear metadata cache for a specific slug (for testing/admin).
+ * Clears both the slug-keyed entry (`loadTenantMetadata`) and the
+ * `host:`-prefixed entry (`loadTenantMetadataByHost`) — a stale entry left
+ * behind in the other cache key has bitten this repo before.
  */
 export function clearTenantCache(host?: string): void {
   if (host) {
-    const normalizedSlug = normalizeHost(host);
+    const normalized = normalizeHost(host);
 
-    metadataCache.delete(normalizedSlug);
-    console.log(`[Cache] Cleared cache for slug: ${normalizedSlug}`);
+    metadataCache.delete(normalized);
+    metadataCache.delete(`host:${normalized}`);
+    console.log(`[Cache] Cleared cache for slug/host: ${normalized}`);
   } else {
     metadataCache.clear();
     console.log("[Cache] Cleared all tenant metadata cache");
