@@ -22,6 +22,7 @@ import {
 } from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
+import { renderInlineThemeCSS } from "@/lib/theme/render-css";
 
 // Function to check if the current route should not have a navbar
 function isNoNavbarRoute(pathname: string): boolean {
@@ -146,6 +147,12 @@ export default async function RootLayout({
   let useDatabaseTheme = false;
   let tenantInfo: ClientTenantInfo | null = null;
   let isMaintenanceMode = false;
+  // Contexto crudo del tenant ACTIVO para inyectar su CSS de tema inline
+  // (mismo generador que /brands/db). Mantenimiento e inactivos siguen por
+  // el <link> clásico — comportamiento idéntico al de siempre.
+  let activeTenantContext: Awaited<
+    ReturnType<typeof loadTenantContext>
+  > | null = null;
 
   // Try slug-based tenant resolution first
   if (tenantSlug) {
@@ -157,6 +164,7 @@ export default async function RootLayout({
           themeSlug = tenantContext.theme_slug;
           useDatabaseTheme = true;
           tenantInfo = toClientSafe(tenantContext);
+          activeTenantContext = tenantContext;
           console.log(
             `[Layout] Using tenant theme: ${themeSlug} for slug: ${tenantSlug}`,
             { correlationId }
@@ -201,6 +209,16 @@ export default async function RootLayout({
     }
   }
 
+  // Tema de DB: se inyecta INLINE en <head> — el layout ya tiene el
+  // theme_json en memoria, así que el request render-blocking a
+  // /brands/db/... (DB lookup + @import en cadena, cache 60s, sin CDN)
+  // sobra. Si la generación falla o el CSS trae algo sospechoso,
+  // renderInlineThemeCSS devuelve null y caemos al <link> de siempre.
+  const inlineThemeCSS =
+    useDatabaseTheme && activeTenantContext
+      ? renderInlineThemeCSS(activeTenantContext, tenantSlug ?? "unknown")
+      : null;
+
   // Choose CSS URL based on source
   let brandCSSUrl: string;
 
@@ -237,7 +255,14 @@ export default async function RootLayout({
           href="https://fonts.gstatic.com"
           rel="preconnect"
         />
-        <link href={brandCSSUrl} rel="stylesheet" />
+        {inlineThemeCSS !== null ? (
+          <style
+            dangerouslySetInnerHTML={{ __html: inlineThemeCSS }}
+            data-theme-inline={tenantSlug ?? ""}
+          />
+        ) : (
+          <link href={brandCSSUrl} rel="stylesheet" />
+        )}
       </head>
       <body
         className={clsx(
