@@ -225,15 +225,17 @@ export default async function RootLayout({
     >
       <head>
         <meta content="notranslate" name="google" />
+        {/* Preconnects se quedan: el CSS de marca hace @import de Google
+            Fonts con las 1-2 familias que el tema realmente usa. El antiguo
+            stylesheet global de 10 familias x ~5 pesos (~50 combinaciones,
+            render-blocking en cada página) se eliminó: cada tenant carga
+            solo sus fuentes vía brand CSS, e Inter ya es self-hosted por
+            next/font (config/fonts.ts). */}
         <link href="https://fonts.googleapis.com" rel="preconnect" />
         <link
           crossOrigin="anonymous"
           href="https://fonts.gstatic.com"
           rel="preconnect"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&family=Lato:wght@300;400;700&family=Playfair+Display:wght@400;500;600;700&family=Roboto+Slab:wght@300;400;500;700&family=Nunito:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap"
-          rel="stylesheet"
         />
         <link href={brandCSSUrl} rel="stylesheet" />
       </head>
