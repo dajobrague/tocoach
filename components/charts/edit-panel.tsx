@@ -98,7 +98,7 @@ const ICON_PALETTE: ReadonlyArray<string> = [
   "solar:sun-bold",
   "solar:bolt-bold",
   "solar:fire-bold",
-  "solar:dish-bold",
+  "solar:plate-bold",
   "solar:bone-bold",
   "solar:leaf-bold",
   "solar:cloud-waterdrop-bold",

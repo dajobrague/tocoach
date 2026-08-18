@@ -1008,7 +1008,7 @@ function AddChartCard({
           <div className="flex flex-col items-center justify-center gap-2 py-6 text-foreground/40">
             <Icon
               className="animate-spin"
-              icon="solar:loading-bold"
+              icon="solar:refresh-bold"
               width={20}
             />
             <span className="text-xs">Cargando métricas…</span>

@@ -752,7 +752,7 @@ export default function EditExerciseLibraryModal({
             isDisabled={isSubmitting || uploadingImage || uploadingVideo}
             isLoading={isSubmitting}
             startContent={
-              !isSubmitting && <Icon icon="solar:save-bold" width={18} />
+              !isSubmitting && <Icon icon="solar:diskette-bold" width={18} />
             }
             onPress={handleSubmit}
           >

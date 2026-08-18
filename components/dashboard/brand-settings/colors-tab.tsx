@@ -319,7 +319,7 @@ export default function BrandColorsTab() {
               variant="light"
               onPress={() => setMessage(null)}
             >
-              <Icon icon="solar:close-linear" width={18} />
+              <Icon icon="solar:close-circle-linear" width={18} />
             </Button>
           }
           startContent={
@@ -598,7 +598,7 @@ export default function BrandColorsTab() {
           isDisabled={!hasChanges}
           isLoading={isSaving}
           size="lg"
-          startContent={<Icon icon="solar:floppy-disk-linear" />}
+          startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSave}
         >
           {isSaving ? "Guardando..." : "Guardar Cambios"}

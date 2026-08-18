@@ -393,7 +393,7 @@ export default function BrandTypographyTab() {
               variant="light"
               onPress={() => setMessage(null)}
             >
-              <Icon icon="solar:close-linear" width={18} />
+              <Icon icon="solar:close-circle-linear" width={18} />
             </Button>
           }
           startContent={
@@ -574,7 +574,7 @@ export default function BrandTypographyTab() {
           className="bg-black text-white hover:bg-slate-800"
           isLoading={isSaving}
           size="lg"
-          startContent={<Icon icon="solar:floppy-disk-linear" />}
+          startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSave}
         >
           {isSaving ? "Guardando..." : "Guardar Cambios"}
