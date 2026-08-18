@@ -123,29 +123,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update trainer's tenant_host (now stores slug)
-    const { error: trainerError } = await supabase
-      .from("trainers")
-      .update({
-        tenant_host: normalizedSlug,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", session.trainer_id);
-
-    if (trainerError) {
-      console.error("[Save Slug] Trainer update error", {
-        correlationId,
-        trainer_id: session.trainer_id,
-        target_slug: normalizedSlug,
-        error: trainerError,
-      });
-
-      return NextResponse.json(
-        { error: "Error al actualizar el perfil del entrenador" },
-        { status: 500 }
-      );
-    }
-
     // First, find existing tenant for this trainer
     const { data: existingTenant, error: findError } = await supabase
       .from("tenants")
@@ -244,6 +221,33 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         { error: "Error al actualizar el registro del tenant" },
+        { status: 500 }
+      );
+    }
+
+    // `trainers.tenant_host` se actualiza DESPUÉS del tenant: es un puntero a
+    // `tenants.host` (FK en 27 tablas hijas) y si se escribiera antes y el
+    // rename del tenant fallara, quedaría apuntando a un host inexistente y
+    // toda escritura del trainer con tenant_host (revisiones de video, chat,
+    // notificaciones) rompería con 23503. Pasó en prod con 6 trainers.
+    const { error: trainerError } = await supabase
+      .from("trainers")
+      .update({
+        tenant_host: normalizedSlug,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", session.trainer_id);
+
+    if (trainerError) {
+      console.error("[Save Slug] Trainer update error", {
+        correlationId,
+        trainer_id: session.trainer_id,
+        target_slug: normalizedSlug,
+        error: trainerError,
+      });
+
+      return NextResponse.json(
+        { error: "Error al actualizar el perfil del entrenador" },
         { status: 500 }
       );
     }
