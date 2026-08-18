@@ -21,6 +21,12 @@ interface Props {
   isExpanded?: boolean;
   /** Featured variant: trainer-prescribed session for the visible date. */
   isRecommended?: boolean;
+  /**
+   * Programa al que pertenece la sesión. Solo llega cuando el cliente
+   * tiene varios programas activos (fuerza + cardio) — con uno solo la
+   * etiqueta sería ruido.
+   */
+  programName?: string | null;
 }
 
 export function SessionCard({
@@ -32,6 +38,7 @@ export function SessionCard({
   expandedContent,
   isExpanded = false,
   isRecommended = false,
+  programName = null,
 }: Props) {
   const style = getSessionTypeStyle(sessionType);
 
@@ -86,6 +93,11 @@ export function SessionCard({
                 {exerciseCount}{" "}
                 {exerciseCount === 1 ? "ejercicio" : "ejercicios"}
               </span>
+              {programName != null && programName.length > 0 ? (
+                <span className="max-w-full truncate text-xs text-foreground/45 font-body">
+                  · {programName}
+                </span>
+              ) : null}
             </div>
           </div>
 

@@ -401,6 +401,7 @@ export function transformToWorkoutProgram(
     // invisible el estado "paused" y rompía la sección Pausados del trainer
     // (los clientes filtran por "active", así que para ellos no cambia nada).
     status: normalizeProgramStatus(clientProgram.status),
+    isPrimary: clientProgram.is_primary === true,
     notes: clientProgram.notes,
     sessions: workoutSessions,
   };

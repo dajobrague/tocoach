@@ -34,6 +34,11 @@ export async function GET(_request: NextRequest) {
       );
     }
 
+    // SCOPE Fase 2: esta vista semanal de referencia sigue mostrando SOLO
+    // el microciclo del programa PRIMARIO, mientras el día fusionado
+    // (workouts + recomendados) ya es multi-programa. Es deliberado — la
+    // paridad plural (ciclo por programa o semana fusionada) queda para
+    // la siguiente fase; no lo "arregles" colapsando el día a un programa.
     const ownedProgram = await loadActiveOwnedProgram(
       supabase,
       session.client_id,

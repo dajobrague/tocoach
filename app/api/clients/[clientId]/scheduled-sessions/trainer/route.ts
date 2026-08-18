@@ -171,9 +171,10 @@ export async function GET(
       row.originally_prescribed_session = null;
     }
 
-    // 2. Materialize from the microcycle template — unchanged from
-    //    before, indexed by date (one template row per date).
-    let templateByDate = new Map<string, ScheduledSessionResponse>();
+    // 2. Materialize from the microcycle template, indexed by date. Puede
+    //    haber VARIAS filas por fecha: una por programa activo que
+    //    prescribe ese día (fuerza + cardio el mismo día = dos chips).
+    let templateByDate = new Map<string, ScheduledSessionResponse[]>();
 
     if (startDate && endDate) {
       templateByDate = await materializeTemplate(
@@ -187,15 +188,15 @@ export async function GET(
     }
 
     // 3. Merge. Política por fecha:
-    //    - La sesión recomendada para la fecha es la del slot del
-    //      template (el microciclo). No hay pin del trainer.
-    //    - Cada fila real se incluye tal cual; cuando su session_id
-    //      diverge del template, lleva `originally_prescribed_session`
-    //      con la sesión del template para que la UI muestre el chip
-    //      "Recomendado: X".
-    //    - Si el template recomienda una sesión y ninguna fila real la
-    //      cubre, agregamos la fila virtual del template (la prescripción
-    //      pendiente, sin actividad).
+    //    - Las sesiones recomendadas para la fecha son las de los slots
+    //      del template (una por programa activo). No hay pin del trainer.
+    //    - Cada fila real se incluye tal cual; cuando su session_id no
+    //      está entre las recomendadas, lleva `originally_prescribed_session`
+    //      con la sesión del template PRIMARIO para que la UI muestre el
+    //      chip "Recomendado: X".
+    //    - Cada prescripción del template que ninguna fila real cubre se
+    //      agrega como fila virtual (prescripción pendiente, sin
+    //      actividad) — con dos programas puede haber dos virtuales.
 
     const merged: ScheduledSessionResponse[] = [];
     const allDates = new Set<string>();
@@ -204,36 +205,50 @@ export async function GET(
     for (const date of templateByDate.keys()) allDates.add(date);
 
     for (const date of allDates) {
-      const template = templateByDate.get(date) ?? null;
+      const templates = templateByDate.get(date) ?? [];
       const realsForDate = realRowsTyped.filter(
         (r) => r.scheduled_date === date
       );
 
-      // La "sesión recomendada" para la fecha es la del template.
-      const recommendedSessionId = template?.session?.id ?? null;
+      // Sesiones recomendadas para la fecha (orden primario-primero).
+      const recommendedSessionIds = new Set(
+        templates
+          .map((t) => t.session?.id)
+          .filter((id): id is string => id != null)
+      );
+      // Anotación de divergencia: "lo originalmente prescrito" es la
+      // primera recomendada que NINGUNA fila real cubre. Anotar una ya
+      // cubierta (p. ej. el primario ya entrenado en su propia fila)
+      // señalaría al trainer una divergencia inexistente; si todas están
+      // cubiertas, no hay nada que anotar.
+      const uncoveredTemplate =
+        templates.find(
+          (t) =>
+            t.session?.id != null &&
+            !realsForDate.some((r) => r.session?.id === t.session?.id)
+        ) ?? null;
 
       // Emitir cada fila real con anotación de divergencia.
       for (const row of realsForDate) {
         if (
-          recommendedSessionId != null &&
-          row.session?.id !== recommendedSessionId
+          recommendedSessionIds.size > 0 &&
+          (row.session?.id == null ||
+            !recommendedSessionIds.has(row.session.id))
         ) {
-          // Cliente entrenó algo distinto a lo recomendado: anotar la
-          // sesión del template como "originalmente prescrito" para que
-          // la UI le ponga el chip.
-          row.originally_prescribed_session = template?.session ?? null;
+          row.originally_prescribed_session =
+            uncoveredTemplate?.session ?? null;
         }
         merged.push(row);
       }
 
-      // Si el template recomienda una sesión y ninguna fila real la
-      // cubre, agregar la fila virtual del template (prescripción
-      // pendiente, sin actividad).
-      if (
-        template &&
-        recommendedSessionId != null &&
-        !realsForDate.some((r) => r.session?.id === recommendedSessionId)
-      ) {
+      // Agregar cada prescripción del template que ninguna fila real cubre.
+      for (const template of templates) {
+        const templateSessionId = template.session?.id;
+
+        if (templateSessionId == null) continue;
+        if (realsForDate.some((r) => r.session?.id === templateSessionId)) {
+          continue;
+        }
         merged.push(template);
       }
     }
@@ -269,13 +284,15 @@ export async function GET(
  *
  * Regla de fechas:
  * - Hoy y futuro se proyectan desde los programas ACTIVOS (puede haber
- *   varios: multi-activo es válido, p. ej. fuerza + cardio). Si dos
- *   programas prescriben la misma fecha gana el primero en orden primario
- *   (first-wins) — limitación conocida hasta la vista de día fusionada.
- * - El pasado se proyecta también desde programas pausados: el seguimiento
- *   es el registro histórico del cliente y no debe quedar en blanco al
- *   cambiar de programa activo (los activos tienen precedencia si ambos
- *   cubren la misma fecha).
+ *   varios: multi-activo es válido, p. ej. fuerza + cardio). Cada activo
+ *   que prescribe la fecha emite SU fila — día fusionado — en orden
+ *   primario-primero y sin duplicar la misma sesión.
+ * - El pasado se proyecta también desde programas pausados, pero solo como
+ *   relleno de huecos: si ningún activo prescribió la fecha, el primer
+ *   pausado (start_date desc) aporta una única fila. El seguimiento es el
+ *   registro histórico del cliente y no debe quedar en blanco al cambiar
+ *   de programa, pero tampoco apilar prescripciones retiradas sobre las
+ *   vigentes.
  */
 async function materializeTemplate(
   supabase: ReturnType<typeof createSupabaseClient>,
@@ -284,8 +301,8 @@ async function materializeTemplate(
   startDate: string,
   endDate: string,
   correlationId: string
-): Promise<Map<string, ScheduledSessionResponse>> {
-  const out = new Map<string, ScheduledSessionResponse>();
+): Promise<Map<string, ScheduledSessionResponse[]>> {
+  const out = new Map<string, ScheduledSessionResponse[]>();
 
   const programs = await loadOwnedProgramsByStatus(
     supabase,
@@ -326,6 +343,10 @@ async function materializeTemplate(
     const slotByDayIndex = new Map<number, string | null>();
 
     for (const slot of microcycle.slots) {
+      // First-wins en day_index duplicado (data anómala) — mismo criterio
+      // que el resolver del cliente (slots.find), para que ambas vistas
+      // prescriban la misma sesión.
+      if (slotByDayIndex.has(slot.day_index)) continue;
       slotByDayIndex.set(slot.day_index, slot.session_id);
       if (slot.session_id) allSessionIds.add(slot.session_id);
     }
@@ -359,30 +380,39 @@ async function materializeTemplate(
   );
 
   for (const date of daysBetween(startDate, endDate)) {
+    const rowsForDate: ScheduledSessionResponse[] = [];
+    const seenSessionIds = new Set<string>();
+
     for (const cycle of programCycles) {
       // Skip dates before this program's start.
       if (date < cycle.startDate) continue;
 
-      // Hoy y futuro: solo el programa activo prescribe. Los ciclos
+      // Hoy y futuro: solo los programas activos prescriben. Los ciclos
       // pausados solo rellenan el track pasado.
       if (date >= todayYmd && !cycle.isActive) continue;
+
+      // Pausados = relleno de huecos: si un activo (o un pausado previo,
+      // más reciente) ya prescribió esta fecha, no apilamos prescripciones
+      // retiradas encima. Los activos sí se acumulan todos (día fusionado).
+      if (!cycle.isActive && rowsForDate.length > 0) continue;
 
       const offset = diffDays(cycle.startDate, date);
       const dayIndex = (offset % cycle.durationDays) + 1;
       const sessionId = cycle.slotByDayIndex.get(dayIndex);
 
       if (!sessionId) continue;
+      // Dos programas apuntando a la MISMA sesión ese día: una sola fila.
+      if (seenSessionIds.has(sessionId)) continue;
 
       const sessionDetail = sessionMap.get(sessionId);
 
       if (!sessionDetail) continue;
 
-      // First cycle that schedules this date wins (active program first,
-      // then paused by start_date desc).
-      if (out.has(date)) continue;
-
-      out.set(date, {
-        id: `template:${cycle.startDate}:${dayIndex}:${date}`,
+      seenSessionIds.add(sessionId);
+      rowsForDate.push({
+        // sessionId en el id: dos ciclos con el mismo start_date/duración
+        // en la misma fecha producirían ids iguales sin él (React keys).
+        id: `template:${cycle.startDate}:${dayIndex}:${date}:${sessionId}`,
         scheduled_date: date,
         scheduled_time: null,
         status: "scheduled",
@@ -391,6 +421,8 @@ async function materializeTemplate(
         originally_prescribed_session: null,
       });
     }
+
+    if (rowsForDate.length > 0) out.set(date, rowsForDate);
   }
 
   return out;

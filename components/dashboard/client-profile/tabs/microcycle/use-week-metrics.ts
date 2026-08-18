@@ -99,11 +99,17 @@ export function buildDayMetricsRange(
     const rows = scheduledByDate.get(ymd) ?? [];
     const isFuture = ymd > todayYmd;
 
-    // recommendedSessionName: la fila de template (los IDs virtuales
-    // del template arrancan con "template:"). Si no hay nada, null = rest.
-    const templateVirtualRow =
-      rows.find((r) => r.id.startsWith("template:")) ?? null;
-    const recommendedSessionName = templateVirtualRow?.session?.name ?? null;
+    // recommendedSessions: las filas de template (los IDs virtuales del
+    // template arrancan con "template:") — puede haber varias, una por
+    // programa activo que prescribe el día. Se capturan ANTES del filtro
+    // de visibilidad para que el chip "Recomendado" del day-detail pueda
+    // nombrar prescripciones aunque su fila quede oculta. Vacío = rest.
+    const recommendedSessions = rows
+      .filter((r) => r.id.startsWith("template:"))
+      .map((r) => r.session)
+      .filter((s): s is NonNullable<typeof s> => s != null)
+      .map((s) => ({ id: s.id, name: s.name }));
+    const recommendedSessionNames = recommendedSessions.map((s) => s.name);
 
     // Build session entries from scheduled rows, matching logs.
     const claimedLogKeys = new Set<string>();
@@ -184,16 +190,25 @@ export function buildDayMetricsRange(
     // If the day has any session with actual work, hide sessions with
     // zero logs — those are usually the client selecting the wrong
     // session in the picker. The trainer only needs to see what was done.
+    // EXCEPTO las filas de template HOY: con dos programas activos,
+    // loguear fuerza no puede ocultar el cardio aún pendiente/accionable
+    // ni dejar que el día se clasifique "Hecho" a medias.
     const anyHasLogs = sessions.some((s) => s.logs.length > 0);
     const visibleSessions =
       anyHasLogs && !isFuture
-        ? sessions.filter((s) => s.logs.length > 0)
+        ? sessions.filter(
+            (s) =>
+              s.logs.length > 0 ||
+              (ymd === todayYmd &&
+                s.scheduledSession.id.startsWith("template:"))
+          )
         : sessions;
 
     days.push({
       date: ymd,
       sessions: visibleSessions,
-      recommendedSessionName,
+      recommendedSessions,
+      recommendedSessionNames,
       isToday: ymd === todayYmd,
       isFuture,
     });

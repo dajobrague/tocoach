@@ -117,6 +117,16 @@ export function ProgramSelector({
                       <DropdownItem
                         key={program.programId}
                         description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
+                        endContent={
+                          /* Pin = programa principal (ancla del microciclo). */
+                          program.isPrimary === true ? (
+                            <Icon
+                              className="shrink-0 text-default-400"
+                              icon="solar:star-bold"
+                              width={13}
+                            />
+                          ) : null
+                        }
                         startContent={
                           <span
                             className={`h-2 w-2 rounded-full ${visual.dot}`}
