@@ -27,4 +27,17 @@ describe("generateThemeCSS scope", () => {
       "--heroui-primary-foreground: 222 47% 11% !important"
     );
   });
+
+  it("el override .text-primary-foreground usa la variable calculada, no #ffffff fijo", () => {
+    const pastel = structuredClone(defaultTheme);
+
+    pastel.colors.brand = "#fde047";
+
+    const css = generateThemeCSS(pastel);
+    const rule = css.match(/\.text-primary-foreground,[\s\S]*?\{[\s\S]*?\}/);
+
+    expect(rule).not.toBeNull();
+    expect(rule?.[0]).not.toContain("#ffffff");
+    expect(rule?.[0]).toContain("var(--heroui-primary-foreground)");
+  });
 });

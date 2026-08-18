@@ -237,7 +237,7 @@ ${prefix}body *[class*="bg-primary"] {
 ${prefix}.text-primary-foreground,
 ${prefix}[data-slot="base"].text-primary-foreground,
 ${prefix}button.text-primary-foreground {
-  color: #ffffff !important;
+  color: hsl(var(--heroui-primary-foreground)) !important;
 }
 
 ${prefix}.bg-secondary,
@@ -252,7 +252,7 @@ ${prefix}*[class*="bg-secondary"] {
 ${prefix}.text-secondary-foreground,
 ${prefix}[data-slot="base"].text-secondary-foreground,
 ${prefix}button.text-secondary-foreground {
-  color: #ffffff !important;
+  color: hsl(var(--heroui-secondary-foreground)) !important;
 }
 
 ${prefix}.bg-default,
