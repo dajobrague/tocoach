@@ -119,6 +119,12 @@ export function generateThemeCSS(
   const bodyFontCSS = cssFontFamily(theme.fonts.body.family);
   const sel = opts?.scope ?? "html.light,\nhtml:not(.dark)";
   const prefix = opts?.scope ? `${opts.scope} ` : "html ";
+  // `body` is an ANCESTOR of a scope like `.trainer-app`, never a descendant
+  // — `${prefix}body …` would compile to `.trainer-app body …`, a selector
+  // that can never match. Blocks that need to reach `body`-nested elements
+  // use this prefix instead, which drops the literal `body` segment when
+  // scoped (the scope root itself already sits inside body).
+  const bodyPrefix = opts?.scope ? `${opts.scope} ` : "html body ";
 
   const css = `
 ${fontsImport}
@@ -225,12 +231,12 @@ ${sel} {
 }
 
 /* Ultra high specificity HeroUI component overrides */
-${prefix}body .bg-primary,
-${prefix}body [data-slot="base"].bg-primary,
-${prefix}body button.bg-primary,
-${prefix}body [data-color="primary"],
-${prefix}body .heroui-button[data-color="primary"],
-${prefix}body *[class*="bg-primary"] {
+${bodyPrefix}.bg-primary,
+${bodyPrefix}[data-slot="base"].bg-primary,
+${bodyPrefix}button.bg-primary,
+${bodyPrefix}[data-color="primary"],
+${bodyPrefix}.heroui-button[data-color="primary"],
+${bodyPrefix}*[class*="bg-primary"] {
   background-color: ${theme.colors.brand} !important;
 }
 
@@ -314,18 +320,18 @@ ${prefix}.text-secondary {
 }
 
 /* HeroUI Component Font Overrides */
-${prefix}body button,
-${prefix}body .heroui-button,
-${prefix}body [data-slot="base"],
-${prefix}body input,
-${prefix}body textarea,
-${prefix}body .heroui-input input,
-${prefix}body .heroui-textarea textarea,
-${prefix}body .heroui-chip,
-${prefix}body .heroui-chip span,
-${prefix}body [role="button"],
-${prefix}body .heroui-navbar-item,
-${prefix}body .heroui-link {
+${bodyPrefix}button,
+${bodyPrefix}.heroui-button,
+${bodyPrefix}[data-slot="base"],
+${bodyPrefix}input,
+${bodyPrefix}textarea,
+${bodyPrefix}.heroui-input input,
+${bodyPrefix}.heroui-textarea textarea,
+${bodyPrefix}.heroui-chip,
+${bodyPrefix}.heroui-chip span,
+${bodyPrefix}[role="button"],
+${bodyPrefix}.heroui-navbar-item,
+${bodyPrefix}.heroui-link {
   font-family: ${bodyFontCSS} !important;
   font-weight: ${theme.fonts.body.weight} !important;
 }

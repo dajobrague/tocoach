@@ -18,6 +18,24 @@ describe("generateThemeCSS scope", () => {
     expect(css).not.toMatch(/html\.light|html:not\(\.dark\)|^html /m);
   });
 
+  it("sin scope los bloques body-prefixed usan 'html body' (byte-identidad del path default)", () => {
+    const css = generateThemeCSS(defaultTheme);
+
+    expect(css).toContain("html body");
+  });
+
+  it("con scope .trainer-app los bloques body-prefixed no generan selectores muertos '.trainer-app body'", () => {
+    const css = generateThemeCSS(defaultTheme, { scope: ".trainer-app" });
+
+    // body es ANCESTOR de .trainer-app, no descendiente — este selector
+    // nunca podría matchear nada y dejaba ganar la hoja de marca default.
+    expect(css).not.toContain(".trainer-app body");
+    // Debe existir una forma equivalente que sí funcione dentro del scope.
+    expect(css).toMatch(
+      /\.trainer-app \*\[class\*="bg-primary"\]|\.trainer-app button/
+    );
+  });
+
   it("primary-foreground ya no es blanco fijo para marcas claras", () => {
     const pastel = structuredClone(defaultTheme);
 
