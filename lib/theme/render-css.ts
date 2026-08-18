@@ -7,12 +7,13 @@
 // ruta sigue existiendo y sirve este mismo módulo: es la red de seguridad y
 // el fallback del layout cuando la generación inline falla.
 
-import type { TenantContext } from "@/lib/tenant/types";
+import type { TenantContext, TenantMetadata } from "@/lib/tenant/types";
 import type { ThemeConfig } from "@/lib/theme/schema";
 
 import {
   generateHeroUIColorScale,
   hexToHeroUIHSL,
+  pickForegroundHSL,
 } from "@/lib/theme/color-utils";
 import { defaultTheme, validateTheme } from "@/lib/theme/schema";
 
@@ -109,10 +110,15 @@ export function cssFontFamily(raw: string): string {
 }
 
 // Generate complete CSS for a theme (same as file-based version)
-export function generateThemeCSS(theme: ThemeConfig): string {
+export function generateThemeCSS(
+  theme: ThemeConfig,
+  opts?: { scope?: string }
+): string {
   const fontsImport = buildGoogleFontsImport(theme);
   const headingFontCSS = cssFontFamily(theme.fonts.heading.family);
   const bodyFontCSS = cssFontFamily(theme.fonts.body.family);
+  const sel = opts?.scope ?? "html.light,\nhtml:not(.dark)";
+  const prefix = opts?.scope ? `${opts.scope} ` : "html ";
 
   const css = `
 ${fontsImport}
@@ -147,8 +153,7 @@ ${fontsImport}
 }
 
 /* Target HeroUI's light theme class and default (no class) */
-html.light,
-html:not(.dark) {
+${sel} {
   /* HeroUI Primary Color Override - HSL Format */
   --heroui-primary: ${hexToHeroUIHSL(theme.colors.brand)} !important;
   --heroui-primary-50: ${generateHeroUIColorScale(theme.colors.brand)["50"]} !important;
@@ -161,7 +166,7 @@ html:not(.dark) {
   --heroui-primary-700: ${generateHeroUIColorScale(theme.colors.brand)["700"]} !important;
   --heroui-primary-800: ${generateHeroUIColorScale(theme.colors.brand)["800"]} !important;
   --heroui-primary-900: ${generateHeroUIColorScale(theme.colors.brand)["900"]} !important;
-  --heroui-primary-foreground: 0 0% 100% !important;
+  --heroui-primary-foreground: ${pickForegroundHSL(theme.colors.brand)} !important;
 
   /* HeroUI Secondary Color Override - HSL Format */
   --heroui-secondary: ${hexToHeroUIHSL(theme.colors.accent)} !important;
@@ -175,7 +180,7 @@ html:not(.dark) {
   --heroui-secondary-700: ${generateHeroUIColorScale(theme.colors.accent)["700"]} !important;
   --heroui-secondary-800: ${generateHeroUIColorScale(theme.colors.accent)["800"]} !important;
   --heroui-secondary-900: ${generateHeroUIColorScale(theme.colors.accent)["900"]} !important;
-  --heroui-secondary-foreground: 0 0% 100% !important;
+  --heroui-secondary-foreground: ${pickForegroundHSL(theme.colors.accent)} !important;
 
   /* HeroUI Default/Neutral Colors - HSL Format */
   --heroui-default: ${hexToHeroUIHSL(theme.colors.surface["2"])} !important;
@@ -220,75 +225,75 @@ html:not(.dark) {
 }
 
 /* Ultra high specificity HeroUI component overrides */
-html body .bg-primary,
-html body [data-slot="base"].bg-primary,
-html body button.bg-primary,
-html body [data-color="primary"],
-html body .heroui-button[data-color="primary"],
-html body *[class*="bg-primary"] {
+${prefix}body .bg-primary,
+${prefix}body [data-slot="base"].bg-primary,
+${prefix}body button.bg-primary,
+${prefix}body [data-color="primary"],
+${prefix}body .heroui-button[data-color="primary"],
+${prefix}body *[class*="bg-primary"] {
   background-color: ${theme.colors.brand} !important;
 }
 
-html .text-primary-foreground,
-html [data-slot="base"].text-primary-foreground,
-html button.text-primary-foreground {
+${prefix}.text-primary-foreground,
+${prefix}[data-slot="base"].text-primary-foreground,
+${prefix}button.text-primary-foreground {
   color: #ffffff !important;
 }
 
-html .bg-secondary,
-html [data-slot="base"].bg-secondary,
-html button.bg-secondary,
-html [data-color="secondary"],
-html .heroui-button[data-color="secondary"],
-html *[class*="bg-secondary"] {
+${prefix}.bg-secondary,
+${prefix}[data-slot="base"].bg-secondary,
+${prefix}button.bg-secondary,
+${prefix}[data-color="secondary"],
+${prefix}.heroui-button[data-color="secondary"],
+${prefix}*[class*="bg-secondary"] {
   background-color: ${theme.colors.accent} !important;
 }
 
-html .text-secondary-foreground,
-html [data-slot="base"].text-secondary-foreground,
-html button.text-secondary-foreground {
+${prefix}.text-secondary-foreground,
+${prefix}[data-slot="base"].text-secondary-foreground,
+${prefix}button.text-secondary-foreground {
   color: #ffffff !important;
 }
 
-html .bg-default,
-html [data-slot="base"].bg-default,
-html button.bg-default,
-html [data-color="default"],
-html .heroui-button[data-color="default"],
-html *[class*="bg-default"] {
+${prefix}.bg-default,
+${prefix}[data-slot="base"].bg-default,
+${prefix}button.bg-default,
+${prefix}[data-color="default"],
+${prefix}.heroui-button[data-color="default"],
+${prefix}*[class*="bg-default"] {
   background-color: ${theme.colors.surface["2"]} !important;
 }
 
-html .text-default-foreground,
-html [data-slot="base"].text-default-foreground {
+${prefix}.text-default-foreground,
+${prefix}[data-slot="base"].text-default-foreground {
   color: ${theme.colors.text.primary} !important;
 }
 
-html .bg-default-100 {
+${prefix}.bg-default-100 {
   background-color: ${theme.colors.surface["2"]} !important;
 }
 
-html .bg-default-200 {
+${prefix}.bg-default-200 {
   background-color: ${theme.colors.fill} !important;
 }
 
-html .text-default-600 {
+${prefix}.text-default-600 {
   color: ${theme.colors.text.secondary} !important;
 }
 
-html .border-default {
+${prefix}.border-default {
   border-color: ${theme.colors.border} !important;
 }
 
-html .text-foreground {
+${prefix}.text-foreground {
   color: ${theme.colors.text.primary} !important;
 }
 
-html .text-primary {
+${prefix}.text-primary {
   color: ${theme.colors.brand} !important;
 }
 
-html .text-secondary {
+${prefix}.text-secondary {
   color: ${theme.colors.text.secondary} !important;
 }
 
@@ -309,18 +314,18 @@ html .text-secondary {
 }
 
 /* HeroUI Component Font Overrides */
-html body button,
-html body .heroui-button,
-html body [data-slot="base"],
-html body input,
-html body textarea,
-html body .heroui-input input,
-html body .heroui-textarea textarea,
-html body .heroui-chip,
-html body .heroui-chip span,
-html body [role="button"],
-html body .heroui-navbar-item,
-html body .heroui-link {
+${prefix}body button,
+${prefix}body .heroui-button,
+${prefix}body [data-slot="base"],
+${prefix}body input,
+${prefix}body textarea,
+${prefix}body .heroui-input input,
+${prefix}body .heroui-textarea textarea,
+${prefix}body .heroui-chip,
+${prefix}body .heroui-chip span,
+${prefix}body [role="button"],
+${prefix}body .heroui-navbar-item,
+${prefix}body .heroui-link {
   font-family: ${bodyFontCSS} !important;
   font-weight: ${theme.fonts.body.weight} !important;
 }
@@ -361,6 +366,36 @@ export function renderInlineThemeCSS(
   } catch (error) {
     console.error(
       `[CSS Gen DB] Inline theme CSS generation failed for ${host}:`,
+      error
+    );
+
+    return null;
+  }
+}
+
+/**
+ * CSS de tema scoped a `.trainer-app`, listo para inyectar inline en <head>
+ * del shell de trainer. Espejo de `renderInlineThemeCSS` (misma validación
+ * y guard de "<") pero generando con `{ scope: ".trainer-app" }` para que
+ * los overrides no se filtren fuera del wrapper del trainer.
+ */
+export function renderTrainerThemeCSS(context: TenantMetadata): string | null {
+  try {
+    const theme = resolveTenantTheme(context, context.host);
+    const css = generateThemeCSS(theme, { scope: ".trainer-app" });
+
+    if (css.includes("<")) {
+      console.warn(
+        `[CSS Gen DB] Trainer theme CSS for ${context.host} contained "<" — falling back to linked stylesheet`
+      );
+
+      return null;
+    }
+
+    return css;
+  } catch (error) {
+    console.error(
+      `[CSS Gen DB] Trainer theme CSS generation failed for ${context.host}:`,
       error
     );
 
