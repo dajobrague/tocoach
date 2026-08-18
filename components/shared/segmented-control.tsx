@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 
 /** Segmented control manual (track soft + pill activa con shadow). Se usa en
