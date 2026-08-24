@@ -146,6 +146,7 @@ function SetsTable({
       {sets.map((set, index) => {
         const isRecord = index === recordIndex;
         const videoUrl = set.video_url ?? null;
+        const note = set.metadata?.note?.trim() || null;
         const lowReps =
           prescribedMin !== null &&
           typeof set.reps === "number" &&
@@ -204,6 +205,18 @@ function SetsTable({
                 </button>
               ) : null}
             </span>
+            {note !== null ? (
+              // Nota del cliente en esa serie ("8 izq / 10 der"). Fila
+              // propia a lo ancho, pegada a su serie (sin borde superior;
+              // el border-t de la serie siguiente hace de separador).
+              <span
+                className={`col-span-4 px-2.5 pb-1.5 text-[10.5px] leading-snug text-gray-500 ${
+                  isRecord ? "bg-amber-50/40" : ""
+                }`}
+              >
+                📝 {note}
+              </span>
+            ) : null}
           </Fragment>
         );
       })}

@@ -345,6 +345,7 @@ export function ExerciseLogModal({
       body.sets = formData.sets.map((s) => ({
         reps: s.reps ? parseInt(s.reps) : null,
         weight: s.weight || null,
+        note: s.note?.trim() || null,
         videoUrl: s.videoUrl || null,
       }));
     }

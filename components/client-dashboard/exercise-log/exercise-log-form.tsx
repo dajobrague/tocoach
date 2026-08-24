@@ -232,6 +232,7 @@ function StrengthFields({
           <span className="w-10 shrink-0 text-center">Serie</span>
           <span className="flex-1">Peso (kg)</span>
           <span className="flex-1">Reps</span>
+          <span className="w-10 shrink-0 text-center">Nota</span>
           <span className="w-10 shrink-0 text-center">Video</span>
           {hasMultipleSets ? <span className="w-10 shrink-0" /> : null}
         </div>
