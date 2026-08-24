@@ -1,6 +1,11 @@
 // Una fila del formulario de fuerza: número de serie · reps · peso ·
-// botón de video. El video es por SERIE — el state vive en
-// formData.sets[index].videoUrl|videoPath y se sube via useSetVideos.
+// botón de nota · botón de video. El video es por SERIE — el state vive
+// en formData.sets[index].videoUrl|videoPath y se sube via useSetVideos.
+//
+// La nota también es por serie ("8 izq / 10 der"): el input de reps es
+// numérico, así que las asimetrías por lado se anotan acá. El botón
+// despliega un input de texto bajo la fila; con contenido queda
+// resaltado en primary igual que el de video.
 //
 // Los headers (Serie / Reps / Peso) viven en el padre (StrengthFields)
 // para que cada fila sea uniforme y no tengamos label flotante +
@@ -26,7 +31,7 @@ interface Props {
   set: SetDraftWithTarget;
   canRemove: boolean;
   isUploading: boolean;
-  onUpdate: (field: "reps" | "weight", value: string) => void;
+  onUpdate: (field: "reps" | "weight" | "note", value: string) => void;
   onRemove: () => void;
   onPickVideo: (file: File) => void;
   onRemoveVideo: () => void;
@@ -45,6 +50,12 @@ export function ExerciseSetRow({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const hasVideo = Boolean(set.videoUrl);
+  const hasNote = Boolean(set.note && set.note.trim().length > 0);
+  // null = seguir a hasNote: una nota que llega por hidratación (log
+  // existente o draft) se despliega sola. El toggle explícito del
+  // usuario (true/false) gana después.
+  const [noteToggled, setNoteToggled] = useState<boolean | null>(null);
+  const noteOpen = noteToggled ?? hasNote;
 
   const handleVideoClick = () => {
     if (isUploading) return;
@@ -96,6 +107,25 @@ export function ExerciseSetRow({
         />
         <Button
           isIconOnly
+          aria-expanded={noteOpen}
+          aria-label={
+            hasNote ? "Editar nota de esta serie" : "Añadir nota a esta serie"
+          }
+          className={`shrink-0 h-10 w-10 min-w-10 ${
+            hasNote ? "text-primary" : ""
+          }`}
+          color="default"
+          radius="md"
+          variant="flat"
+          onPress={() => setNoteToggled(!noteOpen)}
+        >
+          <Icon
+            icon={hasNote ? "solar:notes-bold" : "solar:notes-linear"}
+            width={20}
+          />
+        </Button>
+        <Button
+          isIconOnly
           aria-label={
             hasVideo ? "Ver video de esta serie" : "Subir video de esta serie"
           }
@@ -129,6 +159,27 @@ export function ExerciseSetRow({
           </Button>
         ) : null}
       </div>
+
+      {noteOpen ? (
+        <Input
+          autoFocus={noteToggled === true}
+          classNames={{
+            input: "text-sm",
+            base: "ml-[46px] sm:ml-12 w-auto",
+          }}
+          placeholder="Nota de la serie (ej: 8 izq / 10 der)"
+          size="sm"
+          startContent={
+            <Icon
+              className="text-foreground/40 shrink-0"
+              icon="solar:notes-linear"
+              width={16}
+            />
+          }
+          value={set.note ?? ""}
+          onValueChange={(value) => onUpdate("note", value)}
+        />
+      ) : null}
 
       {previewOpen && set.videoUrl ? (
         <SetVideoPreview

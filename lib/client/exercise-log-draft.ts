@@ -10,6 +10,10 @@ const DRAFT_TTL_MS = 48 * 60 * 60 * 1000;
 export type SetDraft = {
   reps: string;
   weight: string;
+  // Nota corta de la serie ("8 izq / 10 der"). El input de reps es
+  // numérico, así que las asimetrías por lado en ejercicios unilaterales
+  // viajan acá — se persiste en exercise_log_sets.metadata.note.
+  note?: string;
   // Video opcional por serie. videoUrl es lo que se muestra/guarda;
   // videoPath sirve para borrar del storage si el usuario lo cambia
   // antes de hacer Save. Ambos quedan undefined cuando no hay video.

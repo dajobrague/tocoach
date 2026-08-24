@@ -144,6 +144,15 @@ function StrengthSessionCard({
   const maxWeight =
     sets.length > 0 ? Math.max(...sets.map((s) => s.weight_kg ?? 0)) : 0;
 
+  // Notas por serie del cliente ("8 izq / 10 der") — se listan bajo los
+  // chips porque dentro no caben sin romper el layout compacto.
+  const setNotes = sets
+    .map((s) => ({
+      setNumber: s.set_number,
+      note: s.metadata?.note?.trim() || null,
+    }))
+    .filter((s): s is { setNumber: number; note: string } => s.note !== null);
+
   // Per-set videos (migration 091). Legacy sessions stored a single video at
   // exercise_logs.video_url; when no per-set videos exist we surface that on
   // set 1 with a muted treatment so the trainer can still see it.
@@ -208,6 +217,22 @@ function StrengthSessionCard({
                 />
               );
             })}
+          </div>
+        ) : null}
+
+        {setNotes.length > 0 ? (
+          <div className="space-y-0.5">
+            {setNotes.map((s) => (
+              <p
+                key={s.setNumber}
+                className="text-[11px] text-gray-600 leading-snug"
+              >
+                <span className="font-semibold text-gray-500 tabular-nums">
+                  S{s.setNumber}
+                </span>{" "}
+                · {s.note}
+              </p>
+            ))}
           </div>
         ) : null}
 
