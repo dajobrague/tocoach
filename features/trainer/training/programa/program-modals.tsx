@@ -12,6 +12,8 @@ import type {
 
 import {
   Button,
+  Checkbox,
+  CheckboxGroup,
   Input,
   Modal,
   ModalBody,
@@ -534,6 +536,126 @@ export function DeleteProgramModal({
             }}
           >
             Eliminar
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
+
+// ─── Pausar otros programas al asignar uno nuevo ────────────────────────────
+
+/**
+ * Se abre justo después de crear/asignar un programa cuando el cliente ya
+ * tenía otros activos. Ofrece pausarlos (= ocultarlos al cliente) sin
+ * hacerlo por defecto: multi-activo es uso deliberado (fuerza + cardio),
+ * así que nada se pausa si el trainer no lo marca. Sin este paso, el
+ * programa viejo sigue visible en la app del cliente y los trainers acaban
+ * "eliminándolo" (destructivo) para ocultarlo — feedback Pablo Carboneras,
+ * ago 2026.
+ */
+export function PauseOthersModal({
+  isOpen,
+  clientId,
+  others,
+  onClose,
+}: {
+  isOpen: boolean;
+  clientId: string;
+  /** Programas que ya estaban activos antes de la asignación. */
+  others: WorkoutProgram[];
+  onClose: () => void;
+}) {
+  const { updateProgramStatus } = useProgramMutations(clientId);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [isPausing, setIsPausing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelected([]);
+      setIsPausing(false);
+      setError(null);
+    }
+  }, [isOpen]);
+
+  const pauseSelected = async () => {
+    if (selected.length === 0 || isPausing) return;
+    setIsPausing(true);
+    setError(null);
+
+    // Secuencial a propósito: cada PATCH recalcula el programa primario en
+    // el servidor (ensurePrimaryProgram); en paralelo podrían pisarse.
+    try {
+      for (const programId of selected) {
+        await updateProgramStatus.mutateAsync({ programId, status: "paused" });
+      }
+      onClose();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron pausar los programas"
+      );
+    } finally {
+      setIsPausing(false);
+    }
+  };
+
+  return (
+    <Modal
+      isDismissable={isPausing === false}
+      isOpen={isOpen}
+      placement="center"
+      onClose={onClose}
+    >
+      <ModalContent>
+        <ModalHeader className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+            <Icon icon="solar:eye-closed-linear" width={18} />
+          </span>
+          Programa asignado — ¿ocultar los anteriores?
+        </ModalHeader>
+        <ModalBody className="gap-3">
+          <p className="text-sm text-default-600">
+            Este cliente ya tenía{" "}
+            {others.length === 1 ? "otro programa" : "otros programas"} en
+            marcha. Mientras sigan activos, el cliente verá las sesiones de
+            todos a la vez. Marca los que quieras pausar (podrás reactivarlos
+            cuando quieras); deja sin marcar los que deban convivir, como un
+            plan de cardio o movilidad.
+          </p>
+          <CheckboxGroup
+            isDisabled={isPausing}
+            value={selected}
+            onValueChange={setSelected}
+          >
+            {others.map((program) => (
+              <Checkbox key={program.programId} value={program.programId}>
+                <span className="text-sm">
+                  {program.name}
+                  <span className="text-default-400">
+                    {" "}
+                    · {program.sessions.length}{" "}
+                    {program.sessions.length === 1 ? "sesión" : "sesiones"}
+                  </span>
+                </span>
+              </Checkbox>
+            ))}
+          </CheckboxGroup>
+          {error !== null && <ErrorNote message={error} />}
+        </ModalBody>
+        <ModalFooter>
+          <Button isDisabled={isPausing} variant="light" onPress={onClose}>
+            Mantener todos activos
+          </Button>
+          <Button
+            className="bg-slate-900 text-white"
+            isDisabled={selected.length === 0}
+            isLoading={isPausing}
+            onPress={() => void pauseSelected()}
+          >
+            Pausar {selected.length > 0 ? `(${selected.length})` : ""}
           </Button>
         </ModalFooter>
       </ModalContent>

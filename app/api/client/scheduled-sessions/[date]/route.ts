@@ -13,6 +13,7 @@ import {
   loadAllActiveOwnedPrograms,
   loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
+import { filterToActiveProgramSessions } from "@/lib/microcycles/visible-sessions";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
 
@@ -348,7 +349,35 @@ async function resolveMicrocycleSlots(
     matches.push({ sessionId: slot.session_id });
   }
 
-  return matches;
+  if (matches.length === 0) return matches;
+
+  // Un slot puede referenciar una sesión de OTRO programa (el editor del
+  // trainer mezcla sesiones de todos los activos en el plan del primario).
+  // Si ese otro programa fue pausado después, su sesión no debe
+  // recomendarse al cliente: pausar = ocultar.
+  const { data: sessionOwners, error: ownersError } = await supabase
+    .from("sessions")
+    .select("id, program_id")
+    .in(
+      "id",
+      matches.map((m) => m.sessionId)
+    );
+
+  if (ownersError) {
+    console.warn(
+      `${LOG_PREFIX} session owners lookup failed [${correlationId}]:`,
+      ownersError.message
+    );
+
+    return matches;
+  }
+
+  const visible = filterToActiveProgramSessions(
+    sessionOwners ?? [],
+    programs.map((p) => p.program_id)
+  );
+
+  return matches.filter((m) => visible.has(m.sessionId));
 }
 
 function makeResolvedDay(

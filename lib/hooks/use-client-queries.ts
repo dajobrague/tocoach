@@ -198,43 +198,9 @@ export function usePrograms() {
   });
 }
 
-// Activa un programa pausado sin tocar el resto (multi-activo válido).
-// Invalida todo lo derivado de los programas activos: plan del día,
-// sesiones disponibles, calendario.
-export function useActivateProgram() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (clientProgramId: string) => {
-      const response = await clientFetch("/api/client/programs/activate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientProgramId }),
-      });
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Error al activar el programa");
-      }
-
-      return data as { activatedId: string; demotedIds: string[] };
-    },
-    onSuccess: () => {
-      const affected: string[][] = [
-        ["client", "programs"],
-        ["client", "available-sessions"],
-        ["client", "microcycle"],
-        ["client", "resolved-day"],
-        ["client", "calendar"],
-        ["client", "scheduledSessions"],
-      ];
-
-      for (const queryKey of affected) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
-    },
-  });
-}
+// useActivateProgram fue retirado (ago 2026): activar/pausar programas es
+// exclusivo del trainer — pausar es su forma de OCULTAR un programa al
+// cliente. El endpoint /api/client/programs/activate responde 403.
 
 export function useExerciseLogs(clientId: string) {
   return useQuery({

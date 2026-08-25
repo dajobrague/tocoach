@@ -2,7 +2,7 @@
 
 import type { WorkoutProgram } from "@/types/training";
 
-import { addToast, Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,10 +10,7 @@ import { usePathname } from "next/navigation";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
-import {
-  useActivateProgram,
-  usePrograms,
-} from "@/lib/hooks/use-client-queries";
+import { usePrograms } from "@/lib/hooks/use-client-queries";
 
 export function ProgramsContent() {
   const pathname = usePathname();
@@ -36,34 +33,11 @@ export function ProgramsContent() {
     refetch,
   } = usePrograms();
 
-  const activateProgram = useActivateProgram();
-
   const active = programs.filter((p: WorkoutProgram) => p.status === "active");
   const paused = programs.filter((p: WorkoutProgram) => p.status === "paused");
   const completed = programs.filter(
     (p: WorkoutProgram) => p.status === "completed"
   );
-
-  // Activar no toca los demás programas (multi-activo válido). Es
-  // reversible desde esta misma pantalla, así que no pedimos confirmación.
-  const handleActivate = (program: WorkoutProgram) => {
-    activateProgram.mutate(program.clientProgramId, {
-      onSuccess: () => {
-        addToast({
-          title: `"${program.name}" activado`,
-          description: "Ya aparece en tu pantalla de Entrenamiento.",
-          color: "success",
-        });
-      },
-      onError: (err) => {
-        addToast({
-          title: "No se pudo activar el programa",
-          description: err.message,
-          color: "danger",
-        });
-      },
-    });
-  };
 
   return (
     <>
@@ -180,8 +154,15 @@ export function ProgramsContent() {
                     <h2 className="text-sm font-semibold text-default-600 uppercase tracking-wide">
                       Pausados
                     </h2>
+                    <p className="text-xs text-default-500 font-body">
+                      Tu entrenador pausó estos programas. Si quieres retomar
+                      alguno, pídeselo y él lo reactivará.
+                    </p>
                     {paused.map((p: WorkoutProgram) => (
-                      <Card key={p.clientProgramId} className="shadow-sm">
+                      <Card
+                        key={p.clientProgramId}
+                        className="shadow-sm opacity-80"
+                      >
                         <CardBody className="p-4">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
@@ -195,20 +176,9 @@ export function ProgramsContent() {
                                 {p.sessions?.length ?? 0} sesiones en plantilla
                               </p>
                             </div>
-                            <div className="flex shrink-0 flex-col items-end gap-2">
-                              <Chip color="warning" size="sm" variant="flat">
-                                Pausado
-                              </Chip>
-                              <Button
-                                color="primary"
-                                isDisabled={activateProgram.isPending}
-                                size="sm"
-                                variant="flat"
-                                onPress={() => handleActivate(p)}
-                              >
-                                Activar
-                              </Button>
-                            </div>
+                            <Chip color="warning" size="sm" variant="flat">
+                              Pausado
+                            </Chip>
                           </div>
                         </CardBody>
                       </Card>
