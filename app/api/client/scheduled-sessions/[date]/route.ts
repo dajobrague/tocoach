@@ -143,8 +143,8 @@ export async function GET(
     const { data: ssRowsRaw, error: ssError } = await supabase
       .from("scheduled_sessions")
       .select(
-        `id, session_id,
-         session:sessions(id, name,
+        `id, session_id, status,
+         session:sessions(id, name, program_id,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
@@ -221,10 +221,59 @@ export async function GET(
         Array.isArray(r.session.session_exercises) &&
         r.session.session_exercises.length > 0
     );
+
+    // Pausar = ocultar también aplica a las filas MATERIALIZADAS: una fila
+    // creada al "empezar" una sesión cuyo programa se pausó después no debe
+    // renderizar el plan del programa oculto. Excepción deliberada: si la
+    // fila representa actividad real (completada, o con logs de ese día),
+    // se conserva — pausar oculta prescripciones, nunca borra historial.
+    const activeProgramIds = new Set(recPrograms.map((p) => p.program_id));
+    const hiddenRows = rowsWithExercises.filter(
+      (r) => activeProgramIds.has(r.session?.program_id) === false
+    );
+    const rowsWithActivity = new Set<string>();
+
+    for (const row of hiddenRows) {
+      if (row.status === "completed") rowsWithActivity.add(row.id);
+    }
+
+    const pendingHidden = hiddenRows.filter(
+      (r) => rowsWithActivity.has(r.id) === false
+    );
+
+    if (pendingHidden.length > 0) {
+      const seIds = pendingHidden.flatMap((r) =>
+        (r.session?.session_exercises ?? []).map((se: { id: string }) => se.id)
+      );
+      const { data: logRows } = await supabase
+        .from("exercise_logs")
+        .select("session_exercise_id")
+        .eq("client_id", clientId)
+        .eq("training_date", date)
+        .in("session_exercise_id", seIds);
+
+      const loggedSeIds = new Set(
+        (logRows ?? []).map((l) => l.session_exercise_id)
+      );
+
+      for (const row of pendingHidden) {
+        const trained = (row.session?.session_exercises ?? []).some(
+          (se: { id: string }) => loggedSeIds.has(se.id)
+        );
+
+        if (trained) rowsWithActivity.add(row.id);
+      }
+    }
+
+    const visibleRows = rowsWithExercises.filter(
+      (r) =>
+        activeProgramIds.has(r.session?.program_id) ||
+        rowsWithActivity.has(r.id)
+    );
     const realRow =
-      rowsWithExercises.find(
+      visibleRows.find(
         (r) => r.session_id === trainerRecommendedSessionIds[0]
-      ) ?? [...rowsWithExercises].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+      ) ?? [...visibleRows].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 
     if (realRow) {
       const sessionRow = realRow.session as any;
@@ -364,12 +413,15 @@ async function resolveMicrocycleSlots(
     );
 
   if (ownersError) {
+    // FAIL-CLOSED, igual que /api/client/microcycle ante el mismo fallo:
+    // preferimos un día sin recomendaciones transitorio a recomendar la
+    // sesión de un programa oculto (el invariante que vende la feature).
     console.warn(
       `${LOG_PREFIX} session owners lookup failed [${correlationId}]:`,
       ownersError.message
     );
 
-    return matches;
+    return [];
   }
 
   const visible = filterToActiveProgramSessions(

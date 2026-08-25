@@ -5,6 +5,13 @@
 // programa fue pausado después — sin este filtro, "pausar" ocultaba el
 // programa del picker pero sus sesiones seguían apareciendo como días
 // planificados (queja Pablo Carboneras, ago 2026).
+//
+// El invariante se aplica en TODOS los caminos del cliente: lectura
+// (picker, semana, día resuelto) y escritura (start / crear
+// scheduled_session — ver sessionProgramIsActiveForClient en db.ts; este
+// módulo se mantiene puro para poder testearlo sin entorno Supabase).
+// Verificado contra prod (ago 2026): 0 sesiones con program_id NULL en
+// slots, así que el drop defensivo de NULL no puede ocultar data legacy.
 
 export function filterToActiveProgramSessions(
   sessionRows: Array<{ id: string; program_id: string | null }>,

@@ -155,10 +155,59 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       exercise_count: exerciseCounts.get(s.id) ?? 0,
     }));
 
+    // Slots que apuntan a sesiones fuera de los programas ACTIVOS (programa
+    // pausado después de planificar la semana). El cliente NO las ve
+    // (filtro pausar=ocultar en los endpoints client-side); sin esta lista
+    // el editor las pintaba como una sesión genérica "Sesión" y el trainer
+    // no sabía que ese día está oculto para su cliente.
+    const availableIds = new Set(sessionsWithCount.map((s) => s.id));
+    const orphanSlotIds = Array.from(
+      new Set(
+        (microcycle?.slots ?? [])
+          .map((slot) => slot.session_id)
+          .filter(
+            (id): id is string => id !== null && availableIds.has(id) === false
+          )
+      )
+    );
+    let hiddenSessions: Array<{
+      id: string;
+      name: string;
+      session_type: string | null;
+      program_name: string | null;
+    }> = [];
+
+    if (orphanSlotIds.length > 0) {
+      const { data: hiddenRows } = await supabase
+        .from("sessions")
+        .select("id, name, session_type, program:programs(name)")
+        .in("id", orphanSlotIds);
+
+      hiddenSessions = ((hiddenRows ?? []) as unknown[]).map((raw) => {
+        const row = raw as {
+          id: string;
+          name: string;
+          session_type: string | null;
+          program: { name?: string } | { name?: string }[] | null;
+        };
+        const program = Array.isArray(row.program)
+          ? (row.program[0] ?? null)
+          : row.program;
+
+        return {
+          id: row.id,
+          name: row.name,
+          session_type: row.session_type ?? null,
+          program_name: program?.name ?? null,
+        };
+      });
+    }
+
     return NextResponse.json({
       success: true,
       microcycle,
       available_sessions: sessionsWithCount,
+      hidden_sessions: hiddenSessions,
       program: primaryProgram,
       programs: allPrograms,
       start_date: primary.start_date,

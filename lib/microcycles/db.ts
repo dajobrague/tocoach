@@ -59,25 +59,34 @@ export function compareProgramPriority(
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
-// Resuelve el client_program PRIMARIO activo de un cliente (ancla del
-// microciclo). Si se pasa trainerId, además exige que ese trainer sea
-// dueño (filtro doble client_id + trainer_id, patrón implícito de
-// ownership usado en el resto de los endpoints trainer-side del repo).
+// (loadActiveOwnedProgram — el wrapper singular "primario" — se eliminó en
+// ago 2026: su último caller pasó a loadAllActiveOwnedPrograms()[0] porque
+// además necesitaba la lista completa para el filtro de visibilidad.)
 
-export async function loadActiveOwnedProgram(
+/**
+ * Guard de escritura del invariante "pausar = ocultar": ¿el programa dueño
+ * de una sesión está activo para este cliente? Lo usan los endpoints que
+ * MATERIALIZAN scheduled_sessions a partir de un sessionId elegido por el
+ * cliente (start, crear scheduled_session): un bundle viejo puede seguir
+ * mostrando la sesión de un programa recién pausado, y sin este check el
+ * servidor crearía la fila igualmente.
+ */
+export async function sessionProgramIsActiveForClient(
   supabase: Supabase,
   clientId: string,
-  trainerIdOrNull: string | null,
+  sessionProgramId: string | null,
   correlationId: string
-): Promise<OwnedProgram | null> {
-  const all = await loadAllActiveOwnedPrograms(
+): Promise<boolean> {
+  if (sessionProgramId === null) return false;
+
+  const actives = await loadAllActiveOwnedPrograms(
     supabase,
     clientId,
-    trainerIdOrNull,
+    null,
     correlationId
   );
 
-  return all[0] ?? null;
+  return actives.some((cp) => cp.program_id === sessionProgramId);
 }
 
 // Devuelve los client_programs activos del cliente en orden canónico

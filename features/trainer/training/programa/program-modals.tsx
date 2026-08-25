@@ -568,16 +568,31 @@ export function PauseOthersModal({
 }) {
   const { updateProgramStatus } = useProgramMutations(clientId);
   const [selected, setSelected] = useState<string[]>([]);
+  // Ya pausados en ESTA apertura del modal — tras un fallo parcial la lista
+  // y los botones deben reflejar lo que realmente pasó en el servidor.
+  const [pausedIds, setPausedIds] = useState<string[]>([]);
   const [isPausing, setIsPausing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSelected([]);
+      setPausedIds([]);
       setIsPausing(false);
       setError(null);
     }
   }, [isOpen]);
+
+  const remaining = others.filter(
+    (program) => pausedIds.includes(program.programId) === false
+  );
+  // Pausar el primario mueve el ancla del plan semanal al programa nuevo,
+  // que aún no tiene microciclo: sin configurarlo el cliente ve la semana
+  // vacía. Avisar aquí, en el momento de la decisión.
+  const primarySelected = remaining.some(
+    (program) =>
+      program.isPrimary === true && selected.includes(program.programId)
+  );
 
   const pauseSelected = async () => {
     if (selected.length === 0 || isPausing) return;
@@ -586,20 +601,41 @@ export function PauseOthersModal({
 
     // Secuencial a propósito: cada PATCH recalcula el programa primario en
     // el servidor (ensurePrimaryProgram); en paralelo podrían pisarse.
-    try {
-      for (const programId of selected) {
+    const queue = [...selected];
+    const succeeded: string[] = [];
+    let failedId: string | null = null;
+    let failedMessage = "No se pudieron pausar los programas";
+
+    for (const programId of queue) {
+      try {
         await updateProgramStatus.mutateAsync({ programId, status: "paused" });
+        succeeded.push(programId);
+      } catch (err) {
+        failedId = programId;
+        if (err instanceof Error) failedMessage = err.message;
+        break;
       }
-      onClose();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudieron pausar los programas"
-      );
-    } finally {
-      setIsPausing(false);
     }
+
+    setPausedIds((prev) => [...prev, ...succeeded]);
+    setSelected(queue.filter((id) => succeeded.includes(id) === false));
+    setIsPausing(false);
+
+    if (failedId === null) {
+      onClose();
+
+      return;
+    }
+
+    const failedName =
+      others.find((program) => program.programId === failedId)?.name ??
+      "el programa";
+
+    setError(
+      succeeded.length > 0
+        ? `No se pudo pausar "${failedName}". Los anteriores de la lista ya quedaron pausados; reintenta con los que siguen marcados.`
+        : `No se pudo pausar "${failedName}": ${failedMessage}`
+    );
   };
 
   return (
@@ -630,7 +666,7 @@ export function PauseOthersModal({
             value={selected}
             onValueChange={setSelected}
           >
-            {others.map((program) => (
+            {remaining.map((program) => (
               <Checkbox key={program.programId} value={program.programId}>
                 <span className="text-sm">
                   {program.name}
@@ -638,16 +674,31 @@ export function PauseOthersModal({
                     {" "}
                     · {program.sessions.length}{" "}
                     {program.sessions.length === 1 ? "sesión" : "sesiones"}
+                    {program.isPrimary === true ? " · principal" : ""}
                   </span>
                 </span>
               </Checkbox>
             ))}
           </CheckboxGroup>
+          {primarySelected && (
+            <div className="flex items-start gap-2 rounded-large border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-700">
+              <Icon
+                className="mt-0.5 shrink-0"
+                icon="solar:info-circle-linear"
+                width={14}
+              />
+              <span>
+                Vas a pausar el programa que ancla el plan semanal actual. El
+                plan del cliente pasará a partir del programa nuevo: configura
+                sus días del microciclo o el cliente verá la semana vacía.
+              </span>
+            </div>
+          )}
           {error !== null && <ErrorNote message={error} />}
         </ModalBody>
         <ModalFooter>
           <Button isDisabled={isPausing} variant="light" onPress={onClose}>
-            Mantener todos activos
+            {pausedIds.length > 0 ? "Cerrar" : "Mantener todos activos"}
           </Button>
           <Button
             className="bg-slate-900 text-white"
