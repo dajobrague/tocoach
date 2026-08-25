@@ -36,12 +36,9 @@ import { useMemo } from "react";
 import { ChartErrorBoundary } from "./error-boundary";
 import { ChartRenderer } from "./chart-renderer";
 import { PhotoTimelineRenderer } from "./renderers/photo-timeline";
-import {
-  iconForChartType,
-  isBucketsEmpty,
-  latestNonNull,
-  formatNumber,
-} from "./utils";
+import { headerStatValue, type HeaderStatMode } from "./header-stat";
+import { useHeaderStatPref } from "./use-header-stat-pref";
+import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
 import { resolveColor } from "@/lib/charts/palette";
 
@@ -91,6 +88,45 @@ function NoDataOverlay() {
   );
 }
 
+/**
+ * Toggle Último/Media junto al número grande. Es preferencia del
+ * ESPECTADOR (cliente o trainer), compartida entre todas las cards vía
+ * useHeaderStatPref — no config por gráfica del trainer.
+ */
+function HeaderStatToggle({
+  mode,
+  onChange,
+}: {
+  mode: HeaderStatMode;
+  onChange: (mode: HeaderStatMode) => void;
+}) {
+  const segment = (target: HeaderStatMode, label: string) => (
+    <button
+      aria-pressed={mode === target}
+      className={`px-1.5 py-0.5 rounded-md transition-colors ${
+        mode === target
+          ? "bg-content1 text-foreground shadow-sm"
+          : "text-foreground/45"
+      }`}
+      type="button"
+      onClick={() => onChange(target)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div
+      aria-label="Valor mostrado"
+      className="flex items-center rounded-lg bg-default-100 p-0.5 text-[10px] font-medium flex-shrink-0 mb-1"
+      role="group"
+    >
+      {segment("latest", "Último")}
+      {segment("average", "Media")}
+    </div>
+  );
+}
+
 function CardOrphan() {
   return (
     <div className="flex flex-col items-center justify-center h-40 gap-2 text-foreground/40">
@@ -116,7 +152,15 @@ export function ChartCard({
   editOverlay,
 }: Props) {
   const isPhotoTimeline = config.chart_type === "photo_timeline";
-  // The header's "current value" is the latest non-null for 1-D charts;
+  // Los charts 1-D (line/area/bar) llevan el toggle Último/Media del
+  // header — ring/stacked/kpi tienen su propia semántica de valor.
+  const hasStatToggle =
+    config.chart_type === "line" ||
+    config.chart_type === "area" ||
+    config.chart_type === "bar";
+  const [statMode, setStatMode] = useHeaderStatPref();
+  // The header's stat is viewer-selectable for 1-D charts (latest non-null
+  // or the range mean — same avgNonNull as the dashed reference line);
   // ring (range_total) shows the sum of its series; kpi shows nothing in
   // the header (the body is already the big number).
   const headerValue = useMemo(() => {
@@ -142,8 +186,8 @@ export function ChartCard({
       return null;
     }
 
-    return latestNonNull(buckets);
-  }, [buckets, config.chart_type]);
+    return headerStatValue(buckets, statMode);
+  }, [buckets, config.chart_type, statMode]);
 
   // Header icon: prefer an explicit metadata icon, fall back to the chart-type one.
   const resolvedIcon = icon ?? iconForChartType(config.chart_type);
@@ -210,22 +254,27 @@ export function ChartCard({
           ) : null}
         </div>
         {config.chart_type !== "kpi" && !isPhotoTimeline ? (
-          <p
-            className={`text-4xl font-bold mb-3 tabular-nums ${
-              noData ? "text-foreground/30" : "text-foreground"
-            }`}
-          >
-            {headerValue === null
-              ? isLoading
-                ? ""
-                : "—"
-              : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
-            {headerValue !== null && unit ? (
-              <span className="text-base text-foreground/40 ml-1 font-medium">
-                {unit}
-              </span>
+          <div className="flex items-end justify-between gap-2 mb-3">
+            <p
+              className={`text-4xl font-bold tabular-nums ${
+                noData ? "text-foreground/30" : "text-foreground"
+              }`}
+            >
+              {headerValue === null
+                ? isLoading
+                  ? ""
+                  : "—"
+                : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
+              {headerValue !== null && unit ? (
+                <span className="text-base text-foreground/40 ml-1 font-medium">
+                  {unit}
+                </span>
+              ) : null}
+            </p>
+            {hasStatToggle && !isLoading && !orphan && !noData ? (
+              <HeaderStatToggle mode={statMode} onChange={setStatMode} />
             ) : null}
-          </p>
+          </div>
         ) : null}
 
         {/* State branches.
