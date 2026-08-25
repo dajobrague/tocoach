@@ -91,7 +91,9 @@ export function MicrocycleDaysCard({
       return {
         name: hiddenFirst.name,
         isCardio: hiddenFirst.session_type === "cardio",
-        isHidden: true,
+        // is_hidden false = la sesión solo está fuera del scope de este
+        // trainer (el cliente sí la ve): nombre real sin badge.
+        isHidden: hiddenFirst.is_hidden,
       };
     }
 

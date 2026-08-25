@@ -316,8 +316,6 @@ export async function GET(
     //    (borrada/corrupta), caemos a la siguiente recomendada en vez de
     //    declarar "rest" con badges de recomendado vivos — sería
     //    contradictorio.
-    const stepTwoActiveIds = new Set(recPrograms.map((p) => p.program_id));
-
     for (const slotMatch of recSlotMatches) {
       const { data: sessionDetail } = await supabase
         .from("sessions")
@@ -337,8 +335,8 @@ export async function GET(
       // sesión de programa no-activo.
       if (
         sessionDetail &&
-        stepTwoActiveIds.size > 0 &&
-        stepTwoActiveIds.has((sessionDetail as any).program_id) === false
+        activeProgramIds.size > 0 &&
+        activeProgramIds.has((sessionDetail as any).program_id) === false
       ) {
         continue;
       }

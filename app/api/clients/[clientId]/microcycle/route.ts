@@ -175,6 +175,10 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       name: string;
       session_type: string | null;
       program_name: string | null;
+      /** true = el CLIENTE no la ve (programa no activo para él). false =
+          solo está fuera del scope de este trainer (trainer_id stale) pero
+          el cliente sí la ve — el editor muestra el nombre sin badge. */
+      is_hidden: boolean;
     }> = [];
 
     if (orphanSlotIds.length > 0) {
@@ -194,33 +198,28 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         clientActives.map((cp) => cp.program_id)
       );
 
-      hiddenSessions = ((hiddenRows ?? []) as unknown[])
-        .map((raw) => {
-          const row = raw as {
-            id: string;
-            name: string;
-            session_type: string | null;
-            program_id: string | null;
-            program: { name?: string } | { name?: string }[] | null;
-          };
-          const program = Array.isArray(row.program)
-            ? (row.program[0] ?? null)
-            : row.program;
+      hiddenSessions = ((hiddenRows ?? []) as unknown[]).map((raw) => {
+        const row = raw as {
+          id: string;
+          name: string;
+          session_type: string | null;
+          program_id: string | null;
+          program: { name?: string } | { name?: string }[] | null;
+        };
+        const program = Array.isArray(row.program)
+          ? (row.program[0] ?? null)
+          : row.program;
 
-          return {
-            id: row.id,
-            name: row.name,
-            session_type: row.session_type ?? null,
-            program_id: row.program_id ?? null,
-            program_name: program?.name ?? null,
-          };
-        })
-        .filter(
-          (row) =>
+        return {
+          id: row.id,
+          name: row.name,
+          session_type: row.session_type ?? null,
+          program_name: program?.name ?? null,
+          is_hidden:
             row.program_id === null ||
-            clientActiveProgramIds.has(row.program_id) === false
-        )
-        .map(({ program_id: _programId, ...rest }) => rest);
+            clientActiveProgramIds.has(row.program_id) === false,
+        };
+      });
     }
 
     return NextResponse.json({

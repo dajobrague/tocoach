@@ -14,6 +14,9 @@ export interface HiddenSlotSession {
   name: string;
   session_type: string | null;
   program_name: string | null;
+  /** true = el cliente no la ve; false = solo fuera del scope del trainer
+      (el cliente sí la ve) — se usa para decidir si pintar el badge. */
+  is_hidden: boolean;
 }
 
 export interface TrainerMicrocycleData {

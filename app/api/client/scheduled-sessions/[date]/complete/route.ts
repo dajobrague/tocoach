@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
-  scheduledRowHasLogs,
+  checkHiddenRowMutationGuard,
   sessionProgramIsActiveForClient,
 } from "@/lib/microcycles/db";
 import { loadTenantContext } from "@/lib/tenant/loader";
@@ -90,12 +90,11 @@ export async function POST(
     }
 
     // Pausar = ocultar: completar una sesión de un programa NO activo solo
-    // se permite si la fila tiene entrenamiento real (logs) — terminar lo
-    // empezado es historial. Sin logs sería fabricar "actividad" sobre una
-    // prescripción oculta y la excepción de visibilidad la mostraría para
-    // siempre en el día resuelto.
-    {
-      const rowSession = row?.session as
+    // se permite si la fila tiene entrenamiento real (helper compartido con
+    // el PUT) — terminar lo empezado es historial; sin logs sería fabricar
+    // "actividad" sobre una prescripción oculta.
+    if (row !== null) {
+      const rowSession = row.session as
         | { program_id?: string | null }
         | { program_id?: string | null }[]
         | null
@@ -103,23 +102,59 @@ export async function POST(
       const rowProgramId = Array.isArray(rowSession)
         ? (rowSession[0]?.program_id ?? null)
         : (rowSession?.program_id ?? null);
+      const guard = await checkHiddenRowMutationGuard(
+        supabase,
+        String(clientId),
+        rowProgramId,
+        row.id,
+        correlationId
+      );
 
-      let programIdToCheck: string | null = rowProgramId;
-
-      if (row === null) {
-        const { data: sessionProgramRow } = await supabase
+      if (guard.allowed === false) {
+        return NextResponse.json(
+          { success: false, error: guard.message },
+          { status: guard.status }
+        );
+      }
+    } else {
+      // Sin fila previa = materialización: la sesión debe existir y su
+      // programa estar activo. El error del probe NO se descarta — un
+      // fallo transitorio es 503 reintentable, no un 409 que culpe al
+      // trainer, y un sessionId inexistente sigue siendo 404.
+      const { data: sessionProgramRow, error: sessionProbeError } =
+        await supabase
           .from("sessions")
           .select("program_id")
           .eq("id", sessionId)
           .maybeSingle();
 
-        programIdToCheck = sessionProgramRow?.program_id ?? null;
+      if (sessionProbeError) {
+        console.error(`${LOG_PREFIX} session probe failed:`, {
+          correlationId,
+          sessionId,
+          error: sessionProbeError.message,
+        });
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No se pudo verificar la sesión. Inténtalo de nuevo.",
+          },
+          { status: 503 }
+        );
+      }
+
+      if (!sessionProgramRow) {
+        return NextResponse.json(
+          { success: false, error: "Sesión no encontrada" },
+          { status: 404 }
+        );
       }
 
       const programIsActive = await sessionProgramIsActiveForClient(
         supabase,
         String(clientId),
-        programIdToCheck,
+        sessionProgramRow.program_id ?? null,
         correlationId
       );
 
@@ -134,34 +169,14 @@ export async function POST(
       }
 
       if (programIsActive === false) {
-        const hasLogs =
-          row !== null
-            ? await scheduledRowHasLogs(supabase, row.id, correlationId)
-            : false;
-
-        // null = probe de logs falló: 503 reintentable, no un 409 que
-        // culpe al trainer sin haber podido verificar.
-        if (hasLogs === null) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "No se pudo verificar el entrenamiento. Inténtalo de nuevo.",
-            },
-            { status: 503 }
-          );
-        }
-
-        if (hasLogs === false) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
-            },
-            { status: 409 }
-          );
-        }
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+          },
+          { status: 409 }
+        );
       }
     }
 

@@ -118,9 +118,12 @@ export function useMarkSessionCompleted(date: string, sessionId: string) {
       qc.invalidateQueries({ queryKey: ["client", "calendar"] });
       qc.invalidateQueries({ queryKey: ["client", "resolved-day", date] });
     },
-    onError: (err) => {
+    onError: (err, vars) => {
       addToast({
-        title: "No se pudo completar la sesión",
+        title:
+          vars?.undo === true
+            ? "No se pudo deshacer el completado"
+            : "No se pudo completar la sesión",
         description: err instanceof Error ? err.message : undefined,
         color: "danger",
       });

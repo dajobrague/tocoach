@@ -109,6 +109,68 @@ export async function sessionProgramIsActiveForClient(
 }
 
 /**
+ * Guard compartido para MUTAR una fila existente de scheduled_sessions
+ * (reschedule, cambio de status, completar, borrar). Regla pausar=ocultar:
+ * programa activo O fila con logs reales → permitido; programa no activo
+ * sin logs → 409; estado no verificable → 503 reintentable. Un programa
+ * null (sesión huérfana: el FK session_id es ON DELETE SET NULL) NO aplica
+ * el guard — no hay programa que pueda estar pausado.
+ */
+export type HiddenRowGuardResult =
+  | { allowed: true }
+  | { allowed: false; status: 409 | 503; message: string };
+
+export async function checkHiddenRowMutationGuard(
+  supabase: Supabase,
+  clientId: string,
+  rowProgramId: string | null,
+  scheduledRowId: string,
+  correlationId: string
+): Promise<HiddenRowGuardResult> {
+  if (rowProgramId === null) return { allowed: true };
+
+  const programIsActive = await sessionProgramIsActiveForClient(
+    supabase,
+    clientId,
+    rowProgramId,
+    correlationId
+  );
+
+  if (programIsActive === null) {
+    return {
+      allowed: false,
+      status: 503,
+      message: "No se pudo verificar el programa. Inténtalo de nuevo.",
+    };
+  }
+
+  if (programIsActive === true) return { allowed: true };
+
+  const hasLogs = await scheduledRowHasLogs(
+    supabase,
+    scheduledRowId,
+    correlationId
+  );
+
+  if (hasLogs === null) {
+    return {
+      allowed: false,
+      status: 503,
+      message: "No se pudo verificar el entrenamiento. Inténtalo de nuevo.",
+    };
+  }
+
+  if (hasLogs === true) return { allowed: true };
+
+  return {
+    allowed: false,
+    status: 409,
+    message:
+      "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+  };
+}
+
+/**
  * ¿Tiene esta fila de scheduled_sessions logs de ejercicio reales? Es la
  * "evidencia de actividad" del invariante pausar=ocultar: una fila con
  * logs es historial y sigue siendo operable/visible aunque el programa se
