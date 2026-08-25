@@ -79,6 +79,22 @@ export function MicrocycleDaysCard({
   const [pageStart, setPageStart] = useState(1);
 
   const resolveSlot = (sessionId: string): ResolvedSlot => {
+    // El check de ocultas va PRIMERO: si el trainer tiene seleccionado el
+    // propio programa pausado, sus sesiones también están en `sessions` y
+    // el short-circuit por "own" suprimía la marca — justo en la vista
+    // donde el trainer va a confirmar que el pause funcionó.
+    const hiddenFirst = state.hiddenSessions.find(
+      (session) => session.id === sessionId
+    );
+
+    if (hiddenFirst !== undefined) {
+      return {
+        name: hiddenFirst.name,
+        isCardio: hiddenFirst.session_type === "cardio",
+        isHidden: true,
+      };
+    }
+
     const own = sessions.find((session) => session.id === sessionId);
 
     if (own !== undefined) {
@@ -95,21 +111,6 @@ export function MicrocycleDaysCard({
       return {
         name: available.name,
         isCardio: available.session_type === "cardio",
-      };
-    }
-
-    // Sesión de un programa pausado (u otro no-activo): el cliente no ve
-    // este día. Nombre real + marca de oculta, en vez del genérico "Sesión"
-    // que hacía dudar si el pause había funcionado.
-    const hidden = state.hiddenSessions.find(
-      (session) => session.id === sessionId
-    );
-
-    if (hidden !== undefined) {
-      return {
-        name: hidden.name,
-        isCardio: hidden.session_type === "cardio",
-        isHidden: true,
       };
     }
 

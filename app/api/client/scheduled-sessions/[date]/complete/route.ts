@@ -14,6 +14,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  scheduledRowHasLogs,
+  sessionProgramIsActiveForClient,
+} from "@/lib/microcycles/db";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { isSessionFullyCovered } from "@/lib/training/session-completion";
 
@@ -63,7 +67,7 @@ export async function POST(
 
     const { data: row, error: rowError } = await supabase
       .from("scheduled_sessions")
-      .select("id, status, metadata")
+      .select("id, status, metadata, session:sessions(program_id)")
       .eq("client_id", clientId)
       .eq("scheduled_date", date)
       .eq("session_id", sessionId)
@@ -83,6 +87,82 @@ export async function POST(
 
     if (undo) {
       return await undoManualComplete(supabase, row, sessionId, clientId);
+    }
+
+    // Pausar = ocultar: completar una sesión de un programa NO activo solo
+    // se permite si la fila tiene entrenamiento real (logs) — terminar lo
+    // empezado es historial. Sin logs sería fabricar "actividad" sobre una
+    // prescripción oculta y la excepción de visibilidad la mostraría para
+    // siempre en el día resuelto.
+    {
+      const rowSession = row?.session as
+        | { program_id?: string | null }
+        | { program_id?: string | null }[]
+        | null
+        | undefined;
+      const rowProgramId = Array.isArray(rowSession)
+        ? (rowSession[0]?.program_id ?? null)
+        : (rowSession?.program_id ?? null);
+
+      let programIdToCheck: string | null = rowProgramId;
+
+      if (row === null) {
+        const { data: sessionProgramRow } = await supabase
+          .from("sessions")
+          .select("program_id")
+          .eq("id", sessionId)
+          .maybeSingle();
+
+        programIdToCheck = sessionProgramRow?.program_id ?? null;
+      }
+
+      const programIsActive = await sessionProgramIsActiveForClient(
+        supabase,
+        String(clientId),
+        programIdToCheck,
+        correlationId
+      );
+
+      if (programIsActive === null) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No se pudo verificar el programa. Inténtalo de nuevo.",
+          },
+          { status: 503 }
+        );
+      }
+
+      if (programIsActive === false) {
+        const hasLogs =
+          row !== null
+            ? await scheduledRowHasLogs(supabase, row.id, correlationId)
+            : false;
+
+        // null = probe de logs falló: 503 reintentable, no un 409 que
+        // culpe al trainer sin haber podido verificar.
+        if (hasLogs === null) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "No se pudo verificar el entrenamiento. Inténtalo de nuevo.",
+            },
+            { status: 503 }
+          );
+        }
+
+        if (hasLogs === false) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+            },
+            { status: 409 }
+          );
+        }
+      }
     }
 
     // Completar sin fila previa (sesión sin ningún log guardado): crearla

@@ -94,6 +94,18 @@ export async function POST(
       correlationId
     );
 
+    // null = no se pudo VERIFICAR (fallo transitorio): 503 reintentable,
+    // nunca un 409 que culpe al trainer de una pausa que no existe.
+    if (programIsActive === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No se pudo verificar el programa. Inténtalo de nuevo.",
+        },
+        { status: 503 }
+      );
+    }
+
     if (programIsActive === false) {
       return NextResponse.json(
         {

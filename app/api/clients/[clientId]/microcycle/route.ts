@@ -178,29 +178,49 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     }> = [];
 
     if (orphanSlotIds.length > 0) {
-      const { data: hiddenRows } = await supabase
-        .from("sessions")
-        .select("id, name, session_type, program:programs(name)")
-        .in("id", orphanSlotIds);
+      // El predicado de "oculta" debe ser el MISMO que aplican los
+      // endpoints del cliente (activos del cliente SIN scope de trainer):
+      // available_sessions viene trainer-scoped, y con un trainer_id stale
+      // en client_programs (clase de incidente conocida en prod) el editor
+      // marcaría oculta una sesión que el cliente sí ve.
+      const [{ data: hiddenRows }, clientActives] = await Promise.all([
+        supabase
+          .from("sessions")
+          .select("id, name, session_type, program_id, program:programs(name)")
+          .in("id", orphanSlotIds),
+        loadAllActiveOwnedPrograms(supabase, clientId, null, correlationId),
+      ]);
+      const clientActiveProgramIds = new Set(
+        clientActives.map((cp) => cp.program_id)
+      );
 
-      hiddenSessions = ((hiddenRows ?? []) as unknown[]).map((raw) => {
-        const row = raw as {
-          id: string;
-          name: string;
-          session_type: string | null;
-          program: { name?: string } | { name?: string }[] | null;
-        };
-        const program = Array.isArray(row.program)
-          ? (row.program[0] ?? null)
-          : row.program;
+      hiddenSessions = ((hiddenRows ?? []) as unknown[])
+        .map((raw) => {
+          const row = raw as {
+            id: string;
+            name: string;
+            session_type: string | null;
+            program_id: string | null;
+            program: { name?: string } | { name?: string }[] | null;
+          };
+          const program = Array.isArray(row.program)
+            ? (row.program[0] ?? null)
+            : row.program;
 
-        return {
-          id: row.id,
-          name: row.name,
-          session_type: row.session_type ?? null,
-          program_name: program?.name ?? null,
-        };
-      });
+          return {
+            id: row.id,
+            name: row.name,
+            session_type: row.session_type ?? null,
+            program_id: row.program_id ?? null,
+            program_name: program?.name ?? null,
+          };
+        })
+        .filter(
+          (row) =>
+            row.program_id === null ||
+            clientActiveProgramIds.has(row.program_id) === false
+        )
+        .map(({ program_id: _programId, ...rest }) => rest);
     }
 
     return NextResponse.json({

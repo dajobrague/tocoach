@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  scheduledRowHasLogs,
+  sessionProgramIsActiveForClient,
+} from "@/lib/microcycles/db";
+
+// Estados que el cliente puede escribir vía PUT. Antes se aplicaba el body
+// sin validar — cualquier string acababa en la columna.
+const CLIENT_ALLOWED_STATUSES = new Set([
+  "scheduled",
+  "pending",
+  "completed",
+  "cancelled",
+]);
 
 // PUT - Update a scheduled session (reschedule or change status)
 export async function PUT(
@@ -35,6 +48,87 @@ export async function PUT(
 
     console.log("[Scheduled Session Update API] Updating:", sessionId, body);
 
+    if (status !== undefined && CLIENT_ALLOWED_STATUSES.has(status) === false) {
+      return NextResponse.json(
+        { success: false, error: "status inválido" },
+        { status: 400 }
+      );
+    }
+
+    // Fila + programa dueño de su sesión, para el guard pausar=ocultar.
+    const { data: existing, error: existingError } = await supabase
+      .from("scheduled_sessions")
+      .select("scheduled_date, metadata, session:sessions(program_id)")
+      .eq("id", sessionId)
+      .eq("client_id", clientId)
+      .single();
+
+    if (existingError || !existing) {
+      return NextResponse.json(
+        { success: false, error: "Sesión programada no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    // Pausar = ocultar: mover o cambiar el estado de una fila cuyo programa
+    // no está activo solo se permite si tiene entrenamiento real (misma
+    // regla que /complete) — sin esto, un PUT movía prescripciones ocultas
+    // o fabricaba un 'completed' que las hacía visibles para siempre.
+    const existingSession = existing.session as
+      | { program_id?: string | null }
+      | { program_id?: string | null }[]
+      | null;
+    const rowProgramId = Array.isArray(existingSession)
+      ? (existingSession[0]?.program_id ?? null)
+      : (existingSession?.program_id ?? null);
+    const programIsActive = await sessionProgramIsActiveForClient(
+      supabase,
+      clientId,
+      rowProgramId,
+      `sched-put-${sessionId}`
+    );
+
+    if (programIsActive === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No se pudo verificar el programa. Inténtalo de nuevo.",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (programIsActive === false) {
+      const hasLogs = await scheduledRowHasLogs(
+        supabase,
+        sessionId,
+        `sched-put-${sessionId}`
+      );
+
+      // null = probe de logs falló: 503 reintentable, no un 409 que culpe
+      // al trainer sin haber podido verificar.
+      if (hasLogs === null) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No se pudo verificar el entrenamiento. Inténtalo de nuevo.",
+          },
+          { status: 503 }
+        );
+      }
+
+      if (hasLogs === false) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Build update object
     const updateData: any = {
       updated_at: new Date().toISOString(),
@@ -43,21 +137,12 @@ export async function PUT(
     // When rescheduling, persist the original template date so the UI can
     // suppress the old template slot and show the card on the new date.
     if (scheduledDate !== undefined) {
-      const { data: existing } = await supabase
-        .from("scheduled_sessions")
-        .select("scheduled_date, metadata")
-        .eq("id", sessionId)
-        .eq("client_id", clientId)
-        .single();
+      const prevMeta = (existing.metadata as Record<string, any>) || {};
 
-      if (existing) {
-        const prevMeta = (existing.metadata as Record<string, any>) || {};
-
-        if (!prevMeta.original_plan_date) {
-          prevMeta.original_plan_date = existing.scheduled_date;
-        }
-        updateData.metadata = prevMeta;
+      if (!prevMeta.original_plan_date) {
+        prevMeta.original_plan_date = existing.scheduled_date;
       }
+      updateData.metadata = prevMeta;
 
       updateData.scheduled_date = scheduledDate;
     }

@@ -76,17 +76,66 @@ export async function sessionProgramIsActiveForClient(
   clientId: string,
   sessionProgramId: string | null,
   correlationId: string
-): Promise<boolean> {
+): Promise<boolean | null> {
   if (sessionProgramId === null) return false;
 
-  const actives = await loadAllActiveOwnedPrograms(
-    supabase,
-    clientId,
-    null,
-    correlationId
-  );
+  // Query directa (no loadAllActiveOwnedPrograms): ese loader devuelve []
+  // tanto en error como en vacío, y este guard NECESITA distinguirlos — un
+  // fallo transitorio de DB no puede convertirse en un 409 que culpa al
+  // trainer de una pausa que no existe. null = no se pudo verificar (el
+  // caller responde 5xx reintentable), false = programa NO activo (409).
+  const { data, error } = await supabase
+    .from("client_programs")
+    .select("id, status")
+    .eq("client_id", clientId)
+    .eq("program_id", sessionProgramId);
 
-  return actives.some((cp) => cp.program_id === sessionProgramId);
+  if (error) {
+    console.error(`${LOG_PREFIX} sessionProgramIsActiveForClient failed:`, {
+      correlationId,
+      clientId,
+      sessionProgramId,
+      error: error.message,
+    });
+
+    return null;
+  }
+
+  return (data ?? []).some(
+    (cp) =>
+      typeof cp.status === "string" &&
+      cp.status.trim().toLowerCase() === "active"
+  );
+}
+
+/**
+ * ¿Tiene esta fila de scheduled_sessions logs de ejercicio reales? Es la
+ * "evidencia de actividad" del invariante pausar=ocultar: una fila con
+ * logs es historial y sigue siendo operable/visible aunque el programa se
+ * pause. null = no se pudo verificar.
+ */
+export async function scheduledRowHasLogs(
+  supabase: Supabase,
+  scheduledSessionId: string,
+  correlationId: string
+): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from("exercise_logs")
+    .select("id")
+    .eq("scheduled_session_id", scheduledSessionId)
+    .limit(1);
+
+  if (error) {
+    console.error(`${LOG_PREFIX} scheduledRowHasLogs failed:`, {
+      correlationId,
+      scheduledSessionId,
+      error: error.message,
+    });
+
+    return null;
+  }
+
+  return (data ?? []).length > 0;
 }
 
 // Devuelve los client_programs activos del cliente en orden canónico
