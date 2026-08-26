@@ -14,9 +14,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
-  loadActiveOwnedProgram,
+  loadAllActiveOwnedPrograms,
   loadMicrocycleWithSlots,
 } from "@/lib/microcycles/db";
+import { filterToActiveProgramSessions } from "@/lib/microcycles/visible-sessions";
 
 const LOG_PREFIX = "[Client Microcycle API]";
 
@@ -39,12 +40,13 @@ export async function GET(_request: NextRequest) {
     // (workouts + recomendados) ya es multi-programa. Es deliberado — la
     // paridad plural (ciclo por programa o semana fusionada) queda para
     // la siguiente fase; no lo "arregles" colapsando el día a un programa.
-    const ownedProgram = await loadActiveOwnedProgram(
+    const activePrograms = await loadAllActiveOwnedPrograms(
       supabase,
       session.client_id,
       null,
       correlationId
     );
+    const ownedProgram = activePrograms[0] ?? null;
 
     if (!ownedProgram) {
       return NextResponse.json({ success: true, microcycle: null });
@@ -69,6 +71,19 @@ export async function GET(_request: NextRequest) {
       sessionIds,
       correlationId
     );
+
+    // Sesiones de programas PAUSADOS no son visibles para el cliente aunque
+    // un slot del microciclo primario las referencie (los slots pueden
+    // cruzar programas). Quitarlas del map degrada esos días a 'rest' en
+    // expandSlots, igual que un slot huérfano.
+    const visibleIds = filterToActiveProgramSessions(
+      Array.from(sessionMap.values()),
+      activePrograms.map((cp) => cp.program_id)
+    );
+
+    for (const id of Array.from(sessionMap.keys())) {
+      if (visibleIds.has(id) === false) sessionMap.delete(id);
+    }
 
     const expanded = expandSlots(
       microcycle.duration_days,
@@ -102,6 +117,8 @@ interface SessionDetail {
   name: string;
   session_type: SessionType | null;
   duration_minutes: number | null;
+  /** Programa dueño de la sesión — para el filtro de visibilidad. */
+  program_id: string | null;
 }
 
 async function loadSessionDetails(
@@ -113,7 +130,7 @@ async function loadSessionDetails(
 
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, name, session_type, duration_minutes")
+    .select("id, name, session_type, duration_minutes, program_id")
     .in("id", sessionIds);
 
   if (error) {
@@ -133,6 +150,7 @@ async function loadSessionDetails(
       name: row.name,
       session_type: (row.session_type ?? null) as SessionType | null,
       duration_minutes: row.duration_minutes ?? null,
+      program_id: row.program_id ?? null,
     });
   }
 

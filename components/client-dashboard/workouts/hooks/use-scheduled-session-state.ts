@@ -3,6 +3,7 @@
 // chip "Empezaste a las HH:MM" y el botón "Marcar como completado" de la
 // vista de sesión activa (pedidos de la llamada del 15 Jul).
 
+import { addToast } from "@heroui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
@@ -70,6 +71,15 @@ export function useSetStartTime(date: string, sessionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: stateKey(date, sessionId) });
     },
+    // Sin esto el 409 de "programa pausado" (bundles viejos) se tragaba en
+    // silencio y el botón simplemente se reseteaba.
+    onError: (err) => {
+      addToast({
+        title: "No se pudo registrar la hora",
+        description: err instanceof Error ? err.message : undefined,
+        color: "danger",
+      });
+    },
   });
 }
 
@@ -107,6 +117,16 @@ export function useMarkSessionCompleted(date: string, sessionId: string) {
       // El calendario y los conteos de sesión muestran el status — refrescar.
       qc.invalidateQueries({ queryKey: ["client", "calendar"] });
       qc.invalidateQueries({ queryKey: ["client", "resolved-day", date] });
+    },
+    onError: (err, vars) => {
+      addToast({
+        title:
+          vars?.undo === true
+            ? "No se pudo deshacer el completado"
+            : "No se pudo completar la sesión",
+        description: err instanceof Error ? err.message : undefined,
+        color: "danger",
+      });
     },
   });
 }

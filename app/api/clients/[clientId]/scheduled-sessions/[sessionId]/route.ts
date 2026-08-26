@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  checkHiddenRowMutationGuard,
+  sessionProgramIsActiveForClient,
+} from "@/lib/microcycles/db";
+
+// Estados que el cliente puede escribir vía PUT. Antes se aplicaba el body
+// sin validar — cualquier string acababa en la columna. El set replica el
+// CHECK constraint scheduled_sessions_status_check de la DB.
+const CLIENT_ALLOWED_STATUSES = new Set([
+  "scheduled",
+  "completed",
+  "missed",
+  "cancelled",
+  "rescheduled",
+]);
 
 // PUT - Update a scheduled session (reschedule or change status)
 export async function PUT(
@@ -35,6 +50,73 @@ export async function PUT(
 
     console.log("[Scheduled Session Update API] Updating:", sessionId, body);
 
+    if (status !== undefined && CLIENT_ALLOWED_STATUSES.has(status) === false) {
+      return NextResponse.json(
+        { success: false, error: "status inválido" },
+        { status: 400 }
+      );
+    }
+
+    // Fila + programa dueño de su sesión, para el guard pausar=ocultar.
+    // Error de query ≠ fila inexistente: el error va a 503 reintentable
+    // (antes cualquier fallo transitorio se convertía en 404 terminal).
+    const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: existing, error: existingError } = await supabase
+      .from("scheduled_sessions")
+      .select("scheduled_date, metadata, session:sessions(program_id)")
+      .eq("id", sessionId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error("[Scheduled Session Update API] Row fetch failed:", {
+        correlationId,
+        sessionId,
+        error: existingError.message,
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No se pudo verificar la sesión. Inténtalo de nuevo.",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Sesión programada no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    // Pausar = ocultar: mover o cambiar el estado de una fila cuyo programa
+    // no está activo solo se permite si tiene entrenamiento real (misma
+    // regla que /complete, helper compartido). Una fila huérfana (session
+    // borrada, FK SET NULL → programa null) queda exenta del guard.
+    const existingSession = existing.session as
+      | { program_id?: string | null }
+      | { program_id?: string | null }[]
+      | null;
+    const rowProgramId = Array.isArray(existingSession)
+      ? (existingSession[0]?.program_id ?? null)
+      : (existingSession?.program_id ?? null);
+    const guard = await checkHiddenRowMutationGuard(
+      supabase,
+      clientId,
+      rowProgramId,
+      sessionId,
+      correlationId
+    );
+
+    if (guard.allowed === false) {
+      return NextResponse.json(
+        { success: false, error: guard.message },
+        { status: guard.status }
+      );
+    }
+
     // Build update object
     const updateData: any = {
       updated_at: new Date().toISOString(),
@@ -43,21 +125,12 @@ export async function PUT(
     // When rescheduling, persist the original template date so the UI can
     // suppress the old template slot and show the card on the new date.
     if (scheduledDate !== undefined) {
-      const { data: existing } = await supabase
-        .from("scheduled_sessions")
-        .select("scheduled_date, metadata")
-        .eq("id", sessionId)
-        .eq("client_id", clientId)
-        .single();
+      const prevMeta = (existing.metadata as Record<string, any>) || {};
 
-      if (existing) {
-        const prevMeta = (existing.metadata as Record<string, any>) || {};
-
-        if (!prevMeta.original_plan_date) {
-          prevMeta.original_plan_date = existing.scheduled_date;
-        }
-        updateData.metadata = prevMeta;
+      if (!prevMeta.original_plan_date) {
+        prevMeta.original_plan_date = existing.scheduled_date;
       }
+      updateData.metadata = prevMeta;
 
       updateData.scheduled_date = scheduledDate;
     }
@@ -137,6 +210,75 @@ export async function DELETE(
     }
 
     console.log("[Scheduled Session Delete API] Deleting:", sessionId);
+
+    // Pausar = ocultar: borrar una fila de un programa NO activo está
+    // bloqueado SIEMPRE (con o sin logs) — el FK de exercise_logs es
+    // ON DELETE CASCADE, así que borrar la fila destruiría justo el
+    // historial que el invariante protege. Filas huérfanas (programa null)
+    // quedan exentas.
+    const deleteCorrelationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: rowToDelete, error: rowToDeleteError } = await supabase
+      .from("scheduled_sessions")
+      .select("id, session:sessions(program_id)")
+      .eq("id", sessionId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    if (rowToDeleteError) {
+      console.error("[Scheduled Session Delete API] Row fetch failed:", {
+        correlationId: deleteCorrelationId,
+        sessionId,
+        error: rowToDeleteError.message,
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No se pudo verificar la sesión. Inténtalo de nuevo.",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (rowToDelete) {
+      const delSession = rowToDelete.session as
+        | { program_id?: string | null }
+        | { program_id?: string | null }[]
+        | null;
+      const delProgramId = Array.isArray(delSession)
+        ? (delSession[0]?.program_id ?? null)
+        : (delSession?.program_id ?? null);
+
+      if (delProgramId !== null) {
+        const programIsActive = await sessionProgramIsActiveForClient(
+          supabase,
+          clientId,
+          delProgramId,
+          deleteCorrelationId
+        );
+
+        if (programIsActive === null) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "No se pudo verificar el programa. Inténtalo de nuevo.",
+            },
+            { status: 503 }
+          );
+        }
+
+        if (programIsActive === false) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
 
     // Delete the scheduled session
     const { error: deleteError } = await supabase

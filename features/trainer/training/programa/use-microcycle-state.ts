@@ -12,6 +12,7 @@ import { useSaveMicrocycle } from "@/components/trainer/microcycle/hooks/use-sav
 import {
   useTrainerMicrocycle,
   type AvailableTrainerSession,
+  type HiddenSlotSession,
 } from "@/components/trainer/microcycle/hooks/use-trainer-microcycle";
 
 const DEFAULT_DURATION_DAYS = 7;
@@ -39,6 +40,8 @@ export interface MicrocycleState {
   assignedCount: number;
   /** Sesiones que el endpoint del microciclo considera asignables (fallback de nombres). */
   availableSessions: AvailableTrainerSession[];
+  /** Sesiones en slots cuyo programa NO está activo — el cliente no las ve. */
+  hiddenSessions: HiddenSlotSession[];
   isSaving: boolean;
   saveError: string | null;
   /** Asigna una sesión (o null = descanso) a un día y guarda al instante. */
@@ -209,6 +212,7 @@ export function useMicrocycleState(clientId: string): MicrocycleState {
     maxAssignedDay,
     assignedCount,
     availableSessions: query.data?.available_sessions ?? [],
+    hiddenSessions: query.data?.hidden_sessions ?? [],
     isSaving: save.isPending,
     saveError:
       save.error instanceof Error

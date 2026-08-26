@@ -59,25 +59,145 @@ export function compareProgramPriority(
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
-// Resuelve el client_program PRIMARIO activo de un cliente (ancla del
-// microciclo). Si se pasa trainerId, además exige que ese trainer sea
-// dueño (filtro doble client_id + trainer_id, patrón implícito de
-// ownership usado en el resto de los endpoints trainer-side del repo).
+// (loadActiveOwnedProgram — el wrapper singular "primario" — se eliminó en
+// ago 2026: su último caller pasó a loadAllActiveOwnedPrograms()[0] porque
+// además necesitaba la lista completa para el filtro de visibilidad.)
 
-export async function loadActiveOwnedProgram(
+/**
+ * Guard de escritura del invariante "pausar = ocultar": ¿el programa dueño
+ * de una sesión está activo para este cliente? Lo usan los endpoints que
+ * MATERIALIZAN scheduled_sessions a partir de un sessionId elegido por el
+ * cliente (start, crear scheduled_session): un bundle viejo puede seguir
+ * mostrando la sesión de un programa recién pausado, y sin este check el
+ * servidor crearía la fila igualmente.
+ */
+export async function sessionProgramIsActiveForClient(
   supabase: Supabase,
   clientId: string,
-  trainerIdOrNull: string | null,
+  sessionProgramId: string | null,
   correlationId: string
-): Promise<OwnedProgram | null> {
-  const all = await loadAllActiveOwnedPrograms(
+): Promise<boolean | null> {
+  if (sessionProgramId === null) return false;
+
+  // Query directa (no loadAllActiveOwnedPrograms): ese loader devuelve []
+  // tanto en error como en vacío, y este guard NECESITA distinguirlos — un
+  // fallo transitorio de DB no puede convertirse en un 409 que culpa al
+  // trainer de una pausa que no existe. null = no se pudo verificar (el
+  // caller responde 5xx reintentable), false = programa NO activo (409).
+  const { data, error } = await supabase
+    .from("client_programs")
+    .select("id, status")
+    .eq("client_id", clientId)
+    .eq("program_id", sessionProgramId);
+
+  if (error) {
+    console.error(`${LOG_PREFIX} sessionProgramIsActiveForClient failed:`, {
+      correlationId,
+      clientId,
+      sessionProgramId,
+      error: error.message,
+    });
+
+    return null;
+  }
+
+  return (data ?? []).some(
+    (cp) =>
+      typeof cp.status === "string" &&
+      cp.status.trim().toLowerCase() === "active"
+  );
+}
+
+/**
+ * Guard compartido para MUTAR una fila existente de scheduled_sessions
+ * (reschedule, cambio de status, completar, borrar). Regla pausar=ocultar:
+ * programa activo O fila con logs reales → permitido; programa no activo
+ * sin logs → 409; estado no verificable → 503 reintentable. Un programa
+ * null (sesión huérfana: el FK session_id es ON DELETE SET NULL) NO aplica
+ * el guard — no hay programa que pueda estar pausado.
+ */
+export type HiddenRowGuardResult =
+  | { allowed: true }
+  | { allowed: false; status: 409 | 503; message: string };
+
+export async function checkHiddenRowMutationGuard(
+  supabase: Supabase,
+  clientId: string,
+  rowProgramId: string | null,
+  scheduledRowId: string,
+  correlationId: string
+): Promise<HiddenRowGuardResult> {
+  if (rowProgramId === null) return { allowed: true };
+
+  const programIsActive = await sessionProgramIsActiveForClient(
     supabase,
     clientId,
-    trainerIdOrNull,
+    rowProgramId,
     correlationId
   );
 
-  return all[0] ?? null;
+  if (programIsActive === null) {
+    return {
+      allowed: false,
+      status: 503,
+      message: "No se pudo verificar el programa. Inténtalo de nuevo.",
+    };
+  }
+
+  if (programIsActive === true) return { allowed: true };
+
+  const hasLogs = await scheduledRowHasLogs(
+    supabase,
+    scheduledRowId,
+    correlationId
+  );
+
+  if (hasLogs === null) {
+    return {
+      allowed: false,
+      status: 503,
+      message: "No se pudo verificar el entrenamiento. Inténtalo de nuevo.",
+    };
+  }
+
+  if (hasLogs === true) return { allowed: true };
+
+  return {
+    allowed: false,
+    status: 409,
+    message:
+      "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+  };
+}
+
+/**
+ * ¿Tiene esta fila de scheduled_sessions logs de ejercicio reales? Es la
+ * "evidencia de actividad" del invariante pausar=ocultar: una fila con
+ * logs es historial y sigue siendo operable/visible aunque el programa se
+ * pause. null = no se pudo verificar.
+ */
+export async function scheduledRowHasLogs(
+  supabase: Supabase,
+  scheduledSessionId: string,
+  correlationId: string
+): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from("exercise_logs")
+    .select("id")
+    .eq("scheduled_session_id", scheduledSessionId)
+    .limit(1);
+
+  if (error) {
+    console.error(`${LOG_PREFIX} scheduledRowHasLogs failed:`, {
+      correlationId,
+      scheduledSessionId,
+      error: error.message,
+    });
+
+    return null;
+  }
+
+  return (data ?? []).length > 0;
 }
 
 // Devuelve los client_programs activos del cliente en orden canónico

@@ -13,6 +13,7 @@ import {
   loadAllActiveOwnedPrograms,
   loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
+import { filterToActiveProgramSessions } from "@/lib/microcycles/visible-sessions";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
 
@@ -142,8 +143,8 @@ export async function GET(
     const { data: ssRowsRaw, error: ssError } = await supabase
       .from("scheduled_sessions")
       .select(
-        `id, session_id,
-         session:sessions(id, name,
+        `id, session_id, status,
+         session:sessions(id, name, program_id,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
@@ -220,10 +221,74 @@ export async function GET(
         Array.isArray(r.session.session_exercises) &&
         r.session.session_exercises.length > 0
     );
+
+    // Pausar = ocultar también aplica a las filas MATERIALIZADAS: una fila
+    // creada al "empezar" una sesión cuyo programa se pausó después no debe
+    // renderizar el plan del programa oculto. Excepción deliberada: si la
+    // fila representa actividad real (completada o con logs), se conserva —
+    // pausar oculta prescripciones, nunca borra historial. Los logs se
+    // buscan por scheduled_session_id (atadura exacta fila↔log): matchear
+    // por session_exercise_id + training_date perdía logs legacy con esos
+    // campos NULL. El filtro solo corre con lista de activos NO vacía:
+    // lista vacía puede ser un fallo de query (el loader no distingue) y
+    // ocultar todo por un error transitorio sería una regresión.
+    const activeProgramIds = new Set(recPrograms.map((p) => p.program_id));
+    const rowsWithActivity = new Set<string>();
+    let visibleRows = rowsWithExercises;
+
+    if (activeProgramIds.size > 0) {
+      const hiddenRows = rowsWithExercises.filter(
+        (r) => activeProgramIds.has(r.session?.program_id) === false
+      );
+
+      for (const row of hiddenRows) {
+        if (row.status === "completed") rowsWithActivity.add(row.id);
+      }
+
+      const pendingHidden = hiddenRows.filter(
+        (r) => rowsWithActivity.has(r.id) === false
+      );
+
+      if (pendingHidden.length > 0) {
+        const { data: logRows, error: logsError } = await supabase
+          .from("exercise_logs")
+          .select("scheduled_session_id")
+          .eq("client_id", clientId)
+          .in(
+            "scheduled_session_id",
+            pendingHidden.map((r) => r.id)
+          );
+
+        if (logsError) {
+          // Fail-open para HISTORIAL: si no se pudo comprobar la evidencia,
+          // conservar las filas — la regla de este route (ver ssError
+          // arriba) es que un fallo de query nunca esconde lo entrenado.
+          console.warn(
+            `${LOG_PREFIX} activity-evidence probe failed [${correlationId}]:`,
+            logsError.message
+          );
+          for (const row of pendingHidden) rowsWithActivity.add(row.id);
+        } else {
+          const withLogs = new Set(
+            (logRows ?? []).map((l) => l.scheduled_session_id)
+          );
+
+          for (const row of pendingHidden) {
+            if (withLogs.has(row.id)) rowsWithActivity.add(row.id);
+          }
+        }
+      }
+
+      visibleRows = rowsWithExercises.filter(
+        (r) =>
+          activeProgramIds.has(r.session?.program_id) ||
+          rowsWithActivity.has(r.id)
+      );
+    }
     const realRow =
-      rowsWithExercises.find(
+      visibleRows.find(
         (r) => r.session_id === trainerRecommendedSessionIds[0]
-      ) ?? [...rowsWithExercises].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+      ) ?? [...visibleRows].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 
     if (realRow) {
       const sessionRow = realRow.session as any;
@@ -255,7 +320,7 @@ export async function GET(
       const { data: sessionDetail } = await supabase
         .from("sessions")
         .select(
-          `id, name,
+          `id, name, program_id,
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
@@ -264,6 +329,17 @@ export async function GET(
         )
         .eq("id", slotMatch.sessionId)
         .maybeSingle();
+
+      // Red del invariante pausar=ocultar: aunque el filtro de dueños haya
+      // fallado (fail-open arriba), el día NUNCA se materializa desde una
+      // sesión de programa no-activo.
+      if (
+        sessionDetail &&
+        activeProgramIds.size > 0 &&
+        activeProgramIds.has((sessionDetail as any).program_id) === false
+      ) {
+        continue;
+      }
 
       if (sessionDetail) {
         const day = makeResolvedDay(
@@ -348,7 +424,40 @@ async function resolveMicrocycleSlots(
     matches.push({ sessionId: slot.session_id });
   }
 
-  return matches;
+  if (matches.length === 0) return matches;
+
+  // Un slot puede referenciar una sesión de OTRO programa (el editor del
+  // trainer mezcla sesiones de todos los activos en el plan del primario).
+  // Si ese otro programa fue pausado después, su sesión no debe
+  // recomendarse al cliente: pausar = ocultar.
+  const { data: sessionOwners, error: ownersError } = await supabase
+    .from("sessions")
+    .select("id, program_id")
+    .in(
+      "id",
+      matches.map((m) => m.sessionId)
+    );
+
+  if (ownersError) {
+    // FAIL-OPEN aquí a propósito: devolver [] borraba también el fallback
+    // de template del paso 2 y el día prescrito entero degradaba a
+    // "descanso" por un fallo transitorio. El leak que esto permite (badge
+    // recomendando una sesión pausada durante el fallo) lo corta la red del
+    // paso 2: el fetch del detalle re-verifica el programa dueño.
+    console.warn(
+      `${LOG_PREFIX} session owners lookup failed [${correlationId}]:`,
+      ownersError.message
+    );
+
+    return matches;
+  }
+
+  const visible = filterToActiveProgramSessions(
+    sessionOwners ?? [],
+    programs.map((p) => p.program_id)
+  );
+
+  return matches.filter((m) => visible.has(m.sessionId));
 }
 
 function makeResolvedDay(

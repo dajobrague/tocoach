@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { sessionProgramIsActiveForClient } from "@/lib/microcycles/db";
 import { loadTenantContext } from "@/lib/tenant/loader";
 
 const LOG_PREFIX = "[Client Session Start API]";
@@ -62,7 +63,7 @@ export async function POST(
       await Promise.all([
         supabase
           .from("sessions")
-          .select("trainer_id, tenant_host")
+          .select("trainer_id, tenant_host, program_id")
           .eq("id", sessionId)
           .single(),
         loadTenantContext(session.tenant_slug),
@@ -79,6 +80,40 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Sesión no encontrada" },
         { status: 404 }
+      );
+    }
+
+    // Pausar = ocultar: no se puede empezar una sesión de un programa que
+    // no está activo para este cliente. Sin este guard, un bundle viejo
+    // (el SW puede fijar clientes hasta 24h) materializaba la fila y la
+    // sesión oculta reaparecía en el día resuelto.
+    const programIsActive = await sessionProgramIsActiveForClient(
+      supabase,
+      String(clientId),
+      sessionData.program_id ?? null,
+      correlationId
+    );
+
+    // null = no se pudo VERIFICAR (fallo transitorio): 503 reintentable,
+    // nunca un 409 que culpe al trainer de una pausa que no existe.
+    if (programIsActive === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No se pudo verificar el programa. Inténtalo de nuevo.",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (programIsActive === false) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Este entrenamiento ya no está disponible: tu entrenador pausó el programa.",
+        },
+        { status: 409 }
       );
     }
 
