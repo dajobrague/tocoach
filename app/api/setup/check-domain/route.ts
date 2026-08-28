@@ -3,14 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-
-function validateSlugFormat(slug: string): boolean {
-  // Slug validation: lowercase letters, numbers, hyphens only
-  // Must start and end with alphanumeric, 3-30 characters
-  const pattern = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
-
-  return pattern.test(slug.toLowerCase().trim());
-}
+import { validateSlugFormat } from "@/lib/tenant/slug";
 
 function generateSlugSuggestions(baseSlug: string): string[] {
   const sanitized = baseSlug
