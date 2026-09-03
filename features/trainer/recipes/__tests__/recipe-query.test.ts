@@ -2,7 +2,11 @@ import type { RecipeListItem } from "../recipe-query";
 
 import { describe, expect, it } from "vitest";
 
-import { buildRecipesQuery, distinctMealTypes } from "../recipe-query";
+import {
+  buildRecipesQuery,
+  distinctMealTypes,
+  tagSuggestions,
+} from "../recipe-query";
 
 function makeRecipe(overrides: Partial<RecipeListItem> = {}): RecipeListItem {
   return {
@@ -23,22 +27,22 @@ describe("buildRecipesQuery", () => {
     expect(buildRecipesQuery({})).toBe("");
   });
 
-  it("maps query -> q, status -> status, mealType -> tag", () => {
+  it("maps query -> q, status -> status, each tag -> a repeated tag", () => {
     const qs = buildRecipesQuery({
       query: "oats",
       status: "active",
-      mealType: "lunch",
+      tags: ["lunch", "vegan"],
     });
 
     expect(qs).toContain("q=oats");
     expect(qs).toContain("status=active");
-    expect(qs).toContain("tag=lunch");
+    expect(qs).toContain("tag=lunch&tag=vegan");
     expect(qs.startsWith("?")).toBe(true);
   });
 
-  it("trims and omits blank query and mealType", () => {
+  it("trims and omits blank query and tags", () => {
     expect(buildRecipesQuery({ query: "   " })).toBe("");
-    expect(buildRecipesQuery({ mealType: "  " })).toBe("");
+    expect(buildRecipesQuery({ tags: ["  "] })).toBe("");
     expect(buildRecipesQuery({ query: "  soup  " })).toBe("?q=soup");
   });
 
@@ -58,7 +62,27 @@ describe("distinctMealTypes", () => {
     expect(distinctMealTypes(recipes)).toEqual(["dinner", "lunch", "snack"]);
   });
 
-  it("always includes the selected tag even if no recipe has it", () => {
-    expect(distinctMealTypes([], "breakfast")).toEqual(["breakfast"]);
+  it("always includes the selected tags even if no recipe has them", () => {
+    expect(distinctMealTypes([], ["breakfast"])).toEqual(["breakfast"]);
+  });
+});
+
+describe("tagSuggestions", () => {
+  const existing = ["Desayunos", "sin gluten", "sin lactosa", "vegano"];
+
+  it("matches existing tags containing the text, minus selected ones", () => {
+    expect(tagSuggestions(existing, ["sin gluten"], "SIN")).toEqual({
+      matches: ["sin lactosa"],
+      create: "SIN",
+    });
+  });
+
+  it("offers creation only when no existing tag equals the text", () => {
+    expect(tagSuggestions(existing, [], "Vegano").create).toBeNull();
+    expect(tagSuggestions(existing, [], "   ").create).toBeNull();
+    expect(tagSuggestions(existing, [], " veg ")).toEqual({
+      matches: ["vegano"],
+      create: "veg",
+    });
   });
 });

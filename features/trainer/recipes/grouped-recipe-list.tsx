@@ -86,6 +86,7 @@ export function GroupedRecipeList({
             {section.recipes.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
+                hideTag={section.kind === "folder" ? section.label : undefined}
                 recipe={recipe}
                 onDelete={onDelete}
                 onOpen={onOpen}

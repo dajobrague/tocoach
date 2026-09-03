@@ -82,41 +82,26 @@ export function recipesInFolder(
 }
 
 /**
- * Tags used by recipes that no folder claims (case-insensitive): they render
- * as flat, auto-generated folder cards so nothing the trainer tagged ever
- * disappears from the folder view.
+ * Recipes outside every folder: none of their tags is a folder name. Plain
+ * tags ("vegano") are NOT folders (Sep 2 call, JC), so a recipe tagged only
+ * with those lives at the root like an untagged one.
  */
-export function looseTags(
+export function recipesOutsideFolders(
   recipes: RecipeListItem[],
   folders: RecipeFolder[]
-): { tag: string; count: number }[] {
-  const claimed = new Set(folders.map((folder) => norm(folder.name)));
-  const counts = new Map<string, { tag: string; count: number }>();
-
-  for (const recipe of recipes) {
-    for (const tag of recipe.meal_type_tags) {
-      const key = norm(tag);
-
-      if (key.length === 0 || claimed.has(key)) continue;
-      const entry = counts.get(key);
-
-      if (entry === undefined) {
-        counts.set(key, { tag, count: 1 });
-      } else {
-        entry.count += 1;
-      }
-    }
-  }
-
-  return [...counts.values()].sort((a, b) => a.tag.localeCompare(b.tag));
+): RecipeListItem[] {
+  return recipes.filter(
+    (recipe) => folders.some((folder) => hasTag(recipe, folder.name)) === false
+  );
 }
 
-/** Recipes with no tags at all (the "Sin clasificar" card). */
-export function untaggedRecipes(recipes: RecipeListItem[]): RecipeListItem[] {
-  return recipes.filter(
-    (recipe) =>
-      recipe.meal_type_tags.filter((tag) => norm(tag).length > 0).length === 0
-  );
+/** Recipes carrying EVERY given tag (case-insensitive); no tags = no filter.
+ *  Composes with `recipesInFolder` as "folder AND tags" in the folder view. */
+export function filterByTags(
+  recipes: RecipeListItem[],
+  tags: string[]
+): RecipeListItem[] {
+  return recipes.filter((recipe) => tags.every((tag) => hasTag(recipe, tag)));
 }
 
 /** Breadcrumb chain from the root to `folderId` (inclusive). */
@@ -142,8 +127,8 @@ export function folderPath(
 /** One section of the grouped list view, ordered depth-first so nested
  *  folders follow their parent. */
 export interface RecipeSection {
-  kind: "folder" | "loose" | "untagged";
-  /** Display heading ("Desayunos", "Verano", "Sin carpeta"). */
+  kind: "folder" | "untagged";
+  /** Display heading ("Desayunos", "Sin carpeta"). */
   label: string;
   depth: number;
   recipes: RecipeListItem[];
@@ -153,9 +138,8 @@ export interface RecipeSection {
  * Flatten the folder tree into grouped-list sections (depth-first, parents
  * before children). A folder appears only when its subtree holds at least
  * one of the given recipes, so filters/search never leave hollow headings.
- * Recipes with several tags appear under each of their folders; tags without
- * a folder row yet get their own flat sections (nothing ever vanishes from
- * the list), and untagged recipes close the list as "Sin carpeta".
+ * Recipes with several folder tags appear under each of their folders, and
+ * recipes outside every folder close the list as "Sin carpeta".
  */
 export function groupedSections(
   folders: RecipeFolder[],
@@ -178,17 +162,7 @@ export function groupedSections(
     });
 
   const sections = walk(folderNodes(folders, recipes, null), 0);
-
-  for (const entry of looseTags(recipes, folders)) {
-    sections.push({
-      kind: "loose",
-      label: entry.tag,
-      depth: 0,
-      recipes: recipes.filter((recipe) => hasTag(recipe, entry.tag)),
-    });
-  }
-
-  const untagged = untaggedRecipes(recipes);
+  const untagged = recipesOutsideFolders(recipes, folders);
 
   if (untagged.length > 0) {
     sections.push({

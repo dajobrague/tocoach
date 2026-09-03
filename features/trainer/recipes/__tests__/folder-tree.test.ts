@@ -4,13 +4,13 @@ import type { RecipeListItem } from "../recipe-query";
 import { describe, expect, it } from "vitest";
 
 import {
+  filterByTags,
   folderNodes,
   folderPath,
   groupedSections,
-  looseTags,
   moveTargets,
   recipesInFolder,
-  untaggedRecipes,
+  recipesOutsideFolders,
 } from "../folder-tree";
 
 function recipe(id: string, tags: string[]): RecipeListItem {
@@ -89,15 +89,40 @@ describe("recipesInFolder", () => {
   });
 });
 
-describe("looseTags", () => {
-  it("lists tags no folder claims, with counts", () => {
-    expect(looseTags(RECIPES, FOLDERS)).toEqual([{ tag: "Verano", count: 1 }]);
+describe("recipesOutsideFolders", () => {
+  it("returns recipes with no folder tag (plain tags are not folders)", () => {
+    // r5 only carries "Verano", which is a tag but not a folder.
+    expect(recipesOutsideFolders(RECIPES, FOLDERS).map((r) => r.id)).toEqual([
+      "r5",
+      "r6",
+    ]);
   });
 });
 
-describe("untaggedRecipes", () => {
-  it("returns recipes without any tag", () => {
-    expect(untaggedRecipes(RECIPES).map((r) => r.id)).toEqual(["r6"]);
+describe("filterByTags", () => {
+  it("keeps recipes carrying EVERY tag, case-insensitively", () => {
+    expect(filterByTags(RECIPES, ["DULCES"]).map((r) => r.id)).toEqual([
+      "r2",
+      "r3",
+    ]);
+    expect(
+      filterByTags(RECIPES, ["dulces", "salados"]).map((r) => r.id)
+    ).toEqual(["r3"]);
+    expect(filterByTags(RECIPES, [])).toHaveLength(RECIPES.length);
+  });
+
+  it("composes with recipesInFolder as folder AND tags", () => {
+    const library = [
+      recipe("v1", ["Desayunos", "vegano"]),
+      recipe("v2", ["Desayunos"]),
+      recipe("v3", ["Cenas", "vegano"]),
+    ];
+    const veganBreakfasts = recipesInFolder(
+      filterByTags(library, ["vegano"]),
+      FOLDERS[0]!
+    );
+
+    expect(veganBreakfasts.map((r) => r.id)).toEqual(["v1"]);
   });
 });
 
@@ -111,7 +136,7 @@ describe("folderPath", () => {
 });
 
 describe("groupedSections", () => {
-  it("orders depth-first, then loose tags, then untagged", () => {
+  it("orders depth-first, then recipes outside every folder", () => {
     const sections = groupedSections(FOLDERS, RECIPES);
 
     expect(
@@ -121,7 +146,6 @@ describe("groupedSections", () => {
       { label: "Desayunos", depth: 0, kind: "folder" },
       { label: "Dulces", depth: 1, kind: "folder" },
       { label: "Salados", depth: 1, kind: "folder" },
-      { label: "Verano", depth: 0, kind: "loose" },
       { label: "Sin carpeta", depth: 0, kind: "untagged" },
     ]);
   });
@@ -143,12 +167,13 @@ describe("groupedSections", () => {
     expect(sections.map((s) => s.label)).toEqual(["Cenas"]);
   });
 
-  it("closes with the untagged section when untagged recipes exist", () => {
+  it("closes with 'Sin carpeta' holding tag-only and untagged recipes", () => {
     const sections = groupedSections(FOLDERS, RECIPES);
     const last = sections[sections.length - 1];
 
     expect(last?.kind).toBe("untagged");
-    expect(last?.recipes.map((r) => r.id)).toEqual(["r6"]);
+    // r5 ("Verano" is a plain tag, not a folder) + r6 (no tags).
+    expect(last?.recipes.map((r) => r.id)).toEqual(["r5", "r6"]);
   });
 });
 

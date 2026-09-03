@@ -160,7 +160,9 @@ describe("GET /api/recipes", () => {
   it("returns 200 with the service results", async () => {
     listMock.mockResolvedValue([sampleRecipe]);
 
-    const res = await listGET(listReq("?status=active&tag=lunch&q=so"));
+    const res = await listGET(
+      listReq("?status=active&tag=lunch&tag=vegan&q=so")
+    );
 
     expect(res.status).toBe(200);
 
@@ -169,7 +171,7 @@ describe("GET /api/recipes", () => {
     expect(body).toEqual({ success: true, data: [sampleRecipe] });
     expect(listMock).toHaveBeenCalledWith("acme.tenant", {
       status: "active",
-      mealType: "lunch",
+      mealTypes: ["lunch", "vegan"],
       query: "so",
     });
   });

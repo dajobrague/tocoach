@@ -17,13 +17,14 @@ export interface RecipeListItem {
 export interface RecipeFilters {
   query?: string;
   status?: RecipeStatus;
-  mealType?: string;
+  /** Every listed tag must be present (AND). */
+  tags?: string[];
 }
 
 /**
  * Build the GET /api/recipes query string from filters. Maps query→q,
- * status→status, mealType→tag, omitting empty values. Returns "" when no
- * filters are set (callers append it directly to the path).
+ * status→status, each tag→a repeated `tag` param, omitting empty values.
+ * Returns "" when no filters are set (callers append it directly to the path).
  */
 export function buildRecipesQuery(filters: RecipeFilters): string {
   const params = new URLSearchParams();
@@ -37,10 +38,10 @@ export function buildRecipesQuery(filters: RecipeFilters): string {
     params.set("status", filters.status);
   }
 
-  const mealType = filters.mealType?.trim();
+  for (const tag of filters.tags ?? []) {
+    const trimmed = tag.trim();
 
-  if (mealType !== undefined && mealType.length > 0) {
-    params.set("tag", mealType);
+    if (trimmed.length > 0) params.append("tag", trimmed);
   }
 
   const qs = params.toString();
@@ -69,10 +70,11 @@ export async function fetchRecipes(
   return (data.data ?? []) as RecipeListItem[];
 }
 
-/** Distinct meal-type tags across a set of recipes, plus an always-kept extra. */
+/** Distinct meal-type tags across a set of recipes, plus always-kept extras
+ *  (the active filter selection, so it stays selectable). */
 export function distinctMealTypes(
   recipes: RecipeListItem[],
-  alwaysInclude?: string
+  alwaysInclude: string[] = []
 ): string[] {
   const set = new Set<string>();
 
@@ -82,9 +84,33 @@ export function distinctMealTypes(
     }
   }
 
-  if (alwaysInclude !== undefined && alwaysInclude.length > 0) {
-    set.add(alwaysInclude);
+  for (const tag of alwaysInclude) {
+    if (tag.length > 0) set.add(tag);
   }
 
   return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Predictive tag input: existing tags containing `text` (minus the ones
+ * already selected) and, when no existing tag equals the text, the trimmed
+ * text as the "create new tag" candidate — null otherwise.
+ */
+export function tagSuggestions(
+  existing: string[],
+  selected: string[],
+  text: string
+): { matches: string[]; create: string | null } {
+  const trimmed = text.trim();
+  const needle = trimmed.toLowerCase();
+  const taken = new Set(selected.map((tag) => tag.toLowerCase()));
+  const matches = existing.filter(
+    (tag) =>
+      taken.has(tag.toLowerCase()) === false &&
+      tag.toLowerCase().includes(needle)
+  );
+  const known =
+    taken.has(needle) || existing.some((tag) => tag.toLowerCase() === needle);
+
+  return { matches, create: needle.length > 0 && !known ? trimmed : null };
 }

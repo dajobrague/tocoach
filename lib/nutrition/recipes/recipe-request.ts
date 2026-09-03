@@ -90,11 +90,15 @@ export type ParseResult<T> =
 export function parseListFilter(params: URLSearchParams): RecipeListFilter {
   const filter: RecipeListFilter = {};
   const status = params.get("status");
-  const tag = params.get("tag");
+  // Repeatable: ?tag=a&tag=b means the recipe must carry both.
+  const tags = params
+    .getAll("tag")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
   const q = params.get("q");
 
   if (isRecipeStatus(status)) filter.status = status;
-  if (tag !== null && tag.length > 0) filter.mealType = tag;
+  if (tags.length > 0) filter.mealTypes = tags;
   if (q !== null && q.trim().length > 0) filter.query = q.trim();
 
   return filter;
