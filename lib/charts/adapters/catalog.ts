@@ -182,6 +182,7 @@ const trainingBreakdown: DataAdapter = {
         label: w.label,
         value: { strength, cardio },
         periodTooltip: w.tooltip,
+        ...(w.ymd !== undefined ? { ymd: w.ymd } : {}),
       };
     });
   },

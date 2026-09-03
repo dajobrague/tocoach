@@ -125,6 +125,8 @@ interface BucketSpec {
   label: string;
   /** Used to scale "intensity" of synth — e.g. weekly buckets get ~7×. */
   daysSpanned: number;
+  /** YYYY-MM-DD — solo en buckets daily (lo consume el renderer calendar). */
+  ymd?: string;
 }
 
 /**
@@ -193,7 +195,11 @@ export function buildDemoBucketSpecs(
     const spannedMs = w.end.getTime() - w.start.getTime();
     const daysSpanned = Math.max(1, Math.round(spannedMs / 86400000) + 1);
 
-    return { label: w.label, daysSpanned };
+    return {
+      label: w.label,
+      daysSpanned,
+      ...(w.ymd !== undefined ? { ymd: w.ymd } : {}),
+    };
   });
 }
 
@@ -206,10 +212,11 @@ export function buildDemoBucketSpecs(
  */
 export function synthesizeDemoBuckets(
   chart: ChartConfig,
-  source: ChartDataSource | undefined
+  source: ChartDataSource | undefined,
+  bucketCount = 12
 ): BucketedPoint[] {
   const rng = seededRandom(hashString(chart.id));
-  const specs = buildDemoBucketSpecs(chart.aggregation, 12);
+  const specs = buildDemoBucketSpecs(chart.aggregation, bucketCount);
 
   // Multi-dim sources (ring, stacked_bar) produce Record<seriesId, number>.
   if (source?.dimensions === "multi") {
@@ -227,20 +234,28 @@ export function synthesizeDemoBuckets(
       ];
     }
     if (source.id === "training_breakdown") {
-      // stacked_bar over time-bucketed periods.
+      // stacked_bar / calendar over time-bucketed periods. Para buckets
+      // diarios (calendar) el escalado /7 redondea cardio a 0 siempre, así
+      // que tiramos una moneda por día con la frecuencia semanal del preset.
       return specs.map((s) => {
+        const daily = s.daysSpanned === 1;
         const sFactor = Math.max(0.3, Math.min(1.5, 0.7 + rng() * 0.7));
         const cFactor = Math.max(0.0, Math.min(1.5, rng() * 1.2));
-        const strength = Math.round(
-          (TRAINING_PRESET.strengthPerWeek * s.daysSpanned * sFactor) / 7
-        );
-        const cardio = Math.round(
-          (TRAINING_PRESET.cardioPerWeek * s.daysSpanned * cFactor) / 7
-        );
+        const strength = daily
+          ? Number(rng() < TRAINING_PRESET.strengthPerWeek / 7)
+          : Math.round(
+              (TRAINING_PRESET.strengthPerWeek * s.daysSpanned * sFactor) / 7
+            );
+        const cardio = daily
+          ? Number(rng() < TRAINING_PRESET.cardioPerWeek / 7)
+          : Math.round(
+              (TRAINING_PRESET.cardioPerWeek * s.daysSpanned * cFactor) / 7
+            );
 
         return {
           label: s.label,
           value: { strength, cardio },
+          ...(s.ymd !== undefined ? { ymd: s.ymd } : {}),
         };
       });
     }

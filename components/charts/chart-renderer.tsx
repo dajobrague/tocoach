@@ -19,6 +19,7 @@ import type {
 } from "@/lib/charts/types";
 
 import { BarRenderer } from "./renderers/bar";
+import { CalendarRenderer } from "./renderers/calendar";
 import { KpiRenderer } from "./renderers/kpi";
 import { LineAreaRenderer } from "./renderers/line-area";
 import { RingRenderer } from "./renderers/ring";
@@ -88,6 +89,17 @@ export function ChartRenderer({ config, buckets, series, yMax }: Props) {
 
       return (
         <RingRenderer buckets={buckets} colors={colors} series={series ?? []} />
+      );
+    }
+    case "calendar": {
+      const colors = config.color as ColorToken[];
+
+      return (
+        <CalendarRenderer
+          buckets={buckets}
+          colors={colors}
+          series={series ?? []}
+        />
       );
     }
     case "kpi": {

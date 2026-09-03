@@ -40,6 +40,7 @@ import { headerStatValue, type HeaderStatMode } from "./header-stat";
 import { useHeaderStatPref } from "./use-header-stat-pref";
 import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
+import { metricFormat } from "@/lib/charts/metric-format";
 import { resolveColor } from "@/lib/charts/palette";
 
 interface Props {
@@ -89,9 +90,10 @@ function NoDataOverlay() {
 }
 
 /**
- * Toggle Último/Media junto al número grande. Es preferencia del
- * ESPECTADOR (cliente o trainer), compartida entre todas las cards vía
- * useHeaderStatPref — no config por gráfica del trainer.
+ * Toggle Media/Último junto al número grande. Es preferencia del
+ * ESPECTADOR (cliente o trainer), por gráfica, vía useHeaderStatPref —
+ * no config del trainer. Media va primero: es lo que se consulta a
+ * diario; Último es para consultas puntuales (JC, sep-2026).
  */
 function HeaderStatToggle({
   mode,
@@ -121,9 +123,37 @@ function HeaderStatToggle({
       className="flex items-center rounded-lg bg-default-100 p-0.5 text-[10px] font-medium flex-shrink-0 mb-1"
       role="group"
     >
-      {segment("latest", "Último")}
       {segment("average", "Media")}
+      {segment("latest", "Último")}
     </div>
+  );
+}
+
+/**
+ * Valoración 1–5 como estrellas (feedback JC sep-2026: nada de número
+ * pelado). Las 5 estrellas usan el mismo glifo — solo cambia el color —
+ * para que el ancho no baile entre ★ y ☆. El valor exacto va al lado
+ * porque la media (3,6 vs 4,4) redondea a la misma estrella.
+ */
+function RatingStars({ value, muted }: { value: number; muted: boolean }) {
+  const filled = Math.round(Math.max(0, Math.min(5, value)));
+
+  return (
+    <span
+      aria-label={`${formatNumber(value, 1)} de 5`}
+      className="inline-flex items-baseline gap-1"
+      role="img"
+    >
+      <span className="text-3xl leading-none tracking-tight">
+        <span className={muted ? "text-foreground/30" : "text-warning"}>
+          {"★".repeat(filled)}
+        </span>
+        <span className="text-foreground/15">{"★".repeat(5 - filled)}</span>
+      </span>
+      <span className="text-base text-foreground/40 font-medium tabular-nums">
+        {formatNumber(value, 1)}
+      </span>
+    </span>
   );
 }
 
@@ -158,7 +188,13 @@ export function ChartCard({
     config.chart_type === "line" ||
     config.chart_type === "area" ||
     config.chart_type === "bar";
-  const [statMode, setStatMode] = useHeaderStatPref();
+  const [statMode, setStatMode] = useHeaderStatPref(config.id);
+  // Unidad / estrellas: mapa fijo por métrica conocida. El prop `unit`
+  // (adapter.metadata.unit) manda si viene, pero en render el shell de
+  // form_question no lo trae, así que el mapa es lo que se ve en la práctica.
+  const format = metricFormat(config.source);
+  const displayUnit = unit ?? format.unit;
+  const isRating = format.rating === true;
   // The header's stat is viewer-selectable for 1-D charts (latest non-null
   // or the range mean — same avgNonNull as the dashed reference line);
   // ring (range_total) shows the sum of its series; kpi shows nothing in
@@ -182,7 +218,11 @@ export function ChartCard({
 
       return null;
     }
-    if (config.chart_type === "stacked_bar" || config.chart_type === "kpi") {
+    if (
+      config.chart_type === "stacked_bar" ||
+      config.chart_type === "kpi" ||
+      config.chart_type === "calendar"
+    ) {
       return null;
     }
 
@@ -253,24 +293,32 @@ export function ChartCard({
             </div>
           ) : null}
         </div>
-        {config.chart_type !== "kpi" && !isPhotoTimeline ? (
+        {/* calendar lleva sus totales bajo la grilla; el número grande
+            sobra ahí. */}
+        {config.chart_type !== "kpi" &&
+        config.chart_type !== "calendar" &&
+        !isPhotoTimeline ? (
           <div className="flex items-end justify-between gap-2 mb-3">
-            <p
-              className={`text-4xl font-bold tabular-nums ${
-                noData ? "text-foreground/30" : "text-foreground"
-              }`}
-            >
-              {headerValue === null
-                ? isLoading
-                  ? ""
-                  : "—"
-                : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
-              {headerValue !== null && unit ? (
-                <span className="text-base text-foreground/40 ml-1 font-medium">
-                  {unit}
-                </span>
-              ) : null}
-            </p>
+            {headerValue !== null && isRating ? (
+              <RatingStars muted={noData} value={headerValue} />
+            ) : (
+              <p
+                className={`text-4xl font-bold tabular-nums ${
+                  noData ? "text-foreground/30" : "text-foreground"
+                }`}
+              >
+                {headerValue === null
+                  ? isLoading
+                    ? ""
+                    : "—"
+                  : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
+                {headerValue !== null && displayUnit ? (
+                  <span className="text-base text-foreground/40 ml-1 font-medium">
+                    {displayUnit}
+                  </span>
+                ) : null}
+              </p>
+            )}
             {hasStatToggle && !isLoading && !orphan && !noData ? (
               <HeaderStatToggle mode={statMode} onChange={setStatMode} />
             ) : null}
@@ -299,7 +347,11 @@ export function ChartCard({
                 buckets={buckets!}
                 config={config}
                 {...(series !== undefined ? { series } : {})}
-                {...(yMax !== undefined ? { yMax } : {})}
+                {...(yMax !== undefined
+                  ? { yMax }
+                  : isRating
+                    ? { yMax: 5 }
+                    : {})}
               />
             </ChartErrorBoundary>
             {noData ? <NoDataOverlay /> : null}

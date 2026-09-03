@@ -44,6 +44,8 @@ export interface BucketWindow {
   label: string;
   /** Tooltip span text, e.g. "1 abr — 7 abr". */
   tooltip: string;
+  /** YYYY-MM-DD del día — solo en buckets `daily`. */
+  ymd?: string;
 }
 
 /**
@@ -155,7 +157,7 @@ function monthLabelFromYmd(ymd: string): string {
  * a `tz` cae fuera del YMD esperado (por offsets extremos UTC+13/+14
  * o UTC-12), shifteamos ±12h. Iteración acotada a ≤2 pasos.
  */
-function tzNoon(ymd: string, tz: string): Date {
+export function tzNoon(ymd: string, tz: string): Date {
   let candidate = Date.parse(`${ymd}T12:00:00Z`);
 
   for (let i = 0; i < 2; i++) {
@@ -243,6 +245,7 @@ export function generateBuckets(
         end: noon,
         label: dayLabelFromYmd(cursorYmd),
         tooltip: formatPeriodTooltipSpan(noon, noon, dailyTz),
+        ymd: cursorYmd,
       });
       cursorYmd = addDayYmd(cursorYmd);
     }

@@ -50,7 +50,7 @@ import {
   useUpdateClientCharts,
   type ChartRange,
 } from "@/lib/charts/hooks";
-import { getEffectiveAggregation } from "@/lib/charts/aggregation";
+import { RANGE_DAYS, getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 import { buildStarterDocument } from "@/lib/charts/starter";
@@ -337,7 +337,13 @@ export function ChartSurface({ mode, clientId }: Props) {
               ? chart
               : { ...chart, aggregation: effectiveAgg };
 
-          buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
+          // calendar: un bucket por día del rango para que la preview
+          // tenga las mismas filas que verá el cliente.
+          buckets = synthesizeDemoBuckets(
+            effectiveChart,
+            adapter?.metadata,
+            chart.chart_type === "calendar" ? (RANGE_DAYS[range] ?? 30) : 12
+          );
         }
       } else if (isPhotoTimeline) {
         photos = snapshotPhotos?.[chart.id]?.photos;
@@ -895,6 +901,7 @@ export function ChartSurface({ mode, clientId }: Props) {
 
 const PERIOD_OPTIONS: ReadonlyArray<{ value: ChartRange; label: string }> = [
   { value: "7d", label: "7d" },
+  { value: "14d", label: "14d" },
   { value: "30d", label: "30d" },
   { value: "90d", label: "3m" },
   { value: "6m", label: "6m" },

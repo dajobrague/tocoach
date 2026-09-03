@@ -1,5 +1,5 @@
 /**
- * GET /api/charts/clients/[clientId]/snapshot?range=7d|30d|90d
+ * GET /api/charts/clients/[clientId]/snapshot?range=7d|14d|30d|90d|…
  *
  * Returns the effective chart config plus all bucketed data needed to
  * render every chart in a single round-trip. The client app uses this
@@ -39,8 +39,9 @@ import {
   filterChartsForAudience,
   resolveAudience,
 } from "@/lib/charts/server/visibility";
-import { getEffectiveAggregation } from "@/lib/charts/aggregation";
+import { RANGE_DAYS, getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { tzNoon } from "@/lib/charts/adapters/bucketing";
 import { buildFormQuestionAdapter } from "@/lib/charts/adapters/form-question";
 import {
   DEFAULT_CHECKIN_SCHEDULE,
@@ -80,16 +81,6 @@ const SYNTHETIC_WEIGHT_CHART: ChartConfig = {
   aggregation: "checkin_period",
 };
 
-// Accepts the legacy 5-key client period selector (7d / 30d / 3m / 6m / 12m)
-// plus the trainer-side 90d shortcut. Anything unknown defaults to 30d.
-const RANGE_DAYS: Record<string, number> = {
-  "7d": 7,
-  "30d": 30,
-  "90d": 90,
-  "3m": 90,
-  "6m": 180,
-  "12m": 365,
-};
 const MAX_BUCKETS = 60;
 
 /**
@@ -130,9 +121,13 @@ function ymdInTz(d: Date, tz: string): string {
  * decrementa días desde ahí, así fromYmd/toYmd matchean la percepción
  * de día del cliente.
  *
- * Devuelve fromYmd/toYmd para el filtro SQL, y from/to como Date
- * (referencias absolutas) para los adapters que usan ms timestamps
- * (ring/macros).
+ * Devuelve fromYmd/toYmd para el filtro SQL, y from/to como Date para
+ * los adapters. from/to se anclan a `tzNoon` de fromYmd/todayYmd en la
+ * tz del cliente, así `generateBuckets` resuelve EXACTAMENTE
+ * [fromYmd..todayYmd]. Antes eran 00:00Z de fromYmd y de mañana, y el
+ * daily de "7d" salía con 8 buckets en toda tz (mañana en UTC/este, el
+ * día anterior en oeste) — inofensivo en barras, pero el calendario de
+ * entrenamiento cuenta días y necesita el rango justo.
  */
 function isValidRangeParam(value: string | null): boolean {
   if (value === null) return true;
@@ -156,8 +151,8 @@ function parseRange(
   const fromYmd = new Date(fromMs).toISOString().split("T")[0] ?? todayYmd;
 
   return {
-    from: new Date(fromMs),
-    to: new Date(todayUtcMs + 86400000),
+    from: tzNoon(fromYmd, tz),
+    to: tzNoon(todayYmd, tz),
     fromYmd,
     toYmd: todayYmd,
   };
@@ -379,6 +374,12 @@ function materializeWithCap(
 
   let buckets = adapter.materialize(ctx, effectiveAgg);
   let fallback = false;
+
+  // calendar necesita un bucket por día del rango (12m = 365 puntos,
+  // ~30KB de payload) — sin fallback a weekly ni truncado.
+  if (chart.chart_type === "calendar") {
+    return { buckets, aggregationFallback: false };
+  }
 
   if (buckets.length > MAX_BUCKETS && effectiveAgg === "daily") {
     buckets = adapter.materialize(ctx, "weekly" as Aggregation);

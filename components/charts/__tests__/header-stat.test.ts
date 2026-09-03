@@ -35,8 +35,8 @@ describe("parseHeaderStatMode", () => {
     expect(parseHeaderStatMode("average")).toBe("average");
   });
 
-  it("falls back to latest on null or garbage", () => {
-    expect(parseHeaderStatMode(null)).toBe("latest");
-    expect(parseHeaderStatMode("banana")).toBe("latest");
+  it("falls back to average on null or garbage", () => {
+    expect(parseHeaderStatMode(null)).toBe("average");
+    expect(parseHeaderStatMode("banana")).toBe("average");
   });
 });

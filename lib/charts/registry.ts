@@ -280,7 +280,9 @@ export function validateChartConfigWithRegistry(
   }
 
   const wantsMulti =
-    cfg.chart_type === "ring" || cfg.chart_type === "stacked_bar";
+    cfg.chart_type === "ring" ||
+    cfg.chart_type === "stacked_bar" ||
+    cfg.chart_type === "calendar";
   const wantsPhoto = cfg.chart_type === "photo_timeline";
   const isMulti = adapter.metadata.dimensions === "multi";
   const isPhoto = adapter.metadata.dimensions === "photo";
