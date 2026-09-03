@@ -70,25 +70,52 @@ export async function fetchRecipes(
   return (data.data ?? []) as RecipeListItem[];
 }
 
-/** Distinct meal-type tags across a set of recipes, plus always-kept extras
- *  (the active filter selection, so it stays selectable). */
+/**
+ * Distinct tags for pickers (editor suggestions, library filter): ONE entry
+ * per case-insensitive spelling. Which spelling wins — Sep 2 call, JC saw
+ * "Cenas" and "cenas" listed twice:
+ *   1. a folder with that name: the folder IS the tag, its casing rules;
+ *   2. else the variant most recipes use;
+ *   3. ties → first in code-unit order (not locale), so server and browser
+ *      agree and the result is deterministic.
+ * Folder names are always listed (a fresh, empty folder is still a valid
+ * target); `extra` keeps entries selectable when no recipe carries them
+ * anymore (the active filter).
+ */
 export function distinctMealTypes(
   recipes: RecipeListItem[],
-  alwaysInclude: string[] = []
+  folderNames: string[] = [],
+  extra: string[] = []
 ): string[] {
-  const set = new Set<string>();
+  const norm = (value: string) => value.trim().toLowerCase();
+  // lowercased tag → usage count per exact spelling.
+  const spellings = new Map<string, Map<string, number>>();
+  const bump = (tag: string, by: number) => {
+    const key = norm(tag);
+
+    if (key.length === 0) return;
+    const counts = spellings.get(key) ?? new Map<string, number>();
+
+    counts.set(tag, (counts.get(tag) ?? 0) + by);
+    spellings.set(key, counts);
+  };
 
   for (const recipe of recipes) {
-    for (const tag of recipe.meal_type_tags) {
-      if (tag.length > 0) set.add(tag);
-    }
+    for (const tag of recipe.meal_type_tags) bump(tag, 1);
   }
+  for (const tag of [...folderNames, ...extra]) bump(tag, 0);
 
-  for (const tag of alwaysInclude) {
-    if (tag.length > 0) set.add(tag);
-  }
+  const folderByKey = new Map(folderNames.map((name) => [norm(name), name]));
 
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
+  return [...spellings.entries()]
+    .map(([key, counts]) => {
+      const mostUsed = [...counts.entries()].sort(
+        (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)
+      )[0];
+
+      return folderByKey.get(key) ?? mostUsed?.[0] ?? key;
+    })
+    .sort((a, b) => a.localeCompare(b));
 }
 
 /**

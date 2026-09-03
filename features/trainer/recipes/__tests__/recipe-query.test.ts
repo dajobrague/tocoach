@@ -63,7 +63,38 @@ describe("distinctMealTypes", () => {
   });
 
   it("always includes the selected tags even if no recipe has them", () => {
-    expect(distinctMealTypes([], ["breakfast"])).toEqual(["breakfast"]);
+    expect(distinctMealTypes([], [], ["breakfast"])).toEqual(["breakfast"]);
+  });
+
+  it("lists folder names even when no recipe carries the tag yet", () => {
+    expect(distinctMealTypes([], ["Cenas"])).toEqual(["Cenas"]);
+  });
+
+  describe("one entry per case-insensitive spelling", () => {
+    const recipes = [
+      makeRecipe({ meal_type_tags: ["cenas"] }),
+      makeRecipe({ meal_type_tags: ["cenas"] }),
+      makeRecipe({ meal_type_tags: ["Cenas"] }),
+    ];
+
+    it("the folder's spelling wins", () => {
+      expect(distinctMealTypes(recipes, ["CENAS"])).toEqual(["CENAS"]);
+    });
+
+    it("without a folder, the most-used spelling wins", () => {
+      expect(distinctMealTypes(recipes)).toEqual(["cenas"]);
+    });
+
+    it("ties break by code-unit order, deterministically", () => {
+      const tied = [
+        makeRecipe({ meal_type_tags: ["cenas"] }),
+        makeRecipe({ meal_type_tags: ["Cenas"] }),
+      ];
+
+      expect(distinctMealTypes(tied)).toEqual(["Cenas"]);
+      // The active filter never re-introduces a variant.
+      expect(distinctMealTypes(tied, [], ["CENAS"])).toEqual(["Cenas"]);
+    });
   });
 });
 

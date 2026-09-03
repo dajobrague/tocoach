@@ -146,11 +146,6 @@ export class RecipeService {
       query = query.eq("status", filter.status);
     }
 
-    if (filter.mealTypes !== undefined && filter.mealTypes.length > 0) {
-      // Array containment (@>) = the row has ALL the given tags.
-      query = query.contains("meal_type_tags", filter.mealTypes);
-    }
-
     if (filter.query !== undefined && filter.query.length > 0) {
       query = query.ilike("name", `%${filter.query}%`);
     }
@@ -163,13 +158,23 @@ export class RecipeService {
       throw new Error(`RecipeService.list failed: ${error.message}`);
     }
 
-    return (data ?? []).map((raw) => {
+    const rows = (data ?? []).map((raw) => {
       const { recipe_media: media, ...row } = raw as RecipeRow & {
         recipe_media?: unknown;
       };
 
       return { ...(row as RecipeRow), thumbnailUrl: pickThumbnailUrl(media) };
     });
+
+    // Tag filter in memory, case-insensitive like the folder view: "Cenas"
+    // and "cenas" are one tag, which `@>` would split. ponytail: scans the
+    // tenant's recipes; move to a lower()'d generated column if it ever hurts.
+    const norm = (value: string) => value.trim().toLowerCase();
+    const wanted = (filter.mealTypes ?? []).map(norm);
+
+    return rows.filter((row) =>
+      wanted.every((tag) => row.meal_type_tags.some((own) => norm(own) === tag))
+    );
   }
 
   async update(
