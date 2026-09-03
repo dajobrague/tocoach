@@ -40,6 +40,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import { MealImageTrainerField } from "./nutrition-trainer-meal-image-field";
 
+import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { distinctTags, filterByTags } from "@/features/trainer/library/tags";
+
 interface TemplateDetailModalProps {
   isOpen: boolean;
   template: {
@@ -305,10 +308,12 @@ export default function TemplateDetailModal({
       video_url?: string;
       image_url?: string;
       description?: string;
+      tags?: string[];
     }>
   >([]);
   const [exerciseCategoryFilter, setExerciseCategoryFilter] =
     useState<string>("all");
+  const [exerciseTagFilter, setExerciseTagFilter] = useState<string[]>([]);
   const [isAddExerciseModalOpen, setIsAddExerciseModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -377,15 +382,22 @@ export default function TemplateDetailModal({
     }
   };
 
+  // Category AND every selected tag (Sep 2 call, JC: filter the picker by
+  // muscle + equipment). Both pickers (add and edit) read this list.
   const filteredExercises = useMemo(() => {
-    if (exerciseCategoryFilter === "all") {
-      return exerciseLibrary;
-    }
+    const byCategory =
+      exerciseCategoryFilter === "all"
+        ? exerciseLibrary
+        : exerciseLibrary.filter(
+            (ex) => ex.category === exerciseCategoryFilter
+          );
 
-    return exerciseLibrary.filter(
-      (ex) => ex.category === exerciseCategoryFilter
-    );
-  }, [exerciseLibrary, exerciseCategoryFilter]);
+    return filterByTags(byCategory, exerciseTagFilter, (ex) => ex.tags ?? []);
+  }, [exerciseLibrary, exerciseCategoryFilter, exerciseTagFilter]);
+  const exerciseTagOptions = useMemo(
+    () => distinctTags(exerciseLibrary, (ex) => ex.tags ?? []),
+    [exerciseLibrary]
+  );
 
   const handleExerciseCreated = async (createdExercise?: any) => {
     // Refresh the exercise library
@@ -2470,10 +2482,17 @@ export default function TemplateDetailModal({
                                                 Cardio
                                               </Button>
                                             </div>
+                                            <TagFilterSelect
+                                              className="max-w-xs"
+                                              options={exerciseTagOptions}
+                                              size="sm"
+                                              value={exerciseTagFilter}
+                                              onChange={setExerciseTagFilter}
+                                            />
                                             <div className="flex gap-2 items-end">
                                               {}
                                               <Autocomplete
-                                                key={`exercises-${filteredExercises.length}-${exerciseCategoryFilter}`}
+                                                key={`exercises-${filteredExercises.length}-${exerciseCategoryFilter}-${exerciseTagFilter.join(",")}`}
                                                 autoFocus
                                                 className="flex-1"
                                                 defaultItems={filteredExercises}

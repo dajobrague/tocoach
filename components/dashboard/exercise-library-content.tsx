@@ -21,6 +21,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
+import { useExerciseTags } from "@/features/exercises/exercise-tags";
+import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 const PAGE_SIZE = 50;
@@ -33,6 +35,8 @@ export default function ExerciseLibraryContent() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("strength");
+  // Combined tag filter (Sep 2 call, JC): every selected tag must match.
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -40,10 +44,13 @@ export default function ExerciseLibraryContent() {
   const skipInitialSearchDebounceRef = useRef(true);
   const categoryFilterRef = useRef(categoryFilter);
   const searchQueryRef = useRef(searchQuery);
+  const tagFilterRef = useRef(tagFilter);
   const listEpochRef = useRef(0);
 
   categoryFilterRef.current = categoryFilter;
   searchQueryRef.current = searchQuery;
+  tagFilterRef.current = tagFilter;
+  const tagOptions = useExerciseTags();
 
   const fetchExercisesPage = useCallback(
     async (page: number, mode: "replace" | "append") => {
@@ -72,6 +79,9 @@ export default function ExerciseLibraryContent() {
         }
         if (search.trim() !== "") {
           params.append("search", search.trim());
+        }
+        for (const tag of tagFilterRef.current) {
+          params.append("tag", tag);
         }
 
         const response = await fetch(`/api/exercises?${params.toString()}`, {
@@ -140,7 +150,7 @@ export default function ExerciseLibraryContent() {
 
   useEffect(() => {
     fetchExercisesPage(1, "replace");
-  }, [categoryFilter, fetchExercisesPage]);
+  }, [categoryFilter, tagFilter, fetchExercisesPage]);
 
   // Debounced refetch when search changes (skip first run to avoid duplicating category initial fetch)
   useEffect(() => {
@@ -278,6 +288,13 @@ export default function ExerciseLibraryContent() {
           }
           value={searchQuery}
           onValueChange={setSearchQuery}
+        />
+
+        <TagFilterSelect
+          className="sm:max-w-sm"
+          options={tagOptions}
+          value={tagFilter}
+          onChange={setTagFilter}
         />
       </div>
 
@@ -427,6 +444,16 @@ export default function ExerciseLibraryContent() {
                       </div>
                     </div>
                   </div>
+
+                  {(exercise.tags ?? []).length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1">
+                      {(exercise.tags ?? []).map((tag) => (
+                        <Chip key={tag} size="sm" variant="flat">
+                          {tag}
+                        </Chip>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Description */}
                   {exercise.description && (
@@ -600,6 +627,15 @@ export default function ExerciseLibraryContent() {
                               <p className="text-sm text-gray-500 line-clamp-1">
                                 {exercise.description}
                               </p>
+                            )}
+                            {(exercise.tags ?? []).length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {(exercise.tags ?? []).map((tag) => (
+                                  <Chip key={tag} size="sm" variant="flat">
+                                    {tag}
+                                  </Chip>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>

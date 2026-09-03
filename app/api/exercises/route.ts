@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { parseTagParams, parseTags } from "@/lib/library/parse-tags";
 
 // GET - Fetch all exercises from trainer's library
 export async function GET(request: NextRequest) {
@@ -21,6 +22,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
     const search = searchParams.get("search");
+    // Repeatable ?tag=a&tag=b: the exercise must carry both.
+    const tags = parseTagParams(searchParams);
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
@@ -59,6 +62,12 @@ export async function GET(request: NextRequest) {
     // Search by name
     if (search && search.trim() !== "") {
       query = query.ilike("name", `%${search}%`);
+    }
+
+    // Case-sensitive on purpose: options come from the stored spellings
+    // (/api/exercises/tags), so exact match is the right match.
+    if (tags.length > 0) {
+      query = query.contains("tags", tags);
     }
 
     // Pagination
@@ -137,7 +146,17 @@ export async function POST(request: NextRequest) {
       instructions,
       tips,
       cardio_type,
+      tags,
     } = body;
+
+    const parsedTags = parseTags(tags);
+
+    if (parsedTags !== undefined && parsedTags.ok === false) {
+      return NextResponse.json(
+        { success: false, error: parsedTags.error },
+        { status: 400 }
+      );
+    }
 
     console.log("[Exercise Library API] Creating exercise:", body);
 
@@ -202,6 +221,8 @@ export async function POST(request: NextRequest) {
         tips: tips || [],
         is_public: false,
         metadata: category === "cardio" && cardio_type ? { cardio_type } : {},
+        // Only when sent: keeps inserts working before the tags migration.
+        ...(parsedTags?.ok === true ? { tags: parsedTags.tags } : {}),
       })
       .select()
       .single();
