@@ -45,7 +45,8 @@ export function TagsField({
     );
 
     if (trimmed.length > 0 && already === false) {
-      // Reuse the library's exact casing when the tag already exists there.
+      // Reuse the exact casing of the matching suggestion (a recipe's tag or
+      // a folder's name); picking a dropdown row passes that string as-is.
       const canonical =
         suggestions.find(
           (tag) => tag.toLowerCase() === trimmed.toLowerCase()

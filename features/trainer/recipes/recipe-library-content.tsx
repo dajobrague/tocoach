@@ -78,11 +78,10 @@ export function RecipeLibraryContent() {
   const foldersQuery = useRecipeFolders();
   const tagOptions = useMemo(
     () =>
-      distinctMealTypes(
-        allRecipes.data ?? [],
-        (foldersQuery.data ?? []).map((folder) => folder.name),
-        tags
-      ),
+      distinctMealTypes(allRecipes.data ?? [], [
+        ...(foldersQuery.data ?? []).map((folder) => folder.name),
+        ...tags,
+      ]),
     [allRecipes.data, foldersQuery.data, tags]
   );
   // Archived = soft-deleted; hide them unless the trainer explicitly filters by

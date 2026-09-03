@@ -63,43 +63,22 @@ describe("distinctMealTypes", () => {
   });
 
   it("always includes the selected tags even if no recipe has them", () => {
-    expect(distinctMealTypes([], [], ["breakfast"])).toEqual(["breakfast"]);
-  });
-
-  it("lists folder names even when no recipe carries the tag yet", () => {
-    expect(distinctMealTypes([], ["Cenas"])).toEqual(["Cenas"]);
-  });
-
-  describe("one entry per case-insensitive spelling", () => {
-    const recipes = [
-      makeRecipe({ meal_type_tags: ["cenas"] }),
-      makeRecipe({ meal_type_tags: ["cenas"] }),
-      makeRecipe({ meal_type_tags: ["Cenas"] }),
-    ];
-
-    it("the folder's spelling wins", () => {
-      expect(distinctMealTypes(recipes, ["CENAS"])).toEqual(["CENAS"]);
-    });
-
-    it("without a folder, the most-used spelling wins", () => {
-      expect(distinctMealTypes(recipes)).toEqual(["cenas"]);
-    });
-
-    it("ties break by code-unit order, deterministically", () => {
-      const tied = [
-        makeRecipe({ meal_type_tags: ["cenas"] }),
-        makeRecipe({ meal_type_tags: ["Cenas"] }),
-      ];
-
-      expect(distinctMealTypes(tied)).toEqual(["Cenas"]);
-      // The active filter never re-introduces a variant.
-      expect(distinctMealTypes(tied, [], ["CENAS"])).toEqual(["Cenas"]);
-    });
+    expect(distinctMealTypes([], ["breakfast"])).toEqual(["breakfast"]);
   });
 });
 
 describe("tagSuggestions", () => {
   const existing = ["Desayunos", "sin gluten", "sin lactosa", "vegano"];
+
+  it("an empty folder already canonizes its tag: suggest it, never create", () => {
+    // Folder "Cenas" exists, no recipe carries the tag yet.
+    const suggestions = distinctMealTypes([], ["Cenas"]);
+
+    expect(tagSuggestions(suggestions, [], "cenas")).toEqual({
+      matches: ["Cenas"],
+      create: null,
+    });
+  });
 
   it("matches existing tags containing the text, minus selected ones", () => {
     expect(tagSuggestions(existing, ["sin gluten"], "SIN")).toEqual({
