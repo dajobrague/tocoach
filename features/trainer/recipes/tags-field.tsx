@@ -1,8 +1,10 @@
 "use client";
 
-import { Chip, Input } from "@heroui/react";
+import { Autocomplete, AutocompleteItem, Chip } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+import { tagSuggestions } from "./recipe-query";
 
 interface TagsFieldProps {
   disabled: boolean;
@@ -12,12 +14,15 @@ interface TagsFieldProps {
   onChange: (tags: string[]) => void;
 }
 
-const MAX_SUGGESTIONS = 8;
+/** Synthetic dropdown row that creates whatever was typed. */
+const CREATE_KEY = "__create__";
 
 /**
- * Free-form tag editor ("verano", "sin gluten", …). Typing filters the
- * library's existing tags so trainers reuse spellings instead of creating
- * near-duplicates; Enter or coma adds whatever was typed as a new tag.
+ * Predictive tag editor (Sep 2 call, JC: "like email-marketing tags").
+ * Typing opens a dropdown with every existing tag containing the text so
+ * trainers reuse spellings instead of creating near-duplicates; when no
+ * existing tag equals the text, the last row creates it. Enter or coma add
+ * the typed text as well.
  */
 export function TagsField({
   disabled,
@@ -25,34 +30,45 @@ export function TagsField({
   value,
   onChange,
 }: TagsFieldProps) {
+  // Both `inputValue` and `selectedKey` are controlled: letting React Aria
+  // sync the text from a selection while `items` change loops forever.
   const [text, setText] = useState("");
-
-  const has = (tag: string) =>
-    value.some((existing) => existing.toLowerCase() === tag.toLowerCase());
+  // Enter on a highlighted row: React Aria commits it, then our onKeyDown
+  // runs in the same event — this flag keeps it from also adding the typed
+  // text. Cleared on the microtask so mouse picks don't leave it set.
+  const pickedRef = useRef(false);
 
   const add = (raw: string) => {
     const trimmed = raw.trim();
+    const already = value.some(
+      (tag) => tag.toLowerCase() === trimmed.toLowerCase()
+    );
 
-    if (trimmed.length === 0 || has(trimmed)) {
-      setText("");
+    if (trimmed.length > 0 && already === false) {
+      // Reuse the library's exact casing when the tag already exists there.
+      const canonical =
+        suggestions.find(
+          (tag) => tag.toLowerCase() === trimmed.toLowerCase()
+        ) ?? trimmed;
 
-      return;
+      onChange([...value, canonical]);
     }
-
-    // Reuse the library's exact casing when the tag already exists there.
-    const canonical =
-      suggestions.find((tag) => tag.toLowerCase() === trimmed.toLowerCase()) ??
-      trimmed;
-
-    onChange([...value, canonical]);
     setText("");
   };
 
-  const needle = text.trim().toLowerCase();
-  const matches = suggestions
-    .filter((tag) => has(tag) === false)
-    .filter((tag) => needle.length === 0 || tag.toLowerCase().includes(needle))
-    .slice(0, MAX_SUGGESTIONS);
+  const { matches, create } = tagSuggestions(suggestions, value, text);
+  const items = [
+    ...matches.map((tag) => ({ key: tag, label: tag, isCreate: false })),
+    ...(create === null
+      ? []
+      : [
+          {
+            key: CREATE_KEY,
+            label: `Crear etiqueta «${create}»`,
+            isCreate: true,
+          },
+        ]),
+  ];
 
   return (
     <div className="flex flex-col gap-2">
@@ -72,11 +88,15 @@ export function TagsField({
         </div>
       )}
 
-      <Input
-        description="Enter o coma para añadir. Sirven para buscar y filtrar recetas."
+      <Autocomplete
+        allowsCustomValue
+        description="Escribe para buscar entre tus etiquetas o crear una nueva. Sirven para buscar y filtrar recetas."
+        inputValue={text}
         isDisabled={disabled}
+        items={items}
         label="Etiquetas"
         placeholder="Ej. desayuno, sin gluten, verano..."
+        selectedKey={null}
         startContent={
           <Icon
             className="text-default-400"
@@ -84,34 +104,41 @@ export function TagsField({
             width={16}
           />
         }
-        value={text}
         variant="bordered"
+        onInputChange={setText}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === ",") {
             event.preventDefault();
-            add(text);
+            if (pickedRef.current === false) add(text);
           }
         }}
-        onValueChange={setText}
-      />
-
-      {matches.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-default-400">Existentes:</span>
-          {matches.map((tag) => (
-            <Chip
-              key={tag}
-              className="cursor-pointer"
-              isDisabled={disabled}
-              size="sm"
-              variant="bordered"
-              onClick={() => add(tag)}
-            >
-              + {tag}
-            </Chip>
-          ))}
-        </div>
-      )}
+        onSelectionChange={(key) => {
+          if (key === null) return;
+          pickedRef.current = true;
+          queueMicrotask(() => {
+            pickedRef.current = false;
+          });
+          add(key === CREATE_KEY ? text : String(key));
+        }}
+      >
+        {(item) => (
+          <AutocompleteItem
+            key={item.key}
+            startContent={
+              <Icon
+                className={item.isCreate ? "text-primary" : "text-default-400"}
+                icon={
+                  item.isCreate ? "solar:add-circle-linear" : "solar:tag-linear"
+                }
+                width={15}
+              />
+            }
+            textValue={item.label}
+          >
+            {item.label}
+          </AutocompleteItem>
+        )}
+      </Autocomplete>
     </div>
   );
 }
