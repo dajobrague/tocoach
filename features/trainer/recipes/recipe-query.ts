@@ -1,3 +1,7 @@
+import { distinctTags } from "../library/tags";
+
+export { tagSuggestions } from "../library/tags";
+
 export type RecipeStatus = "draft" | "active" | "archived";
 
 /** A recipe as surfaced in the trainer library list (subset of the API row). */
@@ -70,51 +74,15 @@ export async function fetchRecipes(
   return (data.data ?? []) as RecipeListItem[];
 }
 
-/**
- * Distinct tags for pickers (editor suggestions, library filter), plus
- * always-kept extras: folder names (a folder IS a tag, even while empty —
- * Sep 2 call: without them, typing "cenas" into an empty "Cenas" folder
- * created a second spelling) and the active filter selection.
- */
+/** Distinct meal-type tags for pickers, plus always-kept extras (folder
+ *  names, the active filter) — see `distinctTags`. */
 export function distinctMealTypes(
   recipes: RecipeListItem[],
   alwaysInclude: string[] = []
 ): string[] {
-  const set = new Set<string>();
-
-  for (const recipe of recipes) {
-    for (const tag of recipe.meal_type_tags) {
-      if (tag.length > 0) set.add(tag);
-    }
-  }
-
-  for (const tag of alwaysInclude) {
-    if (tag.length > 0) set.add(tag);
-  }
-
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
-}
-
-/**
- * Predictive tag input: existing tags containing `text` (minus the ones
- * already selected) and, when no existing tag equals the text, the trimmed
- * text as the "create new tag" candidate — null otherwise.
- */
-export function tagSuggestions(
-  existing: string[],
-  selected: string[],
-  text: string
-): { matches: string[]; create: string | null } {
-  const trimmed = text.trim();
-  const needle = trimmed.toLowerCase();
-  const taken = new Set(selected.map((tag) => tag.toLowerCase()));
-  const matches = existing.filter(
-    (tag) =>
-      taken.has(tag.toLowerCase()) === false &&
-      tag.toLowerCase().includes(needle)
+  return distinctTags(
+    recipes,
+    (recipe) => recipe.meal_type_tags,
+    alwaysInclude
   );
-  const known =
-    taken.has(needle) || existing.some((tag) => tag.toLowerCase() === needle);
-
-  return { matches, create: needle.length > 0 && !known ? trimmed : null };
 }

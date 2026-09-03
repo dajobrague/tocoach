@@ -18,6 +18,8 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { TagsField } from "../library/tags-field";
+
 import { CommunityShareCard } from "./community-share-card";
 import { DeleteRecipeModal } from "./delete-recipe-modal";
 import { EditorHeaderActions } from "./editor-header-actions";
@@ -36,7 +38,6 @@ import {
 import { distinctMealTypes } from "./recipe-query";
 import { RecipePreviewModal } from "./recipe-preview-modal";
 import { RecipeSummaryStrip } from "./recipe-summary-strip";
-import { TagsField } from "./tags-field";
 import { UnsavedChangesModal } from "./unsaved-changes-modal";
 import { useRecipeFolders } from "./use-folders";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
@@ -379,7 +380,9 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
               />
 
               <TagsField
+                description="Escribe para buscar entre tus etiquetas o crear una nueva. Sirven para buscar y filtrar recetas."
                 disabled={busy}
+                placeholder="Ej. desayuno, sin gluten, verano..."
                 suggestions={distinctMealTypes(
                   libraryQuery.data ?? [],
                   (foldersQuery.data ?? []).map((folder) => folder.name)

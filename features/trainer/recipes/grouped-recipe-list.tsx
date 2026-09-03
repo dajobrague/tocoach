@@ -78,12 +78,12 @@ export function GroupedRecipeList({
               {section.label}
             </h2>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-default-500 tabular-nums">
-              {section.recipes.length}
+              {section.items.length}
             </span>
           </header>
 
           <div className={GRID}>
-            {section.recipes.map((recipe) => (
+            {section.items.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 hideTag={section.kind === "folder" ? section.label : undefined}
