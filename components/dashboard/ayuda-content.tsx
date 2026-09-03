@@ -166,7 +166,7 @@ export default function AyudaContent({
     {
       question: "¿Cómo creo un programa de entrenamiento?",
       answer:
-        "Puedes crear programas desde la sección 'Plantillas de Programas'. Haz clic en 'Crear Nueva Plantilla', define los ejercicios, series, repeticiones y días de la semana. Una vez guardada la plantilla, podrás asignarla a tus clientes desde su perfil individual.",
+        "Puedes crear programas desde 'Plantillas → Entrenamiento' en el menú lateral. Haz clic en 'Crear Nueva Plantilla', define los ejercicios, series, repeticiones y días de la semana. Una vez guardada la plantilla, podrás asignarla a tus clientes desde su perfil individual.",
     },
     {
       question: "¿Puedo personalizar el diseño de mi plataforma?",

@@ -80,11 +80,19 @@ export const TRAINER_NAV: TrainerNavSection[] = [
         title: "Plantillas",
         icon: "solar:folder-with-files-linear",
         items: [
+          // Split on purpose: "Programas" alone reads as training only, so
+          // nutrition templates get their own entry (and route) below.
           {
-            key: "templates-programs",
-            title: "Programas",
-            icon: "solar:document-add-linear",
+            key: "templates-training",
+            title: "Entrenamiento",
+            icon: "solar:dumbbell-linear",
             href: "/trainer/dashboard/templates",
+          },
+          {
+            key: "templates-nutrition",
+            title: "Nutrición",
+            icon: "solar:plate-linear",
+            href: "/trainer/dashboard/templates/nutrition",
           },
           {
             key: "templates-charts",

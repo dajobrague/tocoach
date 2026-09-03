@@ -13,8 +13,6 @@ import {
   ModalFooter,
   ModalHeader,
   Spinner,
-  Tab,
-  Tabs,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
@@ -40,13 +38,30 @@ interface Template {
   updatedAt: string;
 }
 
-export default function TemplatesContent() {
+type TemplateType = "programs" | "nutrition";
+
+interface TemplatesContentProps {
+  /** Which library this page shows; each type has its own route + nav entry. */
+  type: TemplateType;
+}
+
+const PAGE_COPY: Record<TemplateType, { title: string; subtitle: string }> = {
+  programs: {
+    title: "Programas de entrenamiento",
+    subtitle: "Crea y gestiona plantillas de programas de entrenamiento",
+  },
+  nutrition: {
+    title: "Programas nutricionales",
+    subtitle: "Crea y gestiona plantillas de planes nutricionales",
+  },
+};
+
+export default function TemplatesContent({
+  type: templateType,
+}: TemplatesContentProps) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [templateTypeTab, setTemplateTypeTab] = useState<
-    "programs" | "nutrition"
-  >("programs");
   const [categoryFilter, setCategoryFilter] = useState<
     "all" | "cardio" | "strength"
   >("all");
@@ -66,9 +81,9 @@ export default function TemplatesContent() {
       const params = new URLSearchParams();
 
       // Filter by template type
-      params.append("type", templateTypeTab);
+      params.append("type", templateType);
       // Filter by category only for programs
-      if (templateTypeTab === "programs" && categoryFilter !== "all") {
+      if (templateType === "programs" && categoryFilter !== "all") {
         params.append("category", categoryFilter);
       }
       const response = await fetch(`/api/templates?${params.toString()}`);
@@ -88,7 +103,7 @@ export default function TemplatesContent() {
 
   useEffect(() => {
     fetchTemplates();
-  }, [templateTypeTab, categoryFilter]);
+  }, [templateType, categoryFilter]);
 
   // Filter templates by search query
   const filteredTemplates = templates.filter(
@@ -169,11 +184,10 @@ export default function TemplatesContent() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Plantillas
+              {PAGE_COPY[templateType].title}
             </h1>
             <p className="text-gray-500 mt-1">
-              Crea y gestiona plantillas para programas de entrenamiento y
-              nutrición
+              {PAGE_COPY[templateType].subtitle}
             </p>
           </div>
           <Button
@@ -185,41 +199,6 @@ export default function TemplatesContent() {
             Crear Plantilla
           </Button>
         </div>
-
-        {/* Template Type Tabs */}
-        <Tabs
-          classNames={{
-            tabList: "gap-6",
-            cursor: "bg-black",
-            tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-black",
-          }}
-          selectedKey={templateTypeTab}
-          variant="underlined"
-          onSelectionChange={(key) => {
-            setTemplateTypeTab(key as "programs" | "nutrition");
-            setCategoryFilter("all");
-          }}
-        >
-          <Tab
-            key="programs"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="solar:dumbbell-bold" width={20} />
-                <span className="font-medium">Programas de Entrenamiento</span>
-              </div>
-            }
-          />
-          <Tab
-            key="nutrition"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="fluent:food-20-filled" width={20} />
-                <span className="font-medium">Planes Nutricionales</span>
-              </div>
-            }
-          />
-        </Tabs>
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
@@ -242,7 +221,7 @@ export default function TemplatesContent() {
           />
 
           {/* Category Filter - Only show for programs */}
-          {templateTypeTab === "programs" && (
+          {templateType === "programs" && (
             <div className="flex gap-2">
               <Button
                 className="bg-black text-white hover:bg-slate-800 font-semibold"
@@ -292,7 +271,7 @@ export default function TemplatesContent() {
               ? "Intenta con otra búsqueda"
               : "Crea tu primera plantilla para agilizar la creación de programas"}
           </p>
-          {!searchQuery && templateTypeTab === "programs" && (
+          {!searchQuery && templateType === "programs" && (
             <Button
               className="text-white font-semibold"
               color="primary"
@@ -448,7 +427,7 @@ export default function TemplatesContent() {
 
       {/* Create Template Modal */}
       <CreateTemplateModal
-        defaultType={templateTypeTab === "nutrition" ? "nutrition" : "program"}
+        defaultType={templateType === "nutrition" ? "nutrition" : "program"}
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
