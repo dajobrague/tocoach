@@ -51,7 +51,7 @@ const PAGE_COPY: Record<TemplateType, { title: string; subtitle: string }> = {
     subtitle: "Crea y gestiona plantillas de programas de entrenamiento",
   },
   nutrition: {
-    title: "Programas nutricionales",
+    title: "Planes nutricionales",
     subtitle: "Crea y gestiona plantillas de planes nutricionales",
   },
 };
