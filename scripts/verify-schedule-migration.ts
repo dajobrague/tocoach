@@ -4,7 +4,8 @@
  * Requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` or `.env`.
  * Never expose the service role key to the browser; this script is for migrations / audits only.
  *
- * Run: npx tsx scripts/verify-schedule-migration.ts
+ * Run: npx tsx --conditions=react-server scripts/verify-schedule-migration.ts
+ * (the condition satisfies the `server-only` guard in lib/clients/supabase-admin.ts)
  */
 
 import { config } from "dotenv";

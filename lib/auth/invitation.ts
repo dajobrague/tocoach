@@ -1,12 +1,9 @@
 // Server-only invitation code validation
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 
 // Lazy Supabase client initialization
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  return createSupabaseAdminClient();
 }
 
 export interface InvitationCode {
