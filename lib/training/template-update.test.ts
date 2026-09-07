@@ -57,9 +57,23 @@ describe("buildTemplateUpdate", () => {
     });
   });
 
-  it("rejects a blank name, bad tags and non-object bodies", () => {
+  it("folder_id-only body (folder move) touches nothing but folder_id", () => {
+    const id = "8274e9d7-811c-4749-b8a5-fdfe1a6dd306";
+
+    expect(buildTemplateUpdate({ folder_id: id })).toEqual({
+      ok: true,
+      updates: { folder_id: id },
+    });
+    expect(buildTemplateUpdate({ folder_id: null })).toEqual({
+      ok: true,
+      updates: { folder_id: null },
+    });
+  });
+
+  it("rejects a blank name, bad tags, bad folder ids and non-object bodies", () => {
     expect(buildTemplateUpdate({ name: "  " }).ok).toBe(false);
     expect(buildTemplateUpdate({ tags: "hombre" }).ok).toBe(false);
+    expect(buildTemplateUpdate({ folder_id: "Hombre" }).ok).toBe(false);
     expect(buildTemplateUpdate(null).ok).toBe(false);
     expect(buildTemplateUpdate([]).ok).toBe(false);
   });

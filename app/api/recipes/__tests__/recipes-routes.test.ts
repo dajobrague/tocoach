@@ -177,6 +177,26 @@ describe("GET /api/recipes", () => {
   });
 });
 
+describe("GET /api/recipes?folder=", () => {
+  it("root → folderId null, a uuid → that folder, composing with ?tag=", async () => {
+    listMock.mockResolvedValue([]);
+
+    await listGET(listReq("?folder=root&tag=vegano"));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", {
+      mealTypes: ["vegano"],
+      folderId: null,
+    });
+
+    const id = "1da1abf5-c8dd-40d8-a704-aabfabf360b5";
+
+    await listGET(listReq(`?folder=${id}`));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", { folderId: id });
+
+    await listGET(listReq("?folder=Cenas"));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", {});
+  });
+});
+
 describe("GET /api/recipes/[id]", () => {
   it("returns 200 when found", async () => {
     getByIdMock.mockResolvedValue(sampleRecipe);
@@ -233,6 +253,30 @@ describe("PATCH /api/recipes/[id]", () => {
 
   it("returns 400 when name is blanked", async () => {
     const res = await updatePATCH(...idArgs("r1", "PATCH", { name: "  " }));
+
+    expect(res.status).toBe(400);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("a { folder_id } body moves the recipe and touches nothing else", async () => {
+    updateMock.mockResolvedValue(sampleRecipe);
+    const id = "1da1abf5-c8dd-40d8-a704-aabfabf360b5";
+
+    await updatePATCH(...idArgs("r1", "PATCH", { folder_id: id }));
+    expect(updateMock).toHaveBeenLastCalledWith("acme.tenant", "r1", {
+      folderId: id,
+    });
+
+    await updatePATCH(...idArgs("r1", "PATCH", { folder_id: null }));
+    expect(updateMock).toHaveBeenLastCalledWith("acme.tenant", "r1", {
+      folderId: null,
+    });
+  });
+
+  it("returns 400 for a malformed folder_id", async () => {
+    const res = await updatePATCH(
+      ...idArgs("r1", "PATCH", { folder_id: "Cenas" })
+    );
 
     expect(res.status).toBe(400);
     expect(updateMock).not.toHaveBeenCalled();

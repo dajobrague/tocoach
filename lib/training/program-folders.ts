@@ -7,8 +7,8 @@ import { FolderService } from "@/lib/library/folder-service";
 
 /**
  * /api/program-folders handlers: hierarchy in `program_folders`, membership
- * on `programs.tags` (a folder IS a tag). Trainer auth only — no feature
- * flag, unlike recipes.
+ * on `programs.folder_id`. Trainer auth only — no feature flag, unlike
+ * recipes.
  */
 export const programFolderHandlers = createFolderRouteHandlers({
   guard: async () => {
@@ -27,9 +27,6 @@ export const programFolderHandlers = createFolderRouteHandlers({
     return { ok: true, tenantHost: session.tenant_host };
   },
   createService: () =>
-    new FolderService(createSupabaseClient(), {
-      table: "program_folders",
-      retagRpc: "replace_program_tag",
-    }),
+    new FolderService(createSupabaseClient(), { table: "program_folders" }),
   logTag: "[ProgramFolders]",
 });

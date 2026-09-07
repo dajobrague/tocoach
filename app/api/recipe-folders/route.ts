@@ -1,6 +1,6 @@
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { createFolderRouteHandlers } from "@/lib/library/folder-routes";
-import { RecipeFolderService } from "@/lib/nutrition/recipes/recipe-folder-service";
+import { FolderService } from "@/lib/library/folder-service";
 import { guardRecipeRequest } from "@/lib/nutrition/recipes/recipe-request";
 
 // GET /api/recipe-folders — the tenant's folder hierarchy (flat rows; the
@@ -13,6 +13,7 @@ export const { GET, POST } = createFolderRouteHandlers({
       ? { ok: true, tenantHost: guard.session.tenant_host }
       : guard;
   },
-  createService: () => new RecipeFolderService(createSupabaseClient()),
+  createService: () =>
+    new FolderService(createSupabaseClient(), { table: "recipe_folders" }),
   logTag: "[RecipeFolders]",
 });
