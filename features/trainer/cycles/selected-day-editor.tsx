@@ -39,6 +39,9 @@ interface SelectedDayEditorProps {
   onRemoveOption: (slotId: string, optionId: string) => void;
   onEditPortions: (slotId: string, option: SlotOption) => void;
   onRelabelSlot: (slotId: string, label: string) => void;
+  /** Slot whose name editor should open on mount (a fresh custom meal). */
+  renameSlotId?: string | null;
+  onRenameEnd?: () => void;
   onClearDay: () => void;
   onDuplicateDay: () => void;
   onCopyFromDay: () => void;
@@ -138,6 +141,8 @@ export function SelectedDayEditor({
   onRemoveOption,
   onEditPortions,
   onRelabelSlot,
+  renameSlotId = null,
+  onRenameEnd,
   onClearDay,
   onDuplicateDay,
   onCopyFromDay,
@@ -194,6 +199,7 @@ export function SelectedDayEditor({
               {day.slots.map((slot) => (
                 <MealRow
                   key={slot.id}
+                  autoRename={slot.id === renameSlotId}
                   disabled={disabled}
                   slot={slot}
                   onAddAlternative={(groupIndex) =>
@@ -209,6 +215,7 @@ export function SelectedDayEditor({
                     onRemoveOption(slot.id, optionId)
                   }
                   onRemoveSlot={() => onRemoveSlot(slot.id)}
+                  {...(onRenameEnd !== undefined ? { onRenameEnd } : {})}
                 />
               ))}
             </div>

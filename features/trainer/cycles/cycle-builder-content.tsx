@@ -102,6 +102,8 @@ export function CycleBuilderContent({
   const [dayCopyMode, setDayCopyMode] = useState<DayCopyMode | null>(null);
   const [removeDayTarget, setRemoveDayTarget] = useState<number | null>(null);
   const [addDayOpen, setAddDayOpen] = useState(false);
+  // A meal added via "Personalizada…" opens its name editor right away.
+  const [renameSlotId, setRenameSlotId] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
 
@@ -332,6 +334,7 @@ export function CycleBuilderContent({
                 dayName={(tree.day_names ?? {})[String(day.dayIndex)] ?? null}
                 disabled={disabled === true || mutations.makePrimaryM.isPending}
                 presets={presetList}
+                renameSlotId={renameSlotId}
                 targets={dayTargets}
                 onAddAlternative={(slotId, groupIndex) =>
                   setPickerTarget({ slotId, groupIndex })
@@ -352,11 +355,16 @@ export function CycleBuilderContent({
                   setPickerTarget({ slotId, groupIndex });
                 }}
                 onAddSlot={(label) =>
-                  mutations.addSlotM.mutate({
-                    dayIndex: day.dayIndex,
-                    position: day.slots.length,
-                    ...(label !== undefined ? { label } : {}),
-                  })
+                  mutations.addSlotM.mutate(
+                    {
+                      dayIndex: day.dayIndex,
+                      position: day.slots.length,
+                      ...(label !== undefined ? { label } : {}),
+                    },
+                    label === undefined
+                      ? { onSuccess: (slot) => setRenameSlotId(slot.id) }
+                      : {}
+                  )
                 }
                 onAssignPreset={(presetId) =>
                   assignTarget.mutate({ dayIndex: day.dayIndex, presetId })
@@ -380,6 +388,7 @@ export function CycleBuilderContent({
                 onRenameDay={(name) =>
                   renameDayM.mutate({ dayIndex: day.dayIndex, name })
                 }
+                onRenameEnd={() => setRenameSlotId(null)}
               />
             ) : null}
           </>
