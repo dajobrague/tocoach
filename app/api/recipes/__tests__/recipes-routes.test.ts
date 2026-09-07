@@ -22,6 +22,7 @@ vi.mock("@/lib/clients/supabase-api", () => ({
   createSupabaseClient: vi.fn(() => ({})),
 }));
 vi.mock("@/lib/nutrition/recipes/recipe-service", () => ({
+  RecipeValidationError: class RecipeValidationError extends Error {},
   RecipeService: vi.fn(function RecipeServiceStub() {
     return {
       create: createMock,
@@ -42,6 +43,7 @@ import {
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
+import { RecipeValidationError } from "@/lib/nutrition/recipes/recipe-service";
 
 const mockedSession = vi.mocked(getTrainerSession);
 const mockedFlag = vi.mocked(isNutritionV2TrainerEnabled);
@@ -271,6 +273,20 @@ describe("PATCH /api/recipes/[id]", () => {
     expect(updateMock).toHaveBeenLastCalledWith("acme.tenant", "r1", {
       folderId: null,
     });
+  });
+
+  it("returns 400 when the service rejects the folder (not the tenant's)", async () => {
+    updateMock.mockRejectedValue(
+      new RecipeValidationError("Carpeta no encontrada")
+    );
+
+    const res = await updatePATCH(
+      ...idArgs("r1", "PATCH", {
+        folder_id: "00000000-0000-4000-8000-000000000000",
+      })
+    );
+
+    expect(res.status).toBe(400);
   });
 
   it("returns 400 for a malformed folder_id", async () => {
