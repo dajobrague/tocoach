@@ -53,7 +53,8 @@ export interface RecipeUpdateInput {
 
 export interface RecipeListFilter {
   status?: RecipeStatus;
-  mealType?: string;
+  /** Every listed tag must be present (AND). */
+  mealTypes?: string[];
   query?: string;
 }
 
@@ -145,8 +146,9 @@ export class RecipeService {
       query = query.eq("status", filter.status);
     }
 
-    if (filter.mealType !== undefined && filter.mealType.length > 0) {
-      query = query.contains("meal_type_tags", [filter.mealType]);
+    if (filter.mealTypes !== undefined && filter.mealTypes.length > 0) {
+      // Array containment (@>) = the row has ALL the given tags.
+      query = query.contains("meal_type_tags", filter.mealTypes);
     }
 
     if (filter.query !== undefined && filter.query.length > 0) {

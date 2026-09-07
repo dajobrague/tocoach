@@ -38,6 +38,7 @@ import { RecipePreviewModal } from "./recipe-preview-modal";
 import { RecipeSummaryStrip } from "./recipe-summary-strip";
 import { TagsField } from "./tags-field";
 import { UnsavedChangesModal } from "./unsaved-changes-modal";
+import { useRecipeFolders } from "./use-folders";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
 import { useRecipes } from "./use-recipes";
 import {
@@ -171,8 +172,10 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
   const recipeQuery = useRecipe(recipeId);
   const ingredientsQuery = useRecipeIngredients(recipeId);
   const mediaQuery = useRecipeMedia(recipeId);
-  // Full library, only to suggest existing tags in the tag editor.
+  // Full library + folders, only to suggest existing tags in the tag editor
+  // (a folder's name is a tag too, and fixes the canonical spelling).
   const libraryQuery = useRecipes({});
+  const foldersQuery = useRecipeFolders();
 
   const update = useUpdateRecipe(recipeId);
   const replaceIngredients = useReplaceIngredients(recipeId);
@@ -377,7 +380,10 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
 
               <TagsField
                 disabled={busy}
-                suggestions={distinctMealTypes(libraryQuery.data ?? [])}
+                suggestions={distinctMealTypes(
+                  libraryQuery.data ?? [],
+                  (foldersQuery.data ?? []).map((folder) => folder.name)
+                )}
                 value={values.mealTypeTags}
                 onChange={(tags) =>
                   setValues({ ...values, mealTypeTags: tags })

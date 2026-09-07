@@ -68,7 +68,9 @@ describe("RecipeService (integration, local DB)", () => {
 
     expect(list.some((r) => r.id === id)).toBe(true);
 
-    const byTag = await service.list(TEST_TENANT_HOST, { mealType: "lunch" });
+    const byTag = await service.list(TEST_TENANT_HOST, {
+      mealTypes: ["lunch"],
+    });
 
     expect(byTag.some((r) => r.id === id)).toBe(true);
 

@@ -173,7 +173,7 @@ export class RecipeFolderService {
   }
 
   /** Delete a folder: children float to the root (FK ON DELETE SET NULL)
-   *  and recipes keep the tag, which shows up again as a loose tag. */
+   *  and recipes keep the tag as a plain, filterable tag. */
   async remove(tenantHost: string, folderId: string): Promise<boolean> {
     const { data, error } = await this.client
       .from(FOLDERS_TABLE)

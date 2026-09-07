@@ -20,15 +20,15 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import {
+  filterByTags,
   folderNodes,
   folderPath,
-  looseTags,
   moveTargets,
   recipesInFolder,
-  untaggedRecipes,
+  recipesOutsideFolders,
 } from "./folder-tree";
 import { updateRecipeTags } from "./recipe-api";
 import { RecipeList } from "./recipe-list";
@@ -39,6 +39,8 @@ import { confirmAfterPress } from "@/lib/ui/native-dialog";
 interface FolderBrowserProps {
   /** The full (non-archived) library; membership is computed client-side. */
   recipes: RecipeListItem[];
+  /** Active tag filter: composes with the open folder (folder AND tags). */
+  tags: string[];
   isLoading: boolean;
   isError: boolean;
   onOpenRecipe: (id: string) => void;
@@ -50,13 +52,15 @@ interface FolderBrowserProps {
  * Drive-style folder view of the recipe library (Jul 28 call, Pablo).
  * Folders are tags underneath: a recipe belongs by carrying the folder's
  * tag, and only the hierarchy lives in recipe_folders — so folders nest
- * freely while recipes keep their portable tag list. Every existing tag is
- * auto-materialized into a folder (no manual promotion), untagged recipes
- * live directly at the root like Drive files, and each recipe card offers
- * "move to folder" without opening the editor.
+ * freely while recipes keep their portable tag list. Plain tags are NOT
+ * folders (Sep 2 call, JC: auto-created folders duplicated on screen):
+ * recipes outside every folder live at the root like Drive files, tags
+ * filter within a folder, and each recipe card offers "move to folder"
+ * without opening the editor.
  */
 export function FolderBrowser({
   recipes,
+  tags,
   isLoading,
   isError,
   onOpenRecipe,
@@ -75,35 +79,6 @@ export function FolderBrowser({
   const [movingRecipe, setMovingRecipe] = useState<RecipeListItem | null>(null);
 
   const folders = foldersQuery.data ?? [];
-
-  // Every tag IS a folder: silently materialize folder rows for tags that
-  // don't have one yet (first visit after tagging in the editor, imports,
-  // pre-folders libraries). The unique index dedupes concurrent tabs; the
-  // ref stops re-attempts (and StrictMode double-runs) within this mount.
-  const materializedRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (foldersQuery.data === undefined) return;
-    const missing = looseTags(recipes, foldersQuery.data).filter(
-      (entry) => materializedRef.current.has(entry.tag.toLowerCase()) === false
-    );
-
-    if (missing.length === 0) return;
-    for (const entry of missing) {
-      materializedRef.current.add(entry.tag.toLowerCase());
-    }
-
-    void (async () => {
-      for (const entry of missing) {
-        try {
-          await createM.mutateAsync({ name: entry.tag, parentId: null });
-        } catch {
-          // 409 (already created by another tab) or transient failure —
-          // the next folders refetch reconciles either way.
-        }
-      }
-    })();
-  }, [recipes, foldersQuery.data, createM]);
 
   const moveRecipeM = useMutation({
     mutationFn: (vars: {
@@ -163,11 +138,13 @@ export function FolderBrowser({
   // A folder deleted elsewhere while open falls back to the root.
   const effectiveId = currentFolder?.id ?? null;
 
-  const nodes = folderNodes(folders, recipes, effectiveId);
+  // Tag filter first, so folder counts and the open folder both reflect it.
+  const visible = filterByTags(recipes, tags);
+  const nodes = folderNodes(folders, visible, effectiveId);
   const shownRecipes =
     currentFolder !== null
-      ? recipesInFolder(recipes, currentFolder)
-      : untaggedRecipes(recipes);
+      ? recipesInFolder(visible, currentFolder)
+      : recipesOutsideFolders(visible, folders);
   const breadcrumb =
     currentFolder !== null ? folderPath(folders, currentFolder.id) : [];
 
@@ -215,7 +192,7 @@ export function FolderBrowser({
               node={node}
               onDelete={() => {
                 confirmAfterPress(
-                  `¿Eliminar la carpeta "${node.folder.name}"? Las recetas pasan a la raíz (o a sus otras carpetas) y las subcarpetas suben a la raíz.`
+                  `¿Eliminar la carpeta "${node.folder.name}"? Las recetas conservan la etiqueta y pasan a la raíz (o a sus otras carpetas); las subcarpetas suben a la raíz.`
                 ).then((confirmed) => {
                   if (confirmed) deleteM.mutate(node.folder.id);
                 });
@@ -238,6 +215,7 @@ export function FolderBrowser({
 
       {shownRecipes.length > 0 ? (
         <RecipeList
+          hideTag={currentFolder?.name}
           isError={false}
           isLoading={false}
           recipes={shownRecipes}
@@ -254,9 +232,11 @@ export function FolderBrowser({
             width={30}
           />
           <p className="max-w-sm text-sm text-default-500">
-            {currentFolder !== null
-              ? "Esta carpeta está vacía. Mueve recetas aquí desde sus tarjetas o crea una nueva."
-              : "Crea tu primera receta o una carpeta para empezar a organizar."}
+            {tags.length > 0
+              ? "Ninguna receta aquí tiene esas etiquetas."
+              : currentFolder !== null
+                ? "Esta carpeta está vacía. Mueve recetas aquí desde sus tarjetas o crea una nueva."
+                : "Crea tu primera receta o una carpeta para empezar a organizar."}
           </p>
           <Button
             className="bg-black text-white"

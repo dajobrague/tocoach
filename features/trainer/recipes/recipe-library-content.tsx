@@ -42,7 +42,7 @@ export function RecipeLibraryContent() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"" | RecipeStatus>("");
-  const [mealType, setMealType] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
   const [toDelete, setToDelete] = useState<RecipeListItem | null>(null);
   // Folder vs list view, remembered per browser (Jul 28 call: each trainer
@@ -64,10 +64,10 @@ export function RecipeLibraryContent() {
 
     if (trimmed.length > 0) value.query = trimmed;
     if (status !== "") value.status = status;
-    if (mealType.length > 0) value.mealType = mealType;
+    if (tags.length > 0) value.tags = tags;
 
     return value;
-  }, [query, status, mealType]);
+  }, [query, status, tags]);
 
   const { data, isLoading, isError } = useRecipes(filters);
   // Unfiltered library (cache-shared with the initial page load) so the tag
@@ -76,9 +76,13 @@ export function RecipeLibraryContent() {
   // Folder hierarchy, shared with the folder view's cache: the list view
   // groups by it.
   const foldersQuery = useRecipeFolders();
-  const mealTypeOptions = useMemo(
-    () => distinctMealTypes(allRecipes.data ?? [], mealType),
-    [allRecipes.data, mealType]
+  const tagOptions = useMemo(
+    () =>
+      distinctMealTypes(allRecipes.data ?? [], [
+        ...(foldersQuery.data ?? []).map((folder) => folder.name),
+        ...tags,
+      ]),
+    [allRecipes.data, foldersQuery.data, tags]
   );
   // Archived = soft-deleted; hide them unless the trainer explicitly filters by
   // status (they remain reachable via the "Archivada" filter option).
@@ -170,14 +174,14 @@ export function RecipeLibraryContent() {
 
           <div className="flex-1">
             <RecipeFilters
-              mealType={mealType}
-              mealTypeOptions={mealTypeOptions}
               query={query}
-              showSelects={view === "list"}
+              showStatus={view === "list"}
               status={status}
-              onMealTypeChange={setMealType}
+              tagOptions={tagOptions}
+              tags={tags}
               onQueryChange={setQuery}
               onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
+              onTagsChange={setTags}
             />
           </div>
         </div>
@@ -189,6 +193,7 @@ export function RecipeLibraryContent() {
             recipes={(allRecipes.data ?? []).filter(
               (recipe) => recipe.status !== "archived"
             )}
+            tags={tags}
             onCreateRecipe={() => setNewOpen(true)}
             onDeleteRecipe={setToDelete}
             onOpenRecipe={(id) =>
