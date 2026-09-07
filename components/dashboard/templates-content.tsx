@@ -23,6 +23,7 @@ import TemplateDetailModal from "./template-detail-modal";
 
 import { FolderBrowser } from "@/features/trainer/library/folder-browser";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
 import { filterByTags } from "@/features/trainer/library/tags";
 import {
   programFolderHooks,
@@ -253,6 +254,7 @@ export default function TemplatesContent({
                 value={tagFilter}
                 onChange={setTagFilter}
               />
+              <TagManagerButton className="h-12" kind="program" />
               <div className="flex gap-2">
                 <Button
                   className="bg-black text-white hover:bg-slate-800 font-semibold"
