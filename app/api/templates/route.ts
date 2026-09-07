@@ -215,6 +215,8 @@ export async function GET(request: NextRequest) {
         description: template.notes,
         templateType: "nutrition", // Distinguish from program
         category: "nutrition",
+        // Nutrition plans have no folders; keep the payload shape uniform.
+        folder_id: null,
         dayCount: dayCountByPlan.get(template.id) ?? 0,
         mealCount: mealCountByPlan.get(template.id) ?? 0,
         createdAt: template.created_at,
