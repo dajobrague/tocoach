@@ -40,6 +40,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import { MealImageTrainerField } from "./nutrition-trainer-meal-image-field";
 
+import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { filterByTags } from "@/features/trainer/library/tags";
+import { TagsField } from "@/features/trainer/library/tags-field";
+import { alertAfterPress } from "@/lib/ui/native-dialog";
+
 interface TemplateDetailModalProps {
   isOpen: boolean;
   template: {
@@ -52,6 +57,7 @@ interface TemplateDetailModalProps {
     division?: string;
     goal?: string;
     sessionsPerWeek?: number;
+    tags?: string[];
   };
   onClose: (updatedData?: {
     name: string;
@@ -61,6 +67,7 @@ interface TemplateDetailModalProps {
     division?: string;
     goal?: string;
     sessionsPerWeek?: number;
+    tags?: string[];
     sessionCount?: number;
     exerciseCount?: number;
     dayCount?: number;
@@ -305,10 +312,12 @@ export default function TemplateDetailModal({
       video_url?: string;
       image_url?: string;
       description?: string;
+      tags?: string[];
     }>
   >([]);
   const [exerciseCategoryFilter, setExerciseCategoryFilter] =
     useState<string>("all");
+  const [exerciseTagFilter, setExerciseTagFilter] = useState<string[]>([]);
   const [isAddExerciseModalOpen, setIsAddExerciseModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -319,6 +328,7 @@ export default function TemplateDetailModal({
     division: template.division || "",
     goal: template.goal || "",
     sessionsPerWeek: template.sessionsPerWeek?.toString() || "3",
+    tags: template.tags ?? [],
   });
 
   // Update formData when template changes
@@ -331,6 +341,7 @@ export default function TemplateDetailModal({
       division: template.division || "",
       goal: template.goal || "",
       sessionsPerWeek: template.sessionsPerWeek?.toString() || "3",
+      tags: template.tags ?? [],
     });
   }, [template]);
 
@@ -377,15 +388,18 @@ export default function TemplateDetailModal({
     }
   };
 
+  // Category AND every selected tag (Sep 2 call, JC: filter the picker by
+  // muscle + equipment). Both pickers (add and edit) read this list.
   const filteredExercises = useMemo(() => {
-    if (exerciseCategoryFilter === "all") {
-      return exerciseLibrary;
-    }
+    const byCategory =
+      exerciseCategoryFilter === "all"
+        ? exerciseLibrary
+        : exerciseLibrary.filter(
+            (ex) => ex.category === exerciseCategoryFilter
+          );
 
-    return exerciseLibrary.filter(
-      (ex) => ex.category === exerciseCategoryFilter
-    );
-  }, [exerciseLibrary, exerciseCategoryFilter]);
+    return filterByTags(byCategory, exerciseTagFilter, (ex) => ex.tags ?? []);
+  }, [exerciseLibrary, exerciseCategoryFilter, exerciseTagFilter]);
 
   const handleExerciseCreated = async (createdExercise?: any) => {
     // Refresh the exercise library
@@ -428,6 +442,34 @@ export default function TemplateDetailModal({
     } catch (error) {
       console.error("Error updating template:", error);
       alert("Error al actualizar la plantilla");
+    } finally {
+      setSavingField(null);
+    }
+  };
+
+  // Tags commit on every change (no blur to wait for): a tags-only PUT, so
+  // the other fields stay as they are. Reverts locally if the save fails.
+  const handleSaveTags = async (tags: string[]) => {
+    const previous = formData.tags;
+
+    setFormData((prev) => ({ ...prev, tags }));
+    setSavingField("tags");
+
+    try {
+      const response = await fetch(`/api/templates/${template.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+      const result = await response.json();
+
+      if (result.success !== true) {
+        throw new Error(result.error ?? "Error al guardar las etiquetas");
+      }
+    } catch (error) {
+      console.error("Error updating template tags:", error);
+      setFormData((prev) => ({ ...prev, tags: previous }));
+      alertAfterPress("Error al guardar las etiquetas");
     } finally {
       setSavingField(null);
     }
@@ -1687,6 +1729,7 @@ export default function TemplateDetailModal({
       payload.goal = formData.goal;
     if (formData.sessionsPerWeek != null && formData.sessionsPerWeek !== "")
       payload.sessionsPerWeek = parseInt(formData.sessionsPerWeek);
+    if (template.templateType === "program") payload.tags = formData.tags;
     onClose(payload);
   }, [formData, sessions, days, onClose]);
 
@@ -2149,6 +2192,20 @@ export default function TemplateDetailModal({
                   )}
                 </div>
               )}
+
+              {/* Etiquetas (Sep 2 call, JC): filter and folder membership. */}
+              {template.templateType === "program" && (
+                <div className="max-w-xl font-normal">
+                  <TagsField
+                    description="Para filtrar. Escribe y pulsa Enter; si no existe, se crea. Ej. tres días, full body."
+                    disabled={savingField === "tags"}
+                    kind="program"
+                    placeholder="Ej. tres días, full body..."
+                    value={formData.tags}
+                    onChange={handleSaveTags}
+                  />
+                </div>
+              )}
             </div>
           </ModalHeader>
           <ModalBody>
@@ -2470,10 +2527,17 @@ export default function TemplateDetailModal({
                                                 Cardio
                                               </Button>
                                             </div>
+                                            <TagFilterSelect
+                                              className="max-w-xs"
+                                              kind="exercise"
+                                              size="sm"
+                                              value={exerciseTagFilter}
+                                              onChange={setExerciseTagFilter}
+                                            />
                                             <div className="flex gap-2 items-end">
                                               {}
                                               <Autocomplete
-                                                key={`exercises-${filteredExercises.length}-${exerciseCategoryFilter}`}
+                                                key={`exercises-${filteredExercises.length}-${exerciseCategoryFilter}-${exerciseTagFilter.join(",")}`}
                                                 autoFocus
                                                 className="flex-1"
                                                 defaultItems={filteredExercises}

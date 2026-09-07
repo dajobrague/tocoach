@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const FOLDERS_TABLE = "recipe_folders";
-const RECIPES_TABLE = "recipes";
-
-export interface RecipeFolderRow {
+export interface FolderRow {
   id: string;
   tenant_host: string;
   name: string;
@@ -13,41 +10,53 @@ export interface RecipeFolderRow {
   updated_at: string;
 }
 
-export class RecipeFolderValidationError extends Error {}
-export class RecipeFolderConflictError extends Error {}
+export class FolderValidationError extends Error {}
+export class FolderConflictError extends Error {}
+
+export interface FolderServiceConfig {
+  /** Folders table ("recipe_folders", "program_folders"). */
+  table: string;
+}
 
 /**
- * CRUD for the recipe-folder hierarchy. A folder IS a tag: membership stays
- * on recipes.meal_type_tags, so this service only manages the tree — plus
- * the one coupling point, rename, which bulk-retags the tenant's recipes so
- * the folder and its recipes never drift apart.
+ * CRUD for a folder hierarchy. Membership lives on the items' `folder_id`
+ * (FK ON DELETE SET NULL), so this service only manages the tree: renaming
+ * a folder touches nothing else, deleting one floats its children and its
+ * items to the root. Folders and tags never meet. One instance per library.
  */
-export class RecipeFolderService {
-  constructor(private readonly client: SupabaseClient) {}
+export class FolderService {
+  constructor(
+    private readonly client: SupabaseClient,
+    private readonly config: FolderServiceConfig
+  ) {}
 
-  async list(tenantHost: string): Promise<RecipeFolderRow[]> {
+  private fail(operation: string, message: string): never {
+    throw new Error(
+      `FolderService(${this.config.table}).${operation} failed: ${message}`
+    );
+  }
+
+  async list(tenantHost: string): Promise<FolderRow[]> {
     const { data, error } = await this.client
-      .from(FOLDERS_TABLE)
+      .from(this.config.table)
       .select("*")
       .eq("tenant_host", tenantHost)
       .order("position", { ascending: true })
       .order("name", { ascending: true });
 
-    if (error !== null) {
-      throw new Error(`RecipeFolderService.list failed: ${error.message}`);
-    }
+    if (error !== null) this.fail("list", error.message);
 
-    return (data ?? []) as RecipeFolderRow[];
+    return (data ?? []) as FolderRow[];
   }
 
   async create(
     tenantHost: string,
     input: { name: string; parentId?: string | null }
-  ): Promise<RecipeFolderRow> {
+  ): Promise<FolderRow> {
     const name = input.name.trim();
 
     if (name.length === 0) {
-      throw new RecipeFolderValidationError("El nombre es obligatorio");
+      throw new FolderValidationError("El nombre es obligatorio");
     }
 
     const parentId = input.parentId ?? null;
@@ -56,12 +65,12 @@ export class RecipeFolderService {
       const parent = await this.getById(tenantHost, parentId);
 
       if (parent === null) {
-        throw new RecipeFolderValidationError("Carpeta padre no encontrada");
+        throw new FolderValidationError("Carpeta padre no encontrada");
       }
     }
 
     const { data, error } = await this.client
-      .from(FOLDERS_TABLE)
+      .from(this.config.table)
       .insert({ tenant_host: tenantHost, name, parent_id: parentId })
       .select()
       .single();
@@ -69,26 +78,24 @@ export class RecipeFolderService {
     if (error !== null) {
       // 23505 = unique_violation (one folder per tag name per tenant).
       if (error.code === "23505") {
-        throw new RecipeFolderConflictError(
-          "Ya existe una carpeta con ese nombre"
-        );
+        throw new FolderConflictError("Ya existe una carpeta con ese nombre");
       }
-      throw new Error(`RecipeFolderService.create failed: ${error.message}`);
+      this.fail("create", error.message);
     }
 
-    return data as RecipeFolderRow;
+    return data as FolderRow;
   }
 
   /**
-   * Rename and/or move a folder. Rename bulk-retags every recipe carrying
-   * the old tag; move validates against cycles (a folder can't become a
-   * descendant of itself). `parentId: null` moves to the root.
+   * Rename and/or move a folder. Move validates against cycles (a folder
+   * can't become a descendant of itself). `parentId: null` moves to the
+   * root. Items are untouched either way — they point at the folder's id.
    */
   async update(
     tenantHost: string,
     folderId: string,
     patch: { name?: string; parentId?: string | null }
-  ): Promise<RecipeFolderRow | null> {
+  ): Promise<FolderRow | null> {
     const folder = await this.getById(tenantHost, folderId);
 
     if (folder === null) {
@@ -101,7 +108,7 @@ export class RecipeFolderService {
       const name = patch.name.trim();
 
       if (name.length === 0) {
-        throw new RecipeFolderValidationError("El nombre es obligatorio");
+        throw new FolderValidationError("El nombre es obligatorio");
       }
       updates.name = name;
     }
@@ -111,14 +118,14 @@ export class RecipeFolderService {
         const parent = await this.getById(tenantHost, patch.parentId);
 
         if (parent === null) {
-          throw new RecipeFolderValidationError("Carpeta padre no encontrada");
+          throw new FolderValidationError("Carpeta padre no encontrada");
         }
 
         if (
           patch.parentId === folderId ||
           (await this.isDescendant(tenantHost, patch.parentId, folderId))
         ) {
-          throw new RecipeFolderValidationError(
+          throw new FolderValidationError(
             "Una carpeta no puede moverse dentro de sí misma"
           );
         }
@@ -131,7 +138,7 @@ export class RecipeFolderService {
     }
 
     const { data, error } = await this.client
-      .from(FOLDERS_TABLE)
+      .from(this.config.table)
       .update(updates)
       .eq("tenant_host", tenantHost)
       .eq("id", folderId)
@@ -140,71 +147,49 @@ export class RecipeFolderService {
 
     if (error !== null) {
       if (error.code === "23505") {
-        throw new RecipeFolderConflictError(
-          "Ya existe una carpeta con ese nombre"
-        );
+        throw new FolderConflictError("Ya existe una carpeta con ese nombre");
       }
-      throw new Error(`RecipeFolderService.update failed: ${error.message}`);
+      this.fail("update", error.message);
     }
 
-    // Rename → retag: the folder IS the tag, so recipes must follow. Done
-    // after the folder update; a failure here surfaces as a 500 and the next
-    // rename attempt re-runs the retag (array_replace is idempotent).
-    const newName = updates.name as string | undefined;
-
-    if (newName !== undefined && newName !== folder.name) {
-      const { error: retagError } = await this.client.rpc(
-        "replace_recipe_tag",
-        {
-          p_tenant_host: tenantHost,
-          p_old_tag: folder.name,
-          p_new_tag: newName,
-        }
-      );
-
-      if (retagError !== null) {
-        throw new Error(
-          `RecipeFolderService.update retag failed: ${retagError.message}`
-        );
-      }
-    }
-
-    return data as RecipeFolderRow;
+    return data as FolderRow;
   }
 
-  /** Delete a folder: children float to the root (FK ON DELETE SET NULL)
-   *  and recipes keep the tag, which shows up again as a loose tag. */
+  /** Delete a folder: children and items float to the root (both FKs are
+   *  ON DELETE SET NULL). */
   async remove(tenantHost: string, folderId: string): Promise<boolean> {
     const { data, error } = await this.client
-      .from(FOLDERS_TABLE)
+      .from(this.config.table)
       .delete()
       .eq("tenant_host", tenantHost)
       .eq("id", folderId)
       .select("id");
 
-    if (error !== null) {
-      throw new Error(`RecipeFolderService.remove failed: ${error.message}`);
-    }
+    if (error !== null) this.fail("remove", error.message);
 
     return (data ?? []).length > 0;
+  }
+
+  /** Does the folder exist in this tenant? For validating an item's
+   *  `folder_id` before writing it. */
+  async exists(tenantHost: string, folderId: string): Promise<boolean> {
+    return (await this.getById(tenantHost, folderId)) !== null;
   }
 
   private async getById(
     tenantHost: string,
     folderId: string
-  ): Promise<RecipeFolderRow | null> {
+  ): Promise<FolderRow | null> {
     const { data, error } = await this.client
-      .from(FOLDERS_TABLE)
+      .from(this.config.table)
       .select("*")
       .eq("tenant_host", tenantHost)
       .eq("id", folderId)
       .maybeSingle();
 
-    if (error !== null) {
-      throw new Error(`RecipeFolderService.getById failed: ${error.message}`);
-    }
+    if (error !== null) this.fail("getById", error.message);
 
-    return (data as RecipeFolderRow | null) ?? null;
+    return (data as FolderRow | null) ?? null;
   }
 
   /** True when `candidateId` sits anywhere under `ancestorId`. */

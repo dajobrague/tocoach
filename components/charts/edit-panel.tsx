@@ -61,6 +61,12 @@ const CHART_TYPES: {
     multi: true,
   },
   { id: "ring", label: "Anillo", icon: "solar:chart-2-bold", multi: true },
+  {
+    id: "calendar",
+    label: "Calendario",
+    icon: "solar:calendar-bold",
+    multi: true,
+  },
   { id: "kpi", label: "Número", icon: "solar:hashtag-bold", multi: false },
 ];
 
@@ -191,6 +197,8 @@ export function ChartEditPanel({
 
   const isMulti = currentSource?.dimensions === "multi";
   const isPhoto = currentSource?.dimensions === "photo";
+  // calendar = fuerza/cardio/descanso por día — solo Entrenamiento.
+  const isTraining = currentSource?.id === "training_breakdown";
 
   const update = (patch: Partial<ChartConfig>): void => {
     onChange({ ...config, ...patch });
@@ -246,13 +254,16 @@ export function ChartEditPanel({
   };
 
   const handleChartTypeChange = (next: ChartType): void => {
-    const nextWantsMulti = next === "ring" || next === "stacked_bar";
+    const nextWantsMulti =
+      next === "ring" || next === "stacked_bar" || next === "calendar";
 
     if (nextWantsMulti && !isMulti) return; // disabled — should be visually
     if (!nextWantsMulti && isMulti) return;
+    if (next === "calendar" && !isTraining) return;
 
     // Aggregation reset rules:
     //   - ring REQUIRES range_total
+    //   - calendar es siempre daily (el runtime lo fuerza igual)
     //   - kpi tolerates any aggregation
     //   - everything else requires a time-bucketed aggregation, so any
     //     "range_total" carry-over from a previous chart_type must be
@@ -261,9 +272,11 @@ export function ChartEditPanel({
     const nextAggregation: Aggregation =
       next === "ring"
         ? "range_total"
-        : config.aggregation === "range_total" && next !== "kpi"
-          ? "checkin_period"
-          : config.aggregation;
+        : next === "calendar"
+          ? "daily"
+          : config.aggregation === "range_total" && next !== "kpi"
+            ? "checkin_period"
+            : config.aggregation;
 
     const nextColor: ColorToken | ColorToken[] = nextWantsMulti
       ? Array.isArray(config.color)
@@ -441,7 +454,7 @@ export function ChartEditPanel({
               <div className="flex flex-wrap gap-1.5">
                 {CHART_TYPES.filter((t) => t.multi).map((t) => {
                   const active = config.chart_type === t.id;
-                  const compatible = isMulti;
+                  const compatible = t.id === "calendar" ? isTraining : isMulti;
 
                   return (
                     <button
@@ -459,7 +472,9 @@ export function ChartEditPanel({
                       title={
                         compatible
                           ? undefined
-                          : "Solo disponible con métricas de varias series (p. ej. Macros, Entrenamiento)"
+                          : t.id === "calendar"
+                            ? "Solo disponible con la métrica Entrenamiento"
+                            : "Solo disponible con métricas de varias series (p. ej. Macros, Entrenamiento)"
                       }
                       type="button"
                       onClick={() => handleChartTypeChange(t.id)}
@@ -484,7 +499,8 @@ export function ChartEditPanel({
               ) : null}
               {!isMulti &&
               (config.chart_type === "ring" ||
-                config.chart_type === "stacked_bar") ? (
+                config.chart_type === "stacked_bar" ||
+                config.chart_type === "calendar") ? (
                 <p className="text-[10px] text-warning mt-1">
                   Combinación inválida — selecciona un tipo de una serie.
                 </p>
@@ -788,7 +804,10 @@ export function ChartEditPanel({
               </p>
               <Select
                 aria-label="Agrupación"
-                isDisabled={config.chart_type === "ring"}
+                isDisabled={
+                  config.chart_type === "ring" ||
+                  config.chart_type === "calendar"
+                }
                 selectedKeys={[config.aggregation]}
                 size="sm"
                 onChange={(e) =>
@@ -811,6 +830,11 @@ export function ChartEditPanel({
               {config.chart_type === "ring" ? (
                 <p className="text-[10px] text-foreground/40 mt-1">
                   Las gráficas de anillo se calculan sobre todo el rango.
+                </p>
+              ) : null}
+              {config.chart_type === "calendar" ? (
+                <p className="text-[10px] text-foreground/40 mt-1">
+                  El calendario siempre muestra un punto por día.
                 </p>
               ) : null}
             </div>

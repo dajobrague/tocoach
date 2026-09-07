@@ -40,6 +40,7 @@ import { headerStatValue, type HeaderStatMode } from "./header-stat";
 import { useHeaderStatPref } from "./use-header-stat-pref";
 import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
+import { RATING_MAX } from "@/lib/forms/types";
 import { resolveColor } from "@/lib/charts/palette";
 
 interface Props {
@@ -55,6 +56,8 @@ interface Props {
   unit?: string;
   /** Forwarded to the renderer; comes from adapter.metadata.y_max. */
   yMax?: number;
+  /** Valoración 1–RATING_MAX (adapter.metadata.rating): estrellas en el header. */
+  rating?: boolean;
   series?: ReadonlyArray<{ id: string; label: string }>;
   editable?: boolean;
   editOverlay?: React.ReactNode;
@@ -89,9 +92,10 @@ function NoDataOverlay() {
 }
 
 /**
- * Toggle Último/Media junto al número grande. Es preferencia del
- * ESPECTADOR (cliente o trainer), compartida entre todas las cards vía
- * useHeaderStatPref — no config por gráfica del trainer.
+ * Toggle Media/Último junto al número grande. Es preferencia del
+ * ESPECTADOR (cliente o trainer), por gráfica, vía useHeaderStatPref —
+ * no config del trainer. Media va primero: es lo que se consulta a
+ * diario; Último es para consultas puntuales (JC, sep-2026).
  */
 function HeaderStatToggle({
   mode,
@@ -121,9 +125,46 @@ function HeaderStatToggle({
       className="flex items-center rounded-lg bg-default-100 p-0.5 text-[10px] font-medium flex-shrink-0 mb-1"
       role="group"
     >
-      {segment("latest", "Último")}
       {segment("average", "Media")}
+      {segment("latest", "Último")}
     </div>
+  );
+}
+
+/**
+ * Valoración 1–RATING_MAX con las MISMAS estrellas que el formulario del
+ * cliente (dynamic-form-modal: `solar:star-bold`, warning = llena,
+ * default-300 = vacía). El valor exacto va al lado porque una media de
+ * 3,6 y una de 4,4 redondean a la misma estrella.
+ */
+function RatingStars({ value, muted }: { value: number; muted: boolean }) {
+  const filled = Math.round(Math.max(0, Math.min(RATING_MAX, value)));
+
+  return (
+    <span
+      aria-label={`${formatNumber(value, 1)} de ${RATING_MAX}`}
+      className="inline-flex items-center gap-1.5"
+      role="img"
+    >
+      <span className="flex items-center">
+        {Array.from({ length: RATING_MAX }, (_, i) => (
+          <Icon
+            key={i}
+            className={`text-2xl ${
+              i < filled
+                ? muted
+                  ? "text-warning/40"
+                  : "text-warning"
+                : "text-default-300"
+            }`}
+            icon="solar:star-bold"
+          />
+        ))}
+      </span>
+      <span className="text-base text-foreground/40 font-medium tabular-nums">
+        {formatNumber(value, 1)}
+      </span>
+    </span>
   );
 }
 
@@ -147,6 +188,7 @@ export function ChartCard({
   icon,
   unit,
   yMax,
+  rating,
   series,
   editable,
   editOverlay,
@@ -158,7 +200,11 @@ export function ChartCard({
     config.chart_type === "line" ||
     config.chart_type === "area" ||
     config.chart_type === "bar";
-  const [statMode, setStatMode] = useHeaderStatPref();
+  const [statMode, setStatMode] = useHeaderStatPref(config.id);
+  // Unidad y rating vienen de la metadata de la fuente (form_templates),
+  // resuelta por chart-surface / charts-section. Nada se adivina por id.
+  const displayUnit = unit;
+  const isRating = rating === true;
   // The header's stat is viewer-selectable for 1-D charts (latest non-null
   // or the range mean — same avgNonNull as the dashed reference line);
   // ring (range_total) shows the sum of its series; kpi shows nothing in
@@ -182,7 +228,11 @@ export function ChartCard({
 
       return null;
     }
-    if (config.chart_type === "stacked_bar" || config.chart_type === "kpi") {
+    if (
+      config.chart_type === "stacked_bar" ||
+      config.chart_type === "kpi" ||
+      config.chart_type === "calendar"
+    ) {
       return null;
     }
 
@@ -253,24 +303,32 @@ export function ChartCard({
             </div>
           ) : null}
         </div>
-        {config.chart_type !== "kpi" && !isPhotoTimeline ? (
+        {/* calendar lleva sus totales bajo la grilla; el número grande
+            sobra ahí. */}
+        {config.chart_type !== "kpi" &&
+        config.chart_type !== "calendar" &&
+        !isPhotoTimeline ? (
           <div className="flex items-end justify-between gap-2 mb-3">
-            <p
-              className={`text-4xl font-bold tabular-nums ${
-                noData ? "text-foreground/30" : "text-foreground"
-              }`}
-            >
-              {headerValue === null
-                ? isLoading
-                  ? ""
-                  : "—"
-                : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
-              {headerValue !== null && unit ? (
-                <span className="text-base text-foreground/40 ml-1 font-medium">
-                  {unit}
-                </span>
-              ) : null}
-            </p>
+            {headerValue !== null && isRating ? (
+              <RatingStars muted={noData} value={headerValue} />
+            ) : (
+              <p
+                className={`text-4xl font-bold tabular-nums ${
+                  noData ? "text-foreground/30" : "text-foreground"
+                }`}
+              >
+                {headerValue === null
+                  ? isLoading
+                    ? ""
+                    : "—"
+                  : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
+                {headerValue !== null && displayUnit ? (
+                  <span className="text-base text-foreground/40 ml-1 font-medium">
+                    {displayUnit}
+                  </span>
+                ) : null}
+              </p>
+            )}
             {hasStatToggle && !isLoading && !orphan && !noData ? (
               <HeaderStatToggle mode={statMode} onChange={setStatMode} />
             ) : null}
@@ -299,7 +357,11 @@ export function ChartCard({
                 buckets={buckets!}
                 config={config}
                 {...(series !== undefined ? { series } : {})}
-                {...(yMax !== undefined ? { yMax } : {})}
+                {...(yMax !== undefined
+                  ? { yMax }
+                  : isRating
+                    ? { yMax: RATING_MAX }
+                    : {})}
               />
             </ChartErrorBoundary>
             {noData ? <NoDataOverlay /> : null}

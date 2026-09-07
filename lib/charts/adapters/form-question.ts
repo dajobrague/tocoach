@@ -32,6 +32,8 @@ import type { AdapterContext, DataAdapter } from "./types";
 
 import { averageInWindow, generateBuckets } from "./bucketing";
 
+import { RATING_MAX } from "@/lib/forms/types";
+
 export interface FormQuestionAdapterSpec {
   /** The form_type the question lives in. */
   formType: FormType;
@@ -46,7 +48,7 @@ export interface FormQuestionAdapterSpec {
    * routes through a photo timeline path instead of numeric bucketing.
    * Defaults to numeric.
    */
-  kind?: "numeric" | "photo";
+  kind?: "numeric" | "photo" | "rating";
 }
 
 const ES_SHORT_MONTHS = [
@@ -97,6 +99,7 @@ export function buildFormQuestionAdapter(
 ): DataAdapter {
   const id = `form_q:${spec.formType}:${spec.questionId}`;
   const isPhoto = spec.kind === "photo";
+  const isRating = spec.kind === "rating";
 
   // Sin icono por defecto: el trainer elige explícitamente via icon
   // picker. Antes los adapters traían "solar:gallery-bold" (photo) y los
@@ -107,6 +110,7 @@ export function buildFormQuestionAdapter(
     id,
     label: spec.label,
     ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
+    ...(isRating ? { y_max: RATING_MAX, rating: true as const } : {}),
     category: spec.formType === "checkins" ? "checkin" : "habit",
     dimensions: isPhoto ? "photo" : 1,
     default_chart_type: isPhoto ? "photo_timeline" : "area",

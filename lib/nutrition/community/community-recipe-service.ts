@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { randomUUID } from "node:crypto";
 
+import { TagService } from "@/lib/library/tag-service";
 import {
   RECIPE_MEDIA_BUCKET,
   storagePathFromUrl,
@@ -311,6 +312,10 @@ export class CommunityRecipeService {
     }
 
     const recipe = created as RecipeRow;
+
+    // The copied tags come from another tenant: register the ones this
+    // tenant's registry does not know so they show in suggestions/filters.
+    await new TagService(this.client).ensure(targetTenantHost, "recipe", tags);
 
     for (const line of source.ingredients ?? []) {
       const { error: lineError } = await this.client

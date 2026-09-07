@@ -22,6 +22,7 @@ vi.mock("@/lib/clients/supabase-api", () => ({
   createSupabaseClient: vi.fn(() => ({})),
 }));
 vi.mock("@/lib/nutrition/recipes/recipe-service", () => ({
+  RecipeValidationError: class RecipeValidationError extends Error {},
   RecipeService: vi.fn(function RecipeServiceStub() {
     return {
       create: createMock,
@@ -42,6 +43,7 @@ import {
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
+import { RecipeValidationError } from "@/lib/nutrition/recipes/recipe-service";
 
 const mockedSession = vi.mocked(getTrainerSession);
 const mockedFlag = vi.mocked(isNutritionV2TrainerEnabled);
@@ -160,7 +162,9 @@ describe("GET /api/recipes", () => {
   it("returns 200 with the service results", async () => {
     listMock.mockResolvedValue([sampleRecipe]);
 
-    const res = await listGET(listReq("?status=active&tag=lunch&q=so"));
+    const res = await listGET(
+      listReq("?status=active&tag=lunch&tag=vegan&q=so")
+    );
 
     expect(res.status).toBe(200);
 
@@ -169,9 +173,29 @@ describe("GET /api/recipes", () => {
     expect(body).toEqual({ success: true, data: [sampleRecipe] });
     expect(listMock).toHaveBeenCalledWith("acme.tenant", {
       status: "active",
-      mealType: "lunch",
+      mealTypes: ["lunch", "vegan"],
       query: "so",
     });
+  });
+});
+
+describe("GET /api/recipes?folder=", () => {
+  it("root → folderId null, a uuid → that folder, composing with ?tag=", async () => {
+    listMock.mockResolvedValue([]);
+
+    await listGET(listReq("?folder=root&tag=vegano"));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", {
+      mealTypes: ["vegano"],
+      folderId: null,
+    });
+
+    const id = "1da1abf5-c8dd-40d8-a704-aabfabf360b5";
+
+    await listGET(listReq(`?folder=${id}`));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", { folderId: id });
+
+    await listGET(listReq("?folder=Cenas"));
+    expect(listMock).toHaveBeenLastCalledWith("acme.tenant", {});
   });
 });
 
@@ -231,6 +255,44 @@ describe("PATCH /api/recipes/[id]", () => {
 
   it("returns 400 when name is blanked", async () => {
     const res = await updatePATCH(...idArgs("r1", "PATCH", { name: "  " }));
+
+    expect(res.status).toBe(400);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("a { folder_id } body moves the recipe and touches nothing else", async () => {
+    updateMock.mockResolvedValue(sampleRecipe);
+    const id = "1da1abf5-c8dd-40d8-a704-aabfabf360b5";
+
+    await updatePATCH(...idArgs("r1", "PATCH", { folder_id: id }));
+    expect(updateMock).toHaveBeenLastCalledWith("acme.tenant", "r1", {
+      folderId: id,
+    });
+
+    await updatePATCH(...idArgs("r1", "PATCH", { folder_id: null }));
+    expect(updateMock).toHaveBeenLastCalledWith("acme.tenant", "r1", {
+      folderId: null,
+    });
+  });
+
+  it("returns 400 when the service rejects the folder (not the tenant's)", async () => {
+    updateMock.mockRejectedValue(
+      new RecipeValidationError("Carpeta no encontrada")
+    );
+
+    const res = await updatePATCH(
+      ...idArgs("r1", "PATCH", {
+        folder_id: "00000000-0000-4000-8000-000000000000",
+      })
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a malformed folder_id", async () => {
+    const res = await updatePATCH(
+      ...idArgs("r1", "PATCH", { folder_id: "Cenas" })
+    );
 
     expect(res.status).toBe(400);
     expect(updateMock).not.toHaveBeenCalled();

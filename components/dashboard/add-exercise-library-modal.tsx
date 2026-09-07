@@ -16,6 +16,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
   extractVideoPathFromUrl,
@@ -49,6 +50,7 @@ export default function AddExerciseLibraryModal({
     instructions: [] as string[],
     tips: [] as string[],
     cardio_type: "",
+    tags: [] as string[],
   });
   const [muscleGroupInput, setMuscleGroupInput] = useState("");
   const [equipmentInput, setEquipmentInput] = useState("");
@@ -232,7 +234,11 @@ export default function AddExerciseLibraryModal({
       const response = await fetch("/api/exercises", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        // Sent only when set: the tags column may not be migrated yet.
+        body: JSON.stringify({
+          ...formData,
+          tags: formData.tags.length > 0 ? formData.tags : undefined,
+        }),
       });
 
       const result = await response.json();
@@ -265,6 +271,7 @@ export default function AddExerciseLibraryModal({
       instructions: [],
       tips: [],
       cardio_type: "",
+      tags: [] as string[],
     });
     setImagePreview(null);
     if (videoPreview) URL.revokeObjectURL(videoPreview);
@@ -712,6 +719,17 @@ export default function AddExerciseLibraryModal({
                   Detalles Adicionales (Opcional)
                 </h4>
                 <div className="space-y-4">
+                  <TagsField
+                    description="Para filtrar la biblioteca al montar sesiones. Ej. pectoral, mancuernas, barra, empuje."
+                    disabled={isSubmitting}
+                    kind="exercise"
+                    placeholder="Ej. pectoral, mancuernas, barra..."
+                    value={formData.tags}
+                    onChange={(tags) =>
+                      setFormData((prev) => ({ ...prev, tags }))
+                    }
+                  />
+
                   {/* Muscle Groups - Only for strength */}
                   {formData.category === "strength" && (
                     <div>

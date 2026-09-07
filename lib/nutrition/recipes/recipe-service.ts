@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { FolderService } from "@/lib/library/folder-service";
+
 const TABLE = "recipes";
 
 export type RecipeStatus = "draft" | "active" | "archived";
@@ -15,6 +17,8 @@ export interface RecipeRow {
   prep_time_min: number | null;
   cook_time_min: number | null;
   meal_type_tags: string[];
+  /** The one folder the recipe lives in; null = root. */
+  folder_id: string | null;
   status: RecipeStatus;
   kcal: number;
   protein_g: number;
@@ -36,6 +40,8 @@ export interface RecipeCreateInput {
   description?: string;
   instructions?: string;
   mealTypeTags?: string[];
+  /** null = root. Must be one of the tenant's folders. */
+  folderId?: string | null;
   prepTimeMin?: number;
   cookTimeMin?: number;
   status?: RecipeStatus;
@@ -46,6 +52,8 @@ export interface RecipeUpdateInput {
   description?: string;
   instructions?: string;
   mealTypeTags?: string[];
+  /** null = move to the root. Must be one of the tenant's folders. */
+  folderId?: string | null;
   prepTimeMin?: number;
   cookTimeMin?: number;
   status?: RecipeStatus;
@@ -53,7 +61,11 @@ export interface RecipeUpdateInput {
 
 export interface RecipeListFilter {
   status?: RecipeStatus;
-  mealType?: string;
+  /** Every listed tag must be present (AND). */
+  mealTypes?: string[];
+  /** null = recipes outside every folder; a folder id = its direct members.
+   *  Composes with the tag filter (folder AND tags). */
+  folderId?: string | null;
   query?: string;
 }
 
@@ -96,6 +108,10 @@ export class RecipeService {
       payload.description = input.description;
     if (input.instructions !== undefined) {
       payload.instructions = input.instructions;
+    }
+    if (input.folderId !== undefined) {
+      await this.assertFolder(tenantHost, input.folderId);
+      payload.folder_id = input.folderId;
     }
     if (input.prepTimeMin !== undefined)
       payload.prep_time_min = input.prepTimeMin;
@@ -145,8 +161,15 @@ export class RecipeService {
       query = query.eq("status", filter.status);
     }
 
-    if (filter.mealType !== undefined && filter.mealType.length > 0) {
-      query = query.contains("meal_type_tags", [filter.mealType]);
+    if (filter.mealTypes !== undefined && filter.mealTypes.length > 0) {
+      // Array containment (@>) = the row has ALL the given tags.
+      query = query.contains("meal_type_tags", filter.mealTypes);
+    }
+
+    if (filter.folderId === null) {
+      query = query.is("folder_id", null);
+    } else if (filter.folderId !== undefined) {
+      query = query.eq("folder_id", filter.folderId);
     }
 
     if (filter.query !== undefined && filter.query.length > 0) {
@@ -195,6 +218,10 @@ export class RecipeService {
     if (patch.mealTypeTags !== undefined) {
       updates.meal_type_tags = patch.mealTypeTags;
     }
+    if (patch.folderId !== undefined) {
+      await this.assertFolder(tenantHost, patch.folderId);
+      updates.folder_id = patch.folderId;
+    }
     if (patch.prepTimeMin !== undefined)
       updates.prep_time_min = patch.prepTimeMin;
     if (patch.cookTimeMin !== undefined)
@@ -218,6 +245,20 @@ export class RecipeService {
     }
 
     return (data as RecipeRow | null) ?? null;
+  }
+
+  /** A folder id must be one of the tenant's own (null = root is fine). */
+  private async assertFolder(
+    tenantHost: string,
+    folderId: string | null
+  ): Promise<void> {
+    if (folderId === null) return;
+
+    const folders = new FolderService(this.client, { table: "recipe_folders" });
+
+    if ((await folders.exists(tenantHost, folderId)) === false) {
+      throw new RecipeValidationError("Carpeta no encontrada");
+    }
   }
 
   async archive(tenantHost: string, id: string): Promise<RecipeRow | null> {

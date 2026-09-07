@@ -50,7 +50,7 @@ import {
   useUpdateClientCharts,
   type ChartRange,
 } from "@/lib/charts/hooks";
-import { getEffectiveAggregation } from "@/lib/charts/aggregation";
+import { RANGE_DAYS, getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 import { buildStarterDocument } from "@/lib/charts/starter";
@@ -314,7 +314,9 @@ export function ChartSurface({ mode, clientId }: Props) {
     const snapshotPhotos = snapshotQuery.data?.photoBuckets;
 
     return doc.charts.map((chart) => {
-      const adapter = resolveAdapter(chart.source);
+      const adapter = resolveAdapter(chart.source, {
+        sources: sourcesQuery.data,
+      });
       let buckets: BucketedPoint[] | undefined;
       let photos: PhotoPoint[] | undefined;
       const isPhotoTimeline = chart.chart_type === "photo_timeline";
@@ -337,7 +339,13 @@ export function ChartSurface({ mode, clientId }: Props) {
               ? chart
               : { ...chart, aggregation: effectiveAgg };
 
-          buckets = synthesizeDemoBuckets(effectiveChart, adapter?.metadata);
+          // calendar: un bucket por día del rango para que la preview
+          // tenga las mismas filas que verá el cliente.
+          buckets = synthesizeDemoBuckets(
+            effectiveChart,
+            adapter?.metadata,
+            chart.chart_type === "calendar" ? (RANGE_DAYS[range] ?? 30) : 12
+          );
         }
       } else if (isPhotoTimeline) {
         photos = snapshotPhotos?.[chart.id]?.photos;
@@ -355,7 +363,10 @@ export function ChartSurface({ mode, clientId }: Props) {
 
       return { chart, adapter, buckets, photos, series };
     });
-  }, [doc, snapshotQuery.data, mode, range]);
+    // sourcesQuery.data: la demo del editor depende de la metadata de la
+    // fuente (rating / unit); sin esta dep se quedaba con el preset 0–100
+    // hasta el siguiente cambio de rango.
+  }, [doc, snapshotQuery.data, sourcesQuery.data, mode, range]);
 
   // ─── Editing handlers ──────────────────────────────────────────────────
 
@@ -747,6 +758,7 @@ export function ChartSurface({ mode, clientId }: Props) {
               {...(adapter?.metadata.y_max !== undefined
                 ? { yMax: adapter.metadata.y_max }
                 : {})}
+              {...(adapter?.metadata.rating === true ? { rating: true } : {})}
               orphan={!adapter}
               {...(series !== undefined ? { series } : {})}
             />
@@ -895,6 +907,7 @@ export function ChartSurface({ mode, clientId }: Props) {
 
 const PERIOD_OPTIONS: ReadonlyArray<{ value: ChartRange; label: string }> = [
   { value: "7d", label: "7d" },
+  { value: "14d", label: "14d" },
   { value: "30d", label: "30d" },
   { value: "90d", label: "3m" },
   { value: "6m", label: "6m" },

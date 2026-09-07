@@ -32,6 +32,8 @@ import { useEffect, useMemo, useState } from "react";
 import { TrainingApiError } from "./training-api";
 import { useExerciseLibrarySearch, useExerciseMutations } from "./use-training";
 
+import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+
 export interface ExerciseDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -182,6 +184,9 @@ export function ExerciseDrawer({
   const [term, setTerm] = useState("");
   // Filtro rápido por categoría (chips bajo el buscador); null = todas.
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  // Etiquetas combinadas (Sep 2, JC): "cliente en casa con barra y
+  // mancuernas, quiero meterle un pectoral → filtrar por".
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [selected, setSelected] = useState<SelectedExercise | null>(null);
   const isCardio =
     selected !== null
@@ -195,7 +200,7 @@ export function ExerciseDrawer({
   // Biblioteca SIN acotar (corrección de David): la sesión puede mezclar
   // tipos, así que se puede elegir cualquier ejercicio y los campos pedidos
   // se adaptan al elegido.
-  const library = useExerciseLibrarySearch(term, undefined);
+  const library = useExerciseLibrarySearch(term, undefined, tagFilter);
   // Chips de filtro: categorías presentes en el resultado, por frecuencia.
   const availableCategories = useMemo(() => {
     const counts = new Map<string, number>();
@@ -233,6 +238,7 @@ export function ExerciseDrawer({
 
     setTerm("");
     setCategoryFilter(null);
+    setTagFilter([]);
     setSwapArmed(false);
     setSubmitError(null);
 
@@ -475,6 +481,14 @@ export function ExerciseDrawer({
                   onValueChange={setTerm}
                 />
 
+                <TagFilterSelect
+                  className="w-full"
+                  kind="exercise"
+                  size="sm"
+                  value={tagFilter}
+                  onChange={setTagFilter}
+                />
+
                 {availableCategories.length > 1 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {[null, ...availableCategories].map((cat) => {
@@ -521,9 +535,11 @@ export function ExerciseDrawer({
                       width={28}
                     />
                     <p className="text-sm text-default-500">
-                      {term.trim().length > 0
-                        ? "No encontramos ejercicios con ese nombre."
-                        : "Tu biblioteca no tiene ejercicios todavía."}
+                      {tagFilter.length > 0
+                        ? "Ningún ejercicio tiene todas esas etiquetas."
+                        : term.trim().length > 0
+                          ? "No encontramos ejercicios con ese nombre."
+                          : "Tu biblioteca no tiene ejercicios todavía."}
                     </p>
                   </div>
                 ) : (

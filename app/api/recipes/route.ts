@@ -7,7 +7,10 @@ import {
   parseCreateInput,
   parseListFilter,
 } from "@/lib/nutrition/recipes/recipe-request";
-import { RecipeService } from "@/lib/nutrition/recipes/recipe-service";
+import {
+  RecipeService,
+  RecipeValidationError,
+} from "@/lib/nutrition/recipes/recipe-service";
 
 const LOG_PREFIX = "[Recipes API]";
 
@@ -69,6 +72,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: recipe }, { status: 201 });
   } catch (error) {
+    if (error instanceof RecipeValidationError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      );
+    }
+
     console.error(`${LOG_PREFIX} create error:`, {
       correlationId: guard.correlationId,
       error: errorMessage(error),

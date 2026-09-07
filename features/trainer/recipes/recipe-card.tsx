@@ -15,6 +15,9 @@ interface RecipeCardProps {
   onMove?: (recipe: RecipeListItem) => void;
 }
 
+/** Chips shown under the title before collapsing the rest into "+N". */
+const MAX_VISIBLE_TAGS = 3;
+
 export function RecipeCard({
   recipe,
   onOpen,
@@ -25,6 +28,10 @@ export function RecipeCard({
     recipe.thumbnailUrl !== undefined &&
     recipe.thumbnailUrl !== null &&
     recipe.thumbnailUrl.length > 0;
+  // Every chip is a tag (folders never show as chips).
+  const tags = recipe.meal_type_tags.filter((tag) => tag.trim().length > 0);
+  const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
+  const extraCount = tags.length - visibleTags.length;
 
   return (
     <div className="group relative h-full">
@@ -98,10 +105,32 @@ export function RecipeCard({
             </Chip>
           </div>
 
-          <div className="p-4">
+          <div className="flex flex-col gap-1.5 p-4">
             <h3 className="line-clamp-2 text-sm font-semibold text-gray-900">
               {recipe.name}
             </h3>
+            {/* Tags at a glance (Sep 2 call, JC): see which recipes in a
+                folder meet a condition without opening the filter. */}
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {visibleTags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    className="min-w-0 max-w-[10rem]"
+                    classNames={{ content: "truncate" }}
+                    size="sm"
+                    variant="flat"
+                  >
+                    {tag}
+                  </Chip>
+                ))}
+                {extraCount > 0 && (
+                  <Chip className="text-default-500" size="sm" variant="flat">
+                    +{extraCount}
+                  </Chip>
+                )}
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>

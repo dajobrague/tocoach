@@ -56,9 +56,16 @@ Historical note: the `host` parameter in `lib/tenant/loader.ts` is named for the
 
 ### Data layer — 100% Supabase
 
-Airtable was fully removed in October 2025 (see `docs/architecture/auth-adr-v2.md`). Both trainers and clients are rows in `auth.users` with profile rows in `trainer_profiles` / `client_profiles` and a `trainer_clients` join table. Tenant isolation is enforced by **RLS policies**, not application code — when adding a new table, add migrations under `supabase/migrations/` (numbered, sequential) and write RLS policies that filter on `tenant_host` / `tenant_slug`.
+Airtable was fully removed in October 2025 (see `docs/architecture/auth-adr-v2.md`). Both trainers and clients are rows in `auth.users` with profile rows in `trainer_profiles` / `client_profiles` and a `trainer_clients` join table. **Tenant isolation is the `tenant_host` / `tenant_slug` filter in each service, not RLS.** Every server query goes through the service-role factory `lib/clients/supabase-admin.ts` (guarded by `server-only`; `supabase-server.ts` / `supabase-api.ts` delegate to it), which bypasses RLS — a query without the tenant filter reads every tenant. When adding a new table, add a migration under `supabase/migrations/` (numbered, sequential) and filter by tenant in the service; do not grant anything to `anon` / `authenticated`.
 
-The middleware uses the anon key with a fresh `createClient` call (no session persistence). Server code should prefer the anon key + RLS over the service role key; the service role bypasses RLS and is only justified for true admin operations (e.g. trainer password reset).
+The `anon` and `authenticated` roles have **no grants** on `public` tables (migration `20260907120000_revoke_anon_table_access.sql`), so the public anon key cannot read or write data; it only serves GoTrue login flows and the Realtime socket. The middleware uses an inline service-role client (no `server-only` in that bundle) for the `tenants.slug/status` lookup only. Browser Realtime (`lib/hooks/use-realtime-*`) joins channels with a short-lived JWT from `GET /api/realtime/token`, signed with `SUPABASE_JWT_SECRET`; `messages` / `notifications` keep `SELECT` for `authenticated` behind policies that read that token's claims.
+
+Server-only environment variables (see `.env.example`):
+
+- `JWT_SECRET` — signs the app's own trainer/admin/client session cookies. Boot fails without it.
+- `SUPABASE_SERVICE_ROLE_KEY` — every server-side Supabase query.
+- `SUPABASE_JWT_SECRET` — the Supabase **project** JWT secret (Settings → API → JWT Secret). Signs the Realtime token; it is a different value from `JWT_SECRET` and has no fallback. Missing it disables Realtime (endpoint returns 500 and logs) but does not break the app.
+- `CRON_SECRET` — shared secret for `GET /api/cron/cleanup-otps`.
 
 ### Service worker caching trap
 

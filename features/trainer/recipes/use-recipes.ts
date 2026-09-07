@@ -13,7 +13,7 @@ export function useRecipes(filters: RecipeFilters) {
       "recipes",
       filters.query ?? "",
       filters.status ?? "",
-      filters.mealType ?? "",
+      filters.tags ?? [],
     ],
     queryFn: () => fetchRecipes(filters),
   });

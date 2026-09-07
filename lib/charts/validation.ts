@@ -41,6 +41,7 @@ const chartTypeSchema = z.enum([
   "ring",
   "kpi",
   "photo_timeline",
+  "calendar",
 ] as const);
 
 const aggregationSchema = z.enum([
@@ -90,7 +91,9 @@ const targetZoneSchema = z
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 const isMultiDim = (chartType: ChartType): boolean =>
-  chartType === "ring" || chartType === "stacked_bar";
+  chartType === "ring" ||
+  chartType === "stacked_bar" ||
+  chartType === "calendar";
 
 const allowsTargetZone = (chartType: ChartType): boolean =>
   (TARGET_ZONE_CHART_TYPES as readonly string[]).includes(chartType);
@@ -205,6 +208,19 @@ export const chartConfigSchema = z
         code: "custom",
         path: ["chart_type"],
         message: "photo_timeline requires a form_question source",
+      });
+    }
+
+    // calendar = fuerza/cardio/descanso por día: solo tiene sentido sobre
+    // training_breakdown (macros_breakdown no es "hubo o no hubo").
+    if (
+      cfg.chart_type === "calendar" &&
+      !(cfg.source.kind === "catalog" && cfg.source.id === "training_breakdown")
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["chart_type"],
+        message: "calendar charts require the training_breakdown source",
       });
     }
 

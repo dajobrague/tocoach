@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabaseBrowserClient } from "@/lib/clients/supabase-browser";
+import { getRealtimeToken } from "@/lib/realtime/realtime-token";
 
 export interface RealtimeNotification {
   id: string;
@@ -74,82 +75,116 @@ export function useRealtimeNotifications({
 
     setHasAttempted(false);
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `${filterColumn}=eq.${userId}`,
-        },
-        (payload) => {
-          const notification = payload.new as RealtimeNotification;
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
 
-          // Las filas de chat llevan client_id Y trainer_id, así que ambas
-          // suscripciones las reciben; metadata.audience scope-a qué campana
-          // puede mostrarlas (filas legacy sin audience pasan siempre).
-          const audience = (
-            notification.metadata as { audience?: string } | null
-          )?.audience;
+    const subscribe = () => {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `${filterColumn}=eq.${userId}`,
+          },
+          (payload) => {
+            const notification = payload.new as RealtimeNotification;
 
-          if (audience && audience !== userType) return;
+            // Las filas de chat llevan client_id Y trainer_id, así que ambas
+            // suscripciones las reciben; metadata.audience scope-a qué campana
+            // puede mostrarlas (filas legacy sin audience pasan siempre).
+            const audience = (
+              notification.metadata as { audience?: string } | null
+            )?.audience;
 
-          setLatestNotification(notification);
-          if (!notification.read_at) {
-            setUnreadCount((prev) => prev + 1);
+            if (audience && audience !== userType) return;
+
+            setLatestNotification(notification);
+            if (!notification.read_at) {
+              setUnreadCount((prev) => prev + 1);
+            }
+            setRefreshTrigger((prev) => prev + 1);
+            onNewNotificationRef.current?.(notification);
           }
-          setRefreshTrigger((prev) => prev + 1);
-          onNewNotificationRef.current?.(notification);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: `${filterColumn}=eq.${userId}`,
-        },
-        (payload) => {
-          const updated = payload.new as RealtimeNotification;
-          const old = payload.old as Partial<RealtimeNotification>;
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `${filterColumn}=eq.${userId}`,
+          },
+          (payload) => {
+            const updated = payload.new as RealtimeNotification;
+            const old = payload.old as Partial<RealtimeNotification>;
 
-          const audience = (updated.metadata as { audience?: string } | null)
-            ?.audience;
+            const audience = (updated.metadata as { audience?: string } | null)
+              ?.audience;
 
-          if (audience && audience !== userType) return;
+            if (audience && audience !== userType) return;
 
-          // Notification was just marked as read from another device/tab
-          if (updated.read_at && !old.read_at) {
-            setUnreadCount((prev) => Math.max(0, prev - 1));
+            // Notification was just marked as read from another device/tab
+            if (updated.read_at && !old.read_at) {
+              setUnreadCount((prev) => Math.max(0, prev - 1));
+            }
+            setRefreshTrigger((prev) => prev + 1);
           }
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      )
-      .subscribe((status) => {
+        )
+        .subscribe((status, err) => {
+          setHasAttempted(true);
+          const connected = status === "SUBSCRIBED";
+
+          if (connected && wasDisconnectedRef.current) {
+            setRefreshTrigger((prev) => prev + 1);
+            onRefreshNeededRef.current?.();
+            wasDisconnectedRef.current = false;
+          }
+
+          if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            console.warn(
+              "[Realtime] channel",
+              status,
+              err instanceof Error ? err.message : (err ?? "")
+            );
+            wasDisconnectedRef.current = true;
+          }
+
+          setIsConnected(connected);
+        });
+
+      channelRef.current = channel;
+    };
+
+    // The channel must join with the app-signed token: without it Realtime
+    // sees the anon role, which has no grants, and delivers nothing. No token
+    // (no session / server not configured) → no channel; hasAttempted flips
+    // so the dropdown falls back to polling instead of waiting forever.
+    void (async () => {
+      const token = await getRealtimeToken(userType);
+
+      if (cancelled) return;
+
+      if (!token) {
+        // eslint-disable-next-line no-console
+        console.warn("[Realtime] no token — notifications channel not opened");
         setHasAttempted(true);
-        const connected = status === "SUBSCRIBED";
 
-        if (connected && wasDisconnectedRef.current) {
-          setRefreshTrigger((prev) => prev + 1);
-          onRefreshNeededRef.current?.();
-          wasDisconnectedRef.current = false;
-        }
+        return;
+      }
 
-        if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          wasDisconnectedRef.current = true;
-        }
+      // Sets the join payload before subscribe(); the accessToken callback on
+      // the client keeps it fresh afterwards.
+      await supabase.realtime.setAuth(token);
 
-        setIsConnected(connected);
-      });
-
-    channelRef.current = channel;
+      if (!cancelled) subscribe();
+    })();
 
     // Visibility-change handler: refetch when user returns to the tab
     const handleVisibilityChange = () => {
@@ -162,8 +197,9 @@ export function useRealtimeNotifications({
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
       channelRef.current = null;
     };
   }, [userId, userType]);

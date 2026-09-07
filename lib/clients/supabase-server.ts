@@ -1,27 +1,15 @@
 /**
- * Server-side Supabase client with type safety
- * Use this for API routes and server components
+ * Typed server-side Supabase client for API routes and server components.
+ * Thin wrapper over the single service-role factory in `supabase-admin.ts`;
+ * kept for its `Database`-typed return and the module singleton below.
  */
 
 import type { Database } from "@/types/supabase";
 
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "./supabase-admin";
 
-// Server-side client (uses anon key with RLS)
 export function createServerSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables");
-  }
-
-  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  return createSupabaseAdminClient<Database>();
 }
 
 // Re-export for convenience

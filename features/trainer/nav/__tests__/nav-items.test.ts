@@ -51,3 +51,17 @@ describe("filterTrainerNav", () => {
     expect(leafKeys(TRAINER_NAV)).toContain("nutrition-update");
   });
 });
+
+describe("templates split", () => {
+  it("exposes training and nutrition as separate leaves with distinct routes", () => {
+    const leaves = flattenLeaves();
+    const hrefOf = (key: string) => leaves.find((l) => l.key === key)?.href;
+
+    // The training route keeps the historical URL so saved links still work.
+    expect(hrefOf("templates-training")).toBe("/trainer/dashboard/templates");
+    expect(hrefOf("templates-nutrition")).toBe(
+      "/trainer/dashboard/templates/nutrition"
+    );
+    expect(leafKeys()).not.toContain("templates-programs");
+  });
+});

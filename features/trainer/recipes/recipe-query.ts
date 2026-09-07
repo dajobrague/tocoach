@@ -6,6 +6,8 @@ export interface RecipeListItem {
   name: string;
   status: RecipeStatus;
   meal_type_tags: string[];
+  /** The one folder the recipe lives in; null = root. */
+  folder_id: string | null;
   kcal: number;
   protein_g: number;
   carbs_g: number;
@@ -17,13 +19,14 @@ export interface RecipeListItem {
 export interface RecipeFilters {
   query?: string;
   status?: RecipeStatus;
-  mealType?: string;
+  /** Every listed tag must be present (AND). */
+  tags?: string[];
 }
 
 /**
  * Build the GET /api/recipes query string from filters. Maps query→q,
- * status→status, mealType→tag, omitting empty values. Returns "" when no
- * filters are set (callers append it directly to the path).
+ * status→status, each tag→a repeated `tag` param, omitting empty values.
+ * Returns "" when no filters are set (callers append it directly to the path).
  */
 export function buildRecipesQuery(filters: RecipeFilters): string {
   const params = new URLSearchParams();
@@ -37,10 +40,10 @@ export function buildRecipesQuery(filters: RecipeFilters): string {
     params.set("status", filters.status);
   }
 
-  const mealType = filters.mealType?.trim();
+  for (const tag of filters.tags ?? []) {
+    const trimmed = tag.trim();
 
-  if (mealType !== undefined && mealType.length > 0) {
-    params.set("tag", mealType);
+    if (trimmed.length > 0) params.append("tag", trimmed);
   }
 
   const qs = params.toString();
@@ -67,24 +70,4 @@ export async function fetchRecipes(
   }
 
   return (data.data ?? []) as RecipeListItem[];
-}
-
-/** Distinct meal-type tags across a set of recipes, plus an always-kept extra. */
-export function distinctMealTypes(
-  recipes: RecipeListItem[],
-  alwaysInclude?: string
-): string[] {
-  const set = new Set<string>();
-
-  for (const recipe of recipes) {
-    for (const tag of recipe.meal_type_tags) {
-      if (tag.length > 0) set.add(tag);
-    }
-  }
-
-  if (alwaysInclude !== undefined && alwaysInclude.length > 0) {
-    set.add(alwaysInclude);
-  }
-
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
 }

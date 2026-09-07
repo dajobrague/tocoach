@@ -13,14 +13,22 @@ import {
   ModalFooter,
   ModalHeader,
   Spinner,
-  Tab,
-  Tabs,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import CreateTemplateModal from "./create-template-modal";
 import TemplateDetailModal from "./template-detail-modal";
+
+import { FolderBrowser } from "@/features/trainer/library/folder-browser";
+import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
+import { filterByTags } from "@/features/trainer/library/tags";
+import {
+  programFolderHooks,
+  useProgramFolders,
+} from "@/features/trainer/training/program-folders";
 
 interface Template {
   id: string;
@@ -32,6 +40,10 @@ interface Template {
   division?: string;
   goal?: string;
   sessionsPerWeek?: number;
+  /** Program templates only (programs.tags). */
+  tags?: string[];
+  /** Program templates only: the one folder it lives in; null = root. */
+  folder_id: string | null;
   sessionCount?: number;
   exerciseCount?: number;
   dayCount?: number;
@@ -40,16 +52,79 @@ interface Template {
   updatedAt: string;
 }
 
-export default function TemplatesContent() {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+type TemplateType = "programs" | "nutrition";
+
+interface TemplatesContentProps {
+  /** Which library this page shows; each type has its own route + nav entry. */
+  type: TemplateType;
+}
+
+const PAGE_COPY: Record<TemplateType, { title: string; subtitle: string }> = {
+  programs: {
+    title: "Programas de entrenamiento",
+    subtitle: "Crea y gestiona plantillas de programas de entrenamiento",
+  },
+  nutrition: {
+    title: "Planes nutricionales",
+    subtitle: "Crea y gestiona plantillas de planes nutricionales",
+  },
+};
+
+const tagsOf = (template: Template): readonly string[] => template.tags ?? [];
+
+const GRID = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+
+/** Invalidated by folder and tag mutations too (deleting a folder floats its
+ *  templates to the root; renaming a tag rewrites their arrays). */
+const TEMPLATES_KEY = "templates";
+
+async function fetchTemplates(
+  type: TemplateType,
+  category: "all" | "cardio" | "strength"
+): Promise<Template[]> {
+  const params = new URLSearchParams({ type });
+
+  // Category applies to programs only.
+  if (type === "programs" && category !== "all") {
+    params.set("category", category);
+  }
+  const response = await fetch(`/api/templates?${params.toString()}`);
+  const result = await response.json().catch(() => null);
+
+  if (response.ok === false || result?.success !== true) {
+    throw new Error(result?.error ?? "Error al cargar plantillas");
+  }
+
+  return (result.templates ?? []) as Template[];
+}
+
+/** folder_id-only PUT — how the folder view moves a template (null = root). */
+async function moveTemplate(
+  templateId: string,
+  folderId: string | null
+): Promise<void> {
+  const response = await fetch(`/api/templates/${templateId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder_id: folderId }),
+  });
+  const result = await response.json().catch(() => null);
+
+  if (response.ok === false || result?.success !== true) {
+    throw new Error(result?.error ?? "Error al mover la plantilla");
+  }
+}
+
+export default function TemplatesContent({
+  type: templateType,
+}: TemplatesContentProps) {
+  const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [templateTypeTab, setTemplateTypeTab] = useState<
-    "programs" | "nutrition"
-  >("programs");
   const [categoryFilter, setCategoryFilter] = useState<
     "all" | "cardio" | "strength"
   >("all");
+  // Combined tag filter (Sep 2 call, JC): every selected tag must match.
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<Template | null>(
     null
@@ -59,44 +134,39 @@ export default function TemplatesContent() {
     null
   );
 
-  // Fetch templates
-  const fetchTemplates = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
+  const {
+    data: templates = [],
+    isLoading,
+    isError,
+  } = useQuery<Template[]>({
+    queryKey: [TEMPLATES_KEY, templateType, categoryFilter],
+    queryFn: () => fetchTemplates(templateType, categoryFilter),
+  });
+  const refetchTemplates = () =>
+    qc.invalidateQueries({ queryKey: [TEMPLATES_KEY] });
+  // Folder hierarchy (cache shared with the folder browser). While the
+  // program_folders table is missing this errors and the page falls back to
+  // the flat grid — the feature degrades, the page never breaks.
+  const foldersQuery = useProgramFolders();
+  const showFolders =
+    templateType === "programs" &&
+    searchQuery.trim().length === 0 &&
+    foldersQuery.isError === false;
 
-      // Filter by template type
-      params.append("type", templateTypeTab);
-      // Filter by category only for programs
-      if (templateTypeTab === "programs" && categoryFilter !== "all") {
-        params.append("category", categoryFilter);
-      }
-      const response = await fetch(`/api/templates?${params.toString()}`);
-      const result = await response.json();
-
-      if (result.success) {
-        setTemplates(result.templates);
-      } else {
-        console.error("Error fetching templates:", result.error);
-      }
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTemplates();
-  }, [templateTypeTab, categoryFilter]);
-
-  // Filter templates by search query
-  const filteredTemplates = templates.filter(
-    (template) =>
-      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (template.description &&
-        template.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Filter templates by search query, then by tags (AND).
+  const filteredTemplates = filterByTags(
+    templates.filter(
+      (template) =>
+        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (template.description &&
+          template.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase()))
+    ),
+    tagFilter,
+    tagsOf
   );
+  const hasFilter = searchQuery.length > 0 || tagFilter.length > 0;
 
   // Handle delete template
   const handleConfirmDelete = async () => {
@@ -119,7 +189,7 @@ export default function TemplatesContent() {
       const result = await response.json();
 
       if (result.success) {
-        fetchTemplates();
+        refetchTemplates();
       } else {
         console.error("Error deleting template:", result.error);
         alert("Error al eliminar la plantilla");
@@ -133,35 +203,6 @@ export default function TemplatesContent() {
     }
   };
 
-  // Handle view/edit template
-  const handleViewTemplate = (template: Template) => {
-    setSelectedTemplate(template);
-  };
-
-  // Get category color
-  const getCategoryColor = (category: "cardio" | "strength" | "nutrition") => {
-    if (category === "cardio") return "danger";
-    if (category === "nutrition") return "success";
-
-    return "primary";
-  };
-
-  // Get category icon
-  const getCategoryIcon = (template: Template) => {
-    if (template.templateType === "nutrition") return "fluent:food-20-filled";
-    if (template.category === "cardio") return "solar:fire-bold";
-
-    return "solar:dumbbell-linear";
-  };
-
-  // Get category label
-  const getCategoryLabel = (category: "cardio" | "strength" | "nutrition") => {
-    if (category === "cardio") return "Cardio";
-    if (category === "nutrition") return "Nutrición";
-
-    return "Fuerza";
-  };
-
   return (
     <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
       {/* Header */}
@@ -169,11 +210,10 @@ export default function TemplatesContent() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Plantillas
+              {PAGE_COPY[templateType].title}
             </h1>
             <p className="text-gray-500 mt-1">
-              Crea y gestiona plantillas para programas de entrenamiento y
-              nutrición
+              {PAGE_COPY[templateType].subtitle}
             </p>
           </div>
           <Button
@@ -185,41 +225,6 @@ export default function TemplatesContent() {
             Crear Plantilla
           </Button>
         </div>
-
-        {/* Template Type Tabs */}
-        <Tabs
-          classNames={{
-            tabList: "gap-6",
-            cursor: "bg-black",
-            tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-black",
-          }}
-          selectedKey={templateTypeTab}
-          variant="underlined"
-          onSelectionChange={(key) => {
-            setTemplateTypeTab(key as "programs" | "nutrition");
-            setCategoryFilter("all");
-          }}
-        >
-          <Tab
-            key="programs"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="solar:dumbbell-bold" width={20} />
-                <span className="font-medium">Programas de Entrenamiento</span>
-              </div>
-            }
-          />
-          <Tab
-            key="nutrition"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="fluent:food-20-filled" width={20} />
-                <span className="font-medium">Planes Nutricionales</span>
-              </div>
-            }
-          />
-        </Tabs>
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
@@ -241,37 +246,77 @@ export default function TemplatesContent() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          {/* Category Filter - Only show for programs */}
-          {templateTypeTab === "programs" && (
-            <div className="flex gap-2">
-              <Button
-                className="bg-black text-white hover:bg-slate-800 font-semibold"
-                variant={categoryFilter === "all" ? "solid" : "flat"}
-                onPress={() => setCategoryFilter("all")}
-              >
-                Todas
-              </Button>
-              <Button
-                className="bg-black text-white hover:bg-slate-800 font-semibold"
-                variant={categoryFilter === "strength" ? "solid" : "flat"}
-                onPress={() => setCategoryFilter("strength")}
-              >
-                Fuerza
-              </Button>
-              <Button
-                className="bg-black text-white hover:bg-slate-800 font-semibold"
-                variant={categoryFilter === "cardio" ? "solid" : "flat"}
-                onPress={() => setCategoryFilter("cardio")}
-              >
-                Cardio
-              </Button>
-            </div>
+          {/* Tag + category filters - Only show for programs */}
+          {templateType === "programs" && (
+            <>
+              <TagFilterSelect
+                kind="program"
+                value={tagFilter}
+                onChange={setTagFilter}
+              />
+              <TagManagerButton className="h-12" kind="program" />
+              <div className="flex gap-2">
+                <Button
+                  className="bg-black text-white hover:bg-slate-800 font-semibold"
+                  variant={categoryFilter === "all" ? "solid" : "flat"}
+                  onPress={() => setCategoryFilter("all")}
+                >
+                  Todas
+                </Button>
+                <Button
+                  className="bg-black text-white hover:bg-slate-800 font-semibold"
+                  variant={categoryFilter === "strength" ? "solid" : "flat"}
+                  onPress={() => setCategoryFilter("strength")}
+                >
+                  Fuerza
+                </Button>
+                <Button
+                  className="bg-black text-white hover:bg-slate-800 font-semibold"
+                  variant={categoryFilter === "cardio" ? "solid" : "flat"}
+                  onPress={() => setCategoryFilter("cardio")}
+                >
+                  Cardio
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Templates Grid */}
-      {isLoading ? (
+      {/* Folder view (programs, no search) or the flat grid */}
+      {showFolders ? (
+        <FolderBrowser
+          hooks={programFolderHooks}
+          isError={isError}
+          isLoading={isLoading}
+          items={templates}
+          labels={{
+            root: "Mis plantillas",
+            singular: "plantilla",
+            plural: "plantillas",
+            create: "Crear plantilla",
+            folderExample: "Hombre",
+          }}
+          moveItem={(template, folderId) => moveTemplate(template.id, folderId)}
+          renderItems={(items, { onMove }) => (
+            <div className={GRID}>
+              {items.map((template) => (
+                <TemplateCard
+                  key={template.id}
+                  template={template}
+                  onDelete={setTemplateToDelete}
+                  onMove={onMove}
+                  onView={setSelectedTemplate}
+                />
+              ))}
+            </div>
+          )}
+          tags={tagFilter}
+          tagsOf={tagsOf}
+          onCreateItem={() => setIsCreateModalOpen(true)}
+          onMoved={refetchTemplates}
+        />
+      ) : isLoading ? (
         <div className="flex justify-center items-center py-20">
           <Spinner size="lg" />
         </div>
@@ -283,16 +328,16 @@ export default function TemplatesContent() {
             width={80}
           />
           <p className="text-gray-500 text-lg mb-2">
-            {searchQuery
+            {hasFilter
               ? "No se encontraron plantillas"
               : "No tienes plantillas aún"}
           </p>
           <p className="text-gray-400 mb-6">
-            {searchQuery
-              ? "Intenta con otra búsqueda"
+            {hasFilter
+              ? "Intenta con otra búsqueda o quita alguna etiqueta"
               : "Crea tu primera plantilla para agilizar la creación de programas"}
           </p>
-          {!searchQuery && templateTypeTab === "programs" && (
+          {!hasFilter && templateType === "programs" && (
             <Button
               className="text-white font-semibold"
               color="primary"
@@ -305,155 +350,26 @@ export default function TemplatesContent() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={GRID}>
           {filteredTemplates.map((template) => (
-            <Card
+            <TemplateCard
               key={template.id}
-              className="hover:shadow-lg transition-shadow h-full"
-            >
-              <CardBody className="p-5 flex flex-col h-full">
-                {/* Header Section - Fixed Height */}
-                <div className="flex justify-between items-start mb-3 min-h-[80px]">
-                  <div className="flex-1 mr-2">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
-                      {template.name}
-                    </h3>
-                    <div className="min-h-[40px]">
-                      {template.description && (
-                        <p className="text-sm text-gray-500 line-clamp-2">
-                          {template.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <Chip
-                    className="ml-2 flex-shrink-0"
-                    classNames={{
-                      content: "text-white font-semibold",
-                    }}
-                    color={getCategoryColor(template.category)}
-                    size="sm"
-                    startContent={
-                      <Icon
-                        className="text-white"
-                        icon={getCategoryIcon(template)}
-                        width={16}
-                      />
-                    }
-                    variant="solid"
-                  >
-                    {getCategoryLabel(template.category)}
-                  </Chip>
-                </div>
-
-                {/* Template Details - Fixed Height */}
-                <div className="space-y-2 mb-4 min-h-[90px]">
-                  {template.templateType === "nutrition" ? (
-                    <>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Icon
-                          className="mr-2 text-gray-400"
-                          icon="solar:calendar-linear"
-                          width={16}
-                        />
-                        <span>{template.dayCount || 0} días</span>
-                      </div>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Icon
-                          className="mr-2 text-gray-400"
-                          icon="fluent:food-20-filled"
-                          width={16}
-                        />
-                        <span>{template.mealCount || 0} comidas</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Icon
-                          className="mr-2 text-gray-400"
-                          icon={getCategoryIcon(template)}
-                          width={16}
-                        />
-                        <span>{template.type}</span>
-                        {template.division && (
-                          <span className="ml-2 text-gray-400">
-                            • {template.division}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Icon
-                          className="mr-2 text-gray-400"
-                          icon="solar:calendar-linear"
-                          width={16}
-                        />
-                        <span>{template.sessionCount || 0} sesiones</span>
-                        <span className="mx-2">•</span>
-                        <span>{template.exerciseCount || 0} ejercicios</span>
-                      </div>
-                      {template.sessionsPerWeek && (
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Icon
-                            className="mr-2 text-gray-400"
-                            icon="solar:calendar-mark-linear"
-                            width={16}
-                          />
-                          <span>
-                            {template.sessionsPerWeek} sesiones/semana
-                          </span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Actions - Pushed to bottom */}
-                <div className="mt-auto pt-4 border-t border-gray-100">
-                  <div className="flex gap-2 mb-3">
-                    <Button
-                      className="flex-1 bg-black text-white hover:bg-slate-800 font-semibold"
-                      size="sm"
-                      variant="flat"
-                      onPress={() => handleViewTemplate(template)}
-                    >
-                      Ver/Editar
-                    </Button>
-                    <Button
-                      isIconOnly
-                      color="danger"
-                      size="sm"
-                      variant="solid"
-                      onPress={() => setTemplateToDelete(template)}
-                    >
-                      <Icon
-                        className="text-white"
-                        icon="solar:trash-bin-trash-bold"
-                        width={18}
-                      />
-                    </Button>
-                  </div>
-
-                  {/* Last Updated */}
-                  <p className="text-xs text-gray-400">
-                    Actualizado:{" "}
-                    {new Date(template.updatedAt).toLocaleDateString("es")}
-                  </p>
-                </div>
-              </CardBody>
-            </Card>
+              template={template}
+              onDelete={setTemplateToDelete}
+              onView={setSelectedTemplate}
+            />
           ))}
         </div>
       )}
 
       {/* Create Template Modal */}
       <CreateTemplateModal
-        defaultType={templateTypeTab === "nutrition" ? "nutrition" : "program"}
+        defaultType={templateType === "nutrition" ? "nutrition" : "program"}
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
           setIsCreateModalOpen(false);
-          fetchTemplates();
+          refetchTemplates();
         }}
       />
 
@@ -463,45 +379,9 @@ export default function TemplatesContent() {
           isOpen={!!selectedTemplate}
           template={selectedTemplate}
           onClose={(updatedData) => {
-            if (updatedData) {
-              // Optimistically update the local templates list with the changes
-              setTemplates((prev) =>
-                prev.map((t) => {
-                  if (t.id !== selectedTemplate.id) return t;
-                  const updated: Template = {
-                    ...t,
-                    name: updatedData.name,
-                    category: updatedData.category,
-                    updatedAt: new Date().toISOString(),
-                  };
-
-                  if (updatedData.description !== undefined)
-                    updated.description = updatedData.description;
-                  if (updatedData.type !== undefined)
-                    updated.type = updatedData.type;
-                  if (updatedData.division !== undefined)
-                    updated.division = updatedData.division;
-                  if (updatedData.goal !== undefined)
-                    updated.goal = updatedData.goal;
-                  if (updatedData.sessionsPerWeek !== undefined)
-                    updated.sessionsPerWeek = updatedData.sessionsPerWeek;
-                  const sc = updatedData.sessionCount ?? t.sessionCount;
-
-                  if (sc !== undefined) updated.sessionCount = sc;
-                  const ec = updatedData.exerciseCount ?? t.exerciseCount;
-
-                  if (ec !== undefined) updated.exerciseCount = ec;
-                  const dc = updatedData.dayCount ?? t.dayCount;
-
-                  if (dc !== undefined) updated.dayCount = dc;
-                  const mc = updatedData.mealCount ?? t.mealCount;
-
-                  if (mc !== undefined) updated.mealCount = mc;
-
-                  return updated;
-                })
-              );
-            }
+            // Every field saved as it was edited; a background refetch
+            // (cached data stays on screen meanwhile) picks up the result.
+            if (updatedData) refetchTemplates();
             setSelectedTemplate(null);
           }}
           onSuccess={() => {
@@ -556,5 +436,217 @@ export default function TemplatesContent() {
         </ModalContent>
       </Modal>
     </div>
+  );
+}
+
+// Get category color
+const getCategoryColor = (category: "cardio" | "strength" | "nutrition") => {
+  if (category === "cardio") return "danger";
+  if (category === "nutrition") return "success";
+
+  return "primary";
+};
+
+// Get category icon
+const getCategoryIcon = (template: Template) => {
+  if (template.templateType === "nutrition") return "fluent:food-20-filled";
+  if (template.category === "cardio") return "solar:fire-bold";
+
+  return "solar:dumbbell-linear";
+};
+
+// Get category label
+const getCategoryLabel = (category: "cardio" | "strength" | "nutrition") => {
+  if (category === "cardio") return "Cardio";
+  if (category === "nutrition") return "Nutrición";
+
+  return "Fuerza";
+};
+
+/** Tag chips shown on the card before collapsing the rest into "+N". */
+const MAX_VISIBLE_TAGS = 3;
+
+interface TemplateCardProps {
+  template: Template;
+  onView: (template: Template) => void;
+  onDelete: (template: Template) => void;
+  /** Folder view only: opens the "Mover a carpeta" dialog. */
+  onMove?: (template: Template) => void;
+}
+
+function TemplateCard({
+  template,
+  onView,
+  onDelete,
+  onMove,
+}: TemplateCardProps) {
+  // Every chip is a tag (folders never show as chips).
+  const tags = tagsOf(template).filter((tag) => tag.trim().length > 0);
+  const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
+  const extraCount = tags.length - visibleTags.length;
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow h-full">
+      <CardBody className="p-5 flex flex-col h-full">
+        {/* Header Section - Fixed Height */}
+        <div className="flex justify-between items-start mb-3 min-h-[80px]">
+          <div className="flex-1 mr-2">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
+              {template.name}
+            </h3>
+            <div className="min-h-[40px]">
+              {template.description && (
+                <p className="text-sm text-gray-500 line-clamp-2">
+                  {template.description}
+                </p>
+              )}
+            </div>
+          </div>
+          <Chip
+            className="ml-2 flex-shrink-0"
+            classNames={{
+              content: "text-white font-semibold",
+            }}
+            color={getCategoryColor(template.category)}
+            size="sm"
+            startContent={
+              <Icon
+                className="text-white"
+                icon={getCategoryIcon(template)}
+                width={16}
+              />
+            }
+            variant="solid"
+          >
+            {getCategoryLabel(template.category)}
+          </Chip>
+        </div>
+
+        {/* Template Details - Fixed Height */}
+        <div className="space-y-2 mb-4 min-h-[90px]">
+          {template.templateType === "nutrition" ? (
+            <>
+              <div className="flex items-center text-sm text-gray-600">
+                <Icon
+                  className="mr-2 text-gray-400"
+                  icon="solar:calendar-linear"
+                  width={16}
+                />
+                <span>{template.dayCount || 0} días</span>
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <Icon
+                  className="mr-2 text-gray-400"
+                  icon="fluent:food-20-filled"
+                  width={16}
+                />
+                <span>{template.mealCount || 0} comidas</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center text-sm text-gray-600">
+                <Icon
+                  className="mr-2 text-gray-400"
+                  icon={getCategoryIcon(template)}
+                  width={16}
+                />
+                <span>{template.type}</span>
+                {template.division && (
+                  <span className="ml-2 text-gray-400">
+                    • {template.division}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <Icon
+                  className="mr-2 text-gray-400"
+                  icon="solar:calendar-linear"
+                  width={16}
+                />
+                <span>{template.sessionCount || 0} sesiones</span>
+                <span className="mx-2">•</span>
+                <span>{template.exerciseCount || 0} ejercicios</span>
+              </div>
+              {template.sessionsPerWeek && (
+                <div className="flex items-center text-sm text-gray-600">
+                  <Icon
+                    className="mr-2 text-gray-400"
+                    icon="solar:calendar-mark-linear"
+                    width={16}
+                  />
+                  <span>{template.sessionsPerWeek} sesiones/semana</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Tags at a glance (Sep 2 call, JC) */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {visibleTags.map((tag) => (
+              <Chip
+                key={tag}
+                className="min-w-0 max-w-[10rem]"
+                classNames={{ content: "truncate" }}
+                size="sm"
+                variant="flat"
+              >
+                {tag}
+              </Chip>
+            ))}
+            {extraCount > 0 && (
+              <Chip className="text-default-500" size="sm" variant="flat">
+                +{extraCount}
+              </Chip>
+            )}
+          </div>
+        )}
+
+        {/* Actions - Pushed to bottom */}
+        <div className="mt-auto pt-4 border-t border-gray-100">
+          <div className="flex gap-2 mb-3">
+            <Button
+              className="flex-1 bg-black text-white hover:bg-slate-800 font-semibold"
+              size="sm"
+              variant="flat"
+              onPress={() => onView(template)}
+            >
+              Ver/Editar
+            </Button>
+            {onMove !== undefined && (
+              <Button
+                isIconOnly
+                aria-label={`Mover ${template.name} a otra carpeta`}
+                size="sm"
+                variant="flat"
+                onPress={() => onMove(template)}
+              >
+                <Icon icon="solar:folder-linear" width={18} />
+              </Button>
+            )}
+            <Button
+              isIconOnly
+              color="danger"
+              size="sm"
+              variant="solid"
+              onPress={() => onDelete(template)}
+            >
+              <Icon
+                className="text-white"
+                icon="solar:trash-bin-trash-bold"
+                width={18}
+              />
+            </Button>
+          </div>
+
+          {/* Last Updated */}
+          <p className="text-xs text-gray-400">
+            Actualizado: {new Date(template.updatedAt).toLocaleDateString("es")}
+          </p>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
