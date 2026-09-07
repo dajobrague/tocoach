@@ -503,12 +503,20 @@ export function CycleBuilderContent({
         mode={dayCopyMode}
         pending={mutations.copyDayM.isPending}
         onClose={() => setDayCopyMode(null)}
-        onConfirm={(sourceDayIndex, targetDayIndex) =>
-          mutations.copyDayM.mutate(
-            { sourceDayIndex, targetDayIndex },
-            { onSuccess: () => setDayCopyMode(null) }
-          )
-        }
+        onConfirm={async (sourceDayIndex, targetDayIndexes) => {
+          // Sequential: copy-day rewrites the target's slots, keep it simple.
+          try {
+            for (const targetDayIndex of targetDayIndexes) {
+              await mutations.copyDayM.mutateAsync({
+                sourceDayIndex,
+                targetDayIndex,
+              });
+            }
+            setDayCopyMode(null);
+          } catch {
+            // The mutation surfaces its own error state; keep the modal open.
+          }
+        }}
       />
 
       <RemoveDayModal
