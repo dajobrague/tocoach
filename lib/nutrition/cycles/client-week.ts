@@ -110,8 +110,8 @@ export interface ClientWeek {
   /** Every menu of the plan, in rotation order (empty without a cycle). */
   menus: ClientWeekMenu[];
   days: ClientWeekDay[];
-  /** The client's standing per-slot choice (slotId → optionId), week-global. */
-  selections: Record<string, string>;
+  /** The client's standing picks (slotId → optionIds, one per component), week-global. */
+  selections: Record<string, string[]>;
   /**
    * The daily targets the trainer saved for this client, or null when unset.
    * Attached by the week route (not by {@link buildClientWeek}, which stays

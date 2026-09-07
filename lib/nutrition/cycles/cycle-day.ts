@@ -54,8 +54,8 @@ export interface ClientCycleView {
   position: CycleDayPosition | null;
   /** Slots grouped by rotation day; `[]` when there is no active cycle. */
   days: CycleDay[];
-  /** The client's standing choice per slot (slotId → optionId). */
-  selections: Record<string, string>;
+  /** The client's standing picks per slot (slotId → selected optionIds, one per component). */
+  selections: Record<string, string[]>;
   /** The client's log for each slot, for TODAY only (slotId → log). */
   logs: Record<string, ClientMealLog>;
   /** Trainer notes that apply to TODAY (date-level + slot-level), P7. */
@@ -166,10 +166,10 @@ export function buildClientCycleView(
   logs: MealLogRow[] = []
 ): ClientCycleView {
   const todayIso = toCalendarYmd(today, timeZone);
-  const selectionMap: Record<string, string> = {};
+  const selectionMap: Record<string, string[]> = {};
 
   for (const selection of selections) {
-    selectionMap[selection.slot_id] = selection.option_id;
+    (selectionMap[selection.slot_id] ??= []).push(selection.option_id);
   }
 
   const logMap: Record<string, ClientMealLog> = {};

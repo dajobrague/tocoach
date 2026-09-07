@@ -21,7 +21,7 @@ interface RouteContext {
  * GET /api/meal-cycles/[id]/client-activity?from&to — what the client actually
  * did, for the trainer's retrospective calendar: their menu choice per date in
  * [from, to] (only choices made against THIS cycle) and their current standing
- * alternative selections (slotId → optionId). Tenant-scoped via the cycle.
+ * alternative selections (slotId → optionIds, one per component). Tenant-scoped via the cycle.
  */
 export async function GET(request: NextRequest, context: RouteContext) {
   const guard = await guardRecipeRequest();
@@ -65,10 +65,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const selectionBySlot: Record<string, string> = {};
+    const selectionBySlot: Record<string, string[]> = {};
 
     for (const selection of selections) {
-      selectionBySlot[selection.slot_id] = selection.option_id;
+      (selectionBySlot[selection.slot_id] ??= []).push(selection.option_id);
     }
 
     return NextResponse.json(

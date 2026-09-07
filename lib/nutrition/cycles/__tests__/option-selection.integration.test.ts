@@ -101,7 +101,59 @@ describe("option-selection (integration, local DB)", () => {
     expect(selections).toEqual([{ slot_id: slotId, option_id: optionA }]);
   });
 
-  it("upserts on (client_id, slot_id) — changing the choice never duplicates", async () => {
+  it("keeps one pick per component: choosing in one group leaves the other group's pick", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Componente",
+    });
+    const cycle = await cycles.create(TEST_TENANT_HOST, {
+      trainerId: TEST_TRAINER_ID,
+      clientId: clientA,
+      name: "Ciclo componentes",
+      durationDays: 3,
+    });
+    const slot = await cycles.addSlot(TEST_TENANT_HOST, cycle.id, {
+      dayIndex: 0,
+      label: "Comida",
+    });
+    // Group 0 (carbs): a1 | a2. Group 1 (protein): b1 | b2.
+    const add = (groupIndex: number) =>
+      options.addRecipeOption(
+        TEST_TENANT_HOST,
+        slot!.id,
+        recipe.id,
+        undefined,
+        undefined,
+        groupIndex
+      );
+    const a1 = await add(0);
+    const a2 = await add(0);
+    const b1 = await add(1);
+    const b2 = await add(1);
+
+    await cycles.update(TEST_TENANT_HOST, cycle.id, { status: "active" });
+
+    await setClientSelection(db, clientA, slot!.id, a2!.id);
+    await setClientSelection(db, clientA, slot!.id, b2!.id);
+
+    const picks = (await getClientSelections(db, clientA)).map(
+      (s) => s.option_id
+    );
+
+    expect(picks.sort()).toEqual([a2!.id, b2!.id].sort());
+
+    // Re-picking inside group 0 replaces a2, keeps b2.
+    await setClientSelection(db, clientA, slot!.id, a1!.id);
+
+    const after = (await getClientSelections(db, clientA)).map(
+      (s) => s.option_id
+    );
+
+    expect(after.sort()).toEqual([a1!.id, b2!.id].sort());
+    expect(after).not.toContain(a2!.id);
+    expect(after).not.toContain(b1!.id);
+  });
+
+  it("upserts within a component — changing the choice never duplicates", async () => {
     const { slotId, optionA, optionB } =
       await seedActiveSlotWithTwoOptions(clientA);
 

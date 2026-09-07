@@ -248,6 +248,8 @@ function CarouselOptionCard({
   );
 }
 
+const EMPTY_IDS: readonly string[] = [];
+
 /**
  * One component of a meal (a `group_index` group). Multiple options within a
  * component are alternatives — a horizontal swipe carousel where the client
@@ -257,13 +259,13 @@ function CarouselOptionCard({
 function ComponentSection({
   options,
   showMacros,
-  selectedOptionId,
+  selectedOptionIds,
   onOpenOption,
   onSelectOption,
 }: {
   options: MealSlotOptionRow[];
   showMacros: boolean;
-  selectedOptionId: string | null;
+  selectedOptionIds: readonly string[];
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
@@ -288,7 +290,7 @@ function ComponentSection({
   }
 
   const chosenId =
-    chosenOption({ groupIndex: 0, options }, selectedOptionId)?.id ?? null;
+    chosenOption({ groupIndex: 0, options }, selectedOptionIds)?.id ?? null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -319,21 +321,21 @@ function SlotBlock({
   label,
   options,
   showMacros,
-  selectedOptionId,
+  selectedOptionIds,
   onOpenOption,
   onSelectOption,
 }: {
   label: string;
   options: MealSlotOptionRow[];
   showMacros: boolean;
-  selectedOptionId: string | null;
+  selectedOptionIds: readonly string[];
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
   const cleanLabel = label.trim().length > 0 ? label : "Comida";
   const visual = mealVisual(cleanLabel);
   const components = slotComponents(options);
-  const mealKcal = slotPlannedTotals(options, selectedOptionId).kcal;
+  const mealKcal = slotPlannedTotals(options, selectedOptionIds).kcal;
 
   return (
     <Card>
@@ -372,7 +374,7 @@ function SlotBlock({
               ) : null}
               <ComponentSection
                 options={component.options}
-                selectedOptionId={selectedOptionId}
+                selectedOptionIds={selectedOptionIds}
                 showMacros={showMacros}
                 onOpenOption={onOpenOption}
                 onSelectOption={onSelectOption}
@@ -430,7 +432,7 @@ export function MealCycleDayPanel({
   onSelectOption,
 }: {
   day: ClientWeekDay;
-  selections: Record<string, string>;
+  selections: Record<string, string[]>;
   showMacros: boolean;
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
@@ -461,7 +463,7 @@ export function MealCycleDayPanel({
             key={slot.id}
             label={slot.label}
             options={slot.options}
-            selectedOptionId={selections[slot.id] ?? null}
+            selectedOptionIds={selections[slot.id] ?? EMPTY_IDS}
             showMacros={showMacros}
             onOpenOption={onOpenOption}
             onSelectOption={onSelectOption}

@@ -1,9 +1,11 @@
 import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
 import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { withSelection } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
 // ─── Date helpers ───────────────────────────────────────────────────────────
@@ -334,8 +336,26 @@ async function postMealCycleSelection(input: {
   }
 }
 
+/** The options of `slotId` in a cached day list (empty when not cached). */
+function findSlotOptions(
+  days: readonly {
+    slots: readonly { id: string; options: MealSlotOptionRow[] }[];
+  }[],
+  slotId: string
+): MealSlotOptionRow[] {
+  for (const day of days) {
+    const slot = day.slots.find((candidate) => candidate.id === slotId);
+
+    if (slot !== undefined) {
+      return slot.options;
+    }
+  }
+
+  return [];
+}
+
 /**
- * Persist the client's option choice for a meal slot, optimistically marking it
+ * Persist the client's option choice for a meal component, optimistically marking it
  * in the cached meal-cycle view so the UI updates instantly. Rolls back on
  * error and re-syncs from the server on settle.
  */
@@ -355,7 +375,12 @@ export function useSetMealCycleSelection() {
       if (previous) {
         queryClient.setQueryData<ClientCycleView | null>(MEAL_CYCLE_KEY, {
           ...previous,
-          selections: { ...previous.selections, [slotId]: optionId },
+          selections: withSelection(
+            previous.selections,
+            findSlotOptions(previous.days, slotId),
+            slotId,
+            optionId
+          ),
         });
       }
 
@@ -369,7 +394,12 @@ export function useSetMealCycleSelection() {
         if (week) {
           queryClient.setQueryData<ClientWeek | null>(key, {
             ...week,
-            selections: { ...week.selections, [slotId]: optionId },
+            selections: withSelection(
+              week.selections,
+              findSlotOptions(week.days, slotId),
+              slotId,
+              optionId
+            ),
           });
         }
       }
