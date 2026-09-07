@@ -17,13 +17,19 @@ import {
   Tabs,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 import CreateTemplateModal from "./create-template-modal";
 import TemplateDetailModal from "./template-detail-modal";
 
+import { FolderBrowser } from "@/features/trainer/library/folder-browser";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 import { distinctTags, filterByTags } from "@/features/trainer/library/tags";
+import {
+  programFolderHooks,
+  useProgramFolders,
+} from "@/features/trainer/training/program-folders";
 
 interface Template {
   id: string;
@@ -49,9 +55,48 @@ const tagsOf = (template: Template): readonly string[] => template.tags ?? [];
 
 const GRID = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
 
+/** Invalidated by folder mutations too (renames retag templates server-side). */
+const TEMPLATES_KEY = "templates";
+
+async function fetchTemplates(
+  type: "programs" | "nutrition",
+  category: "all" | "cardio" | "strength"
+): Promise<Template[]> {
+  const params = new URLSearchParams({ type });
+
+  // Category applies to programs only.
+  if (type === "programs" && category !== "all") {
+    params.set("category", category);
+  }
+  const response = await fetch(`/api/templates?${params.toString()}`);
+  const result = await response.json().catch(() => null);
+
+  if (response.ok === false || result?.success !== true) {
+    throw new Error(result?.error ?? "Error al cargar plantillas");
+  }
+
+  return (result.templates ?? []) as Template[];
+}
+
+/** Tags-only PUT — how the folder view moves a template between folders. */
+async function updateTemplateTags(
+  templateId: string,
+  tags: string[]
+): Promise<void> {
+  const response = await fetch(`/api/templates/${templateId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tags }),
+  });
+  const result = await response.json().catch(() => null);
+
+  if (response.ok === false || result?.success !== true) {
+    throw new Error(result?.error ?? "Error al mover la plantilla");
+  }
+}
+
 export default function TemplatesContent() {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [templateTypeTab, setTemplateTypeTab] = useState<
     "programs" | "nutrition"
@@ -70,42 +115,35 @@ export default function TemplatesContent() {
     null
   );
 
-  // Fetch templates
-  const fetchTemplates = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-
-      // Filter by template type
-      params.append("type", templateTypeTab);
-      // Filter by category only for programs
-      if (templateTypeTab === "programs" && categoryFilter !== "all") {
-        params.append("category", categoryFilter);
-      }
-      const response = await fetch(`/api/templates?${params.toString()}`);
-      const result = await response.json();
-
-      if (result.success) {
-        setTemplates(result.templates);
-      } else {
-        console.error("Error fetching templates:", result.error);
-      }
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTemplates();
-  }, [templateTypeTab, categoryFilter]);
+  const {
+    data: templates = [],
+    isLoading,
+    isError,
+  } = useQuery<Template[]>({
+    queryKey: [TEMPLATES_KEY, templateTypeTab, categoryFilter],
+    queryFn: () => fetchTemplates(templateTypeTab, categoryFilter),
+  });
+  const refetchTemplates = () =>
+    qc.invalidateQueries({ queryKey: [TEMPLATES_KEY] });
+  // Folder hierarchy (cache shared with the folder browser). While the
+  // program_folders table is missing this errors and the page falls back to
+  // the flat grid — the feature degrades, the page never breaks.
+  const foldersQuery = useProgramFolders();
+  const showFolders =
+    templateTypeTab === "programs" &&
+    searchQuery.trim().length === 0 &&
+    foldersQuery.isError === false;
 
   // Tag options come from the whole list (the tag filter is client-side, so
-  // narrowing never hides options); the active selection is always kept.
+  // narrowing never hides options) plus folder names — a folder IS a tag,
+  // even while empty — and the active selection.
   const tagOptions = useMemo(
-    () => distinctTags(templates, tagsOf, tagFilter),
-    [templates, tagFilter]
+    () =>
+      distinctTags(templates, tagsOf, [
+        ...(foldersQuery.data ?? []).map((folder) => folder.name),
+        ...tagFilter,
+      ]),
+    [templates, foldersQuery.data, tagFilter]
   );
 
   // Filter templates by search query, then by tags (AND).
@@ -144,7 +182,7 @@ export default function TemplatesContent() {
       const result = await response.json();
 
       if (result.success) {
-        fetchTemplates();
+        refetchTemplates();
       } else {
         console.error("Error deleting template:", result.error);
         alert("Error al eliminar la plantilla");
@@ -274,8 +312,43 @@ export default function TemplatesContent() {
         </div>
       </div>
 
-      {/* Templates Grid */}
-      {isLoading ? (
+      {/* Folder view (programs, no search) or the flat grid */}
+      {showFolders ? (
+        <FolderBrowser
+          hooks={programFolderHooks}
+          isError={isError}
+          isLoading={isLoading}
+          items={templates}
+          labels={{
+            root: "Mis plantillas",
+            singular: "plantilla",
+            plural: "plantillas",
+            create: "Crear plantilla",
+            folderExample: "Hombre",
+          }}
+          renderItems={(items, { hideTag, onMove }) => (
+            <div className={GRID}>
+              {items.map((template) => (
+                <TemplateCard
+                  key={template.id}
+                  hideTag={hideTag}
+                  template={template}
+                  onDelete={setTemplateToDelete}
+                  onMove={onMove}
+                  onView={setSelectedTemplate}
+                />
+              ))}
+            </div>
+          )}
+          tags={tagFilter}
+          tagsOf={tagsOf}
+          updateItemTags={(template, next) =>
+            updateTemplateTags(template.id, next)
+          }
+          onCreateItem={() => setIsCreateModalOpen(true)}
+          onMoved={refetchTemplates}
+        />
+      ) : isLoading ? (
         <div className="flex justify-center items-center py-20">
           <Spinner size="lg" />
         </div>
@@ -329,7 +402,7 @@ export default function TemplatesContent() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
           setIsCreateModalOpen(false);
-          fetchTemplates();
+          refetchTemplates();
         }}
       />
 
@@ -340,47 +413,9 @@ export default function TemplatesContent() {
           tagSuggestions={tagOptions}
           template={selectedTemplate}
           onClose={(updatedData) => {
-            if (updatedData) {
-              // Optimistically update the local templates list with the changes
-              setTemplates((prev) =>
-                prev.map((t) => {
-                  if (t.id !== selectedTemplate.id) return t;
-                  const updated: Template = {
-                    ...t,
-                    name: updatedData.name,
-                    category: updatedData.category,
-                    updatedAt: new Date().toISOString(),
-                  };
-
-                  if (updatedData.description !== undefined)
-                    updated.description = updatedData.description;
-                  if (updatedData.type !== undefined)
-                    updated.type = updatedData.type;
-                  if (updatedData.division !== undefined)
-                    updated.division = updatedData.division;
-                  if (updatedData.goal !== undefined)
-                    updated.goal = updatedData.goal;
-                  if (updatedData.sessionsPerWeek !== undefined)
-                    updated.sessionsPerWeek = updatedData.sessionsPerWeek;
-                  if (updatedData.tags !== undefined)
-                    updated.tags = updatedData.tags;
-                  const sc = updatedData.sessionCount ?? t.sessionCount;
-
-                  if (sc !== undefined) updated.sessionCount = sc;
-                  const ec = updatedData.exerciseCount ?? t.exerciseCount;
-
-                  if (ec !== undefined) updated.exerciseCount = ec;
-                  const dc = updatedData.dayCount ?? t.dayCount;
-
-                  if (dc !== undefined) updated.dayCount = dc;
-                  const mc = updatedData.mealCount ?? t.mealCount;
-
-                  if (mc !== undefined) updated.mealCount = mc;
-
-                  return updated;
-                })
-              );
-            }
+            // Every field saved as it was edited; a background refetch
+            // (cached data stays on screen meanwhile) picks up the result.
+            if (updatedData) refetchTemplates();
             setSelectedTemplate(null);
           }}
           onSuccess={() => {
@@ -467,12 +502,27 @@ const MAX_VISIBLE_TAGS = 3;
 
 interface TemplateCardProps {
   template: Template;
+  /** Tag every card in view shares (the open folder's) — not repeated. */
+  hideTag?: string | undefined;
   onView: (template: Template) => void;
   onDelete: (template: Template) => void;
+  /** Folder view only: opens the "Mover a carpeta" dialog. */
+  onMove?: (template: Template) => void;
 }
 
-function TemplateCard({ template, onView, onDelete }: TemplateCardProps) {
-  const tags = tagsOf(template).filter((tag) => tag.trim().length > 0);
+function TemplateCard({
+  template,
+  hideTag,
+  onView,
+  onDelete,
+  onMove,
+}: TemplateCardProps) {
+  const hidden = hideTag?.trim().toLowerCase();
+  const tags = tagsOf(template).filter((tag) => {
+    const key = tag.trim().toLowerCase();
+
+    return key.length > 0 && key !== hidden;
+  });
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
   const extraCount = tags.length - visibleTags.length;
 
@@ -606,6 +656,17 @@ function TemplateCard({ template, onView, onDelete }: TemplateCardProps) {
             >
               Ver/Editar
             </Button>
+            {onMove !== undefined && (
+              <Button
+                isIconOnly
+                aria-label={`Mover ${template.name} a otra carpeta`}
+                size="sm"
+                variant="flat"
+                onPress={() => onMove(template)}
+              >
+                <Icon icon="solar:folder-linear" width={18} />
+              </Button>
+            )}
             <Button
               isIconOnly
               color="danger"
