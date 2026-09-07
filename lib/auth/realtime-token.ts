@@ -99,17 +99,36 @@ async function runSelfCheck(
     return false;
   }
 
-  const res = await fetch(`${url}/rest/v1/`, {
+  // A TABLE endpoint, not the OpenAPI root: on hosted Supabase `/rest/v1/`
+  // answers 401 "Only the service_role API key can be used for this
+  // endpoint" whatever the token, so it cannot tell a bad signature from a
+  // good one (it did on the local CLI stack, which is how the false positive
+  // shipped). `messages` is the table the Realtime policies grant to
+  // `authenticated`; a bad signature answers 401 PGRST301, a good one 200.
+  const res = await fetch(`${url}/rest/v1/messages?select=id&limit=0`, {
     headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
 
   if (res.status === 401) {
+    const body =
+      typeof res.text === "function" ? await res.text().catch(() => "") : "";
+
     console.error(
-      `[realtime-token] ${correlationId} Supabase rechaza el token: el secreto de firma (SUPABASE_JWT_SECRET) no coincide con el JWT secret del proyecto. Realtime no funcionará.`
+      `[realtime-token] ${correlationId} Supabase rechaza el token: el secreto de firma (SUPABASE_JWT_SECRET) no coincide con el JWT secret del proyecto. Realtime no funcionará. (${body.slice(0, 160)})`
     );
 
     return false;
+  }
+
+  if (!res.ok) {
+    // e.g. 403 permission denied if someone revokes SELECT on messages from
+    // `authenticated`: the signature is fine, the grant is not. Say so.
+    console.warn(
+      `[realtime-token] ${correlationId} self-check no concluyente: Supabase acepta la firma pero /rest/v1/messages responde HTTP ${res.status} (¿grant SELECT para authenticated?)`
+    );
+
+    return true;
   }
 
   console.log(

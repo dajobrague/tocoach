@@ -195,7 +195,7 @@ describe("GET /api/realtime/token", () => {
     ).rejects.toThrow();
   });
 
-  it("self-checks the secret against /rest/v1/ once per process, with the minted token", async () => {
+  it("self-checks the secret against a table endpoint once per process, with the minted token", async () => {
     mockedClient.mockResolvedValue(clientSession);
     const consoleLog = vi
       .spyOn(console, "log")
@@ -216,7 +216,9 @@ describe("GET /api/realtime/token", () => {
     ];
     const headers = init.headers as Record<string, string>;
 
-    expect(url).toBe("http://127.0.0.1:54421/rest/v1/");
+    expect(url).toBe(
+      "http://127.0.0.1:54421/rest/v1/messages?select=id&limit=0"
+    );
     expect(headers.apikey).toBe("anon-key");
     expect(headers.Authorization).toBe(`Bearer ${first.token}`);
     expect(consoleLog).toHaveBeenCalledWith(
