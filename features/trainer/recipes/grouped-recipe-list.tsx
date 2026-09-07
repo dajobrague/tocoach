@@ -63,12 +63,10 @@ export function GroupedRecipeList({
           <header className="mb-2.5 flex items-center gap-2">
             <Icon
               className={
-                section.kind === "untagged"
-                  ? "text-default-300"
-                  : "text-amber-500"
+                section.kind === "root" ? "text-default-300" : "text-amber-500"
               }
               icon={
-                section.kind === "untagged"
+                section.kind === "root"
                   ? "solar:folder-error-linear"
                   : "solar:folder-bold"
               }
@@ -86,7 +84,6 @@ export function GroupedRecipeList({
             {section.items.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
-                hideTag={section.kind === "folder" ? section.label : undefined}
                 recipe={recipe}
                 onDelete={onDelete}
                 onOpen={onOpen}

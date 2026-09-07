@@ -41,7 +41,7 @@ import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import { MealImageTrainerField } from "./nutrition-trainer-meal-image-field";
 
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
-import { distinctTags, filterByTags } from "@/features/trainer/library/tags";
+import { filterByTags } from "@/features/trainer/library/tags";
 import { TagsField } from "@/features/trainer/library/tags-field";
 import { alertAfterPress } from "@/lib/ui/native-dialog";
 
@@ -59,8 +59,6 @@ interface TemplateDetailModalProps {
     sessionsPerWeek?: number;
     tags?: string[];
   };
-  /** Distinct tags across the trainer's templates (and folder names). */
-  tagSuggestions?: string[];
   onClose: (updatedData?: {
     name: string;
     description?: string;
@@ -224,7 +222,6 @@ function SortableExerciseItem({
 export default function TemplateDetailModal({
   isOpen,
   template,
-  tagSuggestions = [],
   onClose,
   onSuccess,
 }: TemplateDetailModalProps) {
@@ -403,10 +400,6 @@ export default function TemplateDetailModal({
 
     return filterByTags(byCategory, exerciseTagFilter, (ex) => ex.tags ?? []);
   }, [exerciseLibrary, exerciseCategoryFilter, exerciseTagFilter]);
-  const exerciseTagOptions = useMemo(
-    () => distinctTags(exerciseLibrary, (ex) => ex.tags ?? []),
-    [exerciseLibrary]
-  );
 
   const handleExerciseCreated = async (createdExercise?: any) => {
     // Refresh the exercise library
@@ -2204,10 +2197,10 @@ export default function TemplateDetailModal({
               {template.templateType === "program" && (
                 <div className="max-w-xl font-normal">
                   <TagsField
-                    description="Para filtrar y organizar en carpetas. Ej. hombre, tres días, full body."
+                    description="Para filtrar. Escribe y pulsa Enter; si no existe, se crea. Ej. tres días, full body."
                     disabled={savingField === "tags"}
-                    placeholder="Ej. hombre, tres días, full body..."
-                    suggestions={tagSuggestions}
+                    kind="program"
+                    placeholder="Ej. tres días, full body..."
                     value={formData.tags}
                     onChange={handleSaveTags}
                   />
@@ -2536,7 +2529,7 @@ export default function TemplateDetailModal({
                                             </div>
                                             <TagFilterSelect
                                               className="max-w-xs"
-                                              options={exerciseTagOptions}
+                                              kind="exercise"
                                               size="sm"
                                               value={exerciseTagFilter}
                                               onChange={setExerciseTagFilter}

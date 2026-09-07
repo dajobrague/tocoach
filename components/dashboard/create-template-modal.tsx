@@ -21,8 +21,6 @@ import { TagsField } from "@/features/trainer/library/tags-field";
 interface CreateTemplateModalProps {
   isOpen: boolean;
   defaultType?: "program" | "nutrition";
-  /** Distinct tags across the trainer's templates (and folder names). */
-  tagSuggestions?: string[];
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -41,7 +39,6 @@ const EMPTY_FORM = {
 export default function CreateTemplateModal({
   isOpen,
   defaultType,
-  tagSuggestions = [],
   onClose,
   onSuccess,
 }: CreateTemplateModalProps) {
@@ -348,10 +345,10 @@ export default function CreateTemplateModal({
                   />
 
                   <TagsField
-                    description="Para filtrar y organizar en carpetas. Ej. hombre, tres días, full body."
+                    description="Para filtrar. Escribe y pulsa Enter; si no existe, se crea. Ej. tres días, full body."
                     disabled={isSubmitting}
-                    placeholder="Ej. hombre, tres días, full body..."
-                    suggestions={tagSuggestions}
+                    kind="program"
+                    placeholder="Ej. tres días, full body..."
                     value={formData.tags}
                     onChange={(tags) => setFormData({ ...formData, tags })}
                   />

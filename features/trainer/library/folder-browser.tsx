@@ -24,7 +24,6 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { createFolderTree, folderPath, moveTargets } from "./folder-tree";
-import { normalizeTag } from "./tags";
 
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
@@ -42,8 +41,15 @@ export interface FolderBrowserLabels {
   folderExample: string;
 }
 
-interface FolderBrowserProps<T extends { id: string; name: string }> {
-  /** The full library; membership is computed client-side. */
+/** What the browser needs from an item: identity, a title and its folder. */
+export interface FolderItem {
+  id: string;
+  name: string;
+  folder_id: string | null;
+}
+
+interface FolderBrowserProps<T extends FolderItem> {
+  /** The full library; membership is computed client-side from folder_id. */
   items: T[];
   /** Active tag filter: composes with the open folder (folder AND tags). */
   tags: string[];
@@ -51,38 +57,35 @@ interface FolderBrowserProps<T extends { id: string; name: string }> {
   isError: boolean;
   hooks: FolderHooks;
   tagsOf: (item: T) => readonly string[];
-  /** Persist a new tag list for an item ("move to folder" rewrites tags). */
-  updateItemTags: (item: T, tags: string[]) => Promise<unknown>;
+  /** Persist a move: PATCH the item's folder_id (null = root). */
+  moveItem: (item: T, folderId: string | null) => Promise<unknown>;
   /** Called after a successful move so the caller refetches its list. */
   onMoved: () => void;
   labels: FolderBrowserLabels;
-  /** Render the items of the open folder (or the root). `hideTag` is the
-   *  open folder's tag (every card has it); `onMove` opens the move dialog. */
+  /** Render the items of the open folder (or the root); `onMove` opens the
+   *  move dialog for one of them. */
   renderItems: (
     items: T[],
-    context: { hideTag: string | undefined; onMove: (item: T) => void }
+    context: { onMove: (item: T) => void }
   ) => ReactNode;
   onCreateItem: () => void;
 }
 
 /**
- * Drive-style folder view of a trainer library (Jul 28 call, Pablo).
- * Folders are tags underneath: an item belongs by carrying the folder's
- * tag, and only the hierarchy lives in the folders table — so folders nest
- * freely while items keep their portable tag list. Plain tags are NOT
- * folders (Sep 2 call, JC: auto-created folders duplicated on screen):
- * items outside every folder live at the root like Drive files, tags
- * filter within a folder, and each card offers "move to folder" without
+ * Drive-style folder view of a trainer library (Jul 28 call, Pablo). An
+ * item lives in one folder or at the root (`folder_id`), tags are a
+ * separate axis that filters within a folder (Sep 7, David: "tags are one
+ * thing, folders another"), and each card offers "move to folder" without
  * opening the editor.
  */
-export function FolderBrowser<T extends { id: string; name: string }>({
+export function FolderBrowser<T extends FolderItem>({
   items,
   tags,
   isLoading,
   isError,
   hooks,
   tagsOf,
-  updateItemTags,
+  moveItem,
   onMoved,
   labels,
   renderItems,
@@ -102,33 +105,8 @@ export function FolderBrowser<T extends { id: string; name: string }>({
   const tree = createFolderTree<T>(tagsOf);
 
   const moveItemM = useMutation({
-    mutationFn: (vars: { item: T; targetFolderId: string | null }) => {
-      const currentTag =
-        folderId !== null
-          ? (folders.find((folder) => folder.id === folderId)?.name ?? null)
-          : null;
-      const target =
-        vars.targetFolderId !== null
-          ? (folders.find((folder) => folder.id === vars.targetFolderId) ??
-            null)
-          : null;
-      // Leave the folder being viewed; keep every other tag (an item can
-      // live in several folders at once, like Drive shortcuts).
-      const without = tagsOf(vars.item).filter(
-        (tag) =>
-          currentTag === null || normalizeTag(tag) !== normalizeTag(currentTag)
-      );
-      const next =
-        target === null
-          ? without
-          : without.some(
-                (tag) => normalizeTag(tag) === normalizeTag(target.name)
-              )
-            ? without
-            : [...without, target.name];
-
-      return updateItemTags(vars.item, next);
-    },
+    mutationFn: (vars: { item: T; targetFolderId: string | null }) =>
+      moveItem(vars.item, vars.targetFolderId),
     onSuccess: () => {
       onMoved();
       setMovingItem(null);
@@ -214,7 +192,7 @@ export function FolderBrowser<T extends { id: string; name: string }>({
               node={node}
               onDelete={() => {
                 confirmAfterPress(
-                  `¿Eliminar la carpeta "${node.folder.name}"? Las ${labels.plural} conservan la etiqueta y pasan a la raíz (o a sus otras carpetas); las subcarpetas suben a la raíz.`
+                  `¿Eliminar la carpeta "${node.folder.name}"? Sus ${labels.plural} y subcarpetas pasan a la raíz; las etiquetas no cambian.`
                 ).then((confirmed) => {
                   if (confirmed) deleteM.mutate(node.folder.id);
                 });
@@ -236,10 +214,7 @@ export function FolderBrowser<T extends { id: string; name: string }>({
       )}
 
       {shownItems.length > 0 ? (
-        renderItems(shownItems, {
-          hideTag: currentFolder?.name,
-          onMove: setMovingItem,
-        })
+        renderItems(shownItems, { onMove: setMovingItem })
       ) : nodes.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-large border border-dashed border-gray-200 bg-gray-50/60 py-12 text-center">
           <Icon
@@ -281,7 +256,6 @@ export function FolderBrowser<T extends { id: string; name: string }>({
       />
 
       <MoveItemModal
-        currentFolderId={effectiveId}
         folders={folders}
         item={movingItem}
         labels={labels}
@@ -460,20 +434,19 @@ function FolderCard({
 function MoveItemModal({
   item,
   folders,
-  currentFolderId,
   labels,
   moving,
   onClose,
   onMove,
 }: {
-  item: { name: string } | null;
+  item: FolderItem | null;
   folders: Folder[];
-  currentFolderId: string | null;
   labels: FolderBrowserLabels;
   moving: boolean;
   onClose: () => void;
   onMove: (targetFolderId: string | null) => void;
 }) {
+  const currentFolderId = item?.folder_id ?? null;
   // Full paths ("Desayunos / Dulces") so nested folders are unambiguous.
   const options = folders
     .filter((folder) => folder.id !== currentFolderId)
@@ -597,12 +570,6 @@ function FolderNameModal({
           {mode === "create" ? "Nueva carpeta" : "Renombrar carpeta"}
         </ModalHeader>
         <ModalBody className="gap-3">
-          {mode === "rename" && (
-            <p className="text-xs text-default-500">
-              Al renombrar, la etiqueta de todas sus {labels.plural} se
-              actualiza también.
-            </p>
-          )}
           <Input
             autoFocus
             isRequired

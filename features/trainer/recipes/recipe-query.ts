@@ -10,6 +10,8 @@ export interface RecipeListItem {
   name: string;
   status: RecipeStatus;
   meal_type_tags: string[];
+  /** The one folder the recipe lives in; null = root. */
+  folder_id: string | null;
   kcal: number;
   protein_g: number;
   carbs_g: number;

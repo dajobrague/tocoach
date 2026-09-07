@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { FolderBrowser as LibraryFolderBrowser } from "../library/folder-browser";
 
-import { updateRecipeTags } from "./recipe-api";
+import { moveRecipe } from "./recipe-api";
 import { RecipeList } from "./recipe-list";
 import { recipeFolderHooks } from "./use-folders";
 
@@ -47,9 +47,9 @@ export function FolderBrowser({
         create: "Nueva receta",
         folderExample: "Desayunos",
       }}
-      renderItems={(items, { hideTag, onMove }) => (
+      moveItem={(recipe, folderId) => moveRecipe(recipe.id, folderId)}
+      renderItems={(items, { onMove }) => (
         <RecipeList
-          hideTag={hideTag}
           isError={false}
           isLoading={false}
           recipes={items}
@@ -61,7 +61,6 @@ export function FolderBrowser({
       )}
       tags={tags}
       tagsOf={(recipe) => recipe.meal_type_tags}
-      updateItemTags={(recipe, next) => updateRecipeTags(recipe.id, next)}
       onCreateItem={onCreateRecipe}
       onMoved={() => qc.invalidateQueries({ queryKey: ["recipes"] })}
     />

@@ -16,8 +16,6 @@ interface RecipeFiltersProps {
   status: string;
   /** Selected tags; a recipe must carry all of them. */
   tags: string[];
-  /** Distinct tags across the library to offer as filter options. */
-  tagOptions: string[];
   /** Hide the status select (the folder view organizes by folder instead). */
   showStatus?: boolean;
   onQueryChange: (value: string) => void;
@@ -37,7 +35,6 @@ export function RecipeFilters({
   query,
   status,
   tags,
-  tagOptions,
   showStatus = true,
   onQueryChange,
   onStatusChange,
@@ -84,11 +81,7 @@ export function RecipeFilters({
         </Select>
       )}
 
-      <TagFilterSelect
-        options={tagOptions}
-        value={tags}
-        onChange={onTagsChange}
-      />
+      <TagFilterSelect kind="recipe" value={tags} onChange={onTagsChange} />
     </div>
   );
 }

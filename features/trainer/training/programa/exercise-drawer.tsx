@@ -32,7 +32,6 @@ import { useEffect, useMemo, useState } from "react";
 import { TrainingApiError } from "./training-api";
 import { useExerciseLibrarySearch, useExerciseMutations } from "./use-training";
 
-import { useExerciseTags } from "@/features/exercises/exercise-tags";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 
 export interface ExerciseDrawerProps {
@@ -188,7 +187,6 @@ export function ExerciseDrawer({
   // Etiquetas combinadas (Sep 2, JC): "cliente en casa con barra y
   // mancuernas, quiero meterle un pectoral → filtrar por".
   const [tagFilter, setTagFilter] = useState<string[]>([]);
-  const tagOptions = useExerciseTags();
   const [selected, setSelected] = useState<SelectedExercise | null>(null);
   const isCardio =
     selected !== null
@@ -485,7 +483,7 @@ export function ExerciseDrawer({
 
                 <TagFilterSelect
                   className="w-full"
-                  options={tagOptions}
+                  kind="exercise"
                   size="sm"
                   value={tagFilter}
                   onChange={setTagFilter}

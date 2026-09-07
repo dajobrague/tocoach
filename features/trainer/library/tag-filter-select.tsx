@@ -1,11 +1,15 @@
 "use client";
 
+import type { LibraryTagKind } from "./use-library-tags";
+
 import { Select, SelectItem, type Selection } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { useLibraryTagNames } from "./use-library-tags";
+
 interface TagFilterSelectProps {
-  /** Distinct tags across the library to offer as filter options. */
-  options: string[];
+  /** Which registry to offer as options. Folders never show up here. */
+  kind: LibraryTagKind;
   /** Selected tags; an item must carry all of them. */
   value: string[];
   onChange: (tags: string[]) => void;
@@ -18,15 +22,17 @@ function allKeys(keys: Selection): string[] {
   return keys === "all" ? [] : Array.from(keys).map(String);
 }
 
-/** Multi-select tag filter (AND). Renders nothing while there are no tags
- *  to offer, so pages without tags keep their layout. */
+/** Multi-select tag filter (AND) over the tenant's registry. Renders nothing
+ *  while the registry is empty, so pages without tags keep their layout. */
 export function TagFilterSelect({
-  options,
+  kind,
   value,
   onChange,
   className = "sm:max-w-[240px]",
   size = "md",
 }: TagFilterSelectProps) {
+  const options = useLibraryTagNames(kind);
+
   if (options.length === 0) return null;
 
   return (

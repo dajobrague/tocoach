@@ -16,8 +16,6 @@ interface RecipeListProps {
   onCreate?: () => void;
   /** Folder view only: per-card "move to folder" action. */
   onMove?: (recipe: RecipeListItem) => void;
-  /** Tag every card shares (the open folder's) — not worth repeating. */
-  hideTag?: string | undefined;
 }
 
 const GRID =
@@ -31,7 +29,6 @@ export function RecipeList({
   onDelete,
   onCreate,
   onMove,
-  hideTag,
 }: RecipeListProps) {
   if (isLoading) {
     return (
@@ -81,7 +78,6 @@ export function RecipeList({
       {recipes.map((recipe) => (
         <RecipeCard
           key={recipe.id}
-          hideTag={hideTag}
           recipe={recipe}
           {...(onOpen !== undefined ? { onOpen } : {})}
           {...(onDelete !== undefined ? { onDelete } : {})}

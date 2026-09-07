@@ -14,6 +14,7 @@ function makeRecipe(overrides: Partial<RecipeListItem> = {}): RecipeListItem {
     name: "Recipe",
     status: "active",
     meal_type_tags: [],
+    folder_id: null,
     kcal: 0,
     protein_g: 0,
     carbs_g: 0,

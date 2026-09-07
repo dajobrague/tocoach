@@ -21,7 +21,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
-import { useExerciseTags } from "@/features/exercises/exercise-tags";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
@@ -50,7 +49,6 @@ export default function ExerciseLibraryContent() {
   categoryFilterRef.current = categoryFilter;
   searchQueryRef.current = searchQuery;
   tagFilterRef.current = tagFilter;
-  const tagOptions = useExerciseTags();
 
   const fetchExercisesPage = useCallback(
     async (page: number, mode: "replace" | "append") => {
@@ -292,7 +290,7 @@ export default function ExerciseLibraryContent() {
 
         <TagFilterSelect
           className="sm:max-w-sm"
-          options={tagOptions}
+          kind="exercise"
           value={tagFilter}
           onChange={setTagFilter}
         />

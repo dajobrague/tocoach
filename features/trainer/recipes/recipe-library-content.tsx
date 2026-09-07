@@ -16,7 +16,6 @@ import { FolderBrowser } from "./folder-browser";
 import { GroupedRecipeList } from "./grouped-recipe-list";
 import { NewRecipeModal } from "./new-recipe-modal";
 import { RecipeFilters } from "./recipe-filters";
-import { distinctMealTypes } from "./recipe-query";
 import { useRecipeFolders } from "./use-folders";
 import { useRecipes } from "./use-recipes";
 
@@ -70,20 +69,12 @@ export function RecipeLibraryContent() {
   }, [query, status, tags]);
 
   const { data, isLoading, isError } = useRecipes(filters);
-  // Unfiltered library (cache-shared with the initial page load) so the tag
-  // dropdown keeps offering every tag while a filter narrows the list.
+  // Unfiltered library (cache-shared with the initial page load): the folder
+  // view computes membership client-side.
   const allRecipes = useRecipes({});
   // Folder hierarchy, shared with the folder view's cache: the list view
   // groups by it.
   const foldersQuery = useRecipeFolders();
-  const tagOptions = useMemo(
-    () =>
-      distinctMealTypes(allRecipes.data ?? [], [
-        ...(foldersQuery.data ?? []).map((folder) => folder.name),
-        ...tags,
-      ]),
-    [allRecipes.data, foldersQuery.data, tags]
-  );
   // Archived = soft-deleted; hide them unless the trainer explicitly filters by
   // status (they remain reachable via the "Archivada" filter option).
   const recipes = useMemo(
@@ -177,7 +168,6 @@ export function RecipeLibraryContent() {
               query={query}
               showStatus={view === "list"}
               status={status}
-              tagOptions={tagOptions}
               tags={tags}
               onQueryChange={setQuery}
               onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}

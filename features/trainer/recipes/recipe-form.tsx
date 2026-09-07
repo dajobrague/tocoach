@@ -35,13 +35,10 @@ import {
   ingredientsEqual,
   previewTotals,
 } from "./recipe-draft";
-import { distinctMealTypes } from "./recipe-query";
 import { RecipePreviewModal } from "./recipe-preview-modal";
 import { RecipeSummaryStrip } from "./recipe-summary-strip";
 import { UnsavedChangesModal } from "./unsaved-changes-modal";
-import { useRecipeFolders } from "./use-folders";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
-import { useRecipes } from "./use-recipes";
 import {
   useCreateRecipe,
   useRemoveMedia,
@@ -173,10 +170,6 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
   const recipeQuery = useRecipe(recipeId);
   const ingredientsQuery = useRecipeIngredients(recipeId);
   const mediaQuery = useRecipeMedia(recipeId);
-  // Full library + folders, only to suggest existing tags in the tag editor
-  // (a folder's name is a tag too, and fixes the canonical spelling).
-  const libraryQuery = useRecipes({});
-  const foldersQuery = useRecipeFolders();
 
   const update = useUpdateRecipe(recipeId);
   const replaceIngredients = useReplaceIngredients(recipeId);
@@ -380,13 +373,10 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
               />
 
               <TagsField
-                description="Escribe para buscar entre tus etiquetas o crear una nueva. Sirven para buscar y filtrar recetas."
+                description="Escribe y pulsa Enter para añadir; si no existe, se crea. Sirven para buscar y filtrar recetas."
                 disabled={busy}
-                placeholder="Ej. desayuno, sin gluten, verano..."
-                suggestions={distinctMealTypes(
-                  libraryQuery.data ?? [],
-                  (foldersQuery.data ?? []).map((folder) => folder.name)
-                )}
+                kind="recipe"
+                placeholder="Ej. sin gluten, vegano, verano..."
                 value={values.mealTypeTags}
                 onChange={(tags) =>
                   setValues({ ...values, mealTypeTags: tags })
