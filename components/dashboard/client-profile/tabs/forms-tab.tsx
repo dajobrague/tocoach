@@ -1109,6 +1109,7 @@ export default function FormsTab({
                         ? checkinConfigData!
                         : habitConfigData!
                     }
+                    showPageCadence={selectedFormType === "checkins"}
                     onChange={handleEditorChange}
                     onDirtyChange={handleDirtyChange}
                     onQuestionAdded={() =>

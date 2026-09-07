@@ -1,3 +1,5 @@
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
@@ -11,6 +13,7 @@ import {
   validateFormResponse,
 } from "@/lib/forms";
 import { relaxStepsRequirement } from "@/lib/forms/neat-steps";
+import { dropPagesNotDue } from "@/lib/forms/page-cadence";
 
 /**
  * GET /api/forms/responses/[clientId]?form_type=checkins|habits&start_date=&end_date=
@@ -337,7 +340,7 @@ export async function POST(
 
     let { data: configRow, error: configFetchError } = await supabase
       .from("client_form_configs")
-      .select("questions_config")
+      .select("questions_config, schedule")
       .eq("client_id", clientId)
       .eq("form_type", form_type)
       .maybeSingle();
@@ -385,7 +388,10 @@ export async function POST(
       const createdRow = Array.isArray(createdRows) ? createdRows[0] : null;
 
       if (createdRow?.questions_config) {
-        configRow = { questions_config: createdRow.questions_config };
+        configRow = {
+          questions_config: createdRow.questions_config,
+          schedule: null,
+        };
       } else {
         return NextResponse.json(
           {
@@ -398,7 +404,19 @@ export async function POST(
       }
     }
 
-    const questionsConfig = configRow.questions_config;
+    // Check-ins: pages with a cadence (`every_n`) are not part of this
+    // period's form — the client never saw them, so don't require them.
+    // Same helper and schedule as the client modal.
+    const questionsConfig =
+      form_type === "checkins" && isStructuredConfig(configRow.questions_config)
+        ? dropPagesNotDue(
+            configRow.questions_config,
+            (configRow as { schedule?: unknown }).schedule as
+              | CheckInSchedule
+              | null
+              | undefined
+          )
+        : configRow.questions_config;
     const questionsArray = isStructuredConfig(questionsConfig)
       ? questionsConfig.questions
       : Array.isArray(questionsConfig)
