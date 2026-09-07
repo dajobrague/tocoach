@@ -40,9 +40,13 @@ alter default privileges in schema public revoke all on functions from anon, aut
 -- /rest/v1/rpc/<name> with the anon key. Their ACL grants EXECUTE to PUBLIC
 -- (`=X/postgres`) as well as to anon/authenticated explicitly, so revoking
 -- from anon/authenticated alone would be a no-op: PUBLIC must go too.
+-- Evidence (pg_proc.proacl, identical for all 7, local == prod shape):
+--   {=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 -- postgres and service_role keep their explicit grants (app code calls
 -- get_trainer_deletion_impact / cleanup_expired_otps with the service role);
--- the trigger functions fire under the DML role, which is service_role.
+-- the trigger functions (auto_confirm_* on trainers/admin_users,
+-- delete_auth_user_on_admin_delete on admin_users) fire under the DML role,
+-- which is service_role.
 revoke execute on function public.auto_confirm_admin_email() from public, anon, authenticated;
 revoke execute on function public.auto_confirm_trainer_email() from public, anon, authenticated;
 revoke execute on function public.cleanup_expired_otps() from public, anon, authenticated;
@@ -61,9 +65,13 @@ drop policy if exists notifications_anon_access on public.notifications;
 
 grant select on public.messages, public.notifications to authenticated;
 
--- messages.tenant_slug stores the tenant HOST (both writers in
--- app/api/messages/*). Trainers listen tenant-wide; clients only to their own
--- conversation.
+-- messages has no tenant_host column: its `tenant_slug` column stores the
+-- tenant HOST. Both writers:
+--   app/api/messages/route.ts:193          tenant_slug: tenantHost,
+--   app/api/messages/trainer/route.ts:277  tenant_slug: trainer.tenant_host,
+-- (and the FK messages_tenant_slug_fkey references tenants(host)), so the
+-- column is compared with the `tenant_host` claim. Trainers listen
+-- tenant-wide; clients only to their own conversation.
 create policy messages_realtime_select on public.messages
   for select to authenticated
   using (
@@ -74,12 +82,14 @@ create policy messages_realtime_select on public.messages
     )
   );
 
--- notifications.tenant_slug is NOT consistent: chat/video rows store the SLUG
--- (lib/notifications/chat-notification.ts) but form reminders store the HOST
--- (app/api/forms/notifications/create). Accept either so no writer's rows
--- silently stop reaching the bell. The recipient id is what isolates
--- tenants: trainer_id (auth uuid) and client_id (global serial) are unique
--- across tenants.
+-- notifications.tenant_slug is NOT consistent across writers:
+--   lib/notifications/chat-notification.ts:49          tenant_slug: args.tenantSlug   (SLUG)
+--   app/api/forms/notifications/create/route.ts:275    tenant_slug: tenantHost        (HOST)
+--   app/api/forms/notifications/create/route.ts:458    tenant_slug: d.tenant_host     (HOST)
+-- Accept either claim so no writer's rows silently stop reaching the bell
+-- (tech debt: forms/notifications/create should write the slug). The
+-- recipient id is what isolates tenants: trainer_id (auth uuid) and
+-- client_id (global serial) are unique across tenants.
 create policy notifications_realtime_select on public.notifications
   for select to authenticated
   using (

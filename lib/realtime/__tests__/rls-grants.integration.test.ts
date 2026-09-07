@@ -259,6 +259,24 @@ describe("app-signed realtime token", () => {
     expect(strangerRows.data).toEqual([]);
   });
 
+  it("a tenant-B trainer sees only tenant B (symmetric)", async () => {
+    const supabase = tokenClient(
+      await signToken({
+        kind: "trainer",
+        user_id: "other-trainer",
+        tenant_host: OTHER_TENANT_HOST,
+        tenant_slug: OTHER_TENANT_HOST,
+      })
+    );
+    const { data, error } = await supabase
+      .from("messages")
+      .select("tenant_slug")
+      .in("id", messageIds);
+
+    expect(error).toBeNull();
+    expect(data).toEqual([{ tenant_slug: OTHER_TENANT_HOST }]);
+  });
+
   it("a tenant-A token gets nothing from tenant B even when filtering for it", async () => {
     const supabase = tokenClient(await signToken(trainerA));
     const { data, error } = await supabase
