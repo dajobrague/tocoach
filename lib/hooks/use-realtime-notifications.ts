@@ -133,7 +133,7 @@ export function useRealtimeNotifications({
             setRefreshTrigger((prev) => prev + 1);
           }
         )
-        .subscribe((status) => {
+        .subscribe((status, err) => {
           setHasAttempted(true);
           const connected = status === "SUBSCRIBED";
 
@@ -148,6 +148,11 @@ export function useRealtimeNotifications({
             status === "CHANNEL_ERROR" ||
             status === "TIMED_OUT"
           ) {
+            console.warn(
+              "[Realtime] channel",
+              status,
+              err instanceof Error ? err.message : (err ?? "")
+            );
             wasDisconnectedRef.current = true;
           }
 
