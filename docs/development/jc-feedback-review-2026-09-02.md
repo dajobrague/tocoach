@@ -113,3 +113,12 @@ Ninguna rama debe salir del worktree hasta que David la pruebe en local.
 - `npm i --no-save server-only` en el `node_modules` del repo principal (package.json/lock intactos); el worktree `top_coach-rls` tiene ahora `node_modules` propio (npm sustituyó el symlink).
 - **Producción, orden obligatorio:** (1) desplegar código (`SUPABASE_JWT_SECRET` ya está en Railway); (2) verificar login, chat, campana; (3) aplicar `20260907120000_revoke_anon_table_access.sql` por MCP con confirmación de David.
 - Deuda señalada por el agente, fuera de alcance: `notifications.tenant_slug` tiene FK a `tenants(host)` pero el chat guarda el slug (falla silenciosa 23503 si host≠slug); `forms/notifications/create` guarda host; 61 políticas `anon → true` inertes en otras tablas; CLAUDE.md sigue mencionando `trainer_profiles`/`client_profiles` que no existen en prod.
+
+## Deuda cerrada 2026-09-07 (rama `chore/debt-sep7`)
+
+- `notifications.tenant_slug` = **slug** en todos los escritores; `UNIQUE(tenants.slug)` y FK → `tenants(slug)` (`20260907200000`). `messages.tenant_slug` sigue siendo host (FK, escritores y política consistentes entre sí).
+- Etiquetas de ejercicio largas con coma partidas en etiquetas reales, registradas y con auditoría reversible (`20260907201000`; 41 ejercicios en local, ~95 en prod).
+- 101 políticas `USING (true)` inertes eliminadas y `search_path` fijado en las 18 funciones de `public` (`20260907202000`).
+- CLAUDE.md: corregida la descripción de auth (trainers en Supabase Auth; clientes solo en `clients`, sin `*_profiles`).
+
+**Deuda NUEVA, prioritaria — no tocada en esta rama:** `clients.password` guarda la contraseña **en texto plano** y `app/api/auth/client-login/route.ts:74` la compara con `!==`. 275 clientes con contraseña. Requiere hash (bcrypt/argon2) + migración de contraseñas existentes (hash al siguiente login válido o reset forzado) + tocar `client-login`, `client-reset-password`, `setup-client-password`. Decisión de David.

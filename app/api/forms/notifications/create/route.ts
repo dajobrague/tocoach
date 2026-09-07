@@ -268,11 +268,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // notifications.tenant_slug stores the SLUG (FK tenants(slug); the
+    // client bell filters by it). This route only knows the host.
+    const { data: tenantRow } = await supabase
+      .from("tenants")
+      .select("slug")
+      .eq("host", tenantHost)
+      .maybeSingle();
+    const tenantSlug = tenantRow?.slug ?? tenantHost;
+
     // Create notification
     const { data: notification, error } = await supabase
       .from("notifications")
       .insert({
-        tenant_slug: tenantHost,
+        tenant_slug: tenantSlug,
         client_id: client_id,
         trainer_id: resolvedTrainerId,
         type: notification_type,
@@ -417,6 +426,22 @@ export async function PUT(_request: NextRequest) {
       }
     }
 
+    // notifications.tenant_slug stores the SLUG (FK tenants(slug)); the
+    // schedules only carry the host.
+    const slugByHost = new Map<string, string>();
+    const hosts = [...new Set(dueCheckinList.map((d) => d.tenant_host))];
+
+    if (hosts.length > 0) {
+      const { data: tenantRows } = await supabase
+        .from("tenants")
+        .select("host, slug")
+        .in("host", hosts);
+
+      for (const t of tenantRows ?? []) {
+        slugByHost.set(t.host, t.slug);
+      }
+    }
+
     const dupWeeklyIds = new Set<number>();
     let weeklyDupCheckFailed = false;
 
@@ -455,7 +480,7 @@ export async function PUT(_request: NextRequest) {
         );
 
         checkinInsertRows.push({
-          tenant_slug: d.tenant_host,
+          tenant_slug: slugByHost.get(d.tenant_host) ?? d.tenant_host,
           client_id: d.client_id,
           trainer_id: trainerByHost.get(d.tenant_host),
           type: "form_weekly_available",
