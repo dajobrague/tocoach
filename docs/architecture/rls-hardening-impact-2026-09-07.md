@@ -7,15 +7,15 @@
 
 ## 1. Situación verificada
 
-| Métrica (prod, schema `public`) | Valor |
-|---|---|
-| Tablas | 62 |
-| Tablas donde el rol `anon` puede **leer** | **62** |
-| Tablas donde el rol `anon` puede **escribir/borrar/truncar** | **62** |
-| Tablas con RLS desactivado del todo | 5 (`client_checkins`, `client_goals`, `client_water_intake`, `client_step_tracking`, `tenant_events`) |
-| Tablas con RLS "activado" pero política `USING (true)` para `anon` | 52 |
-| Tablas con aislamiento real | **0** (`trainers`/`admin_users`/`tenants` tienen políticas restrictivas por `auth.uid()`, pero conviven con una permisiva `anon → true`; permisivas se combinan con OR) |
-| Funciones `SECURITY DEFINER` ejecutables por `anon` vía `/rest/v1/rpc/…` | 7, incluida `delete_auth_user_on_admin_delete` y `get_trainer_deletion_impact` |
+| Métrica (prod, schema `public`)                                          | Valor                                                                                                                                                                   |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tablas                                                                   | 62                                                                                                                                                                      |
+| Tablas donde el rol `anon` puede **leer**                                | **62**                                                                                                                                                                  |
+| Tablas donde el rol `anon` puede **escribir/borrar/truncar**             | **62**                                                                                                                                                                  |
+| Tablas con RLS desactivado del todo                                      | 5 (`client_checkins`, `client_goals`, `client_water_intake`, `client_step_tracking`, `tenant_events`)                                                                   |
+| Tablas con RLS "activado" pero política `USING (true)` para `anon`       | 52                                                                                                                                                                      |
+| Tablas con aislamiento real                                              | **0** (`trainers`/`admin_users`/`tenants` tienen políticas restrictivas por `auth.uid()`, pero conviven con una permisiva `anon → true`; permisivas se combinan con OR) |
+| Funciones `SECURITY DEFINER` ejecutables por `anon` vía `/rest/v1/rpc/…` | 7, incluida `delete_auth_user_on_admin_delete` y `get_trainer_deletion_impact`                                                                                          |
 
 La anon key es `NEXT_PUBLIC_SUPABASE_ANON_KEY`: está en el bundle del navegador. El aislamiento entre trainers vive **exclusivamente** en el `.eq("tenant_host", …)` de cada servicio del servidor.
 
@@ -31,12 +31,12 @@ Esto es lo que te preocupa, así que va primero. Tracé **cada** `createClient` 
 
 Los únicos usos de la anon key en código `"use client"`:
 
-| Fichero | Qué hace | ¿Toca tablas? |
-|---|---|---|
-| `app/trainer/login/page.tsx:98-160` | `auth.signInWithPassword`, `auth.updateUser`, `auth.signOut` | No — habla con GoTrue (`/auth/v1`) |
-| `app/admin/login/page.tsx:62-122` | Ídem | No |
-| `components/admin/edit-profile-modal.tsx:103-154` | `signInWithPassword` + `updateUser` (cambio de email/contraseña) | No |
-| `lib/clients/supabase-browser.ts` → `lib/hooks/use-realtime-messages.ts`, `use-realtime-notifications.ts` | `channel().on("postgres_changes", …)` | **Sí: es lo único que se rompe** (ver §3) |
+| Fichero                                                                                                   | Qué hace                                                         | ¿Toca tablas?                             |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------- |
+| `app/trainer/login/page.tsx:98-160`                                                                       | `auth.signInWithPassword`, `auth.updateUser`, `auth.signOut`     | No — habla con GoTrue (`/auth/v1`)        |
+| `app/admin/login/page.tsx:62-122`                                                                         | Ídem                                                             | No                                        |
+| `components/admin/edit-profile-modal.tsx:103-154`                                                         | `signInWithPassword` + `updateUser` (cambio de email/contraseña) | No                                        |
+| `lib/clients/supabase-browser.ts` → `lib/hooks/use-realtime-messages.ts`, `use-realtime-notifications.ts` | `channel().on("postgres_changes", …)`                            | **Sí: es lo único que se rompe** (ver §3) |
 
 Los tres primeros crean el cliente con `persistSession: false` (`login/page.tsx:100`), así que **no queda una sesión de Supabase Auth en localStorage** que alguien pudiera reutilizar contra PostgREST como `authenticated`.
 
@@ -44,17 +44,19 @@ Los tres primeros crean el cliente con `persistSession: false` (`login/page.tsx:
 
 ### 2.2 Registro, OTP y recuperación de contraseña van por el servidor
 
-| Flujo | Ruta | Cliente que usa | Tablas | Qué le pasa al cambiar |
-|---|---|---|---|---|
-| Registro de trainer | `app/api/auth/register` | `supabase-server` (anon) + `auth.*` | 2 `.from()` | El `.from()` pasa a service role → mismas filas. `auth.*` no cambia. |
-| Olvido/reset trainer | `trainer-forgot-password`, `trainer-reset-password` | `supabase-server` + `auth.admin` (ya usa `supabase-admin` = service role) | `otp_codes`, `trainers`, log | Ídem. `auth.admin` ya es service role hoy. |
-| Olvido/reset cliente | `client-forgot-password`, `client-reset-password` | `supabase-server` | `otp_codes`, `clients`, log | Ídem. |
-| Verificar OTP | `trainer-verify-otp`, `client-verify-otp` → `lib/security/otp.ts` | `supabase-server` | `otp_codes` ×8 | Ídem. |
-| Cambio de contraseña trainer | `app/api/trainer/change-password` | `supabase-server` + `auth.*` ×2 | 0 | Sin `.from()`; `auth.*` no cambia. |
-| Invitación | `lib/auth/invitation.ts` | anon | `invitation_codes` | Pasa a service role → sigue leyendo. |
-| Triggers `auto_confirm_trainer_email`, `auto_confirm_admin_email` | DB | — | — | Son triggers: no dependen de grants del rol que llama. |
+| Flujo                                                             | Ruta                                                              | Cliente que usa                                                           | Tablas                       | Qué le pasa al cambiar                                               |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------- |
+| Registro de trainer                                               | `app/api/auth/register`                                           | `supabase-server` (anon) + `auth.*`                                       | 2 `.from()`                  | El `.from()` pasa a service role → mismas filas. `auth.*` no cambia. |
+| Olvido/reset trainer                                              | `trainer-forgot-password`, `trainer-reset-password`               | `supabase-server` + `auth.admin` (ya usa `supabase-admin` = service role) | `otp_codes`, `trainers`, log | Ídem. `auth.admin` ya es service role hoy.                           |
+| Olvido/reset cliente                                              | `client-forgot-password`, `client-reset-password`                 | `supabase-server`                                                         | `otp_codes`, `clients`, log  | Ídem.                                                                |
+| Verificar OTP                                                     | `trainer-verify-otp`, `client-verify-otp` → `lib/security/otp.ts` | `supabase-server`                                                         | `otp_codes` ×8               | Ídem.                                                                |
+| Cambio de contraseña trainer                                      | `app/api/trainer/change-password`                                 | `supabase-server` + `auth.*` ×2                                           | 0                            | Sin `.from()`; `auth.*` no cambia.                                   |
+| Invitación                                                        | `lib/auth/invitation.ts`                                          | anon                                                                      | `invitation_codes`           | Pasa a service role → sigue leyendo.                                 |
+| Triggers `auto_confirm_trainer_email`, `auto_confirm_admin_email` | DB                                                                | —                                                                         | —                            | Son triggers: no dependen de grants del rol que llama.               |
 
 **Ningún flujo de auth ejecuta `.from()` desde el navegador.** Todos pasan por `lib/clients/supabase-server.ts` (o `supabase-api.ts`, `loader.ts`, `invitation.ts`, `session.ts:228`, `client-session.ts:184`). Cambiar **esa factoría** a service role es un cambio de configuración: el código de cada ruta no se toca y sigue filtrando por `tenant_host` exactamente igual.
+
+> **Corrección (implementación, 2026-09-07):** "el `.from()` pasa a service role" no bastaba. `app/api/auth/login` (y `admin/login`, `admin/trainers`, `admin/users`) llaman a `auth.signInWithPassword()` / `auth.signUp()` y después a `.from()` **sobre el mismo cliente**. supabase-js guarda esa sesión GoTrue en memoria aunque `persistSession:false`, y a partir de ahí manda `Authorization: Bearer <access_token del usuario>` (rol `authenticated`), no la key. Con `authenticated` sin grants, el login devolvía `permission denied for table trainers`. Por eso `createSupabaseAdminClient()` fija `global.headers.Authorization = Bearer <service key>`: `fetchWithAuth` (supabase-js 2.81.1, `dist/main/lib/fetch.js:25`) respeta un Authorization ya presente, mientras que gotrue-js sigue poniendo el JWT del usuario por petición en llamadas como `auth.updateUser()`. El test `lib/clients/__tests__/supabase-admin.test.ts` falla si alguien quita ese header.
 
 ### 2.3 Lo demás
 
@@ -70,7 +72,7 @@ Los tres primeros crean el cliente con `persistSession: false` (`login/page.tsx:
 
 `use-realtime-messages.ts` y `use-realtime-notifications.ts` se suscriben a `postgres_changes` sobre `messages` y `notifications` con el token anon (no llaman a `realtime.setAuth`). Realtime aplica RLS con el rol del token: al quitarle `SELECT` a `anon`, **deja de llegar ningún evento**. Hoy, por cierto, un suscriptor puede escuchar `messages` de **cualquier** tenant cambiando el `filter` — es otra cara de la misma exposición.
 
-**Solución con la doc oficial de Supabase** (guía *Realtime → Postgres Changes → Custom tokens*): firmar en el servidor un JWT corto con el **JWT secret del proyecto Supabase** (Dashboard → Settings → API), con `role: "authenticated"` y claims propios (`tenant_host`, `user_id`, `kind`), entregarlo al navegador, y el hook hace `supabase.realtime.setAuth(token)` antes de suscribirse. Entonces:
+**Solución con la doc oficial de Supabase** (guía _Realtime → Postgres Changes → Custom tokens_): firmar en el servidor un JWT corto con el **JWT secret del proyecto Supabase** (Dashboard → Settings → API), con `role: "authenticated"` y claims propios (`tenant_host`, `user_id`, `kind`), entregarlo al navegador, y el hook hace `supabase.realtime.setAuth(token)` antes de suscribirse. Entonces:
 
 - `messages` y `notifications` conservan `SELECT` **solo** para `authenticated`, con una política **real**:
   `tenant_host = auth.jwt()->>'tenant_host' AND (…destinatario = auth.jwt()->>'user_id'…)`.
@@ -88,12 +90,14 @@ Alternativa sin tocar auth de Realtime: relay por el servidor (SSE) o volver a p
 
 **Qué cambia**
 
-*Código (~10 ficheros, mecánico):*
+_Código (~10 ficheros, mecánico):_
+
 1. `lib/clients/supabase-server.ts`, `supabase-api.ts`, `lib/tenant/loader.ts`, `lib/auth/invitation.ts`, `lib/auth/session.ts:228`, `lib/auth/client-session.ts:184`, `app/api/messages/route.ts`, `app/api/messages/trainer/route.ts`, `app/api/notifications/route.ts`, `middleware.ts` → clave `SUPABASE_SERVICE_ROLE_KEY`. Mejor aún: que todos importen **una** factoría (`supabase-admin.ts` ya existe) y morir la duplicación.
 2. Guard `import "server-only"` en esa factoría: hoy `supabase-server.ts` no lo tiene; con service role dentro, un import accidental desde un `"use client"` sería catastrófico. El guard lo convierte en error de build.
 3. Endpoint `/api/realtime-token` + `setAuth` en los dos hooks (§3).
 
-*Base de datos (una migración):*
+_Base de datos (una migración):_
+
 ```sql
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
@@ -121,6 +125,7 @@ GRANT SELECT ON public.messages, public.notifications TO authenticated;
 **Qué es realmente.** No es reemplazar tu auth por Supabase Auth. La doc confirma que un JWT firmado con el secret del proyecto, con `role: "authenticated"` y claims propios, es un token válido para PostgREST, y que las políticas pueden leer `auth.jwt()->>'tenant_host'`. Es decir: **tu modelo de sesión se queda**; lo que cambia es que el servidor, en cada petición, habla con Postgres con un token que lleva el tenant, y Postgres lo comprueba.
 
 **Coste real:**
+
 - Políticas para ~57 tablas. Muchas tienen `tenant_host`; otras solo `client_id` (join) — hay que auditar una a una.
 - **`tenant_host ≠ tenant_slug`** y las tablas no son consistentes (memoria del proyecto: `notifications.tenant_slug` vs `messages.tenant_host`). Cada política es una oportunidad de equivocarse de columna.
 - Registro y admin (cross-tenant) siguen necesitando service role; hay que separar explícitamente "rutas con tenant" de "rutas sin tenant".
@@ -137,7 +142,7 @@ GRANT SELECT ON public.messages, public.notifications TO authenticated;
 1. **Opción A completa, incluyendo el token de Realtime, en una sola PR.** Impacto cero en registro/login/reset. Reversible. Cierra el agujero real.
 2. Corregir `CLAUDE.md` y `security-baseline.md` en esa misma PR para que digan la verdad.
 3. **Opción B incremental**, empezando por las 4 tablas sensibles, como proyecto aparte con su propio plan y tests por tabla.
-4. Activar *Leaked password protection* en Auth (el advisor lo marca; es un toggle).
+4. Activar _Leaked password protection_ en Auth (el advisor lo marca; es un toggle).
 
 ---
 
