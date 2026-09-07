@@ -7,6 +7,10 @@ import {
   updateClientLastLogin,
 } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  clientPasswordUpdate,
+  hasClientPassword,
+} from "@/lib/auth/client-password";
 
 function validatePassword(password: string): {
   valid: boolean;
@@ -84,7 +88,9 @@ export async function POST(request: NextRequest) {
     // Get client scoped to this tenant
     const { data: client, error: fetchError } = await supabase
       .from("clients")
-      .select("id, email, name, last_name, password, status, tenant")
+      .select(
+        "id, email, name, last_name, password, password_hash, status, tenant"
+      )
       .eq("id", clientId)
       .eq("tenant", tenant.trainer_id)
       .single();
@@ -102,7 +108,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (client.password && client.password.trim() !== "") {
+    if (hasClientPassword(client)) {
       return NextResponse.json(
         { error: "La contraseña ya fue configurada para esta cuenta." },
         { status: 400 }
@@ -111,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     const { error: updateError } = await supabase
       .from("clients")
-      .update({ password: password })
+      .update(await clientPasswordUpdate(password))
       .eq("id", clientId)
       .eq("tenant", tenant.trainer_id);
 

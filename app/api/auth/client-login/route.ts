@@ -6,6 +6,11 @@ import {
   updateClientLastLogin,
 } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  clientPasswordUpdate,
+  hasClientPassword,
+  verifyClientPassword,
+} from "@/lib/auth/client-password";
 
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
@@ -44,7 +49,9 @@ export async function POST(request: NextRequest) {
     // Get client and verify they belong to this tenant
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .select("id, email, name, last_name, password, status, tenant")
+      .select(
+        "id, email, name, last_name, password, password_hash, status, tenant"
+      )
       .eq("id", clientId)
       .eq("tenant", tenant.trainer_id)
       .single();
@@ -62,7 +69,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!client.password || client.password.trim() === "") {
+    if (!hasClientPassword(client)) {
       return NextResponse.json(
         {
           error: "Contraseña no configurada. Configura tu contraseña primero.",
@@ -71,13 +78,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (client.password !== password) {
+    const check = await verifyClientPassword(client, password);
+
+    if (!check.ok) {
       console.warn("[Client Login] Invalid password for:", client.email);
 
       return NextResponse.json(
         { error: "Contraseña incorrecta" },
         { status: 401 }
       );
+    }
+
+    if (check.upgrade) {
+      // Legacy plain-text row: store the hash and wipe the plain text now.
+      // Best effort — a failure here must never block a valid login.
+      void (async () => {
+        const { error: upgradeError } = await supabase
+          .from("clients")
+          .update(await clientPasswordUpdate(password))
+          .eq("id", client.id);
+
+        if (upgradeError) {
+          console.warn(
+            "[Client Login] password hash upgrade failed for:",
+            client.email,
+            upgradeError.message
+          );
+        }
+      })();
     }
 
     if (
