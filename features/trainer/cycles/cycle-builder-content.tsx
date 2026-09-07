@@ -217,6 +217,7 @@ export function CycleBuilderContent({
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 sm:p-6 lg:p-8">
         <MealPlanHeader
           activeId={activeId}
+          clientId={clientId}
           cycles={cycles ?? []}
           onNewCycle={() => setNewOpen(true)}
           onSelectCycle={setSelectedId}
