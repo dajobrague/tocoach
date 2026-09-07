@@ -60,6 +60,13 @@ Airtable was fully removed in October 2025 (see `docs/architecture/auth-adr-v2.m
 
 The `anon` and `authenticated` roles have **no grants** on `public` tables (migration `20260907120000_revoke_anon_table_access.sql`), so the public anon key cannot read or write data; it only serves GoTrue login flows and the Realtime socket. The middleware uses an inline service-role client (no `server-only` in that bundle) for the `tenants.slug/status` lookup only. Browser Realtime (`lib/hooks/use-realtime-*`) joins channels with a short-lived JWT from `GET /api/realtime/token`, signed with `SUPABASE_JWT_SECRET`; `messages` / `notifications` keep `SELECT` for `authenticated` behind policies that read that token's claims.
 
+Server-only environment variables (see `.env.example`):
+
+- `JWT_SECRET` — signs the app's own trainer/admin/client session cookies. Boot fails without it.
+- `SUPABASE_SERVICE_ROLE_KEY` — every server-side Supabase query.
+- `SUPABASE_JWT_SECRET` — the Supabase **project** JWT secret (Settings → API → JWT Secret). Signs the Realtime token; it is a different value from `JWT_SECRET` and has no fallback. Missing it disables Realtime (endpoint returns 500 and logs) but does not break the app.
+- `CRON_SECRET` — shared secret for `GET /api/cron/cleanup-otps`.
+
 ### Service worker caching trap
 
 `public/sw.js` controls bundle caching for the PWA. `next.config.js` forces `Cache-Control: no-store` on `/sw.js` and the registration uses `updateViaCache: "none"` (`components/service-worker-registration.tsx`). This is **load-bearing** — without it, browsers/CDNs pin clients to a stale service worker for up to 24h (the SW spec's hard cap) and they never see new deploys. Don't relax these headers.
