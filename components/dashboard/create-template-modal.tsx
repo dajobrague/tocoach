@@ -16,16 +16,32 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { TagsField } from "@/features/trainer/library/tags-field";
+
 interface CreateTemplateModalProps {
   isOpen: boolean;
   defaultType?: "program" | "nutrition";
+  /** Distinct tags across the trainer's templates (and folder names). */
+  tagSuggestions?: string[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  type: "",
+  category: "",
+  division: "",
+  goal: "",
+  sessionsPerWeek: "3",
+  tags: [] as string[],
+};
+
 export default function CreateTemplateModal({
   isOpen,
   defaultType,
+  tagSuggestions = [],
   onClose,
   onSuccess,
 }: CreateTemplateModalProps) {
@@ -40,15 +56,7 @@ export default function CreateTemplateModal({
     }
   }, [isOpen, defaultType]);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    type: "",
-    category: "",
-    division: "",
-    goal: "",
-    sessionsPerWeek: "3",
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -96,15 +104,7 @@ export default function CreateTemplateModal({
         onSuccess();
         // Reset form
         setTemplateType(null);
-        setFormData({
-          name: "",
-          description: "",
-          type: "",
-          category: "",
-          division: "",
-          goal: "",
-          sessionsPerWeek: "3",
-        });
+        setFormData(EMPTY_FORM);
       } else {
         console.error("Error creating template:", result.error);
         alert("Error al crear la plantilla");
@@ -346,6 +346,15 @@ export default function CreateTemplateModal({
                       })
                     }
                   />
+
+                  <TagsField
+                    description="Para filtrar y organizar en carpetas. Ej. hombre, tres días, full body."
+                    disabled={isSubmitting}
+                    placeholder="Ej. hombre, tres días, full body..."
+                    suggestions={tagSuggestions}
+                    value={formData.tags}
+                    onChange={(tags) => setFormData({ ...formData, tags })}
+                  />
                 </>
               )}
             </div>
@@ -357,15 +366,7 @@ export default function CreateTemplateModal({
               variant="light"
               onPress={() => {
                 setTemplateType(null);
-                setFormData({
-                  name: "",
-                  description: "",
-                  type: "",
-                  category: "",
-                  division: "",
-                  goal: "",
-                  sessionsPerWeek: "3",
-                });
+                setFormData(EMPTY_FORM);
               }}
             >
               Atrás
