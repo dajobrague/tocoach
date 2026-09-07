@@ -298,7 +298,7 @@ export default function ExerciseLibraryContent() {
 
         {/* Renaming/removing a tag rewrites exercise arrays: reload page 1. */}
         <TagManagerButton
-          className="h-12"
+          className="self-start"
           kind="exercise"
           onChanged={() => fetchExercisesPage(1, "replace")}
         />
