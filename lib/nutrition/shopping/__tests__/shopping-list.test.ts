@@ -2,6 +2,7 @@ import type { MealCycleTree, MealSlotWithOptions } from "../../cycles";
 import type { MealSlotOptionRow } from "../../cycles";
 import type { ClientSelection } from "../../cycles/option-selection";
 import type { SnapshotIngredient } from "../../cycles/option-snapshot";
+import type { OverrideRow } from "../../cycles/override-types";
 
 import { describe, expect, it } from "vitest";
 
@@ -33,7 +34,8 @@ function ingredient(
 function option(
   id: string,
   position: number,
-  ingredients: SnapshotIngredient[]
+  ingredients: SnapshotIngredient[],
+  groupIndex = 0
 ): MealSlotOptionRow {
   return {
     id,
@@ -42,7 +44,7 @@ function option(
     source_type: "recipe",
     source_ref_id: "r1",
     position,
-    group_index: 0,
+    group_index: groupIndex,
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     item_snapshot: {
@@ -384,6 +386,99 @@ describe("aggregateShoppingList — selection / first-option fallback", () => {
     // Selection is for another slot → first option of s1 wins.
     expect(items).toEqual([
       { name: "Tofu", brand: null, unit: "g", quantity: 150 },
+    ]);
+  });
+});
+
+describe("aggregateShoppingList — components (group_index) all count", () => {
+  // Component 0 (carbs): Arroz | Patata. Component 1 (protein): Pollo | Tofu.
+  // Every option was added with position 0 (the API never sets it), so the
+  // fallback within a group is the first option in slot order.
+  function componentSlot(): MealSlotWithOptions {
+    return slot("s1", 0, [
+      option("arroz", 0, [ingredient("Arroz", 80)], 0),
+      option("patata", 0, [ingredient("Patata", 200)], 0),
+      option("pollo", 0, [ingredient("Pollo", 150)], 1),
+      option("tofu", 0, [ingredient("Tofu", 120)], 1),
+    ]);
+  }
+
+  it("sums the first option of EVERY component without a selection", () => {
+    const items = aggregateShoppingList({
+      tree: tree([componentSlot()]),
+      selections: NO_SELECTIONS,
+      from: "2026-06-01",
+      to: "2026-06-01",
+    });
+
+    expect(items).toEqual([
+      { name: "Arroz", brand: null, unit: "g", quantity: 80 },
+      { name: "Pollo", brand: null, unit: "g", quantity: 150 },
+    ]);
+  });
+
+  it("honors one pick per component and keeps the other component's default", () => {
+    const items = aggregateShoppingList({
+      tree: tree([componentSlot()]),
+      selections: [
+        { slot_id: "s1", option_id: "patata" },
+        { slot_id: "s1", option_id: "tofu" },
+      ],
+      from: "2026-06-01",
+      to: "2026-06-01",
+    });
+
+    expect(items).toEqual([
+      { name: "Patata", brand: null, unit: "g", quantity: 200 },
+      { name: "Tofu", brand: null, unit: "g", quantity: 120 },
+    ]);
+  });
+});
+
+describe("aggregateShoppingList — trainer swaps for a date replace the slot", () => {
+  function swapRow(partial: Partial<OverrideRow>): OverrideRow {
+    return {
+      id: "ov-1",
+      tenant_host: "t.local",
+      cycle_id: "cycle-1",
+      client_id: 1,
+      override_type: "swap",
+      scope: "single_day",
+      anchor_date: "2026-06-01",
+      day_index: null,
+      slot_id: "s1",
+      note_text: null,
+      swap_source_type: "recipe",
+      swap_source_ref_id: "r2",
+      swap_snapshot: null,
+      swap_snapshots: null,
+      created_at: "2026-06-01T00:00:00Z",
+      updated_at: "2026-06-01T00:00:00Z",
+      ...partial,
+    };
+  }
+
+  it("uses the swap's snapshots on the swapped date and the plan elsewhere", () => {
+    const base = slot("s1", 0, [option("o1", 0, [ingredient("Pollo", 150)])]);
+    const swapped = option("ignored", 0, [ingredient("Salmón", 180)]);
+    const extra = option("ignored", 0, [ingredient("Arroz", 80)]);
+    const items = aggregateShoppingList({
+      tree: tree([base]),
+      selections: NO_SELECTIONS,
+      overrides: [
+        swapRow({
+          swap_snapshots: [swapped.item_snapshot, extra.item_snapshot],
+        }),
+      ],
+      from: "2026-06-01",
+      to: "2026-06-02",
+    });
+
+    // 1 Jun: swap (Salmón + Arroz). 2 Jun: base plan (Pollo).
+    expect(items).toEqual([
+      { name: "Arroz", brand: null, unit: "g", quantity: 80 },
+      { name: "Pollo", brand: null, unit: "g", quantity: 150 },
+      { name: "Salmón", brand: null, unit: "g", quantity: 180 },
     ]);
   });
 });
