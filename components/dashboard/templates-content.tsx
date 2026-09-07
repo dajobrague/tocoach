@@ -13,8 +13,6 @@ import {
   ModalFooter,
   ModalHeader,
   Spinner,
-  Tab,
-  Tabs,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,6 +49,24 @@ interface Template {
   updatedAt: string;
 }
 
+type TemplateType = "programs" | "nutrition";
+
+interface TemplatesContentProps {
+  /** Which library this page shows; each type has its own route + nav entry. */
+  type: TemplateType;
+}
+
+const PAGE_COPY: Record<TemplateType, { title: string; subtitle: string }> = {
+  programs: {
+    title: "Programas de entrenamiento",
+    subtitle: "Crea y gestiona plantillas de programas de entrenamiento",
+  },
+  nutrition: {
+    title: "Planes nutricionales",
+    subtitle: "Crea y gestiona plantillas de planes nutricionales",
+  },
+};
+
 const tagsOf = (template: Template): readonly string[] => template.tags ?? [];
 
 const GRID = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
@@ -59,7 +75,7 @@ const GRID = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
 const TEMPLATES_KEY = "templates";
 
 async function fetchTemplates(
-  type: "programs" | "nutrition",
+  type: TemplateType,
   category: "all" | "cardio" | "strength"
 ): Promise<Template[]> {
   const params = new URLSearchParams({ type });
@@ -95,12 +111,11 @@ async function updateTemplateTags(
   }
 }
 
-export default function TemplatesContent() {
+export default function TemplatesContent({
+  type: templateType,
+}: TemplatesContentProps) {
   const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [templateTypeTab, setTemplateTypeTab] = useState<
-    "programs" | "nutrition"
-  >("programs");
   const [categoryFilter, setCategoryFilter] = useState<
     "all" | "cardio" | "strength"
   >("all");
@@ -120,8 +135,8 @@ export default function TemplatesContent() {
     isLoading,
     isError,
   } = useQuery<Template[]>({
-    queryKey: [TEMPLATES_KEY, templateTypeTab, categoryFilter],
-    queryFn: () => fetchTemplates(templateTypeTab, categoryFilter),
+    queryKey: [TEMPLATES_KEY, templateType, categoryFilter],
+    queryFn: () => fetchTemplates(templateType, categoryFilter),
   });
   const refetchTemplates = () =>
     qc.invalidateQueries({ queryKey: [TEMPLATES_KEY] });
@@ -130,7 +145,7 @@ export default function TemplatesContent() {
   // the flat grid — the feature degrades, the page never breaks.
   const foldersQuery = useProgramFolders();
   const showFolders =
-    templateTypeTab === "programs" &&
+    templateType === "programs" &&
     searchQuery.trim().length === 0 &&
     foldersQuery.isError === false;
 
@@ -203,11 +218,10 @@ export default function TemplatesContent() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Plantillas
+              {PAGE_COPY[templateType].title}
             </h1>
             <p className="text-gray-500 mt-1">
-              Crea y gestiona plantillas para programas de entrenamiento y
-              nutrición
+              {PAGE_COPY[templateType].subtitle}
             </p>
           </div>
           <Button
@@ -219,42 +233,6 @@ export default function TemplatesContent() {
             Crear Plantilla
           </Button>
         </div>
-
-        {/* Template Type Tabs */}
-        <Tabs
-          classNames={{
-            tabList: "gap-6",
-            cursor: "bg-black",
-            tab: "h-12",
-            tabContent: "group-data-[selected=true]:text-black",
-          }}
-          selectedKey={templateTypeTab}
-          variant="underlined"
-          onSelectionChange={(key) => {
-            setTemplateTypeTab(key as "programs" | "nutrition");
-            setCategoryFilter("all");
-            setTagFilter([]);
-          }}
-        >
-          <Tab
-            key="programs"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="solar:dumbbell-bold" width={20} />
-                <span className="font-medium">Programas de Entrenamiento</span>
-              </div>
-            }
-          />
-          <Tab
-            key="nutrition"
-            title={
-              <div className="flex items-center gap-2">
-                <Icon icon="fluent:food-20-filled" width={20} />
-                <span className="font-medium">Planes Nutricionales</span>
-              </div>
-            }
-          />
-        </Tabs>
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
@@ -277,7 +255,7 @@ export default function TemplatesContent() {
           />
 
           {/* Tag + category filters - Only show for programs */}
-          {templateTypeTab === "programs" && (
+          {templateType === "programs" && (
             <>
               <TagFilterSelect
                 options={tagOptions}
@@ -369,7 +347,7 @@ export default function TemplatesContent() {
               ? "Intenta con otra búsqueda o quita alguna etiqueta"
               : "Crea tu primera plantilla para agilizar la creación de programas"}
           </p>
-          {!hasFilter && templateTypeTab === "programs" && (
+          {!hasFilter && templateType === "programs" && (
             <Button
               className="text-white font-semibold"
               color="primary"
@@ -396,7 +374,7 @@ export default function TemplatesContent() {
 
       {/* Create Template Modal */}
       <CreateTemplateModal
-        defaultType={templateTypeTab === "nutrition" ? "nutrition" : "program"}
+        defaultType={templateType === "nutrition" ? "nutrition" : "program"}
         isOpen={isCreateModalOpen}
         tagSuggestions={tagOptions}
         onClose={() => setIsCreateModalOpen(false)}

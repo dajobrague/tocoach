@@ -4,10 +4,13 @@ import type { CycleSummary } from "./cycle-api";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useState } from "react";
 
 import { CycleSelector } from "./cycle-selector";
+import { WeightHistoryModal } from "./weight-history-modal";
 
 interface MealPlanHeaderProps {
+  clientId: number;
   cycles: CycleSummary[];
   activeId: string | null;
   onSelectCycle: (id: string) => void;
@@ -16,6 +19,7 @@ interface MealPlanHeaderProps {
 }
 
 export function MealPlanHeader({
+  clientId,
   cycles,
   activeId,
   onSelectCycle,
@@ -23,6 +27,9 @@ export function MealPlanHeader({
   onViewCalendar,
 }: MealPlanHeaderProps) {
   const hasCycles = cycles.length > 0;
+  // Weight evolution is a read-only lookup the trainer checks before
+  // readjusting the diet; it is deliberately NOT wired to goals/calculator.
+  const [weightOpen, setWeightOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -43,6 +50,13 @@ export function MealPlanHeader({
             onSelect={onSelectCycle}
           />
         )}
+        <Button
+          startContent={<Icon icon="solar:graph-up-linear" width={18} />}
+          variant="bordered"
+          onPress={() => setWeightOpen(true)}
+        >
+          Ver evolución del peso
+        </Button>
         {hasCycles && onViewCalendar !== undefined && (
           <Button
             startContent={<Icon icon="solar:calendar-linear" width={18} />}
@@ -61,6 +75,12 @@ export function MealPlanHeader({
           Nuevo plan
         </Button>
       </div>
+
+      <WeightHistoryModal
+        clientId={clientId}
+        isOpen={weightOpen}
+        onClose={() => setWeightOpen(false)}
+      />
     </div>
   );
 }
