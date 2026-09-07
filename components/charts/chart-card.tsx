@@ -40,7 +40,7 @@ import { headerStatValue, type HeaderStatMode } from "./header-stat";
 import { useHeaderStatPref } from "./use-header-stat-pref";
 import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
-import { metricFormat } from "@/lib/charts/metric-format";
+import { RATING_MAX } from "@/lib/forms/types";
 import { resolveColor } from "@/lib/charts/palette";
 
 interface Props {
@@ -56,6 +56,8 @@ interface Props {
   unit?: string;
   /** Forwarded to the renderer; comes from adapter.metadata.y_max. */
   yMax?: number;
+  /** Valoración 1–RATING_MAX (adapter.metadata.rating): estrellas en el header. */
+  rating?: boolean;
   series?: ReadonlyArray<{ id: string; label: string }>;
   editable?: boolean;
   editOverlay?: React.ReactNode;
@@ -130,25 +132,34 @@ function HeaderStatToggle({
 }
 
 /**
- * Valoración 1–5 como estrellas (feedback JC sep-2026: nada de número
- * pelado). Las 5 estrellas usan el mismo glifo — solo cambia el color —
- * para que el ancho no baile entre ★ y ☆. El valor exacto va al lado
- * porque la media (3,6 vs 4,4) redondea a la misma estrella.
+ * Valoración 1–RATING_MAX con las MISMAS estrellas que el formulario del
+ * cliente (dynamic-form-modal: `solar:star-bold`, warning = llena,
+ * default-300 = vacía). El valor exacto va al lado porque una media de
+ * 3,6 y una de 4,4 redondean a la misma estrella.
  */
 function RatingStars({ value, muted }: { value: number; muted: boolean }) {
-  const filled = Math.round(Math.max(0, Math.min(5, value)));
+  const filled = Math.round(Math.max(0, Math.min(RATING_MAX, value)));
 
   return (
     <span
-      aria-label={`${formatNumber(value, 1)} de 5`}
-      className="inline-flex items-baseline gap-1"
+      aria-label={`${formatNumber(value, 1)} de ${RATING_MAX}`}
+      className="inline-flex items-center gap-1.5"
       role="img"
     >
-      <span className="text-3xl leading-none tracking-tight">
-        <span className={muted ? "text-foreground/30" : "text-warning"}>
-          {"★".repeat(filled)}
-        </span>
-        <span className="text-foreground/15">{"★".repeat(5 - filled)}</span>
+      <span className="flex items-center">
+        {Array.from({ length: RATING_MAX }, (_, i) => (
+          <Icon
+            key={i}
+            className={`text-2xl ${
+              i < filled
+                ? muted
+                  ? "text-warning/40"
+                  : "text-warning"
+                : "text-default-300"
+            }`}
+            icon="solar:star-bold"
+          />
+        ))}
       </span>
       <span className="text-base text-foreground/40 font-medium tabular-nums">
         {formatNumber(value, 1)}
@@ -177,6 +188,7 @@ export function ChartCard({
   icon,
   unit,
   yMax,
+  rating,
   series,
   editable,
   editOverlay,
@@ -189,12 +201,10 @@ export function ChartCard({
     config.chart_type === "area" ||
     config.chart_type === "bar";
   const [statMode, setStatMode] = useHeaderStatPref(config.id);
-  // Unidad / estrellas: mapa fijo por métrica conocida. El prop `unit`
-  // (adapter.metadata.unit) manda si viene, pero en render el shell de
-  // form_question no lo trae, así que el mapa es lo que se ve en la práctica.
-  const format = metricFormat(config.source);
-  const displayUnit = unit ?? format.unit;
-  const isRating = format.rating === true;
+  // Unidad y rating vienen de la metadata de la fuente (form_templates),
+  // resuelta por chart-surface / charts-section. Nada se adivina por id.
+  const displayUnit = unit;
+  const isRating = rating === true;
   // The header's stat is viewer-selectable for 1-D charts (latest non-null
   // or the range mean — same avgNonNull as the dashed reference line);
   // ring (range_total) shows the sum of its series; kpi shows nothing in
@@ -350,7 +360,7 @@ export function ChartCard({
                 {...(yMax !== undefined
                   ? { yMax }
                   : isRating
-                    ? { yMax: 5 }
+                    ? { yMax: RATING_MAX }
                     : {})}
               />
             </ChartErrorBoundary>

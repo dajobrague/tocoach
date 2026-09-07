@@ -301,6 +301,8 @@ export interface SnapshotData {
    * inside each entry.
    */
   photoBuckets?: Record<string, { photos: PhotoPoint[] }>;
+  /** Fuentes form_question del tenant con metadata (unit / y_max / rating). */
+  sources?: ChartDataSource[];
 }
 
 export type ChartRange = "7d" | "14d" | "30d" | "90d" | "6m" | "12m";

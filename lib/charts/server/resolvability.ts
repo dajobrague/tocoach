@@ -52,6 +52,7 @@ export interface TenantQuestion {
   id: string;
   unit: string | null;
   label: string | null;
+  type: string | null;
 }
 
 export interface TenantQuestionsResult {
@@ -120,6 +121,7 @@ export async function loadTenantQuestions(
         id: q.id,
         unit: typeof q.unit === "string" ? q.unit : null,
         label: typeof q.label === "string" ? q.label : null,
+        type: typeof q.type === "string" ? q.type : null,
       });
     }
   }

@@ -20,7 +20,7 @@
  * the registry available.
  */
 
-import type { ChartType, FormType } from "./types";
+import type { ChartDataSource, ChartType, FormType } from "./types";
 import type { CatalogId, DataSourceRef } from "./types";
 import type { DataAdapter } from "./adapters/types";
 import type { ChartConfigInput } from "./validation";
@@ -64,7 +64,15 @@ type ChartLike = ChartConfigInput;
  */
 export function resolveAdapter(
   ref: DataSourceRef,
-  hint?: { chartType?: ChartType }
+  hint?: {
+    chartType?: ChartType;
+    /**
+     * Fuentes con metadata completa (unit / y_max / rating) — el picker
+     * del trainer o `sources` del snapshot. El shell de abajo no las
+     * conoce; si la fuente está aquí, su metadata manda.
+     */
+    sources?: ReadonlyArray<ChartDataSource> | undefined;
+  }
 ): DataAdapter | undefined {
   if (ref.kind === "catalog") {
     return CATALOG_BY_ID.get(ref.id);
@@ -74,12 +82,17 @@ export function resolveAdapter(
   // render time; this shell is enough for `materialize`.
   const isPhoto = hint?.chartType === "photo_timeline";
 
-  return buildFormQuestionAdapter({
+  const shell = buildFormQuestionAdapter({
     formType: ref.form_type,
     questionId: ref.question_id,
     label: ref.question_id, // placeholder; real label is on ChartConfig
     ...(isPhoto ? { kind: "photo" as const } : {}),
   });
+  const known = hint?.sources?.find((s) => s.id === shell.metadata.id);
+
+  return known === undefined
+    ? shell
+    : { ...shell, metadata: { ...shell.metadata, ...known } };
 }
 
 // ─── Numeric form question discovery ──────────────────────────────────────
@@ -165,6 +178,7 @@ export function buildFormQuestionAdaptersFromTemplates(
       const qType = String(q.type).toLowerCase();
       const isNumeric = NUMERIC_QUESTION_TYPES.has(qType);
       const isPhoto = PHOTO_QUESTION_TYPES.has(qType);
+      const isRating = qType === "rating";
 
       if (!isNumeric && !isPhoto) continue;
       out.push(
@@ -173,7 +187,11 @@ export function buildFormQuestionAdaptersFromTemplates(
           questionId: q.id,
           label: q.label || q.id,
           ...(q.unit !== undefined ? { unit: q.unit } : {}),
-          ...(isPhoto ? { kind: "photo" as const } : {}),
+          ...(isPhoto
+            ? { kind: "photo" as const }
+            : isRating
+              ? { kind: "rating" as const }
+              : {}),
         })
       );
     }

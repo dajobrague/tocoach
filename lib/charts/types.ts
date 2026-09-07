@@ -276,6 +276,12 @@ export interface ChartDataSource {
    */
   y_max?: number;
   /**
+   * Pregunta de valoración 1–RATING_MAX. El número grande se pinta con
+   * estrellas y la demo data se queda en esa escala. Viene del `type`
+   * de la pregunta en form_templates, nunca se adivina por el id.
+   */
+  rating?: true;
+  /**
    * Output shape of the adapter:
    *   - `1`      → single-series numeric (line/area/bar/kpi).
    *   - `"multi"` → multi-series numeric (stacked_bar/ring).

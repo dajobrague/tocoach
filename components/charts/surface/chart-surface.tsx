@@ -314,7 +314,9 @@ export function ChartSurface({ mode, clientId }: Props) {
     const snapshotPhotos = snapshotQuery.data?.photoBuckets;
 
     return doc.charts.map((chart) => {
-      const adapter = resolveAdapter(chart.source);
+      const adapter = resolveAdapter(chart.source, {
+        sources: sourcesQuery.data,
+      });
       let buckets: BucketedPoint[] | undefined;
       let photos: PhotoPoint[] | undefined;
       const isPhotoTimeline = chart.chart_type === "photo_timeline";
@@ -753,6 +755,7 @@ export function ChartSurface({ mode, clientId }: Props) {
               {...(adapter?.metadata.y_max !== undefined
                 ? { yMax: adapter.metadata.y_max }
                 : {})}
+              {...(adapter?.metadata.rating === true ? { rating: true } : {})}
               orphan={!adapter}
               {...(series !== undefined ? { series } : {})}
             />

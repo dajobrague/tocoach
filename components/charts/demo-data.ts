@@ -21,7 +21,7 @@ import type {
 } from "@/lib/charts/types";
 
 import { generateBuckets } from "@/lib/charts/adapters/bucketing";
-import { DEFAULT_CHECKIN_SCHEDULE } from "@/lib/forms/types";
+import { DEFAULT_CHECKIN_SCHEDULE, RATING_MAX } from "@/lib/forms/types";
 
 // ─── Deterministic PRNG (mulberry32) ───────────────────────────────────────
 
@@ -105,6 +105,17 @@ const DEFAULT_PRESET: RandomWalkPreset = {
   noise: 8,
   min: 0,
   max: 100,
+};
+
+// Valoraciones 1–RATING_MAX (feedback David sep-2026: la preview mostraba
+// "52,3" con cinco estrellas porque caía al preset 0–100).
+const RATING_PRESET: RandomWalkPreset = {
+  start: 4,
+  drift: 0,
+  noise: 1,
+  min: 1,
+  max: RATING_MAX,
+  decimals: 0,
 };
 
 const MACROS_PRESET = { protein: 130, carbs: 220, fats: 70 };
@@ -267,7 +278,10 @@ export function synthesizeDemoBuckets(
   // 1-D path — random walk inside the preset's [min, max] band.
   const presetKey =
     chart.source.kind === "catalog" ? chart.source.id : "default";
-  const preset = PRESETS[presetKey] ?? DEFAULT_PRESET;
+  const preset =
+    source?.rating === true
+      ? RATING_PRESET
+      : (PRESETS[presetKey] ?? DEFAULT_PRESET);
   let v = preset.start;
 
   return specs.map((s) => {

@@ -12,6 +12,13 @@ export type QuestionType =
 export type FormType = "checkins" | "habits";
 
 /**
+ * Estrellas de una pregunta `rating`. El formulario del cliente pinta
+ * exactamente estas (dynamic-form-modal) y las gráficas deben usar el
+ * mismo máximo — no hay escala configurable por pregunta.
+ */
+export const RATING_MAX = 5;
+
+/**
  * Opción individual para preguntas de tipo `choice` / `multi_choice`.
  *
  * `id` se genera al crear la opción (vía `generateChoiceId`) y es INMUTABLE

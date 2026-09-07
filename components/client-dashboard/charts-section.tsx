@@ -19,6 +19,7 @@
 "use client";
 
 import type {
+  ChartDataSource,
   BucketedPoint,
   ChartConfig,
   ChartsDocument,
@@ -40,6 +41,7 @@ interface SnapshotResponse {
   data?: {
     source: "override" | "template";
     effective_charts: ChartsDocument;
+    sources?: ChartDataSource[];
     schedule: unknown;
     range: { from: string; to: string };
     buckets: Record<
@@ -127,7 +129,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     );
   }
 
-  const { effective_charts, buckets, photoBuckets } = query.data;
+  const { effective_charts, buckets, photoBuckets, sources } = query.data;
 
   if (effective_charts.charts.length === 0) {
     // Trainer hasn't configured any charts (and there's no template).
@@ -148,7 +150,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
   };
 
   const enriched: Enriched[] = effective_charts.charts.map((chart) => {
-    const adapter = resolveAdapter(chart.source);
+    const adapter = resolveAdapter(chart.source, { sources });
     const bucketEntry = buckets[chart.id];
     const chartBuckets: BucketedPoint[] = bucketEntry?.buckets ?? [];
     const photos =
@@ -193,6 +195,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
             {...(adapter?.metadata.y_max !== undefined
               ? { yMax: adapter.metadata.y_max }
               : {})}
+            {...(adapter?.metadata.rating === true ? { rating: true } : {})}
             orphan={!adapter}
             {...(series !== undefined ? { series } : {})}
           />

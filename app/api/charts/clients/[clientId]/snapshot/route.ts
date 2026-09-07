@@ -530,6 +530,21 @@ export async function GET(
       };
     }
 
+    // Metadata de las preguntas del tenant (unit / y_max / rating) para
+    // que el portal cliente resuelva los adapters igual que el trainer.
+    const sources = tenantQuestions.questions
+      .filter((q) => q.type === "number" || q.type === "rating")
+      .map(
+        (q) =>
+          buildFormQuestionAdapter({
+            formType: q.formType,
+            questionId: q.id,
+            label: q.label ?? q.id,
+            ...(q.unit !== null ? { unit: q.unit } : {}),
+            ...(q.type === "rating" ? { kind: "rating" as const } : {}),
+          }).metadata
+      );
+
     const buckets: Record<
       string,
       { buckets: BucketedPoint[]; aggregationFallback: boolean }
@@ -569,6 +584,7 @@ export async function GET(
         range: { from: range.from.toISOString(), to: range.to.toISOString() },
         buckets,
         photoBuckets,
+        sources,
       },
     });
   } catch (err) {
