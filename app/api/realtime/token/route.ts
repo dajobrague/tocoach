@@ -1,37 +1,29 @@
 /* eslint-disable no-console */
-import { SignJWT } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import {
+  checkRealtimeSecretOnce,
+  getRealtimeSigningSecret,
+  signRealtimeToken,
+  type RealtimeTokenClaims,
+} from "@/lib/auth/realtime-token";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Short-lived on purpose: realtime-js re-asks the browser for a token on every
- * heartbeat (see lib/realtime/realtime-token.ts), so renewal is automatic.
- */
-const TOKEN_TTL_SECONDS = 15 * 60;
-
-type RealtimeKind = "trainer" | "client";
-
-interface RealtimeIdentity {
-  kind: RealtimeKind;
-  userId: string;
-  tenantHost: string;
-  tenantSlug: string;
-}
+type RealtimeKind = RealtimeTokenClaims["kind"];
 
 /**
- * Identity for `kind` from the app session (trainer cookie, or client cookie /
+ * Claims for `kind` from the app session (trainer cookie, or client cookie /
  * Bearer). Each session only knows one tenant column, and the two Realtime
  * tables disagree: `messages.tenant_slug` stores the HOST while
  * `notifications.tenant_slug` stores the SLUG — so both go into the token.
  */
-async function resolveIdentity(
+async function resolveClaims(
   kind: RealtimeKind
-): Promise<RealtimeIdentity | null> {
+): Promise<RealtimeTokenClaims | null> {
   const supabase = createSupabaseAdminClient();
 
   if (kind === "trainer") {
@@ -49,9 +41,9 @@ async function resolveIdentity(
 
     return {
       kind,
-      userId: session.trainer_id,
-      tenantHost: session.tenant_host,
-      tenantSlug: data.slug,
+      user_id: session.trainer_id,
+      tenant_host: session.tenant_host,
+      tenant_slug: data.slug,
     };
   }
 
@@ -69,32 +61,34 @@ async function resolveIdentity(
 
   return {
     kind,
-    userId: String(session.client_id),
-    tenantHost: data.host,
-    tenantSlug: session.tenant_slug,
+    user_id: String(session.client_id),
+    tenant_host: data.host,
+    tenant_slug: session.tenant_slug,
   };
 }
 
 /**
  * GET /api/realtime/token?kind=trainer|client
  *
- * Mints the JWT the browser hands to Supabase Realtime. Signed with the
- * project's JWT secret; `role: "authenticated"` is what stops PostgREST /
- * Realtime from treating it as anon. The policies in
- * supabase/migrations/20260907120000_revoke_anon_table_access.sql read the
- * remaining claims through auth.jwt().
+ * Mints the short-lived JWT the browser hands to Supabase Realtime
+ * (lib/realtime/realtime-token.ts fetches and renews it). Signing details and
+ * the one-time secret self-check live in lib/auth/realtime-token.ts.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.SUPABASE_JWT_SECRET;
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  if (!secret) {
+  let secret: string;
+
+  try {
+    secret = getRealtimeSigningSecret();
+  } catch (error) {
     console.error(
-      "[Realtime Token] SUPABASE_JWT_SECRET is not set — realtime disabled"
+      `${error instanceof Error ? error.message : String(error)} correlationId=${correlationId}`
     );
 
     return NextResponse.json(
-      { error: "Realtime not configured" },
-      { status: 503 }
+      { error: "Realtime not configured: SUPABASE_JWT_SECRET is missing" },
+      { status: 500 }
     );
   }
 
@@ -107,31 +101,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const identity = await resolveIdentity(kind);
+  const claims = await resolveClaims(kind);
 
-  if (!identity) {
+  if (!claims) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + TOKEN_TTL_SECONDS;
+  const { token, expiresAt } = await signRealtimeToken(claims, secret);
 
-  const token = await new SignJWT({
-    role: "authenticated",
-    kind: identity.kind,
-    user_id: identity.userId,
-    tenant_host: identity.tenantHost,
-    tenant_slug: identity.tenantSlug,
-  })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setSubject(identity.userId)
-    .setAudience("authenticated")
-    .setIssuedAt(now)
-    .setExpirationTime(exp)
-    .sign(new TextEncoder().encode(secret));
+  // Fire-and-forget: the diagnosis goes to the server logs, the caller gets
+  // its token either way (the hooks degrade if Realtime rejects it).
+  void checkRealtimeSecretOnce(token, correlationId);
 
   return NextResponse.json(
-    { token, expiresAt: exp },
+    { token, expiresAt },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

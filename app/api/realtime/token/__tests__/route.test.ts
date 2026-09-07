@@ -11,6 +11,7 @@ vi.mock("@/lib/clients/supabase-admin", () => ({
 import { GET } from "../route";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import { resetRealtimeSelfCheckForTests } from "@/lib/auth/realtime-token";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 
@@ -50,26 +51,68 @@ function req(kind?: string): NextRequest {
   return new NextRequest(url);
 }
 
+const clientSession = {
+  client_id: "42",
+  tenant_slug: TENANT.slug,
+  email: "c@x",
+  iat: 0,
+  exp: 0,
+};
+
+const trainerSession = {
+  trainer_id: "11111111-1111-4111-8111-111111111111",
+  tenant_host: TENANT.host,
+  email: "t@x",
+  iat: 0,
+  exp: 0,
+};
+
+// Self-check target: PostgREST root. 200 = secret accepted.
+const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  resetRealtimeSelfCheckForTests();
+  vi.stubGlobal("fetch", fetchMock);
   process.env.SUPABASE_JWT_SECRET = SECRET;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54421";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
   mockedAdmin.mockReturnValue(adminStub() as never);
   mockedTrainer.mockResolvedValue(null);
   mockedClient.mockResolvedValue(null);
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   delete process.env.SUPABASE_JWT_SECRET;
 });
 
+async function flushSelfCheck(): Promise<void> {
+  // The route fires the check without awaiting it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("GET /api/realtime/token", () => {
-  it("returns 503 when SUPABASE_JWT_SECRET is not configured", async () => {
+  it("returns 500 with a clear message when SUPABASE_JWT_SECRET is not set (no JWT_SECRET fallback)", async () => {
     delete process.env.SUPABASE_JWT_SECRET;
+    process.env.JWT_SECRET = "the-app-secret-must-not-be-used-here";
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     const res = await GET(req("trainer"));
+    const body = (await res.json()) as { error: string };
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
+    expect(body.error).toMatch(/SUPABASE_JWT_SECRET/);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /Falta SUPABASE_JWT_SECRET.*Realtime desactivado.*correlationId=req-/
+      )
+    );
     expect(mockedTrainer).not.toHaveBeenCalled();
+    delete process.env.JWT_SECRET;
   });
 
   it("returns 400 for a missing or unknown kind", async () => {
@@ -79,13 +122,7 @@ describe("GET /api/realtime/token", () => {
 
   it("returns 401 without a session of the requested kind", async () => {
     // A client session must not satisfy a trainer token request.
-    mockedClient.mockResolvedValue({
-      client_id: "42",
-      tenant_slug: TENANT.slug,
-      email: "c@x",
-      iat: 0,
-      exp: 0,
-    });
+    mockedClient.mockResolvedValue(clientSession);
 
     const res = await GET(req("trainer"));
 
@@ -95,24 +132,15 @@ describe("GET /api/realtime/token", () => {
 
   it("returns 401 for a trainer whose tenant host is unknown", async () => {
     mockedTrainer.mockResolvedValue({
-      trainer_id: "t-1",
+      ...trainerSession,
       tenant_host: "nobody.example.test",
-      email: "t@x",
-      iat: 0,
-      exp: 0,
     });
 
     expect((await GET(req("trainer"))).status).toBe(401);
   });
 
   it("mints an authenticated token with trainer claims (host + resolved slug)", async () => {
-    mockedTrainer.mockResolvedValue({
-      trainer_id: "11111111-1111-4111-8111-111111111111",
-      tenant_host: TENANT.host,
-      email: "t@x",
-      iat: 0,
-      exp: 0,
-    });
+    mockedTrainer.mockResolvedValue(trainerSession);
 
     const res = await GET(req("trainer"));
     const body = (await res.json()) as { token: string; expiresAt: number };
@@ -127,26 +155,17 @@ describe("GET /api/realtime/token", () => {
     expect(payload).toMatchObject({
       role: "authenticated",
       kind: "trainer",
-      sub: "11111111-1111-4111-8111-111111111111",
-      user_id: "11111111-1111-4111-8111-111111111111",
+      sub: trainerSession.trainer_id,
+      user_id: trainerSession.trainer_id,
       tenant_host: TENANT.host,
       tenant_slug: TENANT.slug,
     });
     expect(payload.exp).toBe(body.expiresAt);
-
-    const ttl = (payload.exp ?? 0) - (payload.iat ?? 0);
-
-    expect(ttl).toBe(15 * 60);
+    expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(15 * 60);
   });
 
   it("mints an authenticated token with client claims (slug + resolved host)", async () => {
-    mockedClient.mockResolvedValue({
-      client_id: "42",
-      tenant_slug: TENANT.slug,
-      email: "c@x",
-      iat: 0,
-      exp: 0,
-    });
+    mockedClient.mockResolvedValue(clientSession);
 
     const res = await GET(req("client"));
     const body = (await res.json()) as { token: string };
@@ -167,18 +186,60 @@ describe("GET /api/realtime/token", () => {
   });
 
   it("signs with SUPABASE_JWT_SECRET, not any other key", async () => {
-    mockedClient.mockResolvedValue({
-      client_id: "42",
-      tenant_slug: TENANT.slug,
-      email: "c@x",
-      iat: 0,
-      exp: 0,
-    });
+    mockedClient.mockResolvedValue(clientSession);
 
     const body = (await (await GET(req("client"))).json()) as { token: string };
 
     await expect(
       jwtVerify(body.token, new TextEncoder().encode("some-other-secret-xx"))
     ).rejects.toThrow();
+  });
+
+  it("self-checks the secret against /rest/v1/ once per process, with the minted token", async () => {
+    mockedClient.mockResolvedValue(clientSession);
+    const consoleLog = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => undefined);
+
+    const first = (await (await GET(req("client"))).json()) as {
+      token: string;
+    };
+
+    await GET(req("client"));
+    await flushSelfCheck();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const headers = init.headers as Record<string, string>;
+
+    expect(url).toBe("http://127.0.0.1:54421/rest/v1/");
+    expect(headers.apikey).toBe("anon-key");
+    expect(headers.Authorization).toBe(`Bearer ${first.token}`);
+    expect(consoleLog).toHaveBeenCalledWith(
+      expect.stringMatching(/self-check ok/)
+    );
+  });
+
+  it("logs a loud error when Supabase rejects the token (wrong secret) but still returns it", async () => {
+    mockedClient.mockResolvedValue(clientSession);
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 401 }));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    const res = await GET(req("client"));
+
+    await flushSelfCheck();
+
+    expect(res.status).toBe(200);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /req-.*no coincide con el JWT secret del proyecto\. Realtime no funcionará\./
+      )
+    );
   });
 });
