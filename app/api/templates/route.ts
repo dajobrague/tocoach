@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
+import { parseTagParams, parseTags } from "@/lib/library/parse-tags";
 
 // GET - Fetch all templates for the authenticated trainer
 export async function GET(request: NextRequest) {
@@ -21,6 +22,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // 'cardio', 'strength', or null for all
     const typeFilter = searchParams.get("type"); // 'programs', 'nutrition', or null for all
+    // Repeatable ?tag=a&tag=b: the template must carry both (programs only).
+    const tags = parseTagParams(searchParams);
 
     console.log(
       "[Templates API] Fetching templates, category:",
@@ -47,6 +50,10 @@ export async function GET(request: NextRequest) {
           "eq",
           category
         );
+      }
+
+      if (tags.length > 0) {
+        programsQuery = programsQuery.contains("tags", tags);
       }
 
       const { data: programs, error: programsError } = await programsQuery;
@@ -142,6 +149,7 @@ export async function GET(request: NextRequest) {
         division: template.metadata?.division,
         goal: template.metadata?.goal,
         sessionsPerWeek: template.metadata?.sessions_per_week,
+        tags: template.tags ?? [],
         sessionCount: sessionCountByProgram.get(template.id) ?? 0,
         exerciseCount: exerciseCountByProgram.get(template.id) ?? 0,
         createdAt: template.created_at,
@@ -261,9 +269,19 @@ export async function POST(request: NextRequest) {
       division,
       goal,
       sessionsPerWeek,
+      tags,
     } = body;
 
     console.log("[Templates API] Creating new template:", body);
+
+    const parsedTags = parseTags(tags);
+
+    if (parsedTags !== undefined && parsedTags.ok === false) {
+      return NextResponse.json(
+        { success: false, error: parsedTags.error },
+        { status: 400 }
+      );
+    }
 
     // Get tenant_host for the trainer
     const { data: tenant } = await supabase
@@ -306,6 +324,7 @@ export async function POST(request: NextRequest) {
         is_template: true,
         is_published: false,
         metadata,
+        tags: parsedTags?.ok === true ? parsedTags.tags : [],
       } as any)
       .select()
       .single();
@@ -332,6 +351,7 @@ export async function POST(request: NextRequest) {
         division: (template as any).metadata?.division,
         goal: (template as any).metadata?.goal,
         sessionsPerWeek: (template as any).metadata?.sessions_per_week,
+        tags: (template as any).tags ?? [],
       },
     });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
+import { buildTemplateUpdate } from "@/lib/training/template-update";
 
 // GET - Fetch single template with full structure (sessions + exercises)
 export async function GET(
@@ -87,6 +88,7 @@ export async function GET(
           division: (programTemplate as any).metadata?.division,
           goal: (programTemplate as any).metadata?.goal,
           sessionsPerWeek: (programTemplate as any).metadata?.sessions_per_week,
+          tags: (programTemplate as any).tags ?? [],
           sessions: sessionsWithExercises,
           createdAt: (programTemplate as any).created_at,
           updatedAt: (programTemplate as any).updated_at,
@@ -244,17 +246,19 @@ export async function PUT(
 
     const { templateId } = await params;
     const body = await request.json();
-    const {
-      name,
-      description,
-      type,
-      category,
-      division,
-      goal,
-      sessionsPerWeek,
-    } = body;
 
     console.log("[Template Detail API] Updating template:", templateId, body);
+
+    // Partial: only the fields sent are touched (a tags-only PUT is how the
+    // folder view moves a template between folders).
+    const update = buildTemplateUpdate(body);
+
+    if (update.ok === false) {
+      return NextResponse.json(
+        { success: false, error: update.error },
+        { status: 400 }
+      );
+    }
 
     // Verify template belongs to trainer
     const { data: existingTemplate } = await supabase
@@ -272,31 +276,11 @@ export async function PUT(
       );
     }
 
-    // Update metadata
-    const metadata: any = {
-      type: type || "Strength",
-      sessions_per_week: sessionsPerWeek ? parseInt(sessionsPerWeek) : 3,
-    };
-
-    if (category) {
-      metadata.category = category;
-    }
-
-    if (category === "cardio" && goal) {
-      metadata.goal = goal;
-    } else if (division) {
-      metadata.division = division;
-    }
-
     // Update template
     const { data: updatedTemplate, error: updateError } = await (
       supabase.from("programs") as any
     )
-      .update({
-        name,
-        description: description || null,
-        metadata,
-      })
+      .update(update.updates)
       .eq("id", templateId)
       .select()
       .single();

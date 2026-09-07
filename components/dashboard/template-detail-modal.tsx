@@ -42,6 +42,8 @@ import { MealImageTrainerField } from "./nutrition-trainer-meal-image-field";
 
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 import { distinctTags, filterByTags } from "@/features/trainer/library/tags";
+import { TagsField } from "@/features/trainer/library/tags-field";
+import { alertAfterPress } from "@/lib/ui/native-dialog";
 
 interface TemplateDetailModalProps {
   isOpen: boolean;
@@ -55,7 +57,10 @@ interface TemplateDetailModalProps {
     division?: string;
     goal?: string;
     sessionsPerWeek?: number;
+    tags?: string[];
   };
+  /** Distinct tags across the trainer's templates (and folder names). */
+  tagSuggestions?: string[];
   onClose: (updatedData?: {
     name: string;
     description?: string;
@@ -64,6 +69,7 @@ interface TemplateDetailModalProps {
     division?: string;
     goal?: string;
     sessionsPerWeek?: number;
+    tags?: string[];
     sessionCount?: number;
     exerciseCount?: number;
     dayCount?: number;
@@ -218,6 +224,7 @@ function SortableExerciseItem({
 export default function TemplateDetailModal({
   isOpen,
   template,
+  tagSuggestions = [],
   onClose,
   onSuccess,
 }: TemplateDetailModalProps) {
@@ -324,6 +331,7 @@ export default function TemplateDetailModal({
     division: template.division || "",
     goal: template.goal || "",
     sessionsPerWeek: template.sessionsPerWeek?.toString() || "3",
+    tags: template.tags ?? [],
   });
 
   // Update formData when template changes
@@ -336,6 +344,7 @@ export default function TemplateDetailModal({
       division: template.division || "",
       goal: template.goal || "",
       sessionsPerWeek: template.sessionsPerWeek?.toString() || "3",
+      tags: template.tags ?? [],
     });
   }, [template]);
 
@@ -440,6 +449,34 @@ export default function TemplateDetailModal({
     } catch (error) {
       console.error("Error updating template:", error);
       alert("Error al actualizar la plantilla");
+    } finally {
+      setSavingField(null);
+    }
+  };
+
+  // Tags commit on every change (no blur to wait for): a tags-only PUT, so
+  // the other fields stay as they are. Reverts locally if the save fails.
+  const handleSaveTags = async (tags: string[]) => {
+    const previous = formData.tags;
+
+    setFormData((prev) => ({ ...prev, tags }));
+    setSavingField("tags");
+
+    try {
+      const response = await fetch(`/api/templates/${template.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+      const result = await response.json();
+
+      if (result.success !== true) {
+        throw new Error(result.error ?? "Error al guardar las etiquetas");
+      }
+    } catch (error) {
+      console.error("Error updating template tags:", error);
+      setFormData((prev) => ({ ...prev, tags: previous }));
+      alertAfterPress("Error al guardar las etiquetas");
     } finally {
       setSavingField(null);
     }
@@ -1699,6 +1736,7 @@ export default function TemplateDetailModal({
       payload.goal = formData.goal;
     if (formData.sessionsPerWeek != null && formData.sessionsPerWeek !== "")
       payload.sessionsPerWeek = parseInt(formData.sessionsPerWeek);
+    if (template.templateType === "program") payload.tags = formData.tags;
     onClose(payload);
   }, [formData, sessions, days, onClose]);
 
@@ -2159,6 +2197,20 @@ export default function TemplateDetailModal({
                       {formData.sessionsPerWeek} ses/sem
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Etiquetas (Sep 2 call, JC): filter and folder membership. */}
+              {template.templateType === "program" && (
+                <div className="max-w-xl font-normal">
+                  <TagsField
+                    description="Para filtrar y organizar en carpetas. Ej. hombre, tres días, full body."
+                    disabled={savingField === "tags"}
+                    placeholder="Ej. hombre, tres días, full body..."
+                    suggestions={tagSuggestions}
+                    value={formData.tags}
+                    onChange={handleSaveTags}
+                  />
                 </div>
               )}
             </div>
