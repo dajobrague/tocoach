@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import {
+  clientPasswordUpdate,
+  verifyClientPassword,
+} from "@/lib/auth/client-password";
 
 // Password validation
 function validatePassword(password: string): {
@@ -73,7 +77,7 @@ export async function POST(request: NextRequest) {
     // Get current client password from DB
     const { data: client, error: fetchError } = await supabase
       .from("clients")
-      .select("id, password")
+      .select("id, password, password_hash")
       .eq("id", session.client_id)
       .single();
 
@@ -85,7 +89,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify current password
-    if (client.password !== currentPassword) {
+    const check = await verifyClientPassword(client, currentPassword);
+
+    if (!check.ok) {
       return NextResponse.json(
         { success: false, error: "La contraseña actual es incorrecta" },
         { status: 401 }
@@ -106,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Update password in database
     const { error: updateError } = await supabase
       .from("clients")
-      .update({ password: newPassword })
+      .update(await clientPasswordUpdate(newPassword))
       .eq("id", session.client_id);
 
     if (updateError) {

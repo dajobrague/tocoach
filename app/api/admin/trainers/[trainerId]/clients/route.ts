@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { JWT_SECRET_BYTES } from "@/lib/auth/jwt-secret";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { hasClientPassword } from "@/lib/auth/client-password";
 
 async function verifyAdminAuth(request: NextRequest) {
   const sessionCookie = request.cookies.get("admin-session")?.value;
@@ -56,7 +57,7 @@ export async function GET(
     const { data: clients, error } = await supabase
       .from("clients")
       .select(
-        "id, email, name, last_name, status, last_login_at, sign_up_date, password"
+        "id, email, name, last_name, status, last_login_at, sign_up_date, password, password_hash"
       )
       .eq("tenant", trainerId)
       .order("sign_up_date", { ascending: false });
@@ -80,7 +81,7 @@ export async function GET(
       status: c.status,
       last_login_at: c.last_login_at,
       sign_up_date: c.sign_up_date,
-      hasPassword: !!c.password && String(c.password).trim() !== "",
+      hasPassword: hasClientPassword(c),
     }));
 
     return NextResponse.json({ clients: sanitized }, { status: 200 });
