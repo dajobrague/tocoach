@@ -68,7 +68,7 @@ describe("folderNodes", () => {
     const desayunos = roots.find((n) => n.folder.name === "Desayunos");
 
     // r1 (Desayunos) + r2 (Dulces) + r3 (dulces+Salados, counted once) = 3.
-    expect(desayunos?.recipeCount).toBe(3);
+    expect(desayunos?.itemCount).toBe(3);
   });
 
   it("matches tags case-insensitively", () => {
@@ -77,7 +77,7 @@ describe("folderNodes", () => {
     const dulces = desayunos?.children.find((n) => n.folder.name === "Dulces");
 
     // r2 ("Dulces") + r3 ("dulces") both match.
-    expect(dulces?.recipeCount).toBe(2);
+    expect(dulces?.itemCount).toBe(2);
   });
 });
 
@@ -156,8 +156,8 @@ describe("groupedSections", () => {
     const salados = sections.find((s) => s.label === "Salados");
 
     // r3 carries both tags → appears in both groups.
-    expect(dulces?.recipes.map((r) => r.id)).toContain("r3");
-    expect(salados?.recipes.map((r) => r.id)).toContain("r3");
+    expect(dulces?.items.map((r) => r.id)).toContain("r3");
+    expect(salados?.items.map((r) => r.id)).toContain("r3");
   });
 
   it("skips folders whose subtree holds none of the given recipes", () => {
@@ -173,7 +173,7 @@ describe("groupedSections", () => {
 
     expect(last?.kind).toBe("untagged");
     // r5 ("Verano" is a plain tag, not a folder) + r6 (no tags).
-    expect(last?.recipes.map((r) => r.id)).toEqual(["r5", "r6"]);
+    expect(last?.items.map((r) => r.id)).toEqual(["r5", "r6"]);
   });
 });
 

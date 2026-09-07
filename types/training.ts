@@ -91,6 +91,7 @@ export interface Exercise {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
+  tags?: string[];
   movement_pattern?: string;
   video_url?: string;
   uploaded_video_url?: string;
@@ -295,6 +296,7 @@ export interface CreateExerciseLibraryRequest {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
+  tags?: string[];
   movement_pattern?: string;
   video_url?: string;
   uploaded_video_url?: string;
@@ -319,6 +321,7 @@ export interface UpdateExerciseLibraryRequest {
     | "other";
   muscle_groups?: string[];
   equipment?: string[];
+  tags?: string[];
   movement_pattern?: string;
   video_url?: string;
   uploaded_video_url?: string;

@@ -264,22 +264,31 @@ export function useExerciseMutations(
  * actuales). Con término: `?search=` debounced (250ms) limit 50. `category`
  * solo se pasa para cardio.
  */
-export function useExerciseLibrarySearch(term: string, category?: "cardio") {
+/** `tags`: combined tag filter, applied server-side so the 50/500 caps
+ *  never hide a match (Sep 2 call, JC). */
+export function useExerciseLibrarySearch(
+  term: string,
+  category?: "cardio",
+  tags: string[] = []
+) {
   const debounced = useDebouncedValue(term.trim(), 250);
+  const common = {
+    ...(category !== undefined ? { category } : {}),
+    ...(tags.length > 0 ? { tags } : {}),
+  };
 
   const query = useQuery<LibraryExercise[]>({
-    queryKey: ["trainer", "exercise-library", category ?? "all", debounced],
+    queryKey: [
+      "trainer",
+      "exercise-library",
+      category ?? "all",
+      debounced,
+      tags,
+    ],
     queryFn: () =>
       debounced.length > 0
-        ? searchExerciseLibrary({
-            search: debounced,
-            limit: 50,
-            ...(category !== undefined ? { category } : {}),
-          })
-        : searchExerciseLibrary({
-            limit: 500,
-            ...(category !== undefined ? { category } : {}),
-          }),
+        ? searchExerciseLibrary({ search: debounced, limit: 50, ...common })
+        : searchExerciseLibrary({ limit: 500, ...common }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });

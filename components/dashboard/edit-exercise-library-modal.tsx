@@ -16,8 +16,14 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
+import {
+  EXERCISE_TAGS_KEY,
+  useExerciseTags,
+} from "@/features/exercises/exercise-tags";
+import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
   extractVideoPathFromUrl,
@@ -53,6 +59,7 @@ export default function EditExerciseLibraryModal({
     instructions: [] as string[],
     tips: [] as string[],
     cardio_type: "",
+    tags: [] as string[],
   });
   const [muscleGroupInput, setMuscleGroupInput] = useState("");
   const [equipmentInput, setEquipmentInput] = useState("");
@@ -61,6 +68,8 @@ export default function EditExerciseLibraryModal({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const qc = useQueryClient();
+  const tagSuggestions = useExerciseTags();
 
   // Populate form with exercise data
   useEffect(() => {
@@ -77,6 +86,7 @@ export default function EditExerciseLibraryModal({
         image_url: exercise.image_url || "",
         instructions: exercise.instructions || [],
         tips: exercise.tips || [],
+        tags: exercise.tags ?? [],
         cardio_type:
           (exercise as any).metadata?.cardio_type ??
           (exercise as any).default_training_system ??
@@ -258,17 +268,24 @@ export default function EditExerciseLibraryModal({
     }
 
     setIsSubmitting(true);
+    // Sent only when changed: the tags column may not be migrated yet.
+    const tagsChanged =
+      formData.tags.join("\n") !== (exercise.tags ?? []).join("\n");
 
     try {
       const response = await fetch(`/api/exercises/${exercise.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          tags: tagsChanged ? formData.tags : undefined,
+        }),
       });
 
       const result = await response.json();
 
       if (result.success) {
+        if (tagsChanged) qc.invalidateQueries({ queryKey: EXERCISE_TAGS_KEY });
         onSuccess();
         onClose();
       } else {
@@ -642,6 +659,17 @@ export default function EditExerciseLibraryModal({
                 Detalles Adicionales (Opcional)
               </h4>
               <div className="space-y-4">
+                <TagsField
+                  description="Para filtrar la biblioteca al montar sesiones. Ej. pectoral, mancuernas, barra, empuje."
+                  disabled={isSubmitting}
+                  placeholder="Ej. pectoral, mancuernas, barra..."
+                  suggestions={tagSuggestions}
+                  value={formData.tags}
+                  onChange={(tags) =>
+                    setFormData((prev) => ({ ...prev, tags }))
+                  }
+                />
+
                 {/* Muscle Groups */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

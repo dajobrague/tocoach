@@ -496,12 +496,15 @@ export function searchExerciseLibrary(params: {
   search?: string;
   category?: "cardio";
   limit?: number;
+  /** Every listed tag must be present (repeated ?tag=). */
+  tags?: string[];
 }): Promise<LibraryExercise[]> {
   const query = new URLSearchParams();
 
   if (params.search !== undefined) query.set("search", params.search);
   if (params.category !== undefined) query.set("category", params.category);
   if (params.limit !== undefined) query.set("limit", String(params.limit));
+  for (const tag of params.tags ?? []) query.append("tag", tag);
 
   return getJson<{ exercises?: LibraryExercise[] }>(
     `/api/exercises?${query.toString()}`

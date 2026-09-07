@@ -14,8 +14,14 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import {
+  EXERCISE_TAGS_KEY,
+  useExerciseTags,
+} from "@/features/exercises/exercise-tags";
+import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
   extractVideoPathFromUrl,
@@ -49,6 +55,7 @@ export default function AddExerciseLibraryModal({
     instructions: [] as string[],
     tips: [] as string[],
     cardio_type: "",
+    tags: [] as string[],
   });
   const [muscleGroupInput, setMuscleGroupInput] = useState("");
   const [equipmentInput, setEquipmentInput] = useState("");
@@ -57,6 +64,8 @@ export default function AddExerciseLibraryModal({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const qc = useQueryClient();
+  const tagSuggestions = useExerciseTags();
 
   const categories = [
     { key: "strength", label: "Fuerza" },
@@ -232,13 +241,18 @@ export default function AddExerciseLibraryModal({
       const response = await fetch("/api/exercises", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        // Sent only when set: the tags column may not be migrated yet.
+        body: JSON.stringify({
+          ...formData,
+          tags: formData.tags.length > 0 ? formData.tags : undefined,
+        }),
       });
 
       const result = await response.json();
 
       if (result.success) {
         onSuccess(result.exercise);
+        qc.invalidateQueries({ queryKey: EXERCISE_TAGS_KEY });
         handleClose();
       } else {
         alert(`Error: ${result.error}`);
@@ -265,6 +279,7 @@ export default function AddExerciseLibraryModal({
       instructions: [],
       tips: [],
       cardio_type: "",
+      tags: [] as string[],
     });
     setImagePreview(null);
     if (videoPreview) URL.revokeObjectURL(videoPreview);
@@ -712,6 +727,17 @@ export default function AddExerciseLibraryModal({
                   Detalles Adicionales (Opcional)
                 </h4>
                 <div className="space-y-4">
+                  <TagsField
+                    description="Para filtrar la biblioteca al montar sesiones. Ej. pectoral, mancuernas, barra, empuje."
+                    disabled={isSubmitting}
+                    placeholder="Ej. pectoral, mancuernas, barra..."
+                    suggestions={tagSuggestions}
+                    value={formData.tags}
+                    onChange={(tags) =>
+                      setFormData((prev) => ({ ...prev, tags }))
+                    }
+                  />
+
                   {/* Muscle Groups - Only for strength */}
                   {formData.category === "strength" && (
                     <div>

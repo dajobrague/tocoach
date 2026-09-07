@@ -5,6 +5,8 @@ import type { RecipeStatus } from "./recipe-query";
 import { Input, Select, SelectItem, type Selection } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { TagFilterSelect } from "../library/tag-filter-select";
+
 import { statusLabel } from "./recipe-format";
 
 const STATUS_OPTIONS: RecipeStatus[] = ["active", "draft", "archived"];
@@ -29,11 +31,6 @@ function firstKey(keys: Selection): string {
   const first = Array.from(keys)[0];
 
   return first === undefined ? "" : String(first);
-}
-
-/** Every selected key of a HeroUI Selection set ("all" = no filter). */
-function allKeys(keys: Selection): string[] {
-  return keys === "all" ? [] : Array.from(keys).map(String);
 }
 
 export function RecipeFilters({
@@ -87,28 +84,11 @@ export function RecipeFilters({
         </Select>
       )}
 
-      {tagOptions.length > 0 && (
-        <Select
-          aria-label="Filtrar por etiquetas"
-          className="sm:max-w-[240px]"
-          placeholder="Todas las etiquetas"
-          selectedKeys={tags}
-          selectionMode="multiple"
-          startContent={
-            <Icon
-              className="text-default-400"
-              icon="solar:tag-linear"
-              width={16}
-            />
-          }
-          variant="bordered"
-          onSelectionChange={(keys) => onTagsChange(allKeys(keys))}
-        >
-          {tagOptions.map((option) => (
-            <SelectItem key={option}>{option}</SelectItem>
-          ))}
-        </Select>
-      )}
+      <TagFilterSelect
+        options={tagOptions}
+        value={tags}
+        onChange={onTagsChange}
+      />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { Autocomplete, AutocompleteItem, Chip } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
-import { tagSuggestions } from "./recipe-query";
+import { tagSuggestions } from "./tags";
 
 interface TagsFieldProps {
   disabled: boolean;
@@ -12,6 +12,9 @@ interface TagsFieldProps {
   suggestions: string[];
   value: string[];
   onChange: (tags: string[]) => void;
+  label?: string;
+  placeholder?: string;
+  description?: string;
 }
 
 /** Synthetic dropdown row that creates whatever was typed. */
@@ -22,13 +25,17 @@ const CREATE_KEY = "__create__";
  * Typing opens a dropdown with every existing tag containing the text so
  * trainers reuse spellings instead of creating near-duplicates; when no
  * existing tag equals the text, the last row creates it. Enter or coma add
- * the typed text as well.
+ * the typed text as well. Shared by recipes, exercises and program
+ * templates — tags never create folders here (that was JC's complaint).
  */
 export function TagsField({
   disabled,
   suggestions,
   value,
   onChange,
+  label = "Etiquetas",
+  placeholder = "Escribe una etiqueta...",
+  description = "Escribe para buscar entre tus etiquetas o crear una nueva.",
 }: TagsFieldProps) {
   // Both `inputValue` and `selectedKey` are controlled: letting React Aria
   // sync the text from a selection while `items` change loops forever.
@@ -45,7 +52,7 @@ export function TagsField({
     );
 
     if (trimmed.length > 0 && already === false) {
-      // Reuse the exact casing of the matching suggestion (a recipe's tag or
+      // Reuse the exact casing of the matching suggestion (an item's tag or
       // a folder's name); picking a dropdown row passes that string as-is.
       const canonical =
         suggestions.find(
@@ -91,12 +98,12 @@ export function TagsField({
 
       <Autocomplete
         allowsCustomValue
-        description="Escribe para buscar entre tus etiquetas o crear una nueva. Sirven para buscar y filtrar recetas."
+        description={description}
         inputValue={text}
         isDisabled={disabled}
         items={items}
-        label="Etiquetas"
-        placeholder="Ej. desayuno, sin gluten, verano..."
+        label={label}
+        placeholder={placeholder}
         selectedKey={null}
         startContent={
           <Icon
