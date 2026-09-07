@@ -36,6 +36,8 @@ import type {
 import { EMPTY_CHARTS_DOCUMENT } from "../types";
 import { CATALOG_BY_ID } from "../adapters/catalog";
 
+import { loadFormQuestionRows } from "./form-question-rows";
+
 import {
   CATALOG_DATA_FEED,
   questionMatchesSpec,
@@ -70,7 +72,8 @@ const UNAVAILABLE_RESULT: TenantQuestionsResult = Object.freeze({
 }) as TenantQuestionsResult;
 
 /**
- * Lee form_templates del tenant y normaliza ambos shapes históricos
+ * Lee form_templates del tenant y los client_form_configs de sus clientes
+ * (preguntas personalizadas por cliente) y normaliza ambos shapes históricos
  * de questions_config (array legacy + wrapper { questions: [...] }).
  * Solo incluye preguntas enabled.
  */
@@ -78,15 +81,11 @@ export async function loadTenantQuestions(
   supabase: SupabaseClient,
   tenantHost: string
 ): Promise<TenantQuestionsResult> {
-  const { data, error } = await supabase
-    .from("form_templates")
-    .select("form_type, questions_config, is_active")
-    .eq("tenant_host", tenantHost)
-    .eq("is_active", true);
+  const { rows, error } = await loadFormQuestionRows(supabase, tenantHost);
 
-  if (error) {
+  if (error !== null) {
     console.warn(
-      `[charts/resolvability] loadTenantQuestions error tenant=${tenantHost}: ${error.message}. Filters will fail-open.`
+      `[charts/resolvability] loadTenantQuestions error tenant=${tenantHost}: ${error}. Filters will fail-open.`
     );
 
     return UNAVAILABLE_RESULT;
@@ -94,7 +93,7 @@ export async function loadTenantQuestions(
 
   const out: TenantQuestion[] = [];
 
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const formType = row.form_type as FormType;
 
     if (formType !== "checkins" && formType !== "habits") continue;
@@ -108,7 +107,9 @@ export async function loadTenantQuestions(
     let questions: ReturnType<typeof flattenQuestions> = [];
 
     try {
-      questions = flattenQuestions(row.questions_config);
+      questions = flattenQuestions(
+        row.questions_config as Parameters<typeof flattenQuestions>[0]
+      );
     } catch {
       continue;
     }

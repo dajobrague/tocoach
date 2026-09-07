@@ -81,6 +81,13 @@ export interface FormPage {
   title: string;
   icon: string; // iconify icon name, e.g. "solar:bolt-bold"
   order: number;
+  /**
+   * Check-ins only: show this page every N check-in periods (1 or absent =
+   * every check-in). Lets one weekly form carry a short weekly part and a
+   * longer part (photos, measurements) every 2/4 weeks — see
+   * `lib/forms/page-cadence.ts`.
+   */
+  every_n?: number;
 }
 
 export interface QuestionConfig {

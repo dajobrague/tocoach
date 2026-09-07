@@ -160,7 +160,7 @@ interface MealProduct {
  */
 function groupProducts(
   options: ProductOption[],
-  chosenOptionId: string | null = null
+  chosenOptionIds: readonly string[] = []
 ): MealProduct[] {
   const byGroup = new Map<number, ProductOption[]>();
 
@@ -176,8 +176,11 @@ function groupProducts(
     .sort((a, b) => a[0] - b[0])
     .map(([, opts]) => {
       const chosen =
-        chosenOptionId !== null && opts.length > 1
-          ? opts.find((option) => option.id === chosenOptionId)
+        opts.length > 1
+          ? opts.find(
+              (option) =>
+                option.id !== undefined && chosenOptionIds.includes(option.id)
+            )
           : undefined;
 
       if (chosen !== undefined) {
@@ -460,7 +463,7 @@ function SelectedDayPanel({
   date: string;
   today: string;
   choices: Record<string, number>;
-  selections: Record<string, string>;
+  selections: Record<string, string[]>;
   dayNames: Record<string, string>;
   onDelete: (overrideId: string) => void;
   onEditMeal: (target: {
@@ -577,7 +580,7 @@ function SelectedDayPanel({
             const products: MealProduct[] =
               slot.swap !== null
                 ? swapProducts(slot.swap.snapshots)
-                : groupProducts(slot.options, selections[slot.slotId] ?? null);
+                : groupProducts(slot.options, selections[slot.slotId] ?? []);
             const label = slot.label.trim().length > 0 ? slot.label : "Comida";
             const currentItems = slotCartItems(
               slot.swap !== null ? slot.swap.snapshots : null,

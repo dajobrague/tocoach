@@ -11,7 +11,7 @@ import {
   Input,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { optionKcal, resolveRelabel } from "./cycle-api";
 import { mealVisual } from "./cycle-format";
@@ -33,9 +33,18 @@ interface MealRowProps {
   onRemoveOption: (optionId: string) => void;
   onEditPortions: (option: SlotOption) => void;
   onRelabel: (label: string) => void;
+  /** Open the name editor as soon as the row mounts (a fresh custom meal). */
+  autoRename?: boolean;
+  /** The name editor closed (saved, unchanged or cancelled). */
+  onRenameEnd?: () => void;
 }
 
 const DEFAULT_LABEL = "Comida";
+// HeroUI's DropdownMenu keeps a focus-containing FocusScope alive during its
+// 150 ms exit animation: an input focused before it unmounts is immediately
+// blurred back into the menu, which used to commit the rename untouched.
+// Start editing only after the menu is gone.
+const RENAME_AFTER_MENU_MS = 200;
 
 export function MealRow({
   slot,
@@ -47,6 +56,8 @@ export function MealRow({
   onRemoveOption,
   onEditPortions,
   onRelabel,
+  autoRename = false,
+  onRenameEnd,
 }: MealRowProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -58,8 +69,26 @@ export function MealRow({
   const mealKcal = slotTotals(slot).kcal;
 
   function startRename(): void {
-    setDraft(slot.label);
+    setDraft(label);
     setEditing(true);
+  }
+
+  function startRenameAfterMenu(): void {
+    setTimeout(startRename, RENAME_AFTER_MENU_MS);
+  }
+
+  useEffect(() => {
+    if (autoRename === false) return;
+
+    const timer = setTimeout(startRename, RENAME_AFTER_MENU_MS);
+
+    return () => clearTimeout(timer);
+    // Mount-only: a fresh custom meal opens its name editor once.
+  }, []);
+
+  function stopEditing(): void {
+    setEditing(false);
+    onRenameEnd?.();
   }
 
   function commit(): void {
@@ -67,7 +96,7 @@ export function MealRow({
 
     if (patch !== null) onRelabel(patch.label);
 
-    setEditing(false);
+    stopEditing();
   }
 
   return (
@@ -103,7 +132,7 @@ export function MealRow({
               } else if (event.key === "Escape") {
                 event.preventDefault();
                 skipBlurRef.current = true;
-                setEditing(false);
+                stopEditing();
               }
             }}
             onValueChange={setDraft}
@@ -137,7 +166,7 @@ export function MealRow({
             <DropdownMenu
               aria-label="Acciones de comida"
               onAction={(key) => {
-                if (key === "rename") startRename();
+                if (key === "rename") startRenameAfterMenu();
                 else if (key === "remove") onRemoveSlot();
               }}
             >
@@ -349,6 +378,15 @@ function ComponentBlock({
               </span>
               {disabled ? null : (
                 <>
+                  <button
+                    aria-label={`Editar porciones de ${alt.item_snapshot.name}`}
+                    className="shrink-0 text-default-400 hover:text-gray-700"
+                    title="Editar porciones"
+                    type="button"
+                    onClick={() => onEditPortions(alt)}
+                  >
+                    <Icon icon="solar:pen-linear" width={14} />
+                  </button>
                   <button
                     className="shrink-0 text-[11px] font-medium text-default-400 hover:text-emerald-700"
                     title="Hacer que esta alternativa cuente en los totales del plan"

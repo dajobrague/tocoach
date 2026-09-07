@@ -22,7 +22,8 @@ interface DayCopyModalProps {
   currentDayIndex: number;
   pending: boolean;
   onClose: () => void;
-  onConfirm: (sourceDayIndex: number, targetDayIndex: number) => void;
+  /** `duplicate` may target several days at once; `copyFrom` always one. */
+  onConfirm: (sourceDayIndex: number, targetDayIndexes: number[]) => void;
 }
 
 function mealCount(day: DayGroup): number {
@@ -37,36 +38,49 @@ export function DayCopyModal({
   onClose,
   onConfirm,
 }: DayCopyModalProps) {
-  const [picked, setPicked] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number[]>([]);
 
-  // Reset the picked day whenever the modal (re)opens.
+  // Reset the picked days whenever the modal (re)opens.
   useEffect(() => {
-    if (mode !== null) setPicked(null);
+    if (mode !== null) setPicked([]);
   }, [mode]);
 
   const isDuplicate = mode === "duplicate";
   const choices = days.filter((day) => day.dayIndex !== currentDayIndex);
 
-  // Resolve source/target from the mode. The picked day is the *other* end.
-  const source = isDuplicate ? currentDayIndex : picked;
-  const target = isDuplicate ? picked : currentDayIndex;
+  // Duplicate: the current day goes to every picked day. Copy-from: the one
+  // picked day replaces the current day.
+  const source = isDuplicate ? currentDayIndex : (picked[0] ?? null);
+  const targets = isDuplicate ? picked : [currentDayIndex];
 
-  // The target day is the one that gets replaced — warn if it has meals.
-  const replacedDay =
-    target !== null ? days.find((day) => day.dayIndex === target) : undefined;
-  const replacedMeals = replacedDay !== undefined ? mealCount(replacedDay) : 0;
+  // The target days get replaced — warn when they have meals.
+  const replacedMeals =
+    picked.length === 0
+      ? 0
+      : days
+          .filter((day) => targets.includes(day.dayIndex))
+          .reduce((sum, day) => sum + mealCount(day), 0);
 
   const title = isDuplicate ? "Duplicar día" : "Copiar desde otro día";
   const subtitle = isDuplicate
-    ? `Copia las comidas del Día ${currentDayIndex + 1} a otro día.`
+    ? `Copia las comidas del Día ${currentDayIndex + 1} a otros días.`
     : `Reemplaza el Día ${currentDayIndex + 1} con las comidas de otro día.`;
   const pickerLabel = isDuplicate
-    ? "¿A qué día quieres copiarlas?"
+    ? "¿A qué días quieres copiarlas? Puedes elegir varios."
     : "¿Desde qué día quieres copiar?";
 
+  const toggle = (dayIndex: number) =>
+    setPicked((current) =>
+      isDuplicate
+        ? current.includes(dayIndex)
+          ? current.filter((index) => index !== dayIndex)
+          : [...current, dayIndex]
+        : [dayIndex]
+    );
+
   const confirm = () => {
-    if (source === null || target === null || pending) return;
-    onConfirm(source, target);
+    if (source === null || targets.length === 0 || pending) return;
+    onConfirm(source, targets);
   };
 
   return (
@@ -106,7 +120,7 @@ export function DayCopyModal({
             <div className="flex flex-col gap-2">
               {choices.map((day) => {
                 const meals = mealCount(day);
-                const selected = picked === day.dayIndex;
+                const selected = picked.includes(day.dayIndex);
 
                 return (
                   <button
@@ -117,7 +131,7 @@ export function DayCopyModal({
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     }`}
                     type="button"
-                    onClick={() => setPicked(day.dayIndex)}
+                    onClick={() => toggle(day.dayIndex)}
                   >
                     <span className="text-sm font-medium text-gray-900">
                       Día {day.dayIndex + 1}
@@ -133,7 +147,7 @@ export function DayCopyModal({
             </div>
           )}
 
-          {picked !== null && replacedMeals > 0 && (
+          {replacedMeals > 0 && (
             <div className="flex gap-2 rounded-large bg-amber-50 p-3 text-xs text-amber-800">
               <Icon
                 className="mt-0.5 shrink-0 text-amber-500"
@@ -145,7 +159,10 @@ export function DayCopyModal({
                 <span className="font-semibold">
                   {replacedMeals} {replacedMeals === 1 ? "comida" : "comidas"}
                 </span>{" "}
-                del Día {(target ?? 0) + 1}. Esta acción no se puede deshacer.
+                {targets.length === 1
+                  ? `del Día ${(targets[0] ?? 0) + 1}`
+                  : `de los días ${targets.map((index) => index + 1).join(", ")}`}
+                . Esta acción no se puede deshacer.
               </p>
             </div>
           )}
@@ -157,11 +174,15 @@ export function DayCopyModal({
           <Button
             className="bg-blue-600 text-white"
             color="primary"
-            isDisabled={picked === null}
+            isDisabled={picked.length === 0}
             isLoading={pending}
             onPress={confirm}
           >
-            {isDuplicate ? "Duplicar" : "Copiar"}
+            {isDuplicate
+              ? picked.length > 1
+                ? `Duplicar en ${picked.length} días`
+                : "Duplicar"
+              : "Copiar"}
           </Button>
         </ModalFooter>
       </ModalContent>
