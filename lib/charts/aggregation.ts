@@ -16,6 +16,23 @@
 import type { Aggregation, ChartType } from "./types";
 
 /**
+ * Días que cubre cada clave de rango. Acepta el selector legacy del
+ * cliente (7d / 14d / 30d / 3m / 6m / 12m) más el atajo trainer-side
+ * 90d. Es la única fuente de verdad: el snapshot route valida el
+ * query param contra estas keys y la preview del trainer la usa para
+ * dimensionar la demo data del calendario.
+ */
+export const RANGE_DAYS: Readonly<Record<string, number>> = {
+  "7d": 7,
+  "14d": 14,
+  "30d": 30,
+  "90d": 90,
+  "3m": 90,
+  "6m": 180,
+  "12m": 365,
+};
+
+/**
  * Decide la `aggregation` efectiva del chart según el rango que el
  * cliente seleccionó en el dashboard. La `chart.aggregation` guardada
  * por el trainer funciona como FALLBACK — solo se usa cuando el
@@ -54,10 +71,14 @@ export function getEffectiveAggregation(
   fallback: Aggregation,
   chartType: ChartType
 ): Aggregation {
+  // calendar = un punto por día, sea cual sea el rango. Va antes que
+  // range_total porque no hay forma de pintar un calendario con 1 bucket.
+  if (chartType === "calendar") return "daily";
   if (fallback === "range_total") return "range_total";
   if (chartType === "stacked_bar") return fallback;
 
   if (rangeKey === "7d") return "daily";
+  if (rangeKey === "14d") return "daily";
   if (rangeKey === "30d") return "daily";
   // "3m" (cliente) y "90d" (trainer-side ChartRange) son sinónimos —
   // ambos mapean a 90 días en RANGE_DAYS y deben recibir el mismo

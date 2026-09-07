@@ -240,6 +240,7 @@ export function chartPeriodCountForRange(
 ): number {
   const map: Record<string, number> = {
     "7d": 6,
+    "14d": 8,
     "30d": 12,
     "3m": 16,
     "6m": 20,

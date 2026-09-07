@@ -36,7 +36,13 @@ export type ChartType =
   | "stacked_bar"
   | "ring"
   | "kpi"
-  | "photo_timeline";
+  | "photo_timeline"
+  /**
+   * Calendario de entrenamiento: filas = semanas, un punto por día
+   * (fuerza / cardio / descanso). Solo sobre `training_breakdown`,
+   * siempre agregado `daily` (ver getEffectiveAggregation).
+   */
+  | "calendar";
 
 /** Chart types that are 1-D. */
 export const SINGLE_DIM_CHART_TYPES = [
@@ -50,6 +56,7 @@ export const SINGLE_DIM_CHART_TYPES = [
 export const MULTI_DIM_CHART_TYPES = [
   "stacked_bar",
   "ring",
+  "calendar",
 ] as const satisfies readonly ChartType[];
 
 /**
@@ -217,6 +224,11 @@ export interface BucketedPoint {
   value: number | null | Record<string, number | null>;
   /** Tooltip prefix line, e.g. "1 abr — 7 abr". Optional. */
   periodTooltip?: string;
+  /**
+   * YYYY-MM-DD del bucket cuando la agregación es `daily`. Lo necesita el
+   * renderer `calendar` para colocar cada día en su columna de semana.
+   */
+  ymd?: string;
 }
 
 /**

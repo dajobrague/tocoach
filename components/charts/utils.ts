@@ -162,5 +162,7 @@ export function iconForChartType(chartType: ChartType): string {
       return "solar:hashtag-bold";
     case "photo_timeline":
       return "solar:gallery-bold";
+    case "calendar":
+      return "solar:calendar-bold";
   }
 }

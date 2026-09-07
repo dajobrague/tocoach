@@ -303,7 +303,7 @@ export interface SnapshotData {
   photoBuckets?: Record<string, { photos: PhotoPoint[] }>;
 }
 
-export type ChartRange = "7d" | "30d" | "90d" | "6m" | "12m";
+export type ChartRange = "7d" | "14d" | "30d" | "90d" | "6m" | "12m";
 
 export function useClientSnapshot(
   clientId: number | string,
