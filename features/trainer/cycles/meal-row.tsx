@@ -379,6 +379,15 @@ function ComponentBlock({
               {disabled ? null : (
                 <>
                   <button
+                    aria-label={`Editar porciones de ${alt.item_snapshot.name}`}
+                    className="shrink-0 text-default-400 hover:text-gray-700"
+                    title="Editar porciones"
+                    type="button"
+                    onClick={() => onEditPortions(alt)}
+                  >
+                    <Icon icon="solar:pen-linear" width={14} />
+                  </button>
+                  <button
                     className="shrink-0 text-[11px] font-medium text-default-400 hover:text-emerald-700"
                     title="Hacer que esta alternativa cuente en los totales del plan"
                     type="button"
