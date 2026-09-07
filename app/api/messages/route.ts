@@ -1,15 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 import { buildChatNotificationRow } from "@/lib/notifications/chat-notification";
 
 // Lazy Supabase client initialization
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  return createSupabaseAdminClient();
 }
 
 // slug → host con cache en módulo (TTL 60s, mismo patrón que el tenant

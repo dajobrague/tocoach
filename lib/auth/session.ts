@@ -223,12 +223,13 @@ export async function setSessionCookie(
  */
 export async function updateTrainerLastLogin(trainerId: string): Promise<void> {
   try {
-    const { createClient } = await import("@supabase/supabase-js");
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    // Dynamic import keeps the service-role factory out of the middleware
+    // bundle (middleware imports this module for verifySessionFromRequest).
+    const { createSupabaseAdminClient } = await import(
+      "@/lib/clients/supabase-admin"
     );
+
+    const supabase = createSupabaseAdminClient();
 
     await supabase
       .from("trainers")

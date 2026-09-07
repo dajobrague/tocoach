@@ -290,7 +290,7 @@ const sessionCookieConfig = {
 ### Database Security
 
 - **Connection encryption:** Required for all database connections
-- **Row Level Security (RLS):** Enabled for multi-tenant data
+- **Tenant isolation:** the `tenant_host` / `tenant_slug` filter in every server query (service role via `lib/clients/supabase-admin.ts`); `anon` / `authenticated` have no grants on `public` tables. RLS only gates browser Realtime (`messages`, `notifications`) via the app-signed token — see `docs/architecture/rls-hardening-impact-2026-09-07.md`
 - **Principle of least privilege:** Each service has minimal required permissions
 - **Audit logging:** All data modifications logged
 
