@@ -13,8 +13,6 @@ interface RecipeCardProps {
   onDelete?: (recipe: RecipeListItem) => void;
   /** Folder view only: opens the "Mover a carpeta" dialog. */
   onMove?: (recipe: RecipeListItem) => void;
-  /** Tag to leave out of the chips (the open folder's — every card has it). */
-  hideTag?: string | undefined;
 }
 
 /** Chips shown under the title before collapsing the rest into "+N". */
@@ -25,18 +23,13 @@ export function RecipeCard({
   onOpen,
   onDelete,
   onMove,
-  hideTag,
 }: RecipeCardProps) {
   const hasThumbnail =
     recipe.thumbnailUrl !== undefined &&
     recipe.thumbnailUrl !== null &&
     recipe.thumbnailUrl.length > 0;
-  const hidden = hideTag?.trim().toLowerCase();
-  const tags = recipe.meal_type_tags.filter((tag) => {
-    const key = tag.trim().toLowerCase();
-
-    return key.length > 0 && key !== hidden;
-  });
+  // Every chip is a tag (folders never show as chips).
+  const tags = recipe.meal_type_tags.filter((tag) => tag.trim().length > 0);
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
   const extraCount = tags.length - visibleTags.length;
 

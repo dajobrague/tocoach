@@ -1,4 +1,4 @@
-import { filterByTags, hasTag } from "./tags";
+import { filterByTags } from "./tags";
 
 /** A folders-table row (recipe_folders, program_folders) as the API returns it. */
 export interface Folder {
@@ -12,14 +12,14 @@ export interface Folder {
 export interface FolderNode {
   folder: Folder;
   children: FolderNode[];
-  /** DISTINCT items tagged with this folder's tag or any descendant's. */
+  /** Items whose folder_id is this folder or any descendant. */
   itemCount: number;
 }
 
 /** One section of the grouped list view, ordered depth-first so nested
  *  folders follow their parent. */
 export interface FolderSection<T> {
-  kind: "folder" | "untagged";
+  kind: "folder" | "root";
   /** Display heading ("Desayunos", "Sin carpeta"). */
   label: string;
   depth: number;
@@ -72,37 +72,36 @@ function groupByParent(folders: Folder[]): Map<string | null, Folder[]> {
   return byParent;
 }
 
-function subtreeTags(folder: Folder, children: FolderNode[]): string[] {
-  return [
-    folder.name,
-    ...children.flatMap((child) => subtreeTags(child.folder, child.children)),
-  ];
+function subtreeIds(node: FolderNode): string[] {
+  return [node.folder.id, ...node.children.flatMap(subtreeIds)];
 }
 
 /**
- * Folder logic bound to one item shape. A folder IS a tag: an item belongs
- * by carrying the folder's name in `tagsOf(item)` (case-insensitive), and
- * only the hierarchy lives in the folders table. Plain tags are NOT folders
- * (Sep 2 call, JC): items tagged only with those live at the root.
+ * Folder logic bound to one item shape. An item is in exactly one folder
+ * (`folder_id`) or at the root (null — or a folder the tenant no longer
+ * has, which the FK sets to null server-side; the client tolerates the
+ * stale id meanwhile). Tags are a separate axis: `tagsOf` only feeds the
+ * "folder AND tags" filter.
  */
-export function createFolderTree<T extends { id: string }>(
-  tagsOf: (item: T) => readonly string[]
-) {
-  /** The items directly in a folder (tagged with ITS tag, not descendants'). */
+export function createFolderTree<
+  T extends { id: string; folder_id: string | null },
+>(tagsOf: (item: T) => readonly string[]) {
+  /** The items directly in a folder (not its descendants'). */
   const itemsInFolder = (items: T[], folder: Folder): T[] =>
-    items.filter((item) => hasTag(tagsOf(item), folder.name));
+    items.filter((item) => item.folder_id === folder.id);
 
-  /** Items outside every folder: none of their tags is a folder name. */
-  const itemsOutsideFolders = (items: T[], folders: Folder[]): T[] =>
-    items.filter(
-      (item) =>
-        folders.some((folder) => hasTag(tagsOf(item), folder.name)) === false
+  /** Items outside every folder. */
+  const itemsOutsideFolders = (items: T[], folders: Folder[]): T[] => {
+    const known = new Set(folders.map((folder) => folder.id));
+
+    return items.filter(
+      (item) => item.folder_id === null || known.has(item.folder_id) === false
     );
+  };
 
   /**
    * Build the folder tree for one level (`parentId`; null = root), with each
-   * node's DISTINCT item count across its whole subtree — an item tagged
-   * with two tags of the same subtree counts once.
+   * node's item count across its whole subtree.
    */
   const folderNodes = (
     folders: Folder[],
@@ -112,14 +111,12 @@ export function createFolderTree<T extends { id: string }>(
     const byParent = groupByParent(folders);
     const build = (folder: Folder): FolderNode => {
       const children = (byParent.get(folder.id) ?? []).map(build);
-      const tags = subtreeTags(folder, children);
-      const matched = new Set<string>();
+      const ids = new Set(subtreeIds({ folder, children, itemCount: 0 }));
+      const itemCount = items.filter(
+        (item) => item.folder_id !== null && ids.has(item.folder_id)
+      ).length;
 
-      for (const item of items) {
-        if (tags.some((tag) => hasTag(tagsOf(item), tag))) matched.add(item.id);
-      }
-
-      return { folder, children, itemCount: matched.size };
+      return { folder, children, itemCount };
     };
 
     return (byParent.get(parentId) ?? [])
@@ -135,8 +132,7 @@ export function createFolderTree<T extends { id: string }>(
    * Flatten the folder tree into grouped-list sections (depth-first, parents
    * before children). A folder appears only when its subtree holds at least
    * one of the given items, so filters/search never leave hollow headings.
-   * Items with several folder tags appear under each of their folders, and
-   * items outside every folder close the list as "Sin carpeta".
+   * Items outside every folder close the list as "Sin carpeta".
    */
   const groupedSections = (
     folders: Folder[],
@@ -158,14 +154,14 @@ export function createFolderTree<T extends { id: string }>(
       });
 
     const sections = walk(folderNodes(folders, items, null), 0);
-    const untagged = itemsOutsideFolders(items, folders);
+    const root = itemsOutsideFolders(items, folders);
 
-    if (untagged.length > 0) {
+    if (root.length > 0) {
       sections.push({
-        kind: "untagged",
+        kind: "root",
         label: "Sin carpeta",
         depth: 0,
-        items: untagged,
+        items: root,
       });
     }
 
@@ -184,6 +180,5 @@ export function createFolderTree<T extends { id: string }>(
   };
 }
 
-export type FolderTree<T extends { id: string }> = ReturnType<
-  typeof createFolderTree<T>
->;
+export type FolderTree<T extends { id: string; folder_id: string | null }> =
+  ReturnType<typeof createFolderTree<T>>;

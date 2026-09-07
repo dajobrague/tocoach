@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
+import { parseFolderParam } from "@/lib/library/parse-folder";
 import { parseTagParams, parseTags } from "@/lib/library/parse-tags";
 
 // GET - Fetch all templates for the authenticated trainer
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
     const typeFilter = searchParams.get("type"); // 'programs', 'nutrition', or null for all
     // Repeatable ?tag=a&tag=b: the template must carry both (programs only).
     const tags = parseTagParams(searchParams);
+    // ?folder=root | ?folder=<id>; composes with ?tag= (folder AND tags).
+    const folderId = parseFolderParam(searchParams);
 
     console.log(
       "[Templates API] Fetching templates, category:",
@@ -54,6 +57,12 @@ export async function GET(request: NextRequest) {
 
       if (tags.length > 0) {
         programsQuery = programsQuery.contains("tags", tags);
+      }
+
+      if (folderId === null) {
+        programsQuery = programsQuery.is("folder_id", null);
+      } else if (folderId !== undefined) {
+        programsQuery = programsQuery.eq("folder_id", folderId);
       }
 
       const { data: programs, error: programsError } = await programsQuery;
@@ -150,6 +159,8 @@ export async function GET(request: NextRequest) {
         goal: template.metadata?.goal,
         sessionsPerWeek: template.metadata?.sessions_per_week,
         tags: template.tags ?? [],
+        // snake_case on purpose: the shared folder browser reads `folder_id`.
+        folder_id: template.folder_id ?? null,
         sessionCount: sessionCountByProgram.get(template.id) ?? 0,
         exerciseCount: exerciseCountByProgram.get(template.id) ?? 0,
         createdAt: template.created_at,
@@ -204,6 +215,8 @@ export async function GET(request: NextRequest) {
         description: template.notes,
         templateType: "nutrition", // Distinguish from program
         category: "nutrition",
+        // Nutrition plans have no folders; keep the payload shape uniform.
+        folder_id: null,
         dayCount: dayCountByPlan.get(template.id) ?? 0,
         mealCount: mealCountByPlan.get(template.id) ?? 0,
         createdAt: template.created_at,

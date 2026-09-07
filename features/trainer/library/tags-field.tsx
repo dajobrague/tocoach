@@ -1,15 +1,20 @@
 "use client";
 
+import type { LibraryTagKind } from "./use-library-tags";
+
 import { Autocomplete, AutocompleteItem, Chip } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
 import { tagSuggestions } from "./tags";
+import { useLibraryTagMutations, useLibraryTagNames } from "./use-library-tags";
+
+import { MAX_TAG_LENGTH } from "@/lib/library/parse-tags";
 
 interface TagsFieldProps {
+  /** Which registry to suggest from and create into. */
+  kind: LibraryTagKind;
   disabled: boolean;
-  /** Distinct tags already used across the library, offered as quick-adds. */
-  suggestions: string[];
   value: string[];
   onChange: (tags: string[]) => void;
   label?: string;
@@ -17,26 +22,25 @@ interface TagsFieldProps {
   description?: string;
 }
 
-/** Synthetic dropdown row that creates whatever was typed. */
-const CREATE_KEY = "__create__";
-
 /**
- * Predictive tag editor (Sep 2 call, JC: "like email-marketing tags").
- * Typing opens a dropdown with every existing tag containing the text so
- * trainers reuse spellings instead of creating near-duplicates; when no
- * existing tag equals the text, the last row creates it. Enter or coma add
- * the typed text as well. Shared by recipes, exercises and program
- * templates — tags never create folders here (that was JC's complaint).
+ * Tag editor over the tenant's registry (Sep 2 call, JC: "like
+ * email-marketing tags"; Sep 7, David: tags and folders are different
+ * things). Typing opens the registry's tags containing the text so trainers
+ * reuse spellings; a name that does not exist yet + Enter (or a comma)
+ * creates it in the registry and adds it — one action, no "create" row.
+ * Folders never appear here. Shared by recipes, exercises and templates.
  */
 export function TagsField({
+  kind,
   disabled,
-  suggestions,
   value,
   onChange,
   label = "Etiquetas",
   placeholder = "Escribe una etiqueta...",
-  description = "Escribe para buscar entre tus etiquetas o crear una nueva.",
+  description = "Escribe y pulsa Enter para añadir. Si no existe, se crea.",
 }: TagsFieldProps) {
+  const names = useLibraryTagNames(kind);
+  const { createM } = useLibraryTagMutations(kind);
   // Both `inputValue` and `selectedKey` are controlled: letting React Aria
   // sync the text from a selection while `items` change loops forever.
   const [text, setText] = useState("");
@@ -47,36 +51,25 @@ export function TagsField({
 
   const add = (raw: string) => {
     const trimmed = raw.trim();
-    const already = value.some(
-      (tag) => tag.toLowerCase() === trimmed.toLowerCase()
+
+    setText("");
+
+    if (trimmed.length === 0 || trimmed.length > MAX_TAG_LENGTH) return;
+    if (value.some((tag) => tag.toLowerCase() === trimmed.toLowerCase())) {
+      return;
+    }
+
+    // Reuse the registry's spelling; otherwise register the new name (the
+    // chip lands at once, the registry catches up on the response).
+    const canonical = names.find(
+      (name) => name.toLowerCase() === trimmed.toLowerCase()
     );
 
-    if (trimmed.length > 0 && already === false) {
-      // Reuse the exact casing of the matching suggestion (an item's tag or
-      // a folder's name); picking a dropdown row passes that string as-is.
-      const canonical =
-        suggestions.find(
-          (tag) => tag.toLowerCase() === trimmed.toLowerCase()
-        ) ?? trimmed;
-
-      onChange([...value, canonical]);
-    }
-    setText("");
+    if (canonical === undefined) createM.mutate(trimmed);
+    onChange([...value, canonical ?? trimmed]);
   };
 
-  const { matches, create } = tagSuggestions(suggestions, value, text);
-  const items = [
-    ...matches.map((tag) => ({ key: tag, label: tag, isCreate: false })),
-    ...(create === null
-      ? []
-      : [
-          {
-            key: CREATE_KEY,
-            label: `Crear etiqueta «${create}»`,
-            isCreate: true,
-          },
-        ]),
-  ];
+  const { matches } = tagSuggestions(names, value, text);
 
   return (
     <div className="flex flex-col gap-2">
@@ -101,7 +94,7 @@ export function TagsField({
         description={description}
         inputValue={text}
         isDisabled={disabled}
-        items={items}
+        items={matches.map((tag) => ({ key: tag, label: tag }))}
         label={label}
         placeholder={placeholder}
         selectedKey={null}
@@ -126,7 +119,7 @@ export function TagsField({
           queueMicrotask(() => {
             pickedRef.current = false;
           });
-          add(key === CREATE_KEY ? text : String(key));
+          add(String(key));
         }}
       >
         {(item) => (
@@ -134,10 +127,8 @@ export function TagsField({
             key={item.key}
             startContent={
               <Icon
-                className={item.isCreate ? "text-primary" : "text-default-400"}
-                icon={
-                  item.isCreate ? "solar:add-circle-linear" : "solar:tag-linear"
-                }
+                className="text-default-400"
+                icon="solar:tag-linear"
                 width={15}
               />
             }

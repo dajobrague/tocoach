@@ -1,3 +1,4 @@
+import { parseFolderId } from "@/lib/library/parse-folder";
 import { parseTags } from "@/lib/library/parse-tags";
 
 export type TemplateUpdate =
@@ -15,10 +16,11 @@ const METADATA_FIELDS = [
 
 /**
  * Column updates for PUT /api/templates/[id]. Partial: only the fields
- * present in the body are touched, so a tags-only PUT (the folder view's
- * "move to folder") leaves name, description and metadata alone. Any
- * metadata field present rebuilds `metadata` whole — the detail modal has
- * always sent every field, so that path keeps its exact behaviour.
+ * present in the body are touched, so a `{ folder_id }` PUT (the folder
+ * view's "move to folder") or a tags-only PUT leaves name, description and
+ * metadata alone. Any metadata field present rebuilds `metadata` whole —
+ * the detail modal has always sent every field, so that path keeps its
+ * exact behaviour. Folder ownership is checked by the route.
  */
 export function buildTemplateUpdate(body: unknown): TemplateUpdate {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -77,6 +79,13 @@ export function buildTemplateUpdate(body: unknown): TemplateUpdate {
   if (parsedTags !== undefined) {
     if (parsedTags.ok === false) return parsedTags;
     updates.tags = parsedTags.tags;
+  }
+
+  const folder = parseFolderId(record.folder_id);
+
+  if (folder !== undefined) {
+    if (folder.ok === false) return folder;
+    updates.folder_id = folder.folderId;
   }
 
   return { ok: true, updates };

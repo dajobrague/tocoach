@@ -16,13 +16,8 @@ import {
   Textarea,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import {
-  EXERCISE_TAGS_KEY,
-  useExerciseTags,
-} from "@/features/exercises/exercise-tags";
 import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
@@ -68,8 +63,6 @@ export default function EditExerciseLibraryModal({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const qc = useQueryClient();
-  const tagSuggestions = useExerciseTags();
 
   // Populate form with exercise data
   useEffect(() => {
@@ -285,7 +278,6 @@ export default function EditExerciseLibraryModal({
       const result = await response.json();
 
       if (result.success) {
-        if (tagsChanged) qc.invalidateQueries({ queryKey: EXERCISE_TAGS_KEY });
         onSuccess();
         onClose();
       } else {
@@ -662,8 +654,8 @@ export default function EditExerciseLibraryModal({
                 <TagsField
                   description="Para filtrar la biblioteca al montar sesiones. Ej. pectoral, mancuernas, barra, empuje."
                   disabled={isSubmitting}
+                  kind="exercise"
                   placeholder="Ej. pectoral, mancuernas, barra..."
-                  suggestions={tagSuggestions}
                   value={formData.tags}
                   onChange={(tags) =>
                     setFormData((prev) => ({ ...prev, tags }))

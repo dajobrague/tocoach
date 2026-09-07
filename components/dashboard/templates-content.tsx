@@ -16,14 +16,15 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import CreateTemplateModal from "./create-template-modal";
 import TemplateDetailModal from "./template-detail-modal";
 
 import { FolderBrowser } from "@/features/trainer/library/folder-browser";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
-import { distinctTags, filterByTags } from "@/features/trainer/library/tags";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
+import { filterByTags } from "@/features/trainer/library/tags";
 import {
   programFolderHooks,
   useProgramFolders,
@@ -41,6 +42,8 @@ interface Template {
   sessionsPerWeek?: number;
   /** Program templates only (programs.tags). */
   tags?: string[];
+  /** Program templates only: the one folder it lives in; null = root. */
+  folder_id: string | null;
   sessionCount?: number;
   exerciseCount?: number;
   dayCount?: number;
@@ -71,7 +74,8 @@ const tagsOf = (template: Template): readonly string[] => template.tags ?? [];
 
 const GRID = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
 
-/** Invalidated by folder mutations too (renames retag templates server-side). */
+/** Invalidated by folder and tag mutations too (deleting a folder floats its
+ *  templates to the root; renaming a tag rewrites their arrays). */
 const TEMPLATES_KEY = "templates";
 
 async function fetchTemplates(
@@ -94,15 +98,15 @@ async function fetchTemplates(
   return (result.templates ?? []) as Template[];
 }
 
-/** Tags-only PUT — how the folder view moves a template between folders. */
-async function updateTemplateTags(
+/** folder_id-only PUT — how the folder view moves a template (null = root). */
+async function moveTemplate(
   templateId: string,
-  tags: string[]
+  folderId: string | null
 ): Promise<void> {
   const response = await fetch(`/api/templates/${templateId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tags }),
+    body: JSON.stringify({ folder_id: folderId }),
   });
   const result = await response.json().catch(() => null);
 
@@ -148,18 +152,6 @@ export default function TemplatesContent({
     templateType === "programs" &&
     searchQuery.trim().length === 0 &&
     foldersQuery.isError === false;
-
-  // Tag options come from the whole list (the tag filter is client-side, so
-  // narrowing never hides options) plus folder names — a folder IS a tag,
-  // even while empty — and the active selection.
-  const tagOptions = useMemo(
-    () =>
-      distinctTags(templates, tagsOf, [
-        ...(foldersQuery.data ?? []).map((folder) => folder.name),
-        ...tagFilter,
-      ]),
-    [templates, foldersQuery.data, tagFilter]
-  );
 
   // Filter templates by search query, then by tags (AND).
   const filteredTemplates = filterByTags(
@@ -258,10 +250,11 @@ export default function TemplatesContent({
           {templateType === "programs" && (
             <>
               <TagFilterSelect
-                options={tagOptions}
+                kind="program"
                 value={tagFilter}
                 onChange={setTagFilter}
               />
+              <TagManagerButton className="h-12" kind="program" />
               <div className="flex gap-2">
                 <Button
                   className="bg-black text-white hover:bg-slate-800 font-semibold"
@@ -304,12 +297,12 @@ export default function TemplatesContent({
             create: "Crear plantilla",
             folderExample: "Hombre",
           }}
-          renderItems={(items, { hideTag, onMove }) => (
+          moveItem={(template, folderId) => moveTemplate(template.id, folderId)}
+          renderItems={(items, { onMove }) => (
             <div className={GRID}>
               {items.map((template) => (
                 <TemplateCard
                   key={template.id}
-                  hideTag={hideTag}
                   template={template}
                   onDelete={setTemplateToDelete}
                   onMove={onMove}
@@ -320,9 +313,6 @@ export default function TemplatesContent({
           )}
           tags={tagFilter}
           tagsOf={tagsOf}
-          updateItemTags={(template, next) =>
-            updateTemplateTags(template.id, next)
-          }
           onCreateItem={() => setIsCreateModalOpen(true)}
           onMoved={refetchTemplates}
         />
@@ -376,7 +366,6 @@ export default function TemplatesContent({
       <CreateTemplateModal
         defaultType={templateType === "nutrition" ? "nutrition" : "program"}
         isOpen={isCreateModalOpen}
-        tagSuggestions={tagOptions}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
           setIsCreateModalOpen(false);
@@ -388,7 +377,6 @@ export default function TemplatesContent({
       {selectedTemplate && (
         <TemplateDetailModal
           isOpen={!!selectedTemplate}
-          tagSuggestions={tagOptions}
           template={selectedTemplate}
           onClose={(updatedData) => {
             // Every field saved as it was edited; a background refetch
@@ -480,8 +468,6 @@ const MAX_VISIBLE_TAGS = 3;
 
 interface TemplateCardProps {
   template: Template;
-  /** Tag every card in view shares (the open folder's) — not repeated. */
-  hideTag?: string | undefined;
   onView: (template: Template) => void;
   onDelete: (template: Template) => void;
   /** Folder view only: opens the "Mover a carpeta" dialog. */
@@ -490,17 +476,12 @@ interface TemplateCardProps {
 
 function TemplateCard({
   template,
-  hideTag,
   onView,
   onDelete,
   onMove,
 }: TemplateCardProps) {
-  const hidden = hideTag?.trim().toLowerCase();
-  const tags = tagsOf(template).filter((tag) => {
-    const key = tag.trim().toLowerCase();
-
-    return key.length > 0 && key !== hidden;
-  });
+  // Every chip is a tag (folders never show as chips).
+  const tags = tagsOf(template).filter((tag) => tag.trim().length > 0);
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
   const extraCount = tags.length - visibleTags.length;
 

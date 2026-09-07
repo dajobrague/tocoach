@@ -8,17 +8,30 @@ import type {
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { DeleteRecipeModal } from "./delete-recipe-modal";
-import { FolderBrowser } from "./folder-browser";
 import { GroupedRecipeList } from "./grouped-recipe-list";
 import { NewRecipeModal } from "./new-recipe-modal";
+import { moveRecipe } from "./recipe-api";
 import { RecipeFilters } from "./recipe-filters";
-import { distinctMealTypes } from "./recipe-query";
-import { useRecipeFolders } from "./use-folders";
+import { RecipeList } from "./recipe-list";
 import { useRecipes } from "./use-recipes";
+
+import { FolderBrowser } from "@/features/trainer/library/folder-browser";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
+import { createFolderHooks } from "@/features/trainer/library/use-folders";
+
+/** Recipe folders: hierarchy in recipe_folders, membership on
+ *  recipes.folder_id. Deleting a folder floats recipes to the root, so the
+ *  recipe lists refetch after folder mutations. */
+const recipeFolderHooks = createFolderHooks({
+  baseUrl: "/api/recipe-folders",
+  queryKey: ["recipe-folders"],
+  invalidateKeys: [["recipes"]],
+});
 
 const VIEW_STORAGE_KEY = "topcoach.recipes.view";
 
@@ -40,6 +53,7 @@ const IMPORT_PATH = "/trainer/dashboard/recipes/import";
 
 export function RecipeLibraryContent() {
   const router = useRouter();
+  const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"" | RecipeStatus>("");
   const [tags, setTags] = useState<string[]>([]);
@@ -70,20 +84,12 @@ export function RecipeLibraryContent() {
   }, [query, status, tags]);
 
   const { data, isLoading, isError } = useRecipes(filters);
-  // Unfiltered library (cache-shared with the initial page load) so the tag
-  // dropdown keeps offering every tag while a filter narrows the list.
+  // Unfiltered library (cache-shared with the initial page load): the folder
+  // view computes membership client-side.
   const allRecipes = useRecipes({});
   // Folder hierarchy, shared with the folder view's cache: the list view
   // groups by it.
-  const foldersQuery = useRecipeFolders();
-  const tagOptions = useMemo(
-    () =>
-      distinctMealTypes(allRecipes.data ?? [], [
-        ...(foldersQuery.data ?? []).map((folder) => folder.name),
-        ...tags,
-      ]),
-    [allRecipes.data, foldersQuery.data, tags]
-  );
+  const foldersQuery = recipeFolderHooks.useFolders();
   // Archived = soft-deleted; hide them unless the trainer explicitly filters by
   // status (they remain reachable via the "Archivada" filter option).
   const recipes = useMemo(
@@ -177,28 +183,49 @@ export function RecipeLibraryContent() {
               query={query}
               showStatus={view === "list"}
               status={status}
-              tagOptions={tagOptions}
               tags={tags}
               onQueryChange={setQuery}
               onStatusChange={(value) => setStatus(value as "" | RecipeStatus)}
               onTagsChange={setTags}
             />
           </div>
+
+          <TagManagerButton className="self-start" kind="recipe" />
         </div>
 
         {view === "folders" && query.trim().length === 0 ? (
           <FolderBrowser
+            hooks={recipeFolderHooks}
             isError={allRecipes.isError}
             isLoading={allRecipes.isLoading}
-            recipes={(allRecipes.data ?? []).filter(
+            items={(allRecipes.data ?? []).filter(
               (recipe) => recipe.status !== "archived"
             )}
+            labels={{
+              root: "Mis recetas",
+              singular: "receta",
+              plural: "recetas",
+              create: "Nueva receta",
+              folderExample: "Desayunos",
+            }}
+            moveItem={(recipe, folderId) => moveRecipe(recipe.id, folderId)}
+            renderItems={(items, { onMove }) => (
+              <RecipeList
+                isError={false}
+                isLoading={false}
+                recipes={items}
+                onCreate={() => setNewOpen(true)}
+                onDelete={setToDelete}
+                onMove={onMove}
+                onOpen={(id) =>
+                  router.push(`/trainer/dashboard/recipes/${id}/edit`)
+                }
+              />
+            )}
             tags={tags}
-            onCreateRecipe={() => setNewOpen(true)}
-            onDeleteRecipe={setToDelete}
-            onOpenRecipe={(id) =>
-              router.push(`/trainer/dashboard/recipes/${id}/edit`)
-            }
+            tagsOf={(recipe) => recipe.meal_type_tags}
+            onCreateItem={() => setNewOpen(true)}
+            onMoved={() => qc.invalidateQueries({ queryKey: ["recipes"] })}
           />
         ) : (
           <GroupedRecipeList

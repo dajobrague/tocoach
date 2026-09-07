@@ -4,34 +4,14 @@ import type { Folder } from "./folder-tree";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-async function readEnvelope<T>(response: Response): Promise<T> {
-  const data = await response.json().catch(() => null);
-
-  if (response.ok === false || data?.success !== true) {
-    throw new Error(data?.error ?? "Error de red");
-  }
-
-  return data.data as T;
-}
-
-function sendJson<T>(
-  url: string,
-  method: "POST" | "PATCH" | "DELETE",
-  body?: Record<string, unknown>
-): Promise<T> {
-  return fetch(url, {
-    method,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  }).then(readEnvelope<T>);
-}
+import { getJson, sendJson } from "./fetch-json";
 
 export interface FolderHooksConfig {
   /** REST base, e.g. "/api/recipe-folders" (GET/POST; PATCH/DELETE on /[id]). */
   baseUrl: string;
   queryKey: string[];
-  /** Item lists to refetch after a mutation: renames retag items server-side. */
+  /** Item lists to refetch after a mutation: deleting a folder floats its
+   *  items to the root (FK ON DELETE SET NULL). */
   invalidateKeys: string[][];
 }
 
@@ -42,10 +22,7 @@ export interface FolderHooksConfig {
  */
 export function createFolderHooks(config: FolderHooksConfig) {
   const fetchFolders = (): Promise<Folder[]> =>
-    fetch(config.baseUrl, {
-      credentials: "same-origin",
-      cache: "no-store",
-    }).then(readEnvelope<Folder[]>);
+    getJson<Folder[]>(config.baseUrl);
 
   function useFolders() {
     return useQuery<Folder[]>({

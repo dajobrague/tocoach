@@ -21,8 +21,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
-import { useExerciseTags } from "@/features/exercises/exercise-tags";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
 import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 const PAGE_SIZE = 50;
@@ -50,7 +50,6 @@ export default function ExerciseLibraryContent() {
   categoryFilterRef.current = categoryFilter;
   searchQueryRef.current = searchQuery;
   tagFilterRef.current = tagFilter;
-  const tagOptions = useExerciseTags();
 
   const fetchExercisesPage = useCallback(
     async (page: number, mode: "replace" | "append") => {
@@ -292,9 +291,16 @@ export default function ExerciseLibraryContent() {
 
         <TagFilterSelect
           className="sm:max-w-sm"
-          options={tagOptions}
+          kind="exercise"
           value={tagFilter}
           onChange={setTagFilter}
+        />
+
+        {/* Renaming/removing a tag rewrites exercise arrays: reload page 1. */}
+        <TagManagerButton
+          className="h-12"
+          kind="exercise"
+          onChanged={() => fetchExercisesPage(1, "replace")}
         />
       </div>
 

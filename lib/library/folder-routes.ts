@@ -75,8 +75,8 @@ export function createFolderRouteHandlers(config: FolderRoutesConfig) {
     }
   }
 
-  // Rename (bulk-retags items) and/or move (parent_id; null = root, cycles
-  // rejected).
+  // Rename and/or move (parent_id; null = root, cycles rejected). Items are
+  // never touched: they reference the folder by id.
   async function PATCH(request: NextRequest, context: RouteContext) {
     const guard = await config.guard();
 
@@ -104,8 +104,7 @@ export function createFolderRouteHandlers(config: FolderRoutesConfig) {
     }
   }
 
-  // Remove the folder only: children float to the root and items keep the
-  // tag (it shows again as a loose tag).
+  // Remove the folder: children and its items float to the root (FKs).
   async function DELETE(_request: NextRequest, context: RouteContext) {
     const guard = await config.guard();
 

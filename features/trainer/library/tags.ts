@@ -1,6 +1,7 @@
 // Tag helpers shared by every trainer library (recipes, exercises, program
-// templates). Tags are free-form strings compared case-insensitively; a
-// folder is just a tag with a row in the folders table (see folder-tree.ts).
+// templates). Tag names are compared case-insensitively; which tags exist is
+// the tenant's registry (`library_tags`, see use-library-tags.ts). Folders
+// are a separate axis (`folder_id`, see folder-tree.ts).
 
 /** Case- and whitespace-insensitive tag key. */
 export function normalizeTag(value: string): string {
@@ -25,35 +26,9 @@ export function filterByTags<T>(
 }
 
 /**
- * Distinct tags for pickers (editor suggestions, library filter), plus
- * always-kept extras: folder names (a folder IS a tag, even while empty —
- * Sep 2 call: without them, typing "cenas" into an empty "Cenas" folder
- * created a second spelling) and the active filter selection.
- */
-export function distinctTags<T>(
-  items: T[],
-  tagsOf: (item: T) => readonly string[],
-  alwaysInclude: string[] = []
-): string[] {
-  const set = new Set<string>();
-
-  for (const item of items) {
-    for (const tag of tagsOf(item)) {
-      if (tag.length > 0) set.add(tag);
-    }
-  }
-
-  for (const tag of alwaysInclude) {
-    if (tag.length > 0) set.add(tag);
-  }
-
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
-}
-
-/**
- * Predictive tag input: existing tags containing `text` (minus the ones
+ * Predictive tag input: registry tags containing `text` (minus the ones
  * already selected) and, when no existing tag equals the text, the trimmed
- * text as the "create new tag" candidate — null otherwise.
+ * text as the name Enter would create — null otherwise.
  */
 export function tagSuggestions(
   existing: string[],

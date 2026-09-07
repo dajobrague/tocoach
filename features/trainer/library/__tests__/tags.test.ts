@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { distinctTags, filterByTags, hasTag, tagSuggestions } from "../tags";
+import { filterByTags, hasTag, tagSuggestions } from "../tags";
 
 /** Training-shaped item: exercises and program templates carry `tags`. */
 interface Tagged {
@@ -45,33 +45,20 @@ describe("filterByTags (JC: home client with barbell + dumbbells)", () => {
   });
 });
 
-describe("distinctTags", () => {
-  it("collects sorted distinct spellings plus always-included extras", () => {
-    expect(distinctTags(EXERCISES, tagsOf, ["Tres días"])).toEqual([
-      "barra",
-      "Barra",
-      "empuje",
-      "mancuernas",
-      "pectoral",
-      "Pectoral",
-      "Pierna",
-      "Tres días",
-    ]);
-  });
-});
+describe("tagSuggestions (over the registry)", () => {
+  const registry = ["barra", "empuje", "mancuernas", "Pectoral", "Pierna"];
 
-describe("tagSuggestions", () => {
-  it("offers matches minus selected and a create row only for new text", () => {
-    const existing = distinctTags(EXERCISES, tagsOf);
-
-    expect(tagSuggestions(existing, ["barra"], "bar")).toEqual({
+  it("offers matches minus selected; a new name is what Enter would create", () => {
+    expect(tagSuggestions(registry, ["barra"], "bar")).toEqual({
       matches: [],
       create: "bar",
     });
-    expect(tagSuggestions(existing, [], "pect").matches).toEqual([
-      "pectoral",
+    expect(tagSuggestions(registry, [], "P").matches).toEqual([
+      "empuje",
       "Pectoral",
+      "Pierna",
     ]);
-    expect(tagSuggestions(existing, [], "Pectoral").create).toBeNull();
+    expect(tagSuggestions(registry, [], "pectoral").create).toBeNull();
+    expect(tagSuggestions(registry, ["Pierna"], "pierna").create).toBeNull();
   });
 });
