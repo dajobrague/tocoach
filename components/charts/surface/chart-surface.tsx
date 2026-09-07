@@ -363,7 +363,10 @@ export function ChartSurface({ mode, clientId }: Props) {
 
       return { chart, adapter, buckets, photos, series };
     });
-  }, [doc, snapshotQuery.data, mode, range]);
+    // sourcesQuery.data: la demo del editor depende de la metadata de la
+    // fuente (rating / unit); sin esta dep se quedaba con el preset 0–100
+    // hasta el siguiente cambio de rango.
+  }, [doc, snapshotQuery.data, sourcesQuery.data, mode, range]);
 
   // ─── Editing handlers ──────────────────────────────────────────────────
 
