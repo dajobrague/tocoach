@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabaseBrowserClient } from "@/lib/clients/supabase-browser";
+import { getRealtimeToken } from "@/lib/realtime/realtime-token";
 
 export interface RealtimeMessage {
   id: string;
@@ -79,59 +80,92 @@ export function useRealtimeMessages({
       ? `client_id=eq.${clientId}`
       : `tenant_slug=eq.${tenantSlug}`;
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter,
-        },
-        (payload) => {
-          const msg = payload.new as RealtimeMessage;
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
 
-          if (String(msg.sender_id) !== String(userId)) {
-            setNewMessages((prev) => [...prev, msg]);
-            onNewMessageRef.current?.(msg);
+    const subscribe = () => {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter,
+          },
+          (payload) => {
+            const msg = payload.new as RealtimeMessage;
+
+            if (String(msg.sender_id) !== String(userId)) {
+              setNewMessages((prev) => [...prev, msg]);
+              onNewMessageRef.current?.(msg);
+            }
+            setRefreshTrigger((prev) => prev + 1);
           }
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter,
-        },
-        () => {
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      )
-      .subscribe((status) => {
-        const connected = status === "SUBSCRIBED";
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "messages",
+            filter,
+          },
+          () => {
+            setRefreshTrigger((prev) => prev + 1);
+          }
+        )
+        .subscribe((status, err) => {
+          const connected = status === "SUBSCRIBED";
 
-        if (connected && wasDisconnectedRef.current) {
-          setRefreshTrigger((prev) => prev + 1);
-          onRefreshNeededRef.current?.();
-          wasDisconnectedRef.current = false;
-        }
+          if (connected && wasDisconnectedRef.current) {
+            setRefreshTrigger((prev) => prev + 1);
+            onRefreshNeededRef.current?.();
+            wasDisconnectedRef.current = false;
+          }
 
-        if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          wasDisconnectedRef.current = true;
-        }
+          if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            console.warn(
+              "[Realtime] channel",
+              status,
+              err instanceof Error ? err.message : (err ?? "")
+            );
+            wasDisconnectedRef.current = true;
+          }
 
-        setIsConnected(connected);
-      });
+          setIsConnected(connected);
+        });
 
-    channelRef.current = channel;
+      channelRef.current = channel;
+    };
+
+    // The channel must join with the app-signed token: without it Realtime
+    // sees the anon role, which has no grants, and delivers nothing. No token
+    // (no session / server not configured) → no channel; the visibility and
+    // polling fallbacks below still refresh the UI.
+    void (async () => {
+      const token = await getRealtimeToken(userType);
+
+      if (cancelled) return;
+
+      if (!token) {
+        // eslint-disable-next-line no-console
+        console.warn("[Realtime] no token — messages channel not opened");
+
+        return;
+      }
+
+      // Sets the join payload before subscribe(); the accessToken callback on
+      // the client keeps it fresh afterwards.
+      await supabase.realtime.setAuth(token);
+
+      if (!cancelled) subscribe();
+    })();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -143,8 +177,9 @@ export function useRealtimeMessages({
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
       channelRef.current = null;
     };
   }, [clientId, tenantSlug, userId, userType]);
