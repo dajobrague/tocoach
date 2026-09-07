@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
       query = query.ilike("name", `%${search}%`);
     }
 
-    // Case-sensitive on purpose: options come from the stored spellings
-    // (/api/exercises/tags), so exact match is the right match.
+    // Case-sensitive on purpose: options come from the tag registry, whose
+    // spelling the arrays follow, so exact match is the right match.
     if (tags.length > 0) {
       query = query.contains("tags", tags);
     }

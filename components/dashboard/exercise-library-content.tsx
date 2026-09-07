@@ -22,6 +22,7 @@ import AddExerciseLibraryModal from "./add-exercise-library-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
+import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
 import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 const PAGE_SIZE = 50;
@@ -293,6 +294,13 @@ export default function ExerciseLibraryContent() {
           kind="exercise"
           value={tagFilter}
           onChange={setTagFilter}
+        />
+
+        {/* Renaming/removing a tag rewrites exercise arrays: reload page 1. */}
+        <TagManagerButton
+          className="h-12"
+          kind="exercise"
+          onChanged={() => fetchExercisesPage(1, "replace")}
         />
       </div>
 
