@@ -1,7 +1,3 @@
-import { distinctTags } from "../library/tags";
-
-export { tagSuggestions } from "../library/tags";
-
 export type RecipeStatus = "draft" | "active" | "archived";
 
 /** A recipe as surfaced in the trainer library list (subset of the API row). */
@@ -74,17 +70,4 @@ export async function fetchRecipes(
   }
 
   return (data.data ?? []) as RecipeListItem[];
-}
-
-/** Distinct meal-type tags for pickers, plus always-kept extras (folder
- *  names, the active filter) — see `distinctTags`. */
-export function distinctMealTypes(
-  recipes: RecipeListItem[],
-  alwaysInclude: string[] = []
-): string[] {
-  return distinctTags(
-    recipes,
-    (recipe) => recipe.meal_type_tags,
-    alwaysInclude
-  );
 }
