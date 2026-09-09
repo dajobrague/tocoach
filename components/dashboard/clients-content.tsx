@@ -20,9 +20,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CenteredState } from "@/components/shared/centered-state";
-import { IconTile } from "@/components/shared/icon-tile";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import { SegmentedControl } from "@/components/shared/segmented-control";
+import { StatTile } from "@/components/shared/stat-tile";
 
 import AddClientModal from "./add-client-modal";
 
@@ -132,30 +132,6 @@ const lastLoginText = (value?: string): string => {
 
   return formatDate(value);
 };
-
-function KpiCell({
-  icon,
-  label,
-  tone,
-  value,
-}: {
-  icon: string;
-  label: string;
-  tone: "default" | "success" | "primary" | "warning";
-  value: number;
-}) {
-  return (
-    <div className="flex items-center gap-3 bg-content1 p-4">
-      <IconTile icon={icon} tone={tone} />
-      <div className="min-w-0">
-        <p className="text-2xl font-bold tabular-nums leading-none text-foreground">
-          {value}
-        </p>
-        <p className="mt-1 truncate text-xs text-default-500">{label}</p>
-      </div>
-    </div>
-  );
-}
 
 function TableSkeleton() {
   return (
@@ -299,25 +275,25 @@ export default function ClientsContent() {
 
             {/* Resumen: rejilla hairline, tintes alpha del tema del tenant. */}
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded-large border border-default-200 bg-default-200 lg:grid-cols-4">
-              <KpiCell
+              <StatTile
                 icon="solar:users-group-rounded-bold"
                 label="Total clientes"
                 tone="default"
                 value={stats.total}
               />
-              <KpiCell
+              <StatTile
                 icon="solar:check-circle-bold"
                 label="Activos"
                 tone="success"
                 value={stats.active}
               />
-              <KpiCell
+              <StatTile
                 icon="solar:star-bold"
                 label="Nuevos (7 días)"
                 tone="primary"
                 value={stats.newThisWeek}
               />
-              <KpiCell
+              <StatTile
                 icon="solar:clipboard-check-bold"
                 label="Check-ins pendientes"
                 tone="warning"

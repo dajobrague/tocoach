@@ -178,8 +178,8 @@ export function SideShell({
         Runtime is correct — Sidebar destructures and calls onSelect(key).
       */}
       <Sidebar
-        key={activeKey || "metricas"}
-        defaultSelectedKey={activeKey || "metricas"}
+        key={activeKey || "inicio"}
+        defaultSelectedKey={activeKey || "inicio"}
         iconClassName="group-data-[selected=true]:text-primary"
         itemClasses={{
           base: "data-[selected=true]:bg-primary-50 data-[selected=true]:border-l-4 data-[selected=true]:border-primary data-[selected=true]:rounded-l-none data-[selected=true]:pl-2",

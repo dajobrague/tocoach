@@ -17,7 +17,7 @@ describe("filterTrainerNav", () => {
     expect(leafKeys(filtered)).not.toContain("nutrition-update");
     // Non-gated items are untouched.
     expect(leafKeys(filtered)).toContain("exercise-library");
-    expect(leafKeys(filtered)).toContain("metricas");
+    expect(leafKeys(filtered)).toContain("inicio");
   });
 
   it("shows nutrition_v2-gated items when the flag is on", () => {

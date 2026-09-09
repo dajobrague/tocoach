@@ -23,10 +23,10 @@ export const TRAINER_NAV: TrainerNavSection[] = [
     title: "Principal",
     items: [
       {
-        key: "metricas",
-        title: "Métricas",
-        icon: "solar:chart-line-duotone",
-        href: "/trainer/dashboard/metricas",
+        key: "inicio",
+        title: "Inicio",
+        icon: "solar:home-smile-linear",
+        href: "/trainer/dashboard/inicio",
       },
       {
         key: "clients",

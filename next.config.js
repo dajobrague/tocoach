@@ -57,6 +57,19 @@ const nextConfig = {
   },
 
   // Security headers
+  // La home del trainer se llamaba /metricas. Cualquier enlace externo que
+  // siga apuntando ahí (un item de menú en GHL, un marcador) debe seguir
+  // funcionando, así que la ruta vieja redirige de forma permanente.
+  async redirects() {
+    return [
+      {
+        source: "/trainer/dashboard/metricas",
+        destination: "/trainer/dashboard/inicio",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       // Service worker must NEVER be cached at the HTTP layer. If a CDN or

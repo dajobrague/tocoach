@@ -71,7 +71,7 @@ function SetupWizardContent() {
                 // Clear localStorage to prevent redirect loop
                 if (typeof window !== "undefined") {
                   localStorage.removeItem("activeSection");
-                  localStorage.setItem("activeSection", "metricas");
+                  localStorage.setItem("activeSection", "inicio");
                 }
                 // Use window.location with completion flag
                 window.location.href = "/trainer/dashboard?setup=completed";

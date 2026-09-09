@@ -186,7 +186,7 @@ export default function AyudaContent({
     {
       question: "¿Puedo ver las métricas de progreso de mis clientes?",
       answer:
-        "Sí, en la sección 'Métricas' encontrarás dashboards con estadísticas de todos tus clientes: adherencia a programas, ejercicios completados, mensajes intercambiados y más. También puedes ver métricas individuales desde el perfil de cada cliente.",
+        "Sí. En 'Inicio' tienes el resumen de tu cartera: clientes activos, sesiones completadas, check-ins y actividad reciente. Las métricas de cada cliente están en la pestaña 'Gráficas' de su perfil.",
     },
     {
       question: "¿Cómo funciona el sistema de mensajería?",

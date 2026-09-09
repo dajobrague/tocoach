@@ -64,6 +64,8 @@ describe("perfil de cliente sin literales de color", () => {
     "../../../app/trainer/dashboard/clients/[clientId]/page.tsx",
     "../../../components/dashboard/clients-content.tsx",
     "../../../components/dashboard/add-client-modal.tsx",
+    "../../../components/dashboard/inicio-content.tsx",
+    "../../../components/shared/stat-tile.tsx",
   ];
 
   // Paletas fijas de Tailwind: rompen el tema del tenant porque no derivan
@@ -115,6 +117,16 @@ describe("perfil de cliente sin literales de color", () => {
     expect(
       read("../../../components/dashboard/clients-content.tsx")
     ).not.toContain("alert(");
+  });
+
+  // /trainer/dashboard es un redirector: escribir activeSection y recargar
+  // para llegar a clientes era el mismo bug que el breadcrumb del perfil.
+  it("métricas navega a clientes por router, sin activeSection ni recarga", () => {
+    const src = read("../../../components/dashboard/inicio-content.tsx");
+
+    expect(src).not.toContain("window.location.href");
+    expect(src).not.toContain("activeSection");
+    expect(src).toContain('router.push("/trainer/dashboard/clients")');
   });
 
   it("el raíl de tabs no usa confirm nativo (congela HeroUI hasta recargar)", () => {

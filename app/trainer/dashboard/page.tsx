@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 const SECTION_TO_PATH: Record<string, string> = {
-  metricas: "/trainer/dashboard/metricas",
+  inicio: "/trainer/dashboard/inicio",
+  // Valor heredado en localStorage de antes del renombrado.
+  metricas: "/trainer/dashboard/inicio",
   clients: "/trainer/dashboard/clients",
   messaging: "/trainer/dashboard/messaging",
   "exercise-library": "/trainer/dashboard/exercise-library",
@@ -33,12 +35,12 @@ export default function TrainerDashboardRedirect() {
       } catch {
         /* ignore */
       }
-      router.replace("/trainer/dashboard/metricas");
+      router.replace("/trainer/dashboard/inicio");
 
       return;
     }
 
-    let target = "/trainer/dashboard/metricas";
+    let target = "/trainer/dashboard/inicio";
 
     try {
       const stored = window.localStorage.getItem("activeSection");
