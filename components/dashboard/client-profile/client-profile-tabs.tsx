@@ -1,9 +1,17 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
+import {
+  Button,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { useUrlEnum } from "./use-url-state";
 
@@ -13,7 +21,7 @@ import { useUrlEnum } from "./use-url-state";
 // renderiza uno. Con el split, abrir el perfil descarga solo el tab activo.
 const tabLoading = () => (
   <div className="flex justify-center py-16">
-    <Spinner size="lg" />
+    <Spinner color="primary" size="lg" />
   </div>
 );
 
@@ -60,6 +68,8 @@ const TAB_KEYS = [
   "access",
 ] as const;
 
+type TabKey = (typeof TAB_KEYS)[number];
+
 interface ClientProfileTabsProps {
   clientId: string;
   clientName?: string;
@@ -70,29 +80,34 @@ export default function ClientProfileTabs({
   clientName,
 }: ClientProfileTabsProps) {
   const [selectedTab, setSelectedTab] = useUrlEnum("tab", TAB_KEYS, "training");
+  const [pendingTab, setPendingTab] = useState<TabKey | null>(null);
   const formsUnsavedRef = useRef(false);
 
-  const handleTabChange = (key: (typeof TAB_KEYS)[number]) => {
+  const handleTabChange = (key: TabKey) => {
     if (selectedTab === "forms" && formsUnsavedRef.current && key !== "forms") {
-      if (
-        !window.confirm(
-          "Tienes cambios sin guardar en la configuración de formularios. ¿Quieres descartarlos?"
-        )
-      ) {
-        return;
-      }
-      formsUnsavedRef.current = false;
+      setPendingTab(key);
+
+      return;
     }
     setSelectedTab(key);
   };
 
+  const discardAndGo = () => {
+    if (!pendingTab) return;
+    formsUnsavedRef.current = false;
+    setSelectedTab(pendingTab);
+    setPendingTab(null);
+  };
+
   return (
     <div className="flex flex-col">
-      {/* Tabs Navigation */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Raíl de tabs: comparte superficie con el header (bg-content1), así el
+          borde inferior cierra header + tabs como un solo panel. Sticky para
+          que cambiar de tab no obligue a volver arriba en tabs largas. */}
+      <div className="sticky top-0 z-20 border-b border-divider bg-content1">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
           <div
-            className="flex overflow-x-auto scrollbar-hide -mb-px"
+            className="scrollbar-hide -mb-px flex overflow-x-auto"
             role="tablist"
           >
             {TAB_ITEMS.map((tab) => {
@@ -102,10 +117,10 @@ export default function ClientProfileTabs({
                 <button
                   key={tab.key}
                   aria-selected={isSelected}
-                  className={`relative flex items-center gap-1.5 px-3 h-12 whitespace-nowrap text-sm font-medium transition-colors flex-shrink-0 outline-none border-b-2 ${
+                  className={`relative flex h-12 flex-shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 ${
                     isSelected
-                      ? "text-blue-600 border-blue-600"
-                      : "text-gray-500 hover:text-gray-700 border-transparent"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-default-500 hover:text-foreground"
                   }`}
                   role="tab"
                   type="button"
@@ -121,8 +136,8 @@ export default function ClientProfileTabs({
       </div>
 
       {/* Tab Content */}
-      <div className="bg-gray-50">
-        <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="bg-background">
+        <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
           {selectedTab === "charts" && <ChartsTab clientId={clientId} />}
           {selectedTab === "training" && (
             <TrainingTabs clientId={clientId} clientName={clientName ?? ""} />
@@ -147,6 +162,37 @@ export default function ClientProfileTabs({
           )}
         </div>
       </div>
+
+      {/* Guard de cambios sin guardar. Un diálogo nativo del navegador dentro
+          de un handler de HeroUI congela la página hasta recargar, así que la
+          confirmación es un Modal. */}
+      <Modal
+        isOpen={pendingTab !== null}
+        size="sm"
+        onOpenChange={(open) => {
+          if (!open) setPendingTab(null);
+        }}
+      >
+        <ModalContent>
+          <ModalHeader className="font-heading">
+            Cambios sin guardar
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-600">
+              Tienes cambios sin guardar en la configuración de formularios. Si
+              cambias de pestaña se perderán.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setPendingTab(null)}>
+              Seguir editando
+            </Button>
+            <Button color="danger" onPress={discardAndGo}>
+              Descartar cambios
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

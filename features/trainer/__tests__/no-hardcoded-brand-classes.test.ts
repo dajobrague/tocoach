@@ -49,3 +49,49 @@ describe("shell de trainer sin colores de marca hardcodeados", () => {
     expect(src).not.toContain('? "text-black"');
   });
 });
+
+// El perfil de cliente (header, raíl de tabs, marco de página y los tres
+// modales) migró entero a tokens semánticos. A diferencia de los ficheros del
+// shell de arriba, aquí el barrido fue completo, así que el guard es genérico:
+// cualquier literal de color que vuelva rompe el test.
+describe("perfil de cliente sin literales de color", () => {
+  const PROFILE_FILES = [
+    "../../../components/dashboard/client-profile/client-profile-header.tsx",
+    "../../../components/dashboard/client-profile/client-profile-tabs.tsx",
+    "../../../components/dashboard/client-profile/delete-client-modal.tsx",
+    "../../../components/dashboard/client-profile/update-status-modal.tsx",
+    "../../../components/dashboard/edit-client-modal.tsx",
+    "../../../app/trainer/dashboard/clients/[clientId]/page.tsx",
+  ];
+
+  // Paletas fijas de Tailwind: rompen el tema del tenant porque no derivan
+  // de las variables --heroui-*.
+  const FORBIDDEN =
+    /\b(?:bg|text|border|from|via|to|ring|divide)-(?:gray|slate|zinc|neutral|stone|blue|red|green|purple|orange|indigo|sky|emerald)-\d{2,3}\b/;
+
+  it.each(PROFILE_FILES)("%s no usa paletas fijas de Tailwind", (file) => {
+    const match = read(file).match(FORBIDDEN);
+
+    expect(match?.[0] ?? null).toBeNull();
+  });
+
+  it.each(PROFILE_FILES)("%s no fuerza blanco/negro ni bg-white", (file) => {
+    const src = read(file);
+
+    expect(src).not.toContain("text-white");
+    expect(src).not.toContain("bg-white");
+    expect(src).not.toContain("text-black");
+  });
+
+  it.each(PROFILE_FILES)("%s no suprime el focus ring", (file) => {
+    expect(read(file)).not.toContain("focus:outline-none");
+  });
+
+  it("el raíl de tabs no usa confirm nativo (congela HeroUI hasta recargar)", () => {
+    const src = read(
+      "../../../components/dashboard/client-profile/client-profile-tabs.tsx"
+    );
+
+    expect(src).not.toContain("window.confirm");
+  });
+});

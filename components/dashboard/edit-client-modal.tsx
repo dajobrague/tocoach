@@ -11,8 +11,9 @@ import {
   Select,
   SelectItem,
 } from "@heroui/react";
-import { Icon } from "@iconify/react";
 import { useMemo, useState, useEffect } from "react";
+
+import { IconTile } from "@/components/shared/icon-tile";
 
 const countries = require("i18n-iso-countries");
 
@@ -187,8 +188,8 @@ export default function EditClientModal({
     <Modal
       classNames={{
         base: "max-h-[90vh]",
-        header: "border-b border-gray-200",
-        footer: "border-t border-gray-200",
+        header: "border-b border-divider",
+        footer: "border-t border-divider",
         body: "py-6",
       }}
       isOpen={isOpen}
@@ -199,14 +200,12 @@ export default function EditClientModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Icon className="text-blue-600 text-xl" icon="solar:pen-bold" />
-            </div>
+            <IconTile icon="solar:pen-bold" />
             <div>
-              <h3 className="text-xl font-bold text-gray-900">
+              <h3 className="font-heading text-xl font-bold text-foreground">
                 Editar Cliente
               </h3>
-              <p className="text-sm text-gray-500 font-normal">
+              <p className="text-sm font-normal text-default-500">
                 Actualiza la información del cliente
               </p>
             </div>
@@ -216,14 +215,14 @@ export default function EditClientModal({
           <div className="flex flex-col gap-6">
             {/* Error de Submit */}
             {errors.submit && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              <div className="rounded-large border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
                 {errors.submit}
               </div>
             )}
 
             {/* Información Personal */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              <h4 className="mb-3 text-sm font-semibold text-default-600">
                 Información Personal
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -271,7 +270,9 @@ export default function EditClientModal({
                   <SelectItem key="female">Mujer</SelectItem>
                 </Select>
                 <Input
-                  endContent={<span className="text-xs text-gray-400">cm</span>}
+                  endContent={
+                    <span className="text-xs text-default-400">cm</span>
+                  }
                   label="Altura"
                   placeholder="Ej: 175"
                   type="number"
@@ -283,7 +284,7 @@ export default function EditClientModal({
 
             {/* Información de Contacto */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              <h4 className="mb-3 text-sm font-semibold text-default-600">
                 Información de Contacto
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -309,7 +310,7 @@ export default function EditClientModal({
 
             {/* Información Adicional */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              <h4 className="mb-3 text-sm font-semibold text-default-600">
                 Información Adicional
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -330,7 +331,7 @@ export default function EditClientModal({
 
             {/* Ubicación */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              <h4 className="mb-3 text-sm font-semibold text-default-600">
                 Ubicación
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -371,7 +372,7 @@ export default function EditClientModal({
 
             {/* Estado del Cliente */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              <h4 className="mb-3 text-sm font-semibold text-default-600">
                 Estado del Cliente
               </h4>
               <Select

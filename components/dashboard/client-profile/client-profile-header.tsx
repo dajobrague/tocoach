@@ -1,8 +1,16 @@
 "use client";
 
-import { Avatar, Button, Chip } from "@heroui/react";
+import {
+  Avatar,
+  BreadcrumbItem,
+  Breadcrumbs,
+  Button,
+  Chip,
+  Skeleton,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { OutlineChip } from "@/components/shared/outline-chip";
 import { MockClient } from "@/lib/mock-data/client-profile-mock";
 
 interface ClientProfileHeaderProps {
@@ -13,71 +21,148 @@ interface ClientProfileHeaderProps {
   onDelete?: () => void;
 }
 
+type StatusColor = "success" | "primary" | "warning" | "default" | "secondary";
+
+const STATUS_COLORS: Record<string, StatusColor> = {
+  Activo: "success",
+  "Onboarding Completado": "secondary",
+  "Programación Inicial Pendiente": "warning",
+};
+
+const SEX_LABELS: Record<string, string> = {
+  male: "Hombre",
+  female: "Mujer",
+};
+
+/** Guion largo tipográfico: un dato ausente ocupa la celda igual que uno
+ *  presente, así la rejilla no se descuadra entre clientes. */
+const EMPTY = "—";
+
+const formatJoined = (dateString: string): string => {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) return EMPTY;
+
+  return date.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+};
+
+/** Celda de la rejilla de datos: microetiqueta + valor. Es un `<dl>` real,
+ *  no dos `<p>`, para que un lector de pantalla lea "Edad: 34 años". */
+function Fact({
+  label,
+  numeric = false,
+  value,
+}: {
+  label: string;
+  numeric?: boolean;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.09em] text-default-400">
+        {label}
+      </dt>
+      <dd
+        className={`truncate text-sm font-medium text-foreground ${
+          numeric ? "tabular-nums" : ""
+        }`}
+        title={value === EMPTY ? undefined : value}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+export function ClientProfileHeaderSkeleton() {
+  return (
+    <div className="bg-content1">
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
+        <Skeleton className="h-4 w-40 rounded-md" />
+        <div className="mt-5 flex items-start gap-4">
+          <Skeleton className="h-16 w-16 shrink-0 rounded-large" />
+          <div className="flex-1 space-y-2 pt-1">
+            <Skeleton className="h-7 w-64 rounded-md" />
+            <Skeleton className="h-5 w-48 rounded-md" />
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-divider pt-4 sm:grid-cols-4 xl:grid-cols-8">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="space-y-1.5">
+              <Skeleton className="h-2.5 w-12 rounded-sm" />
+              <Skeleton className="h-4 w-20 rounded-sm" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientProfileHeader({
   client,
   onBack,
+  onDelete,
   onEdit,
   onUpdateStatus,
-  onDelete,
 }: ClientProfileHeaderProps) {
-  const getStatusColor = (
-    status: string
-  ): "success" | "primary" | "warning" | "default" | "secondary" | "danger" => {
-    switch (status) {
-      case "Activo":
-        return "success";
-      case "Onboarding Completado":
-        return "secondary";
-      case "Programación Inicial Pendiente":
-        return "warning";
-      default:
-        return "default";
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-
-    return date.toLocaleDateString("es-ES", {
-      month: "short",
-      year: "numeric",
-    });
-  };
+  const facts: { label: string; numeric?: boolean; value: string }[] = [
+    {
+      label: "Edad",
+      numeric: true,
+      value: client.age != null ? `${client.age} años` : EMPTY,
+    },
+    {
+      label: "Sexo",
+      value: (client.sex && SEX_LABELS[client.sex]) || EMPTY,
+    },
+    {
+      label: "Altura",
+      numeric: true,
+      value: client.heightCm != null ? `${client.heightCm} cm` : EMPTY,
+    },
+    { label: "Ocupación", value: client.occupation || EMPTY },
+    { label: "Email", value: client.email || EMPTY },
+    { label: "Teléfono", value: client.phone || EMPTY },
+    {
+      label: "Ciudad",
+      value:
+        [client.location?.city, client.location?.country]
+          .filter(Boolean)
+          .join(", ") || EMPTY,
+    },
+    { label: "Alta", value: formatJoined(client.joinedDate) },
+  ];
 
   return (
-    <div className="bg-white border-b border-gray-200">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Back button and Actions */}
-        <div className="flex items-center justify-between mb-6">
-          <Button
-            className="text-gray-600 hover:text-gray-900"
-            startContent={<Icon icon="solar:arrow-left-linear" width={20} />}
+    <header className="bg-content1">
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
+        {/* Fila de mando: ubicación a la izquierda, acciones a la derecha. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Breadcrumbs
+            classNames={{ list: "flex-nowrap" }}
+            size="sm"
             variant="light"
-            onPress={onBack}
           >
-            Volver a Clientes
-          </Button>
+            <BreadcrumbItem onPress={onBack}>Clientes</BreadcrumbItem>
+            <BreadcrumbItem>{client.name}</BreadcrumbItem>
+          </Breadcrumbs>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            {/* Edit Profile */}
             {onEdit && (
               <Button
-                className="text-white font-semibold"
+                className="font-semibold"
                 color="primary"
                 size="sm"
-                startContent={<Icon icon="solar:pen-bold" width={18} />}
-                variant="solid"
+                startContent={<Icon icon="solar:pen-bold" width={16} />}
                 onPress={onEdit}
               >
-                Editar Perfil
+                Editar
               </Button>
             )}
-
-            {/* Update Status Button */}
             {onUpdateStatus && (
               <Button
-                className="bg-gray-100 text-gray-700 font-semibold"
+                className="font-semibold"
                 size="sm"
                 startContent={<Icon icon="solar:refresh-bold" width={16} />}
                 variant="flat"
@@ -86,16 +171,15 @@ export default function ClientProfileHeader({
                 Estado
               </Button>
             )}
-
-            {/* Delete Button */}
             {onDelete && (
               <Button
-                className="bg-red-50 text-red-600 font-semibold"
+                className="font-semibold"
+                color="danger"
                 size="sm"
                 startContent={
                   <Icon icon="solar:trash-bin-trash-bold" width={16} />
                 }
-                variant="flat"
+                variant="light"
                 onPress={onDelete}
               >
                 Eliminar
@@ -104,100 +188,59 @@ export default function ClientProfileHeader({
           </div>
         </div>
 
-        {/* Client Info */}
-        <div className="flex items-start gap-6">
+        {/* Identidad: quién es, en qué estado está, y para qué entrena. */}
+        <div className="mt-5 flex items-start gap-4">
           <Avatar
             {...(client.avatar ? { src: client.avatar } : {})}
             isBordered
             showFallback
-            className="w-24 h-24"
+            className="h-16 w-16 shrink-0"
             color="primary"
             name={client.name}
             radius="lg"
-            size="lg"
           />
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold text-gray-900">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1 className="font-heading text-2xl font-bold leading-tight text-foreground">
                 {client.name}
               </h1>
+              {client.nickName && (
+                <span className="text-sm text-default-400">
+                  «{client.nickName}»
+                </span>
+              )}
               <Chip
-                color={getStatusColor(client.status)}
+                color={STATUS_COLORS[client.status] ?? "default"}
                 size="sm"
                 variant="flat"
               >
                 {client.status}
               </Chip>
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-4">
-              <div className="flex items-center gap-1.5">
-                <Icon icon="solar:letter-linear" width={16} />
-                <span>{client.email}</span>
-              </div>
-              {client.phone && (
-                <div className="flex items-center gap-1.5">
-                  <Icon icon="solar:phone-linear" width={16} />
-                  <span>{client.phone}</span>
-                </div>
-              )}
-              {client.location?.city && (
-                <div className="flex items-center gap-1.5">
-                  <Icon icon="solar:map-point-linear" width={16} />
-                  <span>
-                    {client.location.city}, {client.location.country}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5">
-                <Icon icon="solar:calendar-linear" width={16} />
-                <span>Miembro desde {formatDate(client.joinedDate)}</span>
-              </div>
-            </div>
 
-            {/* Quick Info */}
-            <div className="flex flex-wrap gap-3">
-              <div className="bg-gray-50 px-3 py-2 rounded-lg">
-                <p className="text-xs text-gray-500">Edad</p>
-                <p className="text-sm font-semibold text-gray-900">
-                  {client.age} años
-                </p>
-              </div>
-              <div className="bg-gray-50 px-3 py-2 rounded-lg">
-                <p className="text-xs text-gray-500">Ocupación</p>
-                <p className="text-sm font-semibold text-gray-900">
-                  {client.occupation}
-                </p>
-              </div>
-            </div>
-
-            {/* Goals - Compact */}
             {client.goals && client.goals.length > 0 && (
-              <div className="mt-3 flex items-start gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Icon
-                  className="text-blue-600 mt-1 flex-shrink-0"
-                  icon="solar:target-bold"
-                  width={16}
+                  aria-hidden
+                  className="mr-0.5 shrink-0 text-default-400"
+                  icon="solar:target-linear"
+                  width={14}
                 />
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">
-                    Objetivos
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {client.goals.map((goal, index) => (
-                      <span
-                        key={index}
-                        className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200"
-                      >
-                        {goal}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                {client.goals.map((goal) => (
+                  <OutlineChip key={goal}>{goal}</OutlineChip>
+                ))}
               </div>
             )}
           </div>
         </div>
+
+        {/* Rejilla de datos: la ficha completa, siempre visible, sin abrir nada. */}
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-divider pt-4 sm:grid-cols-4 xl:grid-cols-8">
+          {facts.map((fact) => (
+            <Fact key={fact.label} {...fact} />
+          ))}
+        </dl>
       </div>
-    </div>
+    </header>
   );
 }

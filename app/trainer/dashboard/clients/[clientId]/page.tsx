@@ -1,24 +1,34 @@
 /* eslint-disable no-console */
 "use client";
 
+import { Button, Skeleton } from "@heroui/react";
+import { Icon } from "@iconify/react";
 import { useParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import ClientProfileHeader from "@/components/dashboard/client-profile/client-profile-header";
+import ClientProfileHeader, {
+  ClientProfileHeaderSkeleton,
+} from "@/components/dashboard/client-profile/client-profile-header";
 import ClientProfileTabs from "@/components/dashboard/client-profile/client-profile-tabs";
 import DeleteClientModal from "@/components/dashboard/client-profile/delete-client-modal";
 import UpdateStatusModal from "@/components/dashboard/client-profile/update-status-modal";
 import { useModalParam } from "@/components/dashboard/client-profile/use-url-state";
 import EditClientModal from "@/components/dashboard/edit-client-modal";
+import { CenteredState } from "@/components/shared/centered-state";
 import { MockClient } from "@/lib/mock-data/client-profile-mock";
 
-function LoadingScreen({ message }: { message: string }) {
+/* El perfil entra por un skeleton con la forma exacta del header, no por un
+   spinner centrado: el swap spinner → contenido movía toda la página en cada
+   apertura de cliente (layout shift). */
+function LoadingScreen() {
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-          <p className="text-default-500 font-body">{message}</p>
+    <div className="flex min-h-screen flex-col bg-background">
+      <ClientProfileHeaderSkeleton />
+      <div className="border-b border-divider bg-content1">
+        <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-6 px-4 sm:px-6 lg:px-8">
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="h-3 w-24 rounded-sm" />
+          ))}
         </div>
       </div>
     </div>
@@ -75,28 +85,37 @@ function ClientProfileInner() {
   };
 
   if (loading) {
-    return <LoadingScreen message="Cargando perfil del cliente..." />;
+    return <LoadingScreen />;
   }
 
   if (error || !client) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <p className="text-danger text-lg mb-4">
-              {error || "Cliente no encontrado"}
-            </p>
-            <button className="text-black hover:underline" onClick={handleBack}>
-              Volver a Clientes
-            </button>
-          </div>
+      <div className="flex min-h-screen flex-col bg-background">
+        <div className="mx-auto w-full max-w-lg px-4 py-16">
+          <CenteredState
+            action={
+              <Button
+                className="mt-2"
+                startContent={
+                  <Icon icon="solar:arrow-left-linear" width={18} />
+                }
+                variant="flat"
+                onPress={handleBack}
+              >
+                Volver a Clientes
+              </Button>
+            }
+            icon="solar:user-cross-linear"
+            subtitle="Puede que el cliente se haya eliminado o que el enlace ya no sea válido."
+            title={error || "Cliente no encontrado"}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-background">
       <ClientProfileHeader
         client={client}
         onBack={handleBack}
@@ -164,7 +183,7 @@ function ClientProfileInner() {
 
 export default function ClientProfilePage() {
   return (
-    <Suspense fallback={<LoadingScreen message="Cargando..." />}>
+    <Suspense fallback={<LoadingScreen />}>
       <ClientProfileInner />
     </Suspense>
   );

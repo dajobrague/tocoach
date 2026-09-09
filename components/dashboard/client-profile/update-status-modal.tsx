@@ -10,8 +10,9 @@ import {
   Select,
   SelectItem,
 } from "@heroui/react";
-import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
+
+import { IconTile } from "@/components/shared/icon-tile";
 
 interface UpdateStatusModalProps {
   isOpen: boolean;
@@ -121,17 +122,12 @@ export default function UpdateStatusModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Icon
-                className="text-blue-600 text-xl"
-                icon="solar:refresh-bold"
-              />
-            </div>
+            <IconTile icon="solar:refresh-bold" />
             <div>
-              <h3 className="text-xl font-bold text-gray-900">
+              <h3 className="font-heading text-xl font-bold text-foreground">
                 Actualizar Estado
               </h3>
-              <p className="text-sm text-gray-500 font-normal">
+              <p className="text-sm font-normal text-default-500">
                 Cliente: {clientName}
               </p>
             </div>
@@ -156,7 +152,7 @@ export default function UpdateStatusModal({
 
             {/* Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="rounded-large border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
                 {error}
               </div>
             )}
@@ -166,11 +162,7 @@ export default function UpdateStatusModal({
           <Button color="default" variant="light" onPress={handleClose}>
             Cancelar
           </Button>
-          <Button
-            className="bg-blue-600 text-white"
-            isLoading={isLoading}
-            onPress={handleUpdate}
-          >
+          <Button color="primary" isLoading={isLoading} onPress={handleUpdate}>
             Actualizar Estado
           </Button>
         </ModalFooter>

@@ -12,6 +12,8 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { IconTile } from "@/components/shared/icon-tile";
+
 interface DeleteClientModalProps {
   isOpen: boolean;
   clientName: string;
@@ -74,32 +76,31 @@ export default function DeleteClientModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-red-50 p-2 rounded-lg">
-              <Icon
-                className="text-red-600 text-xl"
-                icon="solar:trash-bin-trash-bold"
-              />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">
-                Eliminar Cliente
-              </h3>
-            </div>
+            <IconTile icon="solar:trash-bin-trash-bold" tone="danger" />
+            <h3 className="font-heading text-xl font-bold text-foreground">
+              Eliminar Cliente
+            </h3>
           </div>
         </ModalHeader>
         <ModalBody>
           <div className="flex flex-col gap-4">
             {/* Warning Message */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-900 font-medium mb-2">
-                ⚠️ Esta acción no se puede deshacer
+            <div className="rounded-large border border-danger/20 bg-danger/5 p-4">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
+                <Icon
+                  aria-hidden
+                  className="shrink-0"
+                  icon="solar:danger-triangle-bold"
+                  width={18}
+                />
+                Esta acción no se puede deshacer
               </p>
-              <p className="text-sm text-red-700 mb-3">
+              <p className="mb-3 text-sm text-default-600">
                 Estás a punto de eliminar a{" "}
                 <span className="font-semibold">{clientName}</span>. Los
                 siguientes datos serán eliminados permanentemente:
               </p>
-              <ul className="text-xs text-red-600 space-y-1 ml-4 list-disc">
+              <ul className="ml-4 list-disc space-y-1 text-xs text-default-500">
                 <li>Perfil del cliente y datos personales</li>
                 <li>Formularios de check-ins y hábitos diarios</li>
                 <li>Asignaciones de suplementos</li>
@@ -113,9 +114,9 @@ export default function DeleteClientModal({
 
             {/* Confirmation Input */}
             <div>
-              <p className="text-sm text-gray-700 mb-2">
+              <p className="mb-2 text-sm text-default-600">
                 Para confirmar, escribe{" "}
-                <span className="font-mono font-bold text-red-600">
+                <span className="font-semibold tracking-wide text-danger">
                   ELIMINAR
                 </span>{" "}
                 en el campo de abajo:
@@ -130,7 +131,7 @@ export default function DeleteClientModal({
 
             {/* Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="rounded-large border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
                 {error}
               </div>
             )}
@@ -141,11 +142,7 @@ export default function DeleteClientModal({
             Cancelar
           </Button>
           <Button
-            className={
-              isConfirmValid
-                ? "bg-red-600 text-white"
-                : "bg-gray-200 text-gray-400"
-            }
+            color="danger"
             isDisabled={!isConfirmValid}
             isLoading={isLoading}
             onPress={handleDelete}
