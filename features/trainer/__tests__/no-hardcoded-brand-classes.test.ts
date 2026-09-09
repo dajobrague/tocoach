@@ -62,6 +62,8 @@ describe("perfil de cliente sin literales de color", () => {
     "../../../components/dashboard/client-profile/update-status-modal.tsx",
     "../../../components/dashboard/edit-client-modal.tsx",
     "../../../app/trainer/dashboard/clients/[clientId]/page.tsx",
+    "../../../components/dashboard/clients-content.tsx",
+    "../../../components/dashboard/add-client-modal.tsx",
   ];
 
   // Paletas fijas de Tailwind: rompen el tema del tenant porque no derivan
@@ -91,10 +93,28 @@ describe("perfil de cliente sin literales de color", () => {
   // salvo que localStorage.activeSection diga otra cosa, así que "?tab=clients"
   // nunca llevaba a clientes. Se navega a la ruta real.
   it("el perfil vuelve a la ruta real de clientes, no a ?tab=", () => {
-    const src = read("../../../app/trainer/dashboard/clients/[clientId]/page.tsx");
+    const src = read(
+      "../../../app/trainer/dashboard/clients/[clientId]/page.tsx"
+    );
 
     expect(src).not.toContain("/trainer/dashboard?tab=");
     expect(src).toContain('router.push("/trainer/dashboard/clients")');
+  });
+
+  // La lista navegaba con window.location.href: recarga entera de la app
+  // (bundle, sesión, tema) para ir a un perfil que ya está en el router.
+  it("la lista de clientes navega con el router, no recargando la página", () => {
+    const src = read("../../../components/dashboard/clients-content.tsx");
+
+    expect(src).not.toContain("window.location.href");
+    expect(src).toContain("router.push");
+  });
+
+  // alert() dentro del ciclo de HeroUI congela la página hasta recargar.
+  it("la lista de clientes no usa alert() para los errores de carga", () => {
+    expect(
+      read("../../../components/dashboard/clients-content.tsx")
+    ).not.toContain("alert(");
   });
 
   it("el raíl de tabs no usa confirm nativo (congela HeroUI hasta recargar)", () => {

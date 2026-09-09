@@ -12,6 +12,8 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+
+import { IconTile } from "@/components/shared/icon-tile";
 import countries from "i18n-iso-countries";
 import es from "i18n-iso-countries/langs/es.json";
 import { useMemo, useState } from "react";
@@ -167,8 +169,8 @@ export default function AddClientModal({
     <Modal
       classNames={{
         base: "max-h-[90vh]",
-        header: "border-b border-gray-200",
-        footer: "border-t border-gray-200",
+        header: "border-b border-divider",
+        footer: "border-t border-divider",
         body: "py-6",
       }}
       isOpen={isOpen}
@@ -179,17 +181,12 @@ export default function AddClientModal({
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <div className="bg-slate-100 p-2 rounded-lg">
-              <Icon
-                className="text-slate-700 text-xl"
-                icon="solar:user-plus-bold"
-              />
-            </div>
+            <IconTile icon="solar:user-plus-bold" />
             <div>
-              <h3 className="text-xl font-bold text-gray-900">
+              <h3 className="font-heading text-xl font-bold text-foreground">
                 Añadir Nuevo Cliente
               </h3>
-              <p className="text-sm text-gray-500 font-normal">
+              <p className="text-sm font-normal text-default-500">
                 Complete la información del cliente
               </p>
             </div>
@@ -199,9 +196,9 @@ export default function AddClientModal({
           <div className="flex flex-col gap-6">
             {/* Información Personal */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Icon
-                  className="text-slate-700"
+                  className="text-primary"
                   icon="solar:user-id-bold"
                   width={18}
                 />
@@ -210,17 +207,13 @@ export default function AddClientModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   isRequired
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   errorMessage={errors.firstName}
                   isInvalid={!!errors.firstName}
                   label="Nombre"
                   placeholder="Ej: Carlos"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:user-linear"
                       width={18}
                     />
@@ -230,17 +223,13 @@ export default function AddClientModal({
                 />
                 <Input
                   isRequired
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   errorMessage={errors.lastName}
                   isInvalid={!!errors.lastName}
                   label="Apellido"
                   placeholder="Ej: Ramirez"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:user-linear"
                       width={18}
                     />
@@ -249,15 +238,11 @@ export default function AddClientModal({
                   onValueChange={(value) => handleChange("lastName", value)}
                 />
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Apodo (Opcional)"
                   placeholder="Ej: Carl"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:user-speak-linear"
                       width={18}
                     />
@@ -267,16 +252,12 @@ export default function AddClientModal({
                 />
                 <Input
                   isRequired
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   errorMessage={errors.dob}
                   isInvalid={!!errors.dob}
                   label="Fecha de Nacimiento"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:calendar-linear"
                       width={18}
                     />
@@ -286,15 +267,11 @@ export default function AddClientModal({
                   onValueChange={(value) => handleChange("dob", value)}
                 />
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="ID Nacional (Opcional)"
                   placeholder="Ej: ES12345678"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:card-linear"
                       width={18}
                     />
@@ -307,9 +284,9 @@ export default function AddClientModal({
 
             {/* Información de Contacto */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Icon
-                  className="text-slate-700"
+                  className="text-primary"
                   icon="solar:phone-calling-bold"
                   width={18}
                 />
@@ -318,17 +295,13 @@ export default function AddClientModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   isRequired
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   errorMessage={errors.email}
                   isInvalid={!!errors.email}
                   label="Email"
                   placeholder="ejemplo@email.com"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:letter-linear"
                       width={18}
                     />
@@ -338,15 +311,11 @@ export default function AddClientModal({
                   onValueChange={(value) => handleChange("email", value)}
                 />
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Teléfono (Opcional)"
                   placeholder="+34 600 000 000"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:phone-linear"
                       width={18}
                     />
@@ -359,9 +328,9 @@ export default function AddClientModal({
 
             {/* Información Profesional */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Icon
-                  className="text-slate-700"
+                  className="text-primary"
                   icon="solar:case-bold"
                   width={18}
                 />
@@ -369,15 +338,11 @@ export default function AddClientModal({
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Ocupación (Opcional)"
                   placeholder="Ej: Software Engineer"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:case-minimalistic-linear"
                       width={18}
                     />
@@ -390,9 +355,9 @@ export default function AddClientModal({
 
             {/* Dirección */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Icon
-                  className="text-slate-700"
+                  className="text-primary"
                   icon="solar:map-point-bold"
                   width={18}
                 />
@@ -400,15 +365,11 @@ export default function AddClientModal({
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Ciudad"
                   placeholder="Ej: Madrid"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:city-linear"
                       width={18}
                     />
@@ -417,15 +378,11 @@ export default function AddClientModal({
                   onValueChange={(value) => handleChange("city", value)}
                 />
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Estado/Provincia"
                   placeholder="Ej: Madrid"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:map-linear"
                       width={18}
                     />
@@ -435,22 +392,12 @@ export default function AddClientModal({
                 />
                 <Autocomplete
                   allowsCustomValue={false}
-                  classNames={{
-                    base: "focus:outline-none",
-                    selectorButton: "focus:outline-none",
-                  }}
-                  inputProps={{
-                    classNames: {
-                      input: "focus:outline-none",
-                      inputWrapper: "focus-within:outline-none",
-                    },
-                  }}
                   label="País"
                   placeholder="Buscar país..."
                   selectedKey={formData.country || null}
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:global-linear"
                       width={18}
                     />
@@ -468,15 +415,11 @@ export default function AddClientModal({
                   )}
                 </Autocomplete>
                 <Input
-                  classNames={{
-                    input: "focus:outline-none",
-                    inputWrapper: "focus-within:outline-none",
-                  }}
                   label="Código Postal"
                   placeholder="Ej: 28001"
                   startContent={
                     <Icon
-                      className="text-gray-400"
+                      className="text-default-400"
                       icon="solar:mailbox-linear"
                       width={18}
                     />
