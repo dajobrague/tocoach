@@ -58,3 +58,71 @@ describe("generateThemeCSS scope", () => {
     expect(rule?.[0]).toContain("var(--heroui-primary-foreground)");
   });
 });
+
+describe("superficies del trainer app", () => {
+  /** Tenant con lienzo oscuro: varios en producción lo tienen. */
+  const darkCanvas = () => {
+    const t = structuredClone(defaultTheme);
+
+    t.colors.surface["1"] = "#111827";
+    t.colors.surface["2"] = "#1F2937";
+    t.colors.fill = "#374151";
+    t.colors.border = "#4B5563";
+    t.colors.text.primary = "#F9FAFB";
+    t.colors.text.secondary = "#D1D5DB";
+
+    return t;
+  };
+
+  it("con scope el fondo es blanco aunque el tenant traiga surface oscuro", () => {
+    const css = generateThemeCSS(darkCanvas(), { scope: ".trainer-app" });
+
+    expect(css).toContain("--heroui-background: 0 0% 100% !important;");
+    expect(css).toContain("--heroui-content1: 0 0% 100% !important;");
+  });
+
+  it("con scope el body no se pinta con el surface del tenant", () => {
+    const css = generateThemeCSS(darkCanvas(), { scope: ".trainer-app" });
+
+    // La regla `body { background }` es global y lleva !important: heredarla
+    // teñía la app entera con el lienzo del tenant.
+    expect(css).not.toContain("background: #111827 !important;");
+    expect(css).toContain("body:has(.trainer-app)");
+  });
+
+  it("con scope el texto no hereda el foreground claro del tenant", () => {
+    const css = generateThemeCSS(darkCanvas(), { scope: ".trainer-app" });
+
+    // #F9FAFB sobre blanco sería invisible.
+    expect(css).not.toContain("--heroui-foreground: 210 20% 98% !important;");
+  });
+
+  it("con scope el acento del tenant SÍ se conserva", () => {
+    const t = darkCanvas();
+
+    t.colors.brand = "#7C3AED";
+
+    const css = generateThemeCSS(t, { scope: ".trainer-app" });
+
+    expect(css).toContain("--heroui-primary:");
+    expect(css).toContain("--heroui-focus:");
+    expect(css).not.toContain("--heroui-primary: 0 0% 100%");
+  });
+
+  it("con scope ningún hex oscuro del tenant sobrevive en la hoja", () => {
+    const css = generateThemeCSS(darkCanvas(), { scope: ".trainer-app" });
+
+    // Incluye --color-surface-1 y compañía: hoy ningún componente de trainer
+    // usa esas utilidades, pero un `bg-surface-1` futuro volvería a oscurecer.
+    for (const hex of ["#111827", "#1F2937", "#374151", "#4B5563"]) {
+      expect(css).not.toContain(hex);
+    }
+  });
+
+  it("sin scope (portal de cliente) el tenant sigue pintando el lienzo", () => {
+    const css = generateThemeCSS(darkCanvas());
+
+    expect(css).toContain("background: #111827 !important;");
+    expect(css).not.toContain("--heroui-background: 0 0% 100% !important;");
+  });
+});

@@ -123,6 +123,31 @@ export function cssFontFamily(raw: string): string {
 //   FUERA del scope) reciben las variables vía body:has(scope), emitido como
 //   bloque separado — un parser sin :has() invalida una lista con coma
 //   ENTERA y perdería también el bloque base del scope.
+/** Superficies neutras del shell de trainer (escala zinc de HeroUI light).
+ *  El tenant aporta el ACENTO — primary, secondary, focus —, nunca el lienzo:
+ *  varios temas de producción traen `surface.1` oscuro y el trainer app no
+ *  está diseñado para dark, así que heredarlo lo dejaba ilegible. El portal de
+ *  cliente (modo sin scope) conserva el comportamiento histórico. */
+const TRAINER_SURFACES = {
+  background: "#FFFFFF",
+  foreground: "#11181C",
+  content1: "#FFFFFF",
+  content2: "#F4F4F5",
+  content3: "#E4E4E7",
+  content4: "#D4D4D8",
+  default: "#F4F4F5",
+  default50: "#FAFAFA",
+  default100: "#F4F4F5",
+  default200: "#E4E4E7",
+  default300: "#D4D4D8",
+  default400: "#A1A1AA",
+  default500: "#71717A",
+  default600: "#52525B",
+  default700: "#3F3F46",
+  default800: "#27272A",
+  default900: "#18181B",
+} as const;
+
 export function generateThemeCSS(
   theme: ThemeConfig,
   opts?: { scope?: string }
@@ -135,15 +160,58 @@ export function generateThemeCSS(
   // scope quedan globales como siempre; con scope no se filtran fuera.
   const utilPrefix = scope ? `${scope} ` : "";
 
+  // El tenant nunca pinta el lienzo del trainer: solo el acento.
+  const surface = scope
+    ? {
+        default: TRAINER_SURFACES.default,
+        d50: TRAINER_SURFACES.default50,
+        d100: TRAINER_SURFACES.default100,
+        d200: TRAINER_SURFACES.default200,
+        d300: TRAINER_SURFACES.default300,
+        d400: TRAINER_SURFACES.default400,
+        d500: TRAINER_SURFACES.default500,
+        d600: TRAINER_SURFACES.default600,
+        d700: TRAINER_SURFACES.default700,
+        d800: TRAINER_SURFACES.default800,
+        d900: TRAINER_SURFACES.default900,
+        dFg: TRAINER_SURFACES.foreground,
+        background: TRAINER_SURFACES.background,
+        foreground: TRAINER_SURFACES.foreground,
+        c1: TRAINER_SURFACES.content1,
+        c2: TRAINER_SURFACES.content2,
+        c3: TRAINER_SURFACES.content3,
+        c4: TRAINER_SURFACES.content4,
+      }
+    : {
+        default: theme.colors.surface["2"],
+        d50: theme.colors.surface["2"],
+        d100: theme.colors.surface["2"],
+        d200: theme.colors.fill,
+        d300: theme.colors.border,
+        d400: theme.colors.border,
+        d500: theme.colors.text.secondary,
+        d600: theme.colors.text.secondary,
+        d700: theme.colors.text.primary,
+        d800: theme.colors.text.primary,
+        d900: theme.colors.text.primary,
+        dFg: theme.colors.text.primary,
+        background: theme.colors.surface["1"],
+        foreground: theme.colors.text.primary,
+        c1: theme.colors.surface["1"],
+        c2: theme.colors.surface["2"],
+        c3: theme.colors.fill,
+        c4: theme.colors.border,
+      };
+
   const customVars = `  /* Custom theme variables */
   --color-brand: ${theme.colors.brand};
   --color-accent: ${theme.colors.accent};
-  --color-text-primary: ${theme.colors.text.primary};
-  --color-text-secondary: ${theme.colors.text.secondary};
-  --color-surface-1: ${theme.colors.surface["1"]};
-  --color-surface-2: ${theme.colors.surface["2"]};
-  --color-border: ${theme.colors.border};
-  --color-fill: ${theme.colors.fill};
+  --color-text-primary: ${surface.foreground};
+  --color-text-secondary: ${surface.d500};
+  --color-surface-1: ${surface.background};
+  --color-surface-2: ${surface.c2};
+  --color-border: ${surface.d300};
+  --color-fill: ${surface.d200};
   --color-success: ${theme.semantic?.success || "#22c55e"};
   --color-warning: ${theme.semantic?.warning || "#f59e0b"};
   --color-error: ${theme.semantic?.error || "#ef4444"};
@@ -161,6 +229,26 @@ export function generateThemeCSS(
   --radius-xl: ${theme.radius.xl}px;
   --shadow-e1: ${theme.shadow.e1};
   --shadow-e2: ${theme.shadow.e2};`;
+
+  const surfaceVars = `  --heroui-default: ${hexToHeroUIHSL(surface.default)} !important;
+  --heroui-default-50: ${hexToHeroUIHSL(surface.d50)} !important;
+  --heroui-default-100: ${hexToHeroUIHSL(surface.d100)} !important;
+  --heroui-default-200: ${hexToHeroUIHSL(surface.d200)} !important;
+  --heroui-default-300: ${hexToHeroUIHSL(surface.d300)} !important;
+  --heroui-default-400: ${hexToHeroUIHSL(surface.d400)} !important;
+  --heroui-default-500: ${hexToHeroUIHSL(surface.d500)} !important;
+  --heroui-default-600: ${hexToHeroUIHSL(surface.d600)} !important;
+  --heroui-default-700: ${hexToHeroUIHSL(surface.d700)} !important;
+  --heroui-default-800: ${hexToHeroUIHSL(surface.d800)} !important;
+  --heroui-default-900: ${hexToHeroUIHSL(surface.d900)} !important;
+  --heroui-default-foreground: ${hexToHeroUIHSL(surface.dFg)} !important;
+
+  --heroui-background: ${hexToHeroUIHSL(surface.background)} !important;
+  --heroui-foreground: ${hexToHeroUIHSL(surface.foreground)} !important;
+  --heroui-content1: ${hexToHeroUIHSL(surface.c1)} !important;
+  --heroui-content2: ${hexToHeroUIHSL(surface.c2)} !important;
+  --heroui-content3: ${hexToHeroUIHSL(surface.c3)} !important;
+  --heroui-content4: ${hexToHeroUIHSL(surface.c4)} !important;`;
 
   const herouiVars = `  /* HeroUI Primary Color Override - HSL Format */
   --heroui-primary: ${hexToHeroUIHSL(theme.colors.brand)} !important;
@@ -190,27 +278,9 @@ export function generateThemeCSS(
   --heroui-secondary-900: ${generateHeroUIColorScale(theme.colors.accent)["900"]} !important;
   --heroui-secondary-foreground: ${pickForegroundHSL(theme.colors.accent)} !important;
 
-  /* HeroUI Default/Neutral Colors - HSL Format */
-  --heroui-default: ${hexToHeroUIHSL(theme.colors.surface["2"])} !important;
-  --heroui-default-50: ${hexToHeroUIHSL(theme.colors.surface["2"])} !important;
-  --heroui-default-100: ${hexToHeroUIHSL(theme.colors.surface["2"])} !important;
-  --heroui-default-200: ${hexToHeroUIHSL(theme.colors.fill)} !important;
-  --heroui-default-300: ${hexToHeroUIHSL(theme.colors.border)} !important;
-  --heroui-default-400: ${hexToHeroUIHSL(theme.colors.border)} !important;
-  --heroui-default-500: ${hexToHeroUIHSL(theme.colors.text.secondary)} !important;
-  --heroui-default-600: ${hexToHeroUIHSL(theme.colors.text.secondary)} !important;
-  --heroui-default-700: ${hexToHeroUIHSL(theme.colors.text.primary)} !important;
-  --heroui-default-800: ${hexToHeroUIHSL(theme.colors.text.primary)} !important;
-  --heroui-default-900: ${hexToHeroUIHSL(theme.colors.text.primary)} !important;
-  --heroui-default-foreground: ${hexToHeroUIHSL(theme.colors.text.primary)} !important;
-
-  /* HeroUI Background System - HSL Format */
-  --heroui-background: ${hexToHeroUIHSL(theme.colors.surface["1"])} !important;
-  --heroui-foreground: ${hexToHeroUIHSL(theme.colors.text.primary)} !important;
-  --heroui-content1: ${hexToHeroUIHSL(theme.colors.surface["1"])} !important;
-  --heroui-content2: ${hexToHeroUIHSL(theme.colors.surface["2"])} !important;
-  --heroui-content3: ${hexToHeroUIHSL(theme.colors.fill)} !important;
-  --heroui-content4: ${hexToHeroUIHSL(theme.colors.border)} !important;
+  /* HeroUI Default/Neutral Colors + Background System - HSL Format.
+     Con scope (trainer) las superficies son neutras: ver TRAINER_SURFACES. */
+${surfaceVars}
 
   /* HeroUI Semantic Colors - HSL Format */
   --heroui-success: ${hexToHeroUIHSL(theme.semantic?.success || "#22c55e")} !important;
@@ -381,9 +451,17 @@ ${utilPrefix}.font-body {
 
 ${fontRules}
 
-/* Body background uses theme surface color */
-body {
+/* Fondo del body. En el portal de cliente lo pinta el tema del tenant; en el
+   trainer se fuerza el lienzo neutro, porque esta regla es global y con
+   !important: un surface.1 oscuro teñía la app entera. */
+${
+  scope
+    ? `body:has(${scope}) {
+  background: ${TRAINER_SURFACES.background} !important;
+}`
+    : `body {
   background: ${theme.colors.surface["1"]} !important;
+}`
 }
 `;
 
