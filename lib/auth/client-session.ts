@@ -179,12 +179,13 @@ export async function verifyClientSessionFromRequest(
  */
 export async function updateClientLastLogin(clientId: string): Promise<void> {
   try {
-    const { createClient } = await import("@supabase/supabase-js");
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    // Dynamic import keeps the service-role factory out of the middleware
+    // bundle (middleware imports this module for verifyClientSessionFromRequest).
+    const { createSupabaseAdminClient } = await import(
+      "@/lib/clients/supabase-admin"
     );
+
+    const supabase = createSupabaseAdminClient();
 
     const { error } = await supabase
       .from("clients")

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  return createSupabaseAdminClient();
 }
 
 // GET - Fetch notifications for a client or trainer

@@ -84,6 +84,7 @@ const DynamicFormModal = dynamic(
  */
 const PERIOD_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
   { key: "7d", label: "7 Días" },
+  { key: "14d", label: "14 Días" },
   { key: "30d", label: "30 Días" },
   { key: "3m", label: "3 Meses" },
   { key: "6m", label: "6 Meses" },

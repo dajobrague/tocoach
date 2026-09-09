@@ -10,6 +10,7 @@ import {
 } from "@/lib/security/password-recovery-log";
 import { markOTPUsed, verifyResetToken } from "@/lib/security/otp";
 import { sendPasswordChangedEmail } from "@/lib/services/email";
+import { clientPasswordUpdate } from "@/lib/auth/client-password";
 
 function validatePassword(password: string): {
   valid: boolean;
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
     // would otherwise both have their password overwritten.
     const { error: updateError } = await supabase
       .from("clients")
-      .update({ password: newPassword })
+      .update(await clientPasswordUpdate(newPassword))
       .eq("email", normalizedEmail)
       .eq("tenant", tenant.trainer_id);
 

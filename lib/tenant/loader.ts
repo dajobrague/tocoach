@@ -6,23 +6,13 @@
  * Use only in server components, API routes, and middleware
  */
 
-import { createClient } from "@supabase/supabase-js";
-
+import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 import { logTenantContext } from "@/lib/security/encryption";
 import { TenantContext, TenantMetadata } from "@/lib/tenant/types";
 
 // Lazy Supabase client initialization to avoid connection pool issues
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Using anon key as per project standards
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+  return createSupabaseAdminClient();
 }
 
 // Types imported from types.ts for consistency

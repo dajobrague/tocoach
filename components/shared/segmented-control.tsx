@@ -30,7 +30,7 @@ export function SegmentedControl<K extends string>({
           <button
             key={key}
             aria-selected={isActive}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs transition ${
+            className={`flex-1 whitespace-nowrap rounded-md px-1.5 py-1.5 text-xs transition ${
               isActive
                 ? "bg-content1 text-foreground shadow-sm font-medium"
                 : "text-default-500 hover:text-default-700 font-normal"

@@ -267,13 +267,14 @@ export function fetchRecipe(recipeId: string): Promise<RecipeDetail> {
   return getData<RecipeDetail>(`/api/recipes/${recipeId}`);
 }
 
-/** Partial update of only the tags — how the folder view moves a recipe. */
-export function updateRecipeTags(
+/** Partial update of only the folder — how the folder view moves a recipe.
+ *  `null` = the root. */
+export function moveRecipe(
   recipeId: string,
-  tags: string[]
+  folderId: string | null
 ): Promise<RecipeDetail> {
   return sendJson<RecipeDetail>(`/api/recipes/${recipeId}`, "PATCH", {
-    meal_type_tags: tags,
+    folder_id: folderId,
   });
 }
 

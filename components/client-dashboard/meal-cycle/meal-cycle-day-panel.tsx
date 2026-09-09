@@ -3,6 +3,7 @@
 import type { ClientDayNote } from "@/lib/nutrition/cycles/cycle-day";
 import type { ClientWeekDay } from "@/lib/nutrition/cycles/client-week";
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
+import type { NormalizedSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
 
 import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -112,6 +113,7 @@ function OptionCard({
               </span>
             )}
           </p>
+          <IngredientQuantities ingredients={snapshot.ingredients} />
           {showMacros ? (
             <MacroDotsLine
               carbs_g={snapshot.totals.carbs_g}
@@ -232,6 +234,7 @@ function CarouselOptionCard({
               </span>
             )}
           </p>
+          <IngredientQuantities ingredients={snapshot.ingredients} />
           {showMacros ? (
             <p className="text-xs text-default-500 tabular-nums">
               {Math.round(snapshot.totals.kcal)} kcal
@@ -248,6 +251,28 @@ function CarouselOptionCard({
   );
 }
 
+const EMPTY_IDS: readonly string[] = [];
+
+/**
+ * "Arroz 80 g · Pollo 150 g" — the option's ingredient quantities, so the
+ * client sees how much of each food without opening the detail.
+ */
+function IngredientQuantities({
+  ingredients,
+}: {
+  ingredients: NormalizedSnapshot["ingredients"];
+}) {
+  if (ingredients.length === 0) return null;
+
+  return (
+    <p className="mt-0.5 truncate text-xs text-default-500 tabular-nums">
+      {ingredients
+        .map((ing) => `${ing.name} ${ing.quantity} ${ing.unit}`)
+        .join(" · ")}
+    </p>
+  );
+}
+
 /**
  * One component of a meal (a `group_index` group). Multiple options within a
  * component are alternatives — a horizontal swipe carousel where the client
@@ -257,13 +282,13 @@ function CarouselOptionCard({
 function ComponentSection({
   options,
   showMacros,
-  selectedOptionId,
+  selectedOptionIds,
   onOpenOption,
   onSelectOption,
 }: {
   options: MealSlotOptionRow[];
   showMacros: boolean;
-  selectedOptionId: string | null;
+  selectedOptionIds: readonly string[];
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
@@ -288,7 +313,7 @@ function ComponentSection({
   }
 
   const chosenId =
-    chosenOption({ groupIndex: 0, options }, selectedOptionId)?.id ?? null;
+    chosenOption({ groupIndex: 0, options }, selectedOptionIds)?.id ?? null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -319,21 +344,21 @@ function SlotBlock({
   label,
   options,
   showMacros,
-  selectedOptionId,
+  selectedOptionIds,
   onOpenOption,
   onSelectOption,
 }: {
   label: string;
   options: MealSlotOptionRow[];
   showMacros: boolean;
-  selectedOptionId: string | null;
+  selectedOptionIds: readonly string[];
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
   const cleanLabel = label.trim().length > 0 ? label : "Comida";
   const visual = mealVisual(cleanLabel);
   const components = slotComponents(options);
-  const mealKcal = slotPlannedTotals(options, selectedOptionId).kcal;
+  const mealKcal = slotPlannedTotals(options, selectedOptionIds).kcal;
 
   return (
     <Card>
@@ -372,7 +397,7 @@ function SlotBlock({
               ) : null}
               <ComponentSection
                 options={component.options}
-                selectedOptionId={selectedOptionId}
+                selectedOptionIds={selectedOptionIds}
                 showMacros={showMacros}
                 onOpenOption={onOpenOption}
                 onSelectOption={onSelectOption}
@@ -430,7 +455,7 @@ export function MealCycleDayPanel({
   onSelectOption,
 }: {
   day: ClientWeekDay;
-  selections: Record<string, string>;
+  selections: Record<string, string[]>;
   showMacros: boolean;
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
@@ -461,7 +486,7 @@ export function MealCycleDayPanel({
             key={slot.id}
             label={slot.label}
             options={slot.options}
-            selectedOptionId={selections[slot.id] ?? null}
+            selectedOptionIds={selections[slot.id] ?? EMPTY_IDS}
             showMacros={showMacros}
             onOpenOption={onOpenOption}
             onSelectOption={onSelectOption}

@@ -26,6 +26,7 @@ export default defineConfig({
       "@/config": resolve(root, "config"),
       "@/styles": resolve(root, "styles"),
       "@": root,
+      "server-only": resolve(root, "lib/test/server-only-stub.ts"),
     },
   },
   test: {

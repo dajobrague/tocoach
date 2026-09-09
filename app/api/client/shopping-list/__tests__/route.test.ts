@@ -21,6 +21,11 @@ vi.mock("@/lib/nutrition/cycles/option-selection", () => ({
 vi.mock("@/lib/nutrition/cycles/menu-choice-service", () => ({
   getMenuChoices: vi.fn(),
 }));
+vi.mock("@/lib/nutrition/cycles/override-service", () => ({
+  OverrideService: class {
+    listForCycle = vi.fn().mockResolvedValue([]);
+  },
+}));
 
 import { GET } from "../route";
 

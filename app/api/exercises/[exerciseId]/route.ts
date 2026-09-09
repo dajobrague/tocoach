@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { parseTags } from "@/lib/library/parse-tags";
 
 // GET - Fetch a single exercise
 export async function GET(
@@ -143,6 +144,18 @@ export async function PUT(
     if (body.instructions !== undefined)
       updateData.instructions = body.instructions || [];
     if (body.tips !== undefined) updateData.tips = body.tips || [];
+
+    const parsedTags = parseTags(body.tags);
+
+    if (parsedTags !== undefined) {
+      if (parsedTags.ok === false) {
+        return NextResponse.json(
+          { success: false, error: parsedTags.error },
+          { status: 400 }
+        );
+      }
+      updateData.tags = parsedTags.tags;
+    }
 
     // Cardio activity type lives in metadata.cardio_type — merge without
     // clobbering other metadata keys.

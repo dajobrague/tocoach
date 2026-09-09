@@ -18,6 +18,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
   extractVideoPathFromUrl,
@@ -53,6 +54,7 @@ export default function EditExerciseLibraryModal({
     instructions: [] as string[],
     tips: [] as string[],
     cardio_type: "",
+    tags: [] as string[],
   });
   const [muscleGroupInput, setMuscleGroupInput] = useState("");
   const [equipmentInput, setEquipmentInput] = useState("");
@@ -77,6 +79,7 @@ export default function EditExerciseLibraryModal({
         image_url: exercise.image_url || "",
         instructions: exercise.instructions || [],
         tips: exercise.tips || [],
+        tags: exercise.tags ?? [],
         cardio_type:
           (exercise as any).metadata?.cardio_type ??
           (exercise as any).default_training_system ??
@@ -258,12 +261,18 @@ export default function EditExerciseLibraryModal({
     }
 
     setIsSubmitting(true);
+    // Sent only when changed: the tags column may not be migrated yet.
+    const tagsChanged =
+      formData.tags.join("\n") !== (exercise.tags ?? []).join("\n");
 
     try {
       const response = await fetch(`/api/exercises/${exercise.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          tags: tagsChanged ? formData.tags : undefined,
+        }),
       });
 
       const result = await response.json();
@@ -642,6 +651,17 @@ export default function EditExerciseLibraryModal({
                 Detalles Adicionales (Opcional)
               </h4>
               <div className="space-y-4">
+                <TagsField
+                  description="Para filtrar la biblioteca al montar sesiones. Ej. pectoral, mancuernas, barra, empuje."
+                  disabled={isSubmitting}
+                  kind="exercise"
+                  placeholder="Ej. pectoral, mancuernas, barra..."
+                  value={formData.tags}
+                  onChange={(tags) =>
+                    setFormData((prev) => ({ ...prev, tags }))
+                  }
+                />
+
                 {/* Muscle Groups */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

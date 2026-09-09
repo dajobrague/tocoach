@@ -5,7 +5,11 @@
 // de sesiones. Este componente compone las cards, es dueño del estado del
 // drawer de ejercicio y de los modales de ciclo de vida del programa.
 
-import type { WorkoutExercise, WorkoutSession } from "./training-api";
+import type {
+  WorkoutExercise,
+  WorkoutProgram,
+  WorkoutSession,
+} from "./training-api";
 
 import { Button, Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -19,6 +23,7 @@ import {
   CreateProgramModal,
   DeleteProgramModal,
   EditProgramModal,
+  PauseOthersModal,
   SaveTemplateModal,
 } from "./program-modals";
 import { ProgramSelector } from "./program-selector";
@@ -69,6 +74,12 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  // Snapshot de los activos PREVIOS a una asignación: al crear un programa
+  // nuevo ofrecemos pausarlos (= ocultarlos al cliente). Snapshot y no
+  // lista viva: tras el invalidate el nuevo programa entraría a la lista.
+  const [pausePromptOthers, setPausePromptOthers] = useState<
+    WorkoutProgram[] | null
+  >(null);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   // Slot del shell (fila de pills) donde vive el selector de programa; si no
   // existe (tests, otros hosts) el selector cae en línea como antes.
@@ -226,7 +237,20 @@ export function ProgramaSection({ clientId }: { clientId: string }) {
         focusTemplates={createFocusTemplates}
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={setSelectedId}
+        onCreated={(programId) => {
+          setSelectedId(programId);
+          const others = activePrograms.filter(
+            (program) => program.programId !== programId
+          );
+
+          if (others.length > 0) setPausePromptOthers(others);
+        }}
+      />
+      <PauseOthersModal
+        clientId={clientId}
+        isOpen={pausePromptOthers !== null}
+        others={pausePromptOthers ?? []}
+        onClose={() => setPausePromptOthers(null)}
       />
       <EditProgramModal
         clientId={clientId}

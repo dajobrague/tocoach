@@ -52,36 +52,52 @@ export function slotComponents(options: MealSlotOptionRow[]): SlotComponent[] {
 }
 
 /**
- * The option the client is set to eat for a component: their standing per-slot
- * selection when it points inside this component, else the first option (the
+ * The option the client is set to eat for a component: the one of their
+ * standing picks that points inside this component, else the first option (the
  * same fallback the shopping list uses).
  */
 export function chosenOption(
   component: SlotComponent,
-  selectedOptionId: string | null
+  selectedOptionIds: readonly string[]
 ): MealSlotOptionRow | null {
-  if (selectedOptionId !== null) {
-    const selected = component.options.find(
-      (option) => option.id === selectedOptionId
-    );
+  const selected = component.options.find((option) =>
+    selectedOptionIds.includes(option.id)
+  );
 
-    if (selected !== undefined) {
-      return selected;
-    }
-  }
+  return selected ?? component.options[0] ?? null;
+}
 
-  return component.options[0] ?? null;
+/**
+ * The slot's picks after choosing `optionId`: its alternatives (same
+ * `group_index`) drop out, picks in other components stay. Pure — used for the
+ * optimistic cache update, mirroring what the server persists.
+ */
+export function withSelection(
+  selections: Record<string, string[]>,
+  slotOptions: readonly MealSlotOptionRow[],
+  slotId: string,
+  optionId: string
+): Record<string, string[]> {
+  const target = slotOptions.find((option) => option.id === optionId);
+  const siblings = new Set(
+    slotOptions
+      .filter((option) => option.group_index === target?.group_index)
+      .map((option) => option.id)
+  );
+  const kept = (selections[slotId] ?? []).filter((id) => !siblings.has(id));
+
+  return { ...selections, [slotId]: [...kept, optionId] };
 }
 
 /** Sum the chosen option of every component of one slot. */
 export function slotPlannedTotals(
   options: MealSlotOptionRow[],
-  selectedOptionId: string | null
+  selectedOptionIds: readonly string[]
 ): PlannedTotals {
   const totals = { ...EMPTY_PLANNED };
 
   for (const component of slotComponents(options)) {
-    const chosen = chosenOption(component, selectedOptionId);
+    const chosen = chosenOption(component, selectedOptionIds);
 
     if (chosen === null) {
       continue;
@@ -101,14 +117,14 @@ export function slotPlannedTotals(
 /** Sum every slot of the day (what the "Nutrición del día" card shows). */
 export function dayPlannedTotals(
   slots: MealSlotWithOptions[],
-  selections: Record<string, string>
+  selections: Record<string, string[]>
 ): PlannedTotals {
   const totals = { ...EMPTY_PLANNED };
 
   for (const slot of slots) {
     const slotTotals = slotPlannedTotals(
       slot.options,
-      selections[slot.id] ?? null
+      selections[slot.id] ?? []
     );
 
     totals.kcal += slotTotals.kcal;

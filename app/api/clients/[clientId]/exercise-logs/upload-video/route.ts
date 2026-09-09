@@ -116,9 +116,21 @@ export async function POST(
         uploadError
       );
 
+      // Supabase Storage reports its size cap as EntityTooLarge / "exceeded
+      // the maximum allowed size"; surface it instead of a generic failure.
+      const tooLarge =
+        /maximum allowed size|payload too large|entitytoolarge/i.test(
+          uploadError.message ?? ""
+        );
+
       return NextResponse.json(
-        { success: false, error: "Error al subir video" },
-        { status: 500 }
+        {
+          success: false,
+          error: tooLarge
+            ? "El vídeo supera el tamaño máximo permitido. Prueba con un vídeo más corto."
+            : "Error al subir video",
+        },
+        { status: tooLarge ? 413 : 500 }
       );
     }
 

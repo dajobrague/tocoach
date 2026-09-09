@@ -1,17 +1,22 @@
 "use client";
 
-import type { RecipeFolder } from "./folder-tree";
 import type { RecipeListItem } from "./recipe-query";
+import type { Folder } from "@/features/trainer/library/folder-tree";
 
 import { Icon } from "@iconify/react";
 
-import { groupedSections } from "./folder-tree";
 import { RecipeCard } from "./recipe-card";
 import { RecipeList } from "./recipe-list";
 
+import { createFolderTree } from "@/features/trainer/library/folder-tree";
+
+const { groupedSections } = createFolderTree<RecipeListItem>(
+  (recipe) => recipe.meal_type_tags
+);
+
 interface GroupedRecipeListProps {
   recipes: RecipeListItem[];
-  folders: RecipeFolder[];
+  folders: Folder[];
   isLoading: boolean;
   isError: boolean;
   onOpen: (id: string) => void;
@@ -23,9 +28,9 @@ const GRID =
   "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 /**
- * The "Lista" view grouped by folder (feedback round on the folder view):
- * every group visible at once — no navigation — with nested folders indented
- * under their parent. Groups follow whatever filter/search produced
+ * The "Lista" view grouped by real folder (`folder_id`): every group visible
+ * at once — no navigation — with nested folders indented under their parent
+ * and "Sin carpeta" last. Groups follow whatever filter/search produced
  * `recipes`, so empty headings never appear.
  */
 export function GroupedRecipeList({
@@ -63,12 +68,10 @@ export function GroupedRecipeList({
           <header className="mb-2.5 flex items-center gap-2">
             <Icon
               className={
-                section.kind === "untagged"
-                  ? "text-default-300"
-                  : "text-amber-500"
+                section.kind === "root" ? "text-default-300" : "text-amber-500"
               }
               icon={
-                section.kind === "untagged"
+                section.kind === "root"
                   ? "solar:folder-error-linear"
                   : "solar:folder-bold"
               }
@@ -78,12 +81,12 @@ export function GroupedRecipeList({
               {section.label}
             </h2>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-default-500 tabular-nums">
-              {section.recipes.length}
+              {section.items.length}
             </span>
           </header>
 
           <div className={GRID}>
-            {section.recipes.map((recipe) => (
+            {section.items.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}

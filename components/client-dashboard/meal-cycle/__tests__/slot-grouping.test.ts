@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   chosenOption,
   dayPlannedTotals,
+  withSelection,
   pctOf,
   slotComponents,
   slotPlannedTotals,
@@ -74,15 +75,47 @@ describe("chosenOption", () => {
   };
 
   it("falls back to the first option without a selection", () => {
-    expect(chosenOption(component, null)?.id).toBe("first");
+    expect(chosenOption(component, [])?.id).toBe("first");
   });
 
   it("honors a selection that points inside the component", () => {
-    expect(chosenOption(component, "second")?.id).toBe("second");
+    expect(chosenOption(component, ["second"])?.id).toBe("second");
   });
 
   it("ignores a selection that points at another component", () => {
-    expect(chosenOption(component, "elsewhere")?.id).toBe("first");
+    expect(chosenOption(component, ["elsewhere"])?.id).toBe("first");
+  });
+
+  it("picks the pick that belongs to this component among several", () => {
+    expect(chosenOption(component, ["elsewhere", "second"])?.id).toBe("second");
+  });
+});
+
+describe("withSelection", () => {
+  // Component 0: a1 | a2 (alternatives); component 1: b1 | b2.
+  const options = [
+    makeOption("a1", 0, 100),
+    makeOption("a2", 0, 100),
+    makeOption("b1", 1, 100),
+    makeOption("b2", 1, 100),
+  ];
+
+  it("keeps the pick of another component when choosing in this one", () => {
+    const after = withSelection({ s1: ["a2"] }, options, "s1", "b2");
+
+    expect(after.s1).toEqual(["a2", "b2"]);
+  });
+
+  it("replaces the previous pick of the same component", () => {
+    const after = withSelection({ s1: ["a2", "b2"] }, options, "s1", "a1");
+
+    expect(after.s1).toEqual(["b2", "a1"]);
+  });
+
+  it("does not touch other slots", () => {
+    const after = withSelection({ s2: ["x"] }, options, "s1", "a1");
+
+    expect(after).toEqual({ s2: ["x"], s1: ["a1"] });
   });
 });
 
@@ -96,11 +129,11 @@ describe("slotPlannedTotals", () => {
     ];
 
     // Default (first of each group): 200 + 100.
-    expect(slotPlannedTotals(options, null).kcal).toBe(300);
-    expect(slotPlannedTotals(options, null).protein_g).toBe(15);
+    expect(slotPlannedTotals(options, []).kcal).toBe(300);
+    expect(slotPlannedTotals(options, []).protein_g).toBe(15);
 
     // Selecting the alternative swaps only its component: 300 + 100.
-    expect(slotPlannedTotals(options, "a2").kcal).toBe(400);
+    expect(slotPlannedTotals(options, ["a2"]).kcal).toBe(400);
   });
 });
 
@@ -115,7 +148,7 @@ describe("dayPlannedTotals", () => {
     ] as unknown as MealSlotWithOptions[];
 
     expect(dayPlannedTotals(slots, {}).kcal).toBe(350);
-    expect(dayPlannedTotals(slots, { "slot-1": "a2" }).kcal).toBe(450);
+    expect(dayPlannedTotals(slots, { "slot-1": ["a2"] }).kcal).toBe(450);
   });
 });
 

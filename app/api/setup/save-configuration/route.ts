@@ -64,27 +64,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedSlug = slug.toLowerCase().trim();
 
-    // Update trainer's tenant_host (now stores slug)
-    const { error: trainerError } = await supabase
-      .from("trainers")
-      .update({
-        tenant_host: normalizedSlug,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", session.trainer_id);
-
-    if (trainerError) {
-      console.error("[Save Configuration] Trainer update error:", trainerError);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Error al actualizar el perfil del entrenador",
-        },
-        { status: 500 }
-      );
-    }
-
     // Check if tenant already exists for this trainer
     const { data: existingTenant, error: findError } = await supabase
       .from("tenants")
@@ -167,6 +146,30 @@ export async function POST(request: NextRequest) {
 
       result = data;
       console.log("[Save Configuration] Successfully created tenant");
+    }
+
+    // `trainers.tenant_host` se actualiza DESPUÉS del tenant: si se escribiera
+    // antes y la operación sobre `tenants` fallara (colisión de slug, FKs sin
+    // ON UPDATE CASCADE), quedaría apuntando a un host inexistente y toda
+    // escritura del trainer con tenant_host rompería con 23503.
+    const { error: trainerError } = await supabase
+      .from("trainers")
+      .update({
+        tenant_host: normalizedSlug,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", session.trainer_id);
+
+    if (trainerError) {
+      console.error("[Save Configuration] Trainer update error:", trainerError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Error al actualizar el perfil del entrenador",
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

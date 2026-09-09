@@ -43,6 +43,8 @@ interface MicrocycleDaysCardProps {
 interface ResolvedSlot {
   name: string;
   isCardio: boolean;
+  /** true = el programa dueño no está activo: el cliente NO ve este día. */
+  isHidden?: boolean;
 }
 
 /** "2026-03-03" → "lun 3 mar 2026" (es-ES corto, sin puntos). */
@@ -77,6 +79,24 @@ export function MicrocycleDaysCard({
   const [pageStart, setPageStart] = useState(1);
 
   const resolveSlot = (sessionId: string): ResolvedSlot => {
+    // El check de ocultas va PRIMERO: si el trainer tiene seleccionado el
+    // propio programa pausado, sus sesiones también están en `sessions` y
+    // el short-circuit por "own" suprimía la marca — justo en la vista
+    // donde el trainer va a confirmar que el pause funcionó.
+    const hiddenFirst = state.hiddenSessions.find(
+      (session) => session.id === sessionId
+    );
+
+    if (hiddenFirst !== undefined) {
+      return {
+        name: hiddenFirst.name,
+        isCardio: hiddenFirst.session_type === "cardio",
+        // is_hidden false = la sesión solo está fuera del scope de este
+        // trainer (el cliente sí la ve): nombre real sin badge.
+        isHidden: hiddenFirst.is_hidden,
+      };
+    }
+
     const own = sessions.find((session) => session.id === sessionId);
 
     if (own !== undefined) {
@@ -278,13 +298,21 @@ export function MicrocycleDaysCard({
                             className={`line-clamp-2 text-xs ${
                               resolved === null
                                 ? "text-default-400"
-                                : resolved.isCardio
-                                  ? "font-medium text-rose-600"
-                                  : "font-medium text-gray-700"
+                                : resolved.isHidden === true
+                                  ? "font-medium text-default-400 line-through decoration-default-300"
+                                  : resolved.isCardio
+                                    ? "font-medium text-rose-600"
+                                    : "font-medium text-gray-700"
                             }`}
                           >
                             {resolved?.name ?? "Descanso"}
                           </span>
+                          {resolved?.isHidden === true && (
+                            <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600">
+                              <Icon icon="solar:eye-closed-linear" width={11} />
+                              No visible (pausado)
+                            </span>
+                          )}
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64 p-1.5">

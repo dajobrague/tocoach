@@ -9,6 +9,7 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { getActiveCycleTreeForClient } from "@/lib/nutrition/cycles/client-cycle-reader";
 import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
+import { OverrideService } from "@/lib/nutrition/cycles/override-service";
 import { isNutritionV2Enabled } from "@/lib/nutrition/feature-flag";
 import { aggregateShoppingList } from "@/lib/nutrition/shopping/shopping-list";
 import { loadTenantContext } from "@/lib/tenant/loader";
@@ -21,8 +22,9 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  * for the authed client's own active meal cycle over the `[from, to]` calendar
  * range. Each date resolves to the day it follows (the client's menu choice
  * when one exists, otherwise the rotation day), the selected (or first) option
- * per slot is taken, and snapshot ingredient quantities are summed, merging by
- * (name, unit).
+ * of every component of each slot is taken (a trainer swap for the date
+ * replaces the slot), and snapshot ingredient quantities are summed, merging
+ * by (name, unit).
  *
  * Auth boundary (§4.4 / §4.6): client-session only. The numeric client id comes
  * exclusively from the verified session (never the request), so a client can
@@ -69,10 +71,13 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createSupabaseClient();
-    const [tree, selections, choices] = await Promise.all([
-      getActiveCycleTreeForClient(supabase, clientId),
+    const tree = await getActiveCycleTreeForClient(supabase, clientId);
+    const [selections, choices, overrides] = await Promise.all([
       getClientSelections(supabase, clientId),
       getMenuChoices(supabase, clientId, range.from, range.to),
+      tree === null
+        ? Promise.resolve([])
+        : new OverrideService(supabase).listForCycle(tree.tenant_host, tree.id),
     ]);
 
     // Dates where the client chose a menu shop for THAT menu, not the
@@ -88,6 +93,7 @@ export async function GET(request: NextRequest) {
     const items = aggregateShoppingList({
       tree,
       selections,
+      overrides,
       from: range.from,
       to: range.to,
       menuChoices,

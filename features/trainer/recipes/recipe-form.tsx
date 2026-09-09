@@ -18,6 +18,8 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { TagsField } from "../library/tags-field";
+
 import { CommunityShareCard } from "./community-share-card";
 import { DeleteRecipeModal } from "./delete-recipe-modal";
 import { EditorHeaderActions } from "./editor-header-actions";
@@ -33,13 +35,10 @@ import {
   ingredientsEqual,
   previewTotals,
 } from "./recipe-draft";
-import { distinctMealTypes } from "./recipe-query";
 import { RecipePreviewModal } from "./recipe-preview-modal";
 import { RecipeSummaryStrip } from "./recipe-summary-strip";
-import { TagsField } from "./tags-field";
 import { UnsavedChangesModal } from "./unsaved-changes-modal";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
-import { useRecipes } from "./use-recipes";
 import {
   useCreateRecipe,
   useRemoveMedia,
@@ -171,8 +170,6 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
   const recipeQuery = useRecipe(recipeId);
   const ingredientsQuery = useRecipeIngredients(recipeId);
   const mediaQuery = useRecipeMedia(recipeId);
-  // Full library, only to suggest existing tags in the tag editor.
-  const libraryQuery = useRecipes({});
 
   const update = useUpdateRecipe(recipeId);
   const replaceIngredients = useReplaceIngredients(recipeId);
@@ -376,8 +373,10 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
               />
 
               <TagsField
+                description="Escribe y pulsa Enter para añadir; si no existe, se crea. Sirven para buscar y filtrar recetas."
                 disabled={busy}
-                suggestions={distinctMealTypes(libraryQuery.data ?? [])}
+                kind="recipe"
+                placeholder="Ej. sin gluten, vegano, verano..."
                 value={values.mealTypeTags}
                 onChange={(tags) =>
                   setValues({ ...values, mealTypeTags: tags })

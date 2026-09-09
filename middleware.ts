@@ -4,10 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { verifyClientSessionFromRequest } from "@/lib/auth/client-session";
 
-// Lazy Supabase client initialization to avoid connection issues at module load
+// Lazy Supabase client initialization to avoid connection issues at module load.
+// Inline (not lib/clients/supabase-admin.ts) because the middleware bundle is
+// kept free of `server-only`. Service role: anon has no grants on `tenants`.
+// This is the only query here — slug/status lookup, nothing tenant-scoped.
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
   if (!supabaseUrl || !supabaseKey) {
     console.error("[Middleware] Missing required environment variables:", {
@@ -15,7 +18,7 @@ function getSupabaseClient() {
       hasKey: !!supabaseKey,
     });
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
     );
   }
 

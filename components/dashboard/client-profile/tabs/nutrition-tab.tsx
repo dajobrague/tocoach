@@ -304,6 +304,15 @@ import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  InlineMacrosEditor,
+  InlineNameEditor,
+  InlineNewIngredientRow,
+  OptionRecipeEditor,
+  type IngredientFormValues,
+  type MacroFormValues,
+  type RecipeFormValues,
+} from "@/components/dashboard/client-profile/tabs/nutrition-inline-editors";
 import { NutritionPlanPdfBlock } from "@/components/dashboard/nutrition-plan-pdf-block";
 import { MealImageTrainerField } from "@/components/dashboard/nutrition-trainer-meal-image-field";
 import { OptionImageTrainerField } from "@/components/dashboard/nutrition-trainer-option-image-field";
@@ -372,6 +381,78 @@ const formatWeekdays = (weekdays: number[]): string => {
   return sorted.map((day) => getWeekdayName(day, true)).join(", ");
 };
 
+// Valores iniciales de los editores inline extraídos (se calculan al montar
+// el editor; la lógica es la que antes vivía en los click-openers).
+function mealMacrosInitial(meal: NutritionMealWithIngredients): {
+  protein: string;
+  carbs: string;
+  fats: string;
+  calories: string;
+} {
+  const primary = meal.options?.[0];
+
+  if (primary && meal.options.length === 1) {
+    const m = optionDisplayMacros(primary);
+
+    return {
+      protein: m.protein.toString(),
+      carbs: m.carbs.toString(),
+      fats: m.fats.toString(),
+      calories: m.calories.toString(),
+    };
+  }
+
+  return {
+    protein: meal.protein?.toString() || "0",
+    carbs: meal.carbs?.toString() || "0",
+    fats: meal.fats?.toString() || "0",
+    calories: meal.calories?.toString() || "0",
+  };
+}
+
+function optionMacrosInitial(opt: NutritionMealOptionWithIngredients): {
+  protein: string;
+  carbs: string;
+  fats: string;
+  calories: string;
+} {
+  const m = optionDisplayMacros(opt);
+
+  return {
+    protein: m.protein.toString(),
+    carbs: m.carbs.toString(),
+    fats: m.fats.toString(),
+    calories: m.calories.toString(),
+  };
+}
+
+function optionRecipeInitial(option: NutritionMealOptionWithIngredients): {
+  instructions: string;
+  prep_time_minutes: string;
+  cooking_time_minutes: string;
+  servings: string;
+  recipe_notes: string;
+} {
+  return {
+    instructions: option.instructions ?? "",
+    prep_time_minutes:
+      option.prep_time_minutes === null ||
+      option.prep_time_minutes === undefined
+        ? ""
+        : String(option.prep_time_minutes),
+    cooking_time_minutes:
+      option.cooking_time_minutes === null ||
+      option.cooking_time_minutes === undefined
+        ? ""
+        : String(option.cooking_time_minutes),
+    servings:
+      option.servings === null || option.servings === undefined
+        ? ""
+        : String(option.servings),
+    recipe_notes: option.recipe_notes ?? "",
+  };
+}
+
 function SortableMealItem({
   id,
   children,
@@ -435,29 +516,15 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   const [editingOptionName, setEditingOptionName] = useState<string | null>(
     null
   );
-  const [editingOptionNameValue, setEditingOptionNameValue] = useState("");
   const [editingOptionMacrosId, setEditingOptionMacrosId] = useState<
     string | null
   >(null);
-  const [optionMacrosForm, setOptionMacrosForm] = useState({
-    protein: "",
-    carbs: "",
-    fats: "",
-    calories: "",
-  });
   // Item 2.4: per-option recipe editor. Null = no option has its recipe
   // open in edit mode (trainer is either viewing the read-only summary or
   // the recipe section is collapsed).
   const [editingOptionRecipeId, setEditingOptionRecipeId] = useState<
     string | null
   >(null);
-  const [optionRecipeForm, setOptionRecipeForm] = useState({
-    instructions: "",
-    prep_time_minutes: "",
-    cooking_time_minutes: "",
-    servings: "",
-    recipe_notes: "",
-  });
   const [addingAlternativeForMealId, setAddingAlternativeForMealId] = useState<
     string | null
   >(null);
@@ -503,11 +570,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   } | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
 
-  // Inline editing state for day name and meal name
+  // Inline editing state for day name and meal name (el VALOR en curso vive
+  // dentro de los editores extraídos — ver nutrition-inline-editors.tsx)
   const [editingDayName, setEditingDayName] = useState<string | null>(null);
-  const [editingDayNameValue, setEditingDayNameValue] = useState("");
   const [editingMealName, setEditingMealName] = useState<string | null>(null);
-  const [editingMealNameValue, setEditingMealNameValue] = useState("");
 
   const [createPlanTab, setCreatePlanTab] = useState<"blank" | "template">(
     "blank"
@@ -534,26 +600,6 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     // Item 2.3: plan-level calorie visibility. Default true matches
     // backward-compatible behaviour (existing plans showed calories).
     show_calories: true,
-  });
-
-  const [macrosForm, setMacrosForm] = useState({
-    protein: "",
-    carbs: "",
-    fats: "",
-    calories: "",
-  });
-
-  const [dayMacrosForm, setDayMacrosForm] = useState({
-    protein: "",
-    carbs: "",
-    fats: "",
-    calories: "",
-  });
-
-  const [newIngredient, setNewIngredient] = useState({
-    name: "",
-    quantity: "",
-    unit: "",
   });
 
   const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
@@ -816,7 +862,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         return;
       }
 
-      await refreshPlan();
+      // Aplicación local (antes: refreshPlan() re-fetcheaba el árbol
+      // completo de todos los planes para reflejar un campo escalar).
+      setNutritionPlan((prev) => (prev ? { ...prev, plan_mode: mode } : prev));
+      setAllPlans((prev) =>
+        prev.map((p, i) =>
+          i === selectedPlanIndex ? { ...p, plan_mode: mode } : p
+        )
+      );
     } catch (err) {
       console.error("Error updating plan mode:", err);
       alert("Error al guardar el modo del plan");
@@ -1125,12 +1178,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
     if (day) {
       setEditingDayName(dayId);
-      setEditingDayNameValue(day.day_label);
     }
   };
 
-  const handleSaveDayName = async (dayId: string) => {
-    if (!editingDayNameValue.trim()) return;
+  const handleSaveDayName = async (dayId: string, value: string) => {
+    if (!value.trim()) return;
 
     // Optimistic update
     setNutritionPlan((prev) => {
@@ -1139,7 +1191,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       return {
         ...prev,
         days: prev.days.map((d) =>
-          d.id === dayId ? { ...d, day_label: editingDayNameValue.trim() } : d
+          d.id === dayId ? { ...d, day_label: value.trim() } : d
         ),
       };
     });
@@ -1149,7 +1201,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       const response = await fetch(`/api/nutrition/days/${dayId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ day_label: editingDayNameValue.trim() }),
+        body: JSON.stringify({ day_label: value.trim() }),
       });
 
       if (!response.ok) {
@@ -1304,14 +1356,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     });
     if (foundMeal) {
       setEditingMealName(mealId);
-      setEditingMealNameValue(
-        (foundMeal as NutritionMealWithIngredients).label
-      );
     }
   };
 
-  const handleSaveMealName = async (mealId: string) => {
-    if (!editingMealNameValue.trim()) return;
+  const handleSaveMealName = async (mealId: string, value: string) => {
+    if (!value.trim()) return;
 
     // Optimistic update
     setNutritionPlan((prev) => {
@@ -1322,7 +1371,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         days: prev.days.map((day) => ({
           ...day,
           meals: day.meals.map((m) =>
-            m.id === mealId ? { ...m, label: editingMealNameValue.trim() } : m
+            m.id === mealId ? { ...m, label: value.trim() } : m
           ),
         })),
       };
@@ -1333,7 +1382,7 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       const response = await fetch(`/api/nutrition/meals/${mealId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: editingMealNameValue.trim() }),
+        body: JSON.stringify({ label: value.trim() }),
       });
 
       if (!response.ok) {
@@ -1364,10 +1413,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   // Ingredient handlers - Inline (scoped to option)
   const handleAddIngredientClick = (mealId: string, optionId: string) => {
     setAddingIngredientContext({ mealId, optionId });
-    setNewIngredient({ name: "", quantity: "", unit: "" });
   };
 
-  const handleSaveNewIngredient = async () => {
+  const handleSaveNewIngredient = async (form: IngredientFormValues) => {
     if (!nutritionPlan || !addingIngredientContext) return;
 
     const { mealId, optionId: targetOptionId } = addingIngredientContext;
@@ -1377,9 +1425,9 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       nutrition_meal_id: mealId,
       option_id: targetOptionId,
       tenant_host: nutritionPlan.tenant_host,
-      name: newIngredient.name,
-      quantity: newIngredient.quantity,
-      unit: newIngredient.unit,
+      name: form.name,
+      quantity: form.quantity,
+      unit: form.unit,
       ingredient_order: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1402,7 +1450,6 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     });
 
     setAddingIngredientContext(null);
-    setNewIngredient({ name: "", quantity: "", unit: "" });
 
     try {
       const response = await fetch("/api/nutrition/ingredients", {
@@ -1488,7 +1535,6 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   const handleCancelNewIngredient = () => {
     setAddingIngredientContext(null);
-    setNewIngredient({ name: "", quantity: "", unit: "" });
   };
 
   const handleAddAlternative = async (mealId: string) => {
@@ -1549,23 +1595,18 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     opt: NutritionMealOptionWithIngredients
   ) => {
     setEditingOptionName(null);
-    const m = optionDisplayMacros(opt);
-
-    setOptionMacrosForm({
-      protein: m.protein.toString(),
-      carbs: m.carbs.toString(),
-      fats: m.fats.toString(),
-      calories: m.calories.toString(),
-    });
     setEditingOptionMacrosId(opt.id);
   };
 
-  const handleSaveOptionMacros = async (optionId: string) => {
+  const handleSaveOptionMacros = async (
+    optionId: string,
+    form: MacroFormValues
+  ) => {
     const payload = {
-      protein: parseFloat(optionMacrosForm.protein) || 0,
-      carbs: parseFloat(optionMacrosForm.carbs) || 0,
-      fats: parseFloat(optionMacrosForm.fats) || 0,
-      calories: parseFloat(optionMacrosForm.calories) || 0,
+      protein: parseFloat(form.protein) || 0,
+      carbs: parseFloat(form.carbs) || 0,
+      fats: parseFloat(form.fats) || 0,
+      calories: parseFloat(form.calories) || 0,
     };
 
     // Fase 4: optimistic update. Apply the macro change locally and close the
@@ -1605,8 +1646,8 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
-  const handleSaveOptionName = async (optionId: string) => {
-    const trimmed = editingOptionNameValue.trim();
+  const handleSaveOptionName = async (optionId: string, value: string) => {
+    const trimmed = value.trim();
 
     if (!trimmed) return;
 
@@ -1647,29 +1688,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
     }
   };
 
-  // Item 2.4: open the recipe editor for a given option, pre-filled with its
-  // existing values (or empty strings for unset fields).
+  // Item 2.4: open the recipe editor for a given option. Los valores
+  // iniciales los calcula optionRecipeInitial() al renderizar el editor.
   const handleOpenOptionRecipe = (
     option: NutritionMealOptionWithIngredients
   ) => {
-    setOptionRecipeForm({
-      instructions: option.instructions ?? "",
-      prep_time_minutes:
-        option.prep_time_minutes === null ||
-        option.prep_time_minutes === undefined
-          ? ""
-          : String(option.prep_time_minutes),
-      cooking_time_minutes:
-        option.cooking_time_minutes === null ||
-        option.cooking_time_minutes === undefined
-          ? ""
-          : String(option.cooking_time_minutes),
-      servings:
-        option.servings === null || option.servings === undefined
-          ? ""
-          : String(option.servings),
-      recipe_notes: option.recipe_notes ?? "",
-    });
     setEditingOptionRecipeId(option.id);
   };
 
@@ -1680,17 +1703,20 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
   // Item 2.4: save the recipe fields for the given option, with an optimistic
   // update. Empty strings are coerced to nulls (same contract as the PATCH
   // endpoint's normaliser) so the UI reflects the cleared state immediately.
-  const handleSaveOptionRecipe = async (optionId: string) => {
-    const parsedPrep = optionRecipeForm.prep_time_minutes.trim();
-    const parsedCook = optionRecipeForm.cooking_time_minutes.trim();
-    const parsedServings = optionRecipeForm.servings.trim();
+  const handleSaveOptionRecipe = async (
+    optionId: string,
+    form: RecipeFormValues
+  ) => {
+    const parsedPrep = form.prep_time_minutes.trim();
+    const parsedCook = form.cooking_time_minutes.trim();
+    const parsedServings = form.servings.trim();
 
     const payload = {
-      instructions: optionRecipeForm.instructions.trim() || null,
+      instructions: form.instructions.trim() || null,
       prep_time_minutes: parsedPrep === "" ? null : parseInt(parsedPrep, 10),
       cooking_time_minutes: parsedCook === "" ? null : parseInt(parsedCook, 10),
       servings: parsedServings === "" ? null : parseInt(parsedServings, 10),
-      recipe_notes: optionRecipeForm.recipe_notes.trim() || null,
+      recipe_notes: form.recipe_notes.trim() || null,
     };
 
     // Guard against NaN from malformed numeric input.
@@ -1847,89 +1873,11 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
         </div>
 
         {isEditing ? (
-          <div className="flex flex-col gap-2">
-            <Textarea
-              label="Instrucciones"
-              minRows={4}
-              placeholder="Ej: 1) Pica la cebolla. 2) Sofríe a fuego medio..."
-              value={optionRecipeForm.instructions}
-              onValueChange={(value) =>
-                setOptionRecipeForm((prev) => ({
-                  ...prev,
-                  instructions: value,
-                }))
-              }
-            />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Input
-                label="Preparación (min)"
-                min={0}
-                placeholder="0"
-                size="sm"
-                type="number"
-                value={optionRecipeForm.prep_time_minutes}
-                onValueChange={(value) =>
-                  setOptionRecipeForm((prev) => ({
-                    ...prev,
-                    prep_time_minutes: value,
-                  }))
-                }
-              />
-              <Input
-                label="Cocción (min)"
-                min={0}
-                placeholder="0"
-                size="sm"
-                type="number"
-                value={optionRecipeForm.cooking_time_minutes}
-                onValueChange={(value) =>
-                  setOptionRecipeForm((prev) => ({
-                    ...prev,
-                    cooking_time_minutes: value,
-                  }))
-                }
-              />
-              <Input
-                label="Porciones"
-                min={1}
-                placeholder="1"
-                size="sm"
-                type="number"
-                value={optionRecipeForm.servings}
-                onValueChange={(value) =>
-                  setOptionRecipeForm((prev) => ({ ...prev, servings: value }))
-                }
-              />
-            </div>
-            <Textarea
-              label="Nota (opcional)"
-              minRows={2}
-              placeholder="Ej: Sustituye la mantequilla por aceite de oliva si lo prefieres."
-              value={optionRecipeForm.recipe_notes}
-              onValueChange={(value) =>
-                setOptionRecipeForm((prev) => ({
-                  ...prev,
-                  recipe_notes: value,
-                }))
-              }
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="flat"
-                onPress={handleCloseOptionRecipe}
-              >
-                Cancelar
-              </Button>
-              <Button
-                className="bg-black text-white hover:bg-slate-800"
-                size="sm"
-                onPress={() => handleSaveOptionRecipe(option.id)}
-              >
-                Guardar
-              </Button>
-            </div>
-          </div>
+          <OptionRecipeEditor
+            initial={optionRecipeInitial(option)}
+            onCancel={handleCloseOptionRecipe}
+            onSave={(values) => handleSaveOptionRecipe(option.id, values)}
+          />
         ) : hasAnyContent ? (
           <div className="space-y-2 text-sm">
             {(option.prep_time_minutes != null ||
@@ -2095,53 +2043,10 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
           ))}
 
           {isAdding ? (
-            <div className="flex items-center gap-2 py-2 border-b border-slate-200 bg-slate-50 rounded px-2">
-              <Input
-                autoFocus
-                className="flex-1"
-                placeholder="Nombre del ingrediente"
-                size="sm"
-                value={newIngredient.name}
-                onValueChange={(value) =>
-                  setNewIngredient({ ...newIngredient, name: value })
-                }
-              />
-              <Input
-                className="w-24"
-                placeholder="Cantidad"
-                size="sm"
-                value={newIngredient.quantity}
-                onValueChange={(value) =>
-                  setNewIngredient({ ...newIngredient, quantity: value })
-                }
-              />
-              <Input
-                className="w-24"
-                placeholder="Unidad"
-                size="sm"
-                value={newIngredient.unit}
-                onValueChange={(value) =>
-                  setNewIngredient({ ...newIngredient, unit: value })
-                }
-              />
-              <Button
-                isIconOnly
-                color="success"
-                size="sm"
-                variant="flat"
-                onPress={() => handleSaveNewIngredient()}
-              >
-                <Icon icon="solar:check-circle-bold" width={18} />
-              </Button>
-              <Button
-                isIconOnly
-                size="sm"
-                variant="flat"
-                onPress={handleCancelNewIngredient}
-              >
-                <Icon icon="solar:close-circle-bold" width={18} />
-              </Button>
-            </div>
+            <InlineNewIngredientRow
+              onCancel={handleCancelNewIngredient}
+              onSave={handleSaveNewIngredient}
+            />
           ) : (
             <Button
               className="w-full mt-2"
@@ -2339,38 +2244,54 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   // Meal macros handlers
   const handleEditMealMacrosClick = (meal: NutritionMealWithIngredients) => {
-    const primary = meal.options?.[0];
-
-    if (primary && meal.options.length === 1) {
-      const m = optionDisplayMacros(primary);
-
-      setMacrosForm({
-        protein: m.protein.toString(),
-        carbs: m.carbs.toString(),
-        fats: m.fats.toString(),
-        calories: m.calories.toString(),
-      });
-    } else {
-      setMacrosForm({
-        protein: meal.protein?.toString() || "0",
-        carbs: meal.carbs?.toString() || "0",
-        fats: meal.fats?.toString() || "0",
-        calories: meal.calories?.toString() || "0",
-      });
-    }
-
     setEditingMealMacros(meal.id);
   };
 
-  const handleSaveMealMacros = async (mealId: string) => {
-    try {
-      const payload = {
-        protein: parseFloat(macrosForm.protein) || 0,
-        carbs: parseFloat(macrosForm.carbs) || 0,
-        fats: parseFloat(macrosForm.fats) || 0,
-        calories: parseFloat(macrosForm.calories) || 0,
-      };
+  const handleSaveMealMacros = async (
+    mealId: string,
+    form: MacroFormValues
+  ) => {
+    const payload = {
+      protein: parseFloat(form.protein) || 0,
+      carbs: parseFloat(form.carbs) || 0,
+      fats: parseFloat(form.fats) || 0,
+      calories: parseFloat(form.calories) || 0,
+    };
 
+    const meal = nutritionPlan?.days
+      .flatMap((d) => d.meals)
+      .find((m) => m.id === mealId);
+    const singleOptionId =
+      meal?.options?.length === 1 ? meal.options[0]?.id : undefined;
+
+    // Optimistic (patrón Fase 4): aplicar macros localmente — en la comida
+    // y, si es de opción única, también en esa opción (mismo par de PATCHes
+    // que se envía abajo) — cerrar el editor ya, y revertir si falla el
+    // PATCH principal. Antes esto hacía refreshPlan() (re-fetch del árbol
+    // COMPLETO de todos los planes) con el editor abierto hasta terminar.
+    const snapshot = nutritionPlan;
+
+    setNutritionPlan((prevPlan) => {
+      if (!prevPlan) return prevPlan;
+
+      return {
+        ...prevPlan,
+        days: prevPlan.days.map((day) => ({
+          ...day,
+          meals: day.meals.map((m) => {
+            if (m.id !== mealId) return m;
+            const withMacros = { ...m, ...payload };
+
+            return singleOptionId
+              ? updateOptionInMealNested(withMacros, singleOptionId, payload)
+              : withMacros;
+          }),
+        })),
+      };
+    });
+    setEditingMealMacros(null);
+
+    try {
       console.log("[Nutrition] Saving meal macros:", { mealId, payload });
 
       const response = await fetch(`/api/nutrition/meals/${mealId}`, {
@@ -2384,44 +2305,38 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
       console.log("[Nutrition] Meal macros save response:", result);
 
       if (result.success) {
-        const meal = nutritionPlan?.days
-          .flatMap((d) => d.meals)
-          .find((m) => m.id === mealId);
-
-        if (meal?.options?.length === 1) {
-          const optId = meal.options[0]?.id;
-
-          if (optId) {
-            try {
-              const optRes = await fetch(`/api/nutrition/options/${optId}`, {
+        if (singleOptionId) {
+          try {
+            const optRes = await fetch(
+              `/api/nutrition/options/${singleOptionId}`,
+              {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
-              });
-              const optJson = await optRes.json();
-
-              if (!optJson.success) {
-                console.warn(
-                  "[Nutrition] Option macro sync failed:",
-                  optJson.error
-                );
               }
-            } catch (syncErr) {
-              console.warn("[Nutrition] Option macro sync error:", syncErr);
+            );
+            const optJson = await optRes.json();
+
+            if (!optJson.success) {
+              console.warn(
+                "[Nutrition] Option macro sync failed:",
+                optJson.error
+              );
             }
+          } catch (syncErr) {
+            console.warn("[Nutrition] Option macro sync error:", syncErr);
           }
         }
-
-        await refreshPlan();
-        setEditingMealMacros(null);
       } else {
         console.error("[Nutrition] Error updating meal macros:", result.error);
+        if (snapshot) setNutritionPlan(snapshot);
         alert(
           `Error al guardar macros: ${result.error || "Error desconocido"}`
         );
       }
     } catch (err) {
       console.error("[Nutrition] Error saving meal macros:", err);
+      if (snapshot) setNutritionPlan(snapshot);
       alert("Error al guardar macros. Por favor intenta de nuevo.");
     }
   };
@@ -2480,21 +2395,15 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
 
   // Day macros handlers
   const handleEditDayMacrosClick = (day: any) => {
-    setDayMacrosForm({
-      protein: day.protein?.toString() || "0",
-      carbs: day.carbs?.toString() || "0",
-      fats: day.fats?.toString() || "0",
-      calories: day.calories?.toString() || "0",
-    });
     setEditingDayMacros(day.id);
   };
 
-  const handleSaveDayMacros = async (dayId: string) => {
+  const handleSaveDayMacros = async (dayId: string, form: MacroFormValues) => {
     const payload = {
-      protein: parseFloat(dayMacrosForm.protein) || 0,
-      carbs: parseFloat(dayMacrosForm.carbs) || 0,
-      fats: parseFloat(dayMacrosForm.fats) || 0,
-      calories: parseFloat(dayMacrosForm.calories) || 0,
+      protein: parseFloat(form.protein) || 0,
+      carbs: parseFloat(form.carbs) || 0,
+      fats: parseFloat(form.fats) || 0,
+      calories: parseFloat(form.calories) || 0,
     };
 
     // Optimistically update UI immediately
@@ -3288,49 +3197,14 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                               </div>
                               <div className="flex-1">
                                 {editingDayName === day.id ? (
-                                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-                                  <div
-                                    className="flex items-center gap-2"
-                                    onClick={(e) => e.preventDefault()}
-                                  >
-                                    {}
-                                    <Input
-                                      autoFocus
-                                      className="max-w-xs"
-                                      size="sm"
-                                      value={editingDayNameValue}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter")
-                                          handleSaveDayName(day.id);
-                                        if (e.key === "Escape")
-                                          setEditingDayName(null);
-                                      }}
-                                      onValueChange={setEditingDayNameValue}
-                                    />
-                                    <Button
-                                      isIconOnly
-                                      color="success"
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() => handleSaveDayName(day.id)}
-                                    >
-                                      <Icon
-                                        icon="solar:check-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                    <Button
-                                      isIconOnly
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() => setEditingDayName(null)}
-                                    >
-                                      <Icon
-                                        icon="solar:close-circle-bold"
-                                        width={18}
-                                      />
-                                    </Button>
-                                  </div>
+                                  <InlineNameEditor
+                                    initialValue={day.day_label}
+                                    variant="day"
+                                    onCancel={() => setEditingDayName(null)}
+                                    onSave={(value) =>
+                                      handleSaveDayName(day.id, value)
+                                    }
+                                  />
                                 ) : (
                                   <h3 className="text-xl font-bold text-gray-900">
                                     {day.day_label}
@@ -3541,74 +3415,20 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                             </div>
 
                             {editingDayMacros === day.id ? (
-                              <div className="p-3 bg-white rounded-lg border border-purple-200">
-                                <div className="grid grid-cols-4 gap-2 mb-2">
-                                  <Input
-                                    label="Proteína (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={dayMacrosForm.protein}
-                                    onValueChange={(value) =>
-                                      setDayMacrosForm({
-                                        ...dayMacrosForm,
-                                        protein: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Carbohidratos (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={dayMacrosForm.carbs}
-                                    onValueChange={(value) =>
-                                      setDayMacrosForm({
-                                        ...dayMacrosForm,
-                                        carbs: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Grasas (g)"
-                                    size="sm"
-                                    type="number"
-                                    value={dayMacrosForm.fats}
-                                    onValueChange={(value) =>
-                                      setDayMacrosForm({
-                                        ...dayMacrosForm,
-                                        fats: value,
-                                      })
-                                    }
-                                  />
-                                  <Input
-                                    label="Calorías"
-                                    size="sm"
-                                    type="number"
-                                    value={dayMacrosForm.calories}
-                                    onValueChange={(value) =>
-                                      setDayMacrosForm({
-                                        ...dayMacrosForm,
-                                        calories: value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                                <div className="flex gap-2 justify-end">
-                                  <Button
-                                    className="bg-black text-white hover:bg-slate-800"
-                                    size="sm"
-                                    onPress={() => handleSaveDayMacros(day.id)}
-                                  >
-                                    Guardar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="flat"
-                                    onPress={() => setEditingDayMacros(null)}
-                                  >
-                                    Cancelar
-                                  </Button>
-                                </div>
-                              </div>
+                              <InlineMacrosEditor
+                                gridClassName="grid grid-cols-4 gap-2 mb-2"
+                                initial={{
+                                  protein: day.protein?.toString() || "0",
+                                  carbs: day.carbs?.toString() || "0",
+                                  fats: day.fats?.toString() || "0",
+                                  calories: day.calories?.toString() || "0",
+                                }}
+                                wrapperClassName="p-3 bg-white rounded-lg border border-purple-200"
+                                onCancel={() => setEditingDayMacros(null)}
+                                onSave={(values) =>
+                                  handleSaveDayMacros(day.id, values)
+                                }
+                              />
                             ) : (
                               <div>
                                 {(() => {
@@ -3811,74 +3631,23 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                         />
                                                         {editingMealName ===
                                                         meal.id ? (
-                                                          <div
-                                                            className="flex items-center gap-2 flex-1"
-                                                            onClick={(e) =>
-                                                              e.stopPropagation()
+                                                          <InlineNameEditor
+                                                            initialValue={
+                                                              meal.label
                                                             }
-                                                          >
-                                                            {}
-                                                            <Input
-                                                              autoFocus
-                                                              className="max-w-xs"
-                                                              size="sm"
-                                                              value={
-                                                                editingMealNameValue
-                                                              }
-                                                              onKeyDown={(
-                                                                e
-                                                              ) => {
-                                                                if (
-                                                                  e.key ===
-                                                                  "Enter"
-                                                                )
-                                                                  handleSaveMealName(
-                                                                    meal.id
-                                                                  );
-                                                                if (
-                                                                  e.key ===
-                                                                  "Escape"
-                                                                )
-                                                                  setEditingMealName(
-                                                                    null
-                                                                  );
-                                                              }}
-                                                              onValueChange={
-                                                                setEditingMealNameValue
-                                                              }
-                                                            />
-                                                            <Button
-                                                              isIconOnly
-                                                              color="success"
-                                                              size="sm"
-                                                              variant="flat"
-                                                              onPress={() =>
-                                                                handleSaveMealName(
-                                                                  meal.id
-                                                                )
-                                                              }
-                                                            >
-                                                              <Icon
-                                                                icon="solar:check-circle-bold"
-                                                                width={18}
-                                                              />
-                                                            </Button>
-                                                            <Button
-                                                              isIconOnly
-                                                              size="sm"
-                                                              variant="flat"
-                                                              onPress={() =>
-                                                                setEditingMealName(
-                                                                  null
-                                                                )
-                                                              }
-                                                            >
-                                                              <Icon
-                                                                icon="solar:close-circle-bold"
-                                                                width={18}
-                                                              />
-                                                            </Button>
-                                                          </div>
+                                                            variant="meal"
+                                                            onCancel={() =>
+                                                              setEditingMealName(
+                                                                null
+                                                              )
+                                                            }
+                                                            onSave={(value) =>
+                                                              handleSaveMealName(
+                                                                meal.id,
+                                                                value
+                                                              )
+                                                            }
+                                                          />
                                                         ) : (
                                                           <h4 className="font-bold text-gray-900 truncate">
                                                             {meal.label}
@@ -4079,100 +3848,24 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                     <>
                                                       {editingMealMacros ===
                                                       meal.id ? (
-                                                        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                                          <div className="grid grid-cols-4 gap-2 mb-2">
-                                                            <Input
-                                                              label="Proteína (g)"
-                                                              size="sm"
-                                                              type="number"
-                                                              value={
-                                                                macrosForm.protein
-                                                              }
-                                                              onValueChange={(
-                                                                value
-                                                              ) =>
-                                                                setMacrosForm({
-                                                                  ...macrosForm,
-                                                                  protein:
-                                                                    value,
-                                                                })
-                                                              }
-                                                            />
-                                                            <Input
-                                                              label="Carbohidratos (g)"
-                                                              size="sm"
-                                                              type="number"
-                                                              value={
-                                                                macrosForm.carbs
-                                                              }
-                                                              onValueChange={(
-                                                                value
-                                                              ) =>
-                                                                setMacrosForm({
-                                                                  ...macrosForm,
-                                                                  carbs: value,
-                                                                })
-                                                              }
-                                                            />
-                                                            <Input
-                                                              label="Grasas (g)"
-                                                              size="sm"
-                                                              type="number"
-                                                              value={
-                                                                macrosForm.fats
-                                                              }
-                                                              onValueChange={(
-                                                                value
-                                                              ) =>
-                                                                setMacrosForm({
-                                                                  ...macrosForm,
-                                                                  fats: value,
-                                                                })
-                                                              }
-                                                            />
-                                                            <Input
-                                                              label="Calorías"
-                                                              size="sm"
-                                                              type="number"
-                                                              value={
-                                                                macrosForm.calories
-                                                              }
-                                                              onValueChange={(
-                                                                value
-                                                              ) =>
-                                                                setMacrosForm({
-                                                                  ...macrosForm,
-                                                                  calories:
-                                                                    value,
-                                                                })
-                                                              }
-                                                            />
-                                                          </div>
-                                                          <div className="flex gap-2 justify-end">
-                                                            <Button
-                                                              className="bg-black text-white hover:bg-slate-800"
-                                                              size="sm"
-                                                              onPress={() =>
-                                                                handleSaveMealMacros(
-                                                                  meal.id
-                                                                )
-                                                              }
-                                                            >
-                                                              Guardar
-                                                            </Button>
-                                                            <Button
-                                                              size="sm"
-                                                              variant="flat"
-                                                              onPress={() =>
-                                                                setEditingMealMacros(
-                                                                  null
-                                                                )
-                                                              }
-                                                            >
-                                                              Cancelar
-                                                            </Button>
-                                                          </div>
-                                                        </div>
+                                                        <InlineMacrosEditor
+                                                          gridClassName="grid grid-cols-4 gap-2 mb-2"
+                                                          initial={mealMacrosInitial(
+                                                            meal
+                                                          )}
+                                                          wrapperClassName="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                                                          onCancel={() =>
+                                                            setEditingMealMacros(
+                                                              null
+                                                            )
+                                                          }
+                                                          onSave={(values) =>
+                                                            handleSaveMealMacros(
+                                                              meal.id,
+                                                              values
+                                                            )
+                                                          }
+                                                        />
                                                       ) : (
                                                         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                                                         <div
@@ -4505,60 +4198,25 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                             <div className="min-w-[200px] flex-1 space-y-3">
                                                               {editingOptionName ===
                                                               activeOption.id ? (
-                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                  <Input
-                                                                    className="max-w-xs"
-                                                                    label="Nombre"
-                                                                    size="sm"
-                                                                    value={
-                                                                      editingOptionNameValue
-                                                                    }
-                                                                    onKeyDown={(
-                                                                      e
-                                                                    ) => {
-                                                                      if (
-                                                                        e.key ===
-                                                                        "Enter"
-                                                                      )
-                                                                        handleSaveOptionName(
-                                                                          activeOption.id
-                                                                        );
-                                                                      if (
-                                                                        e.key ===
-                                                                        "Escape"
-                                                                      )
-                                                                        setEditingOptionName(
-                                                                          null
-                                                                        );
-                                                                    }}
-                                                                    onValueChange={
-                                                                      setEditingOptionNameValue
-                                                                    }
-                                                                  />
-                                                                  <Button
-                                                                    color="success"
-                                                                    size="sm"
-                                                                    variant="flat"
-                                                                    onPress={() =>
-                                                                      handleSaveOptionName(
-                                                                        activeOption.id
-                                                                      )
-                                                                    }
-                                                                  >
-                                                                    Guardar
-                                                                  </Button>
-                                                                  <Button
-                                                                    size="sm"
-                                                                    variant="flat"
-                                                                    onPress={() =>
-                                                                      setEditingOptionName(
-                                                                        null
-                                                                      )
-                                                                    }
-                                                                  >
-                                                                    Cancelar
-                                                                  </Button>
-                                                                </div>
+                                                                <InlineNameEditor
+                                                                  initialValue={
+                                                                    activeOption.name
+                                                                  }
+                                                                  variant="option"
+                                                                  onCancel={() =>
+                                                                    setEditingOptionName(
+                                                                      null
+                                                                    )
+                                                                  }
+                                                                  onSave={(
+                                                                    value
+                                                                  ) =>
+                                                                    handleSaveOptionName(
+                                                                      activeOption.id,
+                                                                      value
+                                                                    )
+                                                                  }
+                                                                />
                                                               ) : (
                                                                 <div className="flex items-center gap-2">
                                                                   <span className="font-semibold text-gray-900">
@@ -4577,9 +4235,6 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                                       setEditingOptionName(
                                                                         activeOption.id
                                                                       );
-                                                                      setEditingOptionNameValue(
-                                                                        activeOption.name
-                                                                      );
                                                                     }}
                                                                   >
                                                                     <Icon
@@ -4591,117 +4246,26 @@ export default function NutritionTab({ clientId }: NutritionTabProps) {
                                                               )}
                                                               {editingOptionMacrosId ===
                                                               activeOption.id ? (
-                                                                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                                                                  <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                                                    <Input
-                                                                      label="Proteína (g)"
-                                                                      size="sm"
-                                                                      type="number"
-                                                                      value={
-                                                                        optionMacrosForm.protein
-                                                                      }
-                                                                      onValueChange={(
-                                                                        value
-                                                                      ) =>
-                                                                        setOptionMacrosForm(
-                                                                          (
-                                                                            f
-                                                                          ) => ({
-                                                                            ...f,
-                                                                            protein:
-                                                                              value,
-                                                                          })
-                                                                        )
-                                                                      }
-                                                                    />
-                                                                    <Input
-                                                                      label="Carbohidratos (g)"
-                                                                      size="sm"
-                                                                      type="number"
-                                                                      value={
-                                                                        optionMacrosForm.carbs
-                                                                      }
-                                                                      onValueChange={(
-                                                                        value
-                                                                      ) =>
-                                                                        setOptionMacrosForm(
-                                                                          (
-                                                                            f
-                                                                          ) => ({
-                                                                            ...f,
-                                                                            carbs:
-                                                                              value,
-                                                                          })
-                                                                        )
-                                                                      }
-                                                                    />
-                                                                    <Input
-                                                                      label="Grasas (g)"
-                                                                      size="sm"
-                                                                      type="number"
-                                                                      value={
-                                                                        optionMacrosForm.fats
-                                                                      }
-                                                                      onValueChange={(
-                                                                        value
-                                                                      ) =>
-                                                                        setOptionMacrosForm(
-                                                                          (
-                                                                            f
-                                                                          ) => ({
-                                                                            ...f,
-                                                                            fats: value,
-                                                                          })
-                                                                        )
-                                                                      }
-                                                                    />
-                                                                    <Input
-                                                                      label="Calorías"
-                                                                      size="sm"
-                                                                      type="number"
-                                                                      value={
-                                                                        optionMacrosForm.calories
-                                                                      }
-                                                                      onValueChange={(
-                                                                        value
-                                                                      ) =>
-                                                                        setOptionMacrosForm(
-                                                                          (
-                                                                            f
-                                                                          ) => ({
-                                                                            ...f,
-                                                                            calories:
-                                                                              value,
-                                                                          })
-                                                                        )
-                                                                      }
-                                                                    />
-                                                                  </div>
-                                                                  <div className="flex justify-end gap-2">
-                                                                    <Button
-                                                                      className="bg-black text-white hover:bg-slate-800"
-                                                                      size="sm"
-                                                                      onPress={() =>
-                                                                        handleSaveOptionMacros(
-                                                                          activeOption.id
-                                                                        )
-                                                                      }
-                                                                    >
-                                                                      Guardar
-                                                                    </Button>
-                                                                    <Button
-                                                                      size="sm"
-                                                                      variant="flat"
-                                                                      onPress={() =>
-                                                                        setEditingOptionMacrosId(
-                                                                          null
-                                                                        )
-                                                                      }
-                                                                    >
-                                                                      Cancelar
-                                                                    </Button>
-                                                                  </div>
-                                                                </div>
+                                                                <InlineMacrosEditor
+                                                                  gridClassName="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                                                                  initial={optionMacrosInitial(
+                                                                    activeOption
+                                                                  )}
+                                                                  wrapperClassName="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                                                                  onCancel={() =>
+                                                                    setEditingOptionMacrosId(
+                                                                      null
+                                                                    )
+                                                                  }
+                                                                  onSave={(
+                                                                    values
+                                                                  ) =>
+                                                                    handleSaveOptionMacros(
+                                                                      activeOption.id,
+                                                                      values
+                                                                    )
+                                                                  }
+                                                                />
                                                               ) : (
                                                                 <div
                                                                   className="flex cursor-pointer flex-wrap items-center gap-2 rounded-lg p-2 transition-colors hover:bg-gray-50"

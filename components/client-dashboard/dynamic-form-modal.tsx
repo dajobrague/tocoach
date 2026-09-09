@@ -30,6 +30,7 @@ import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/cond
 // La heurística de pasos vive en lib/forms para que el server aplique la
 // misma regla (relax del required cuando el cliente no tiene NEAT cards).
 import { isStepsQuestion } from "@/lib/forms/neat-steps";
+import { dropPagesNotDue } from "@/lib/forms/page-cadence";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
 import { isEmptyAnswer } from "@/lib/forms/validation";
 import {
@@ -362,9 +363,18 @@ export function DynamicFormModal({
         const raw = data.config.questions_config;
 
         // Normalize into structured format
-        const structured: FormConfigData = isStructuredConfig(raw)
+        const normalizedConfig: FormConfigData = isStructuredConfig(raw)
           ? raw
           : normalizeFormConfig(Array.isArray(raw) ? raw : []);
+        // Check-ins: pages with a cadence (`every_n`) only appear on their
+        // period. Same helper (and schedule) as the server's validation.
+        const structured =
+          formType === "checkins"
+            ? dropPagesNotDue(
+                normalizedConfig,
+                scheduleProp ?? data.schedule ?? null
+              )
+            : normalizedConfig;
 
         // Filter to only enabled questions. NEAT-based filtering (steps
         // question for clients without NEAT cards) is NOT applied here —

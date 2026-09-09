@@ -254,31 +254,68 @@ export function ProgramHeaderCard({
               onAction={(key) => {
                 if (key === "edit") onEdit();
                 else if (key === "template") onSaveAsTemplate();
+                else if (key === "hide") setDeactivateOpen(true);
+                else if (key === "show") onReactivate();
                 else if (key === "delete") onDelete();
               }}
             >
-              <DropdownItem
-                key="edit"
-                startContent={<Icon icon="solar:pen-linear" width={16} />}
-              >
-                Editar
-              </DropdownItem>
-              <DropdownItem
-                key="template"
-                startContent={<Icon icon="solar:diskette-linear" width={16} />}
-              >
-                Guardar como plantilla
-              </DropdownItem>
-              <DropdownItem
-                key="delete"
-                className="text-danger"
-                color="danger"
-                startContent={
-                  <Icon icon="solar:trash-bin-trash-linear" width={16} />
-                }
-              >
-                Eliminar
-              </DropdownItem>
+              {/* Ruta explícita al pause/activate ("hide"/"show"): el chip
+                  clicable del header es invisible como affordance (feedback
+                  Pablo Carboneras ago-2026: trainers "eliminaban" del
+                  microciclo creyendo que eso lo ocultaba al cliente). Array
+                  spread porque las colecciones de HeroUI no aceptan null. */}
+              {[
+                <DropdownItem
+                  key="edit"
+                  startContent={<Icon icon="solar:pen-linear" width={16} />}
+                >
+                  Editar
+                </DropdownItem>,
+                <DropdownItem
+                  key="template"
+                  startContent={
+                    <Icon icon="solar:diskette-linear" width={16} />
+                  }
+                >
+                  Guardar como plantilla
+                </DropdownItem>,
+                ...(program.status === "active"
+                  ? [
+                      <DropdownItem
+                        key="hide"
+                        description="Pausa el programa; el cliente deja de verlo"
+                        startContent={
+                          <Icon icon="solar:eye-closed-linear" width={16} />
+                        }
+                      >
+                        Ocultar al cliente
+                      </DropdownItem>,
+                    ]
+                  : []),
+                ...(program.status === "paused"
+                  ? [
+                      <DropdownItem
+                        key="show"
+                        description="Reactiva el programa; el cliente vuelve a verlo"
+                        startContent={
+                          <Icon icon="solar:eye-linear" width={16} />
+                        }
+                      >
+                        Mostrar al cliente
+                      </DropdownItem>,
+                    ]
+                  : []),
+                <DropdownItem
+                  key="delete"
+                  className="text-danger"
+                  color="danger"
+                  startContent={
+                    <Icon icon="solar:trash-bin-trash-linear" width={16} />
+                  }
+                >
+                  Eliminar
+                </DropdownItem>,
+              ]}
             </DropdownMenu>
           </Dropdown>
         </div>
@@ -327,9 +364,10 @@ export function ProgramHeaderCard({
               <span className="font-semibold text-gray-900">
                 {program.name}
               </span>{" "}
-              pasará a pausado: tu cliente lo verá en &ldquo;Pausados&rdquo; y
-              podrá reactivarlo cuando quiera (igual que tú desde el selector).
-              Las sesiones, ejercicios e historial se conservan.
+              pasará a pausado: sus sesiones desaparecen de la pantalla de
+              entrenamiento de tu cliente (lo verá solo como
+              &ldquo;Pausado&rdquo; en su lista de programas). Solo tú puedes
+              reactivarlo. Las sesiones, ejercicios e historial se conservan.
             </p>
           </ModalBody>
           <ModalFooter>

@@ -54,18 +54,24 @@ export function DayNutritionPanel({
       dot: "bg-blue-500",
       bar: "bg-blue-500",
       value: pct(totals.protein_g, target.protein_g),
+      grams: totals.protein_g,
+      targetGrams: target.protein_g,
     },
     {
       label: "Carbohidratos",
       dot: "bg-emerald-500",
       bar: "bg-emerald-500",
       value: pct(totals.carbs_g, target.carbs_g),
+      grams: totals.carbs_g,
+      targetGrams: target.carbs_g,
     },
     {
       label: "Grasas",
       dot: "bg-amber-500",
       bar: "bg-amber-500",
       value: pct(totals.fat_g, target.fat_g),
+      grams: totals.fat_g,
+      targetGrams: target.fat_g,
     },
   ];
 
@@ -146,7 +152,14 @@ export function DayNutritionPanel({
                 {macro.label}
               </span>
               <ProgressBar color={macro.bar} value={macro.value} />
-              <span className="w-9 shrink-0 text-right text-xs font-medium text-default-500 tabular-nums">
+              <span className="w-24 shrink-0 text-right text-xs font-medium text-default-500 tabular-nums">
+                {Math.round(macro.grams)}
+                <span className="font-normal text-default-400">
+                  {" / "}
+                  {Math.round(macro.targetGrams)} g
+                </span>
+              </span>
+              <span className="w-9 shrink-0 text-right text-xs text-default-400 tabular-nums">
                 {macro.value}%
               </span>
             </div>

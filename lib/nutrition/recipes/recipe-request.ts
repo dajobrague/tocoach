@@ -14,6 +14,7 @@ import type {
 import { NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
+import { parseFolderId, parseFolderParam } from "@/lib/library/parse-folder";
 import { isNutritionV2TrainerEnabled } from "@/lib/nutrition/feature-flag";
 import { pickNutrients } from "@/lib/nutrition/recipes/nutrient-snapshot";
 
@@ -90,11 +91,18 @@ export type ParseResult<T> =
 export function parseListFilter(params: URLSearchParams): RecipeListFilter {
   const filter: RecipeListFilter = {};
   const status = params.get("status");
-  const tag = params.get("tag");
+  // Repeatable: ?tag=a&tag=b means the recipe must carry both.
+  const tags = params
+    .getAll("tag")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
   const q = params.get("q");
+  // ?folder=root | ?folder=<id>; composes with ?tag= (folder AND tags).
+  const folderId = parseFolderParam(params);
 
   if (isRecipeStatus(status)) filter.status = status;
-  if (tag !== null && tag.length > 0) filter.mealType = tag;
+  if (tags.length > 0) filter.mealTypes = tags;
+  if (folderId !== undefined) filter.folderId = folderId;
   if (q !== null && q.trim().length > 0) filter.query = q.trim();
 
   return filter;
@@ -112,8 +120,9 @@ export function parseCreateInput(
   }
 
   const input: RecipeCreateInput = { name };
+  const folder = applyShellFields(record, input);
 
-  applyShellFields(record, input);
+  if (folder?.ok === false) return folder;
 
   return { ok: true, value: input };
 }
@@ -140,16 +149,20 @@ export function parseUpdateInput(
     input.name = name;
   }
 
-  applyShellFields(record, input);
+  const folder = applyShellFields(record, input);
+
+  if (folder?.ok === false) return folder;
 
   return { ok: true, value: input };
 }
 
+/** Copies the optional shell fields; returns the folder_id parse result so
+ *  callers can reject a malformed one (the only field that can fail). */
 function applyShellFields(
   record: Record<string, unknown> | null,
   input: RecipeCreateInput | RecipeUpdateInput
-): void {
-  if (record === null) return;
+): ReturnType<typeof parseFolderId> {
+  if (record === null) return undefined;
 
   const description = record["description"];
   const instructions = record["instructions"];
@@ -164,6 +177,14 @@ function applyShellFields(
   if (typeof prep === "number") input.prepTimeMin = prep;
   if (typeof cook === "number") input.cookTimeMin = cook;
   if (isRecipeStatus(status)) input.status = status;
+
+  // Partial: a { folder_id } body (the folder view's "move to") touches
+  // nothing else.
+  const folder = parseFolderId(record["folder_id"]);
+
+  if (folder?.ok === true) input.folderId = folder.folderId;
+
+  return folder;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

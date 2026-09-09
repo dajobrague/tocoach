@@ -1,9 +1,11 @@
 import type { ClientCycleView } from "@/lib/nutrition/cycles/cycle-day";
+import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
 import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { withSelection } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
 // ─── Date helpers ───────────────────────────────────────────────────────────
@@ -198,43 +200,9 @@ export function usePrograms() {
   });
 }
 
-// Activa un programa pausado sin tocar el resto (multi-activo válido).
-// Invalida todo lo derivado de los programas activos: plan del día,
-// sesiones disponibles, calendario.
-export function useActivateProgram() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (clientProgramId: string) => {
-      const response = await clientFetch("/api/client/programs/activate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientProgramId }),
-      });
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Error al activar el programa");
-      }
-
-      return data as { activatedId: string; demotedIds: string[] };
-    },
-    onSuccess: () => {
-      const affected: string[][] = [
-        ["client", "programs"],
-        ["client", "available-sessions"],
-        ["client", "microcycle"],
-        ["client", "resolved-day"],
-        ["client", "calendar"],
-        ["client", "scheduledSessions"],
-      ];
-
-      for (const queryKey of affected) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
-    },
-  });
-}
+// useActivateProgram fue retirado (ago 2026): activar/pausar programas es
+// exclusivo del trainer — pausar es su forma de OCULTAR un programa al
+// cliente. El endpoint /api/client/programs/activate responde 403.
 
 export function useExerciseLogs(clientId: string) {
   return useQuery({
@@ -368,8 +336,26 @@ async function postMealCycleSelection(input: {
   }
 }
 
+/** The options of `slotId` in a cached day list (empty when not cached). */
+function findSlotOptions(
+  days: readonly {
+    slots: readonly { id: string; options: MealSlotOptionRow[] }[];
+  }[],
+  slotId: string
+): MealSlotOptionRow[] {
+  for (const day of days) {
+    const slot = day.slots.find((candidate) => candidate.id === slotId);
+
+    if (slot !== undefined) {
+      return slot.options;
+    }
+  }
+
+  return [];
+}
+
 /**
- * Persist the client's option choice for a meal slot, optimistically marking it
+ * Persist the client's option choice for a meal component, optimistically marking it
  * in the cached meal-cycle view so the UI updates instantly. Rolls back on
  * error and re-syncs from the server on settle.
  */
@@ -389,7 +375,12 @@ export function useSetMealCycleSelection() {
       if (previous) {
         queryClient.setQueryData<ClientCycleView | null>(MEAL_CYCLE_KEY, {
           ...previous,
-          selections: { ...previous.selections, [slotId]: optionId },
+          selections: withSelection(
+            previous.selections,
+            findSlotOptions(previous.days, slotId),
+            slotId,
+            optionId
+          ),
         });
       }
 
@@ -403,7 +394,12 @@ export function useSetMealCycleSelection() {
         if (week) {
           queryClient.setQueryData<ClientWeek | null>(key, {
             ...week,
-            selections: { ...week.selections, [slotId]: optionId },
+            selections: withSelection(
+              week.selections,
+              findSlotOptions(week.days, slotId),
+              slotId,
+              optionId
+            ),
           });
         }
       }

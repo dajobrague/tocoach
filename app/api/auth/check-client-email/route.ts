@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { hasClientPassword } from "@/lib/auth/client-password";
 
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
@@ -46,7 +47,9 @@ export async function POST(request: NextRequest) {
     // Use ilike for case-insensitive match to handle legacy un-normalized emails
     const { data: clients, error } = await supabase
       .from("clients")
-      .select("id, email, name, last_name, password, status, tenant")
+      .select(
+        "id, email, name, last_name, password, password_hash, status, tenant"
+      )
       .ilike("email", normalizedEmail)
       .eq("tenant", tenant.trainer_id);
 
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hasPassword = !!client.password && client.password.trim() !== "";
+    const hasPassword = hasClientPassword(client);
 
     return NextResponse.json({
       exists: true,

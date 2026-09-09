@@ -147,8 +147,8 @@ export function deleteOverride(
 export interface ClientActivity {
   /** Date ("YYYY-MM-DD") → menu (day index) the client chose to follow. */
   choices: Record<string, number>;
-  /** The client's current standing alternative picks (slotId → optionId). */
-  selections: Record<string, string>;
+  /** The client's current standing alternative picks (slotId → optionIds, one per component). */
+  selections: Record<string, string[]>;
 }
 
 export function fetchClientActivity(

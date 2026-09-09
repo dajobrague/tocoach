@@ -122,12 +122,17 @@ interface FormConfigEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
   /** Called after a question is added (e.g. to show save reminder toast) */
   onQuestionAdded?: () => void;
+  /** Check-ins only: expose the per-page cadence ("cada N check-ins"). */
+  showPageCadence?: boolean;
 }
+
+const PAGE_CADENCE_OPTIONS = [1, 2, 3, 4, 6, 8] as const;
 
 export default function FormConfigEditor({
   initialConfig,
   onChange,
   onDirtyChange,
+  showPageCadence = false,
   onQuestionAdded,
 }: FormConfigEditorProps) {
   // Normalize once and keep as "saved" snapshot
@@ -286,6 +291,18 @@ export default function FormConfigEditor({
     emitChange({
       ...config,
       pages: config.pages.map((p) => (p.id === pageId ? { ...p, icon } : p)),
+    });
+  };
+
+  const updatePageCadence = (pageId: string, everyN: number) => {
+    emitChange({
+      ...config,
+      pages: config.pages.map((p) => {
+        if (p.id !== pageId) return p;
+        const { every_n: _drop, ...rest } = p;
+
+        return everyN > 1 ? { ...rest, every_n: everyN } : rest;
+      }),
     });
   };
 
@@ -748,6 +765,30 @@ export default function FormConfigEditor({
                   {enabledCount} de {totalCount} preguntas activas
                 </p>
               </div>
+            )}
+
+            {showPageCadence && selectedPage && (
+              <Select
+                disallowEmptySelection
+                aria-label="Frecuencia de esta página"
+                className="w-44"
+                selectedKeys={[String(selectedPage.every_n ?? 1)]}
+                size="sm"
+                title="Cada cuántos check-ins aparece esta página"
+                onSelectionChange={(keys) => {
+                  const key = Array.from(keys)[0];
+
+                  if (key !== undefined) {
+                    updatePageCadence(selectedPage.id, Number(key));
+                  }
+                }}
+              >
+                {PAGE_CADENCE_OPTIONS.map((n) => (
+                  <SelectItem key={String(n)}>
+                    {n === 1 ? "Cada check-in" : `Cada ${n} check-ins`}
+                  </SelectItem>
+                ))}
+              </Select>
             )}
           </div>
 

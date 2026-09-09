@@ -196,12 +196,13 @@ describe("buildClientCycleView", () => {
     });
   });
 
-  it("folds the client's selections into a slot → option map", () => {
+  it("folds the client's selections into a slot → option ids map", () => {
     const view = buildClientCycleView(tree, "2026-06-03", "UTC", [
       { slot_id: "slot-0-0", option_id: "opt-x" },
+      { slot_id: "slot-0-0", option_id: "opt-y" },
     ]);
 
-    expect(view.selections).toEqual({ "slot-0-0": "opt-x" });
+    expect(view.selections).toEqual({ "slot-0-0": ["opt-x", "opt-y"] });
   });
 
   it("defaults selections to an empty map when none are given", () => {

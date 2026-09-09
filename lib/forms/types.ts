@@ -12,6 +12,13 @@ export type QuestionType =
 export type FormType = "checkins" | "habits";
 
 /**
+ * Estrellas de una pregunta `rating`. El formulario del cliente pinta
+ * exactamente estas (dynamic-form-modal) y las gráficas deben usar el
+ * mismo máximo — no hay escala configurable por pregunta.
+ */
+export const RATING_MAX = 5;
+
+/**
  * Opción individual para preguntas de tipo `choice` / `multi_choice`.
  *
  * `id` se genera al crear la opción (vía `generateChoiceId`) y es INMUTABLE
@@ -81,6 +88,13 @@ export interface FormPage {
   title: string;
   icon: string; // iconify icon name, e.g. "solar:bolt-bold"
   order: number;
+  /**
+   * Check-ins only: show this page every N check-in periods (1 or absent =
+   * every check-in). Lets one weekly form carry a short weekly part and a
+   * longer part (photos, measurements) every 2/4 weeks — see
+   * `lib/forms/page-cadence.ts`.
+   */
+  every_n?: number;
 }
 
 export interface QuestionConfig {

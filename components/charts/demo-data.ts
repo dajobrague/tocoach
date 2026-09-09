@@ -21,7 +21,7 @@ import type {
 } from "@/lib/charts/types";
 
 import { generateBuckets } from "@/lib/charts/adapters/bucketing";
-import { DEFAULT_CHECKIN_SCHEDULE } from "@/lib/forms/types";
+import { DEFAULT_CHECKIN_SCHEDULE, RATING_MAX } from "@/lib/forms/types";
 
 // ─── Deterministic PRNG (mulberry32) ───────────────────────────────────────
 
@@ -107,6 +107,17 @@ const DEFAULT_PRESET: RandomWalkPreset = {
   max: 100,
 };
 
+// Valoraciones 1–RATING_MAX (feedback David sep-2026: la preview mostraba
+// "52,3" con cinco estrellas porque caía al preset 0–100).
+const RATING_PRESET: RandomWalkPreset = {
+  start: 4,
+  drift: 0,
+  noise: 1,
+  min: 1,
+  max: RATING_MAX,
+  decimals: 0,
+};
+
 const MACROS_PRESET = { protein: 130, carbs: 220, fats: 70 };
 const TRAINING_PRESET = { strengthPerWeek: 4, cardioPerWeek: 2 };
 
@@ -125,6 +136,8 @@ interface BucketSpec {
   label: string;
   /** Used to scale "intensity" of synth — e.g. weekly buckets get ~7×. */
   daysSpanned: number;
+  /** YYYY-MM-DD — solo en buckets daily (lo consume el renderer calendar). */
+  ymd?: string;
 }
 
 /**
@@ -193,7 +206,11 @@ export function buildDemoBucketSpecs(
     const spannedMs = w.end.getTime() - w.start.getTime();
     const daysSpanned = Math.max(1, Math.round(spannedMs / 86400000) + 1);
 
-    return { label: w.label, daysSpanned };
+    return {
+      label: w.label,
+      daysSpanned,
+      ...(w.ymd !== undefined ? { ymd: w.ymd } : {}),
+    };
   });
 }
 
@@ -206,10 +223,11 @@ export function buildDemoBucketSpecs(
  */
 export function synthesizeDemoBuckets(
   chart: ChartConfig,
-  source: ChartDataSource | undefined
+  source: ChartDataSource | undefined,
+  bucketCount = 12
 ): BucketedPoint[] {
   const rng = seededRandom(hashString(chart.id));
-  const specs = buildDemoBucketSpecs(chart.aggregation, 12);
+  const specs = buildDemoBucketSpecs(chart.aggregation, bucketCount);
 
   // Multi-dim sources (ring, stacked_bar) produce Record<seriesId, number>.
   if (source?.dimensions === "multi") {
@@ -227,20 +245,28 @@ export function synthesizeDemoBuckets(
       ];
     }
     if (source.id === "training_breakdown") {
-      // stacked_bar over time-bucketed periods.
+      // stacked_bar / calendar over time-bucketed periods. Para buckets
+      // diarios (calendar) el escalado /7 redondea cardio a 0 siempre, así
+      // que tiramos una moneda por día con la frecuencia semanal del preset.
       return specs.map((s) => {
+        const daily = s.daysSpanned === 1;
         const sFactor = Math.max(0.3, Math.min(1.5, 0.7 + rng() * 0.7));
         const cFactor = Math.max(0.0, Math.min(1.5, rng() * 1.2));
-        const strength = Math.round(
-          (TRAINING_PRESET.strengthPerWeek * s.daysSpanned * sFactor) / 7
-        );
-        const cardio = Math.round(
-          (TRAINING_PRESET.cardioPerWeek * s.daysSpanned * cFactor) / 7
-        );
+        const strength = daily
+          ? Number(rng() < TRAINING_PRESET.strengthPerWeek / 7)
+          : Math.round(
+              (TRAINING_PRESET.strengthPerWeek * s.daysSpanned * sFactor) / 7
+            );
+        const cardio = daily
+          ? Number(rng() < TRAINING_PRESET.cardioPerWeek / 7)
+          : Math.round(
+              (TRAINING_PRESET.cardioPerWeek * s.daysSpanned * cFactor) / 7
+            );
 
         return {
           label: s.label,
           value: { strength, cardio },
+          ...(s.ymd !== undefined ? { ymd: s.ymd } : {}),
         };
       });
     }
@@ -252,7 +278,10 @@ export function synthesizeDemoBuckets(
   // 1-D path — random walk inside the preset's [min, max] band.
   const presetKey =
     chart.source.kind === "catalog" ? chart.source.id : "default";
-  const preset = PRESETS[presetKey] ?? DEFAULT_PRESET;
+  const preset =
+    source?.rating === true
+      ? RATING_PRESET
+      : (PRESETS[presetKey] ?? DEFAULT_PRESET);
   let v = preset.start;
 
   return specs.map((s) => {
