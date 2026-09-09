@@ -18,6 +18,7 @@ export interface MockClient {
   sex?: "male" | "female" | null;
   heightCm?: number | null;
   nationalId?: string;
+  lastLoginAt?: string | null;
   tenantSlug?: string;
   location?: {
     city?: string;

@@ -98,7 +98,7 @@ CREATE TABLE trainer_clients (
 #### Trainer Login
 
 ```typescript
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 async function loginTrainer(email: string, password: string) {
   const supabase = createClient(
@@ -162,7 +162,10 @@ async function verifySession(token: string) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
 
   if (error || !user) {
     throw new Error("Invalid session");
@@ -241,14 +244,14 @@ CREATE POLICY "Clients can view their assigned programs" ON programs
 ### Client Service Example
 
 ```typescript
-import { createServerSupabaseClient } from '@/lib/clients/supabase-server';
+import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
 
 export class ClientService {
   private supabase = createServerSupabaseClient();
 
   async createClientProfile(data: CreateClientProfileData) {
     const { data: profile, error } = await this.supabase
-      .from('client_profiles')
+      .from("client_profiles")
       .insert(data)
       .select()
       .single();
@@ -259,13 +262,15 @@ export class ClientService {
 
   async getClientsForTrainer(trainerId: string) {
     const { data, error } = await this.supabase
-      .from('trainer_clients')
-      .select(`
+      .from("trainer_clients")
+      .select(
+        `
         *,
         client:client_profiles(*)
-      `)
-      .eq('trainer_id', trainerId)
-      .eq('relationship_status', 'active');
+      `
+      )
+      .eq("trainer_id", trainerId)
+      .eq("relationship_status", "active");
 
     if (error) throw new Error(`Failed to get clients: ${error.message}`);
     return data;

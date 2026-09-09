@@ -69,7 +69,7 @@ function ClientProfileInner() {
   }, [clientId]);
 
   const handleBack = () => {
-    router.push("/trainer/dashboard?tab=clients");
+    router.push("/trainer/dashboard/clients");
   };
 
   const handleEditSuccess = () => {
@@ -81,7 +81,7 @@ function ClientProfileInner() {
   };
 
   const handleDeleteSuccess = () => {
-    router.push("/trainer/dashboard?tab=clients");
+    router.push("/trainer/dashboard/clients");
   };
 
   if (loading) {

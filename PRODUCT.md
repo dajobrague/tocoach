@@ -62,7 +62,7 @@ The trainer's own brand is the product surface, not TopCoach's. Every tenant sup
 ## Product Principles
 
 1. **The tabs are the product; the frame is not.** Persistent chrome must justify every pixel it takes from the work area, because GHL already took the first slice.
-2. **Trainers want the whole client on screen, not a drill-down.** They asked for identity, goals, physical facts _and_ contact all visible at once — the answer is density and hierarchy, never a "view more" that hides facts.
+2. **Identity is permanent; the rest is on demand.** Asked in the abstract, trainers want every fact visible at once; shown the result, they chose a collapsed ficha (Sep 9). Confirming _which client you are on_ — avatar, name, status, goals — is always on screen. Physical facts and contact fold behind a "Ficha" toggle that remembers its state per trainer. Treat the seen-it verdict as the real requirement, not the stated one.
 3. **Correct under any tenant palette.** A design is only done when it survives a dark brand, a pale brand, and a legacy partial theme without a hardcoded fallback.
 4. **Semantic tokens or nothing.** Color literals are a regression, not a shortcut.
 5. **Design for tablet-up, not phone.** Narrow means ~768px, not 375px; effort spent on phone layouts for trainer screens is effort spent on a surface nobody uses.

@@ -1,22 +1,22 @@
 # Biblioteca: separar etiquetas de carpetas — Plan · 2026-09-07
 
-> **Sustituye** el modelo "carpeta = etiqueta" de las Fases C (C2–C4) y D (D2–D3) del plan del 2 de septiembre. Nada de eso está desplegado; se rehace antes del merge. Feedback de David tras probar en local: *"los tags deben ser una cosa, las carpetas otra; si creamos una carpeta no puede estar dentro de la lista de tags; y debe haber una manera más fácil de crear tags. Tanto para entrenamientos como ejercicios y nutrición."*
+> **Sustituye** el modelo "carpeta = etiqueta" de las Fases C (C2–C4) y D (D2–D3) del plan del 2 de septiembre. Nada de eso está desplegado; se rehace antes del merge. Feedback de David tras probar en local: _"los tags deben ser una cosa, las carpetas otra; si creamos una carpeta no puede estar dentro de la lista de tags; y debe haber una manera más fácil de crear tags. Tanto para entrenamientos como ejercicios y nutrición."_
 
 **Rama:** `feat/library-tags-folders-split` (worktree `top_coach-library`), partida de `integration/jc-feedback-2026-09-02`.
 
 ## Decisiones cerradas por David (2026-09-07)
 
-| # | Decisión | Elección |
-|---|---|---|
-| 1 | Pertenencia a carpeta | **Una carpeta por elemento, como Google Drive.** Columna `folder_id`. Lo transversal ("vegano", "sin gluten") son etiquetas. |
-| 2 | Naturaleza de las etiquetas | **Lista gestionada por tenant** (`library_tags`). Una etiqueta existe aunque nadie la use. Panel "Gestionar etiquetas" por biblioteca. |
-| 3 | Datos existentes | **Mover a la carpeta y quitar la etiqueta homónima.** Reversible: la migración registra qué quitó. |
-| 4 | Dónde se crean | **Inline** (escribes y Enter crea al instante) **y** en el panel de gestión. Mismo componente en recetas, ejercicios y plantillas. |
+| #   | Decisión                    | Elección                                                                                                                               |
+| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Pertenencia a carpeta       | **Una carpeta por elemento, como Google Drive.** Columna `folder_id`. Lo transversal ("vegano", "sin gluten") son etiquetas.           |
+| 2   | Naturaleza de las etiquetas | **Lista gestionada por tenant** (`library_tags`). Una etiqueta existe aunque nadie la use. Panel "Gestionar etiquetas" por biblioteca. |
+| 3   | Datos existentes            | **Mover a la carpeta y quitar la etiqueta homónima.** Reversible: la migración registra qué quitó.                                     |
+| 4   | Dónde se crean              | **Inline** (escribes y Enter crea al instante) **y** en el panel de gestión. Mismo componente en recetas, ejercicios y plantillas.     |
 
 ## Modelo objetivo
 
 - **Carpetas**: `recipe_folders` y `program_folders` como hoy (jerarquía). Nuevo: `recipes.folder_id` y `programs.folder_id` (`uuid null`, FK `ON DELETE SET NULL`). Pertenencia = `folder_id`. Renombrar carpeta **no** toca etiquetas. Borrar carpeta: hijas a la raíz, elementos a la raíz. **Ejercicios no tienen carpetas** (JC).
-- **Etiquetas**: tabla `library_tags(id, tenant_host, kind ∈ recipe|exercise|program, name, created_at)`, única por `(tenant_host, kind, lower(name))`. Los elementos **siguen guardando nombres** en sus arrays (`recipes.meal_type_tags`, `exercises.tags`, `programs.tags`): conserva filtros `@>`, índices GIN y todas las queries actuales. El registro es la fuente de verdad de *qué etiquetas existen*; renombrar = registro + `array_replace` (RPCs `replace_recipe_tag` / `replace_program_tag` ya existentes; crear `replace_exercise_tag`).
+- **Etiquetas**: tabla `library_tags(id, tenant_host, kind ∈ recipe|exercise|program, name, created_at)`, única por `(tenant_host, kind, lower(name))`. Los elementos **siguen guardando nombres** en sus arrays (`recipes.meal_type_tags`, `exercises.tags`, `programs.tags`): conserva filtros `@>`, índices GIN y todas las queries actuales. El registro es la fuente de verdad de _qué etiquetas existen_; renombrar = registro + `array_replace` (RPCs `replace_recipe_tag` / `replace_program_tag` ya existentes; crear `replace_exercise_tag`).
 - **Invariantes**: una carpeta nunca aparece en sugerencias ni filtros de etiquetas; una etiqueta nunca crea ni implica una carpeta; un chip en una tarjeta es siempre una etiqueta.
 
 ## Migraciones (`20260907150000_*`, `20260907151000_*`) — se escriben y se aplican en LOCAL; prod por MCP tras prueba de David
@@ -45,11 +45,11 @@
 
 ## Dominios
 
-| Dominio | Etiquetas | Carpetas |
-|---|---|---|
-| Recetas | `meal_type_tags`, kind `recipe` | `recipe_folders` + `recipes.folder_id` |
-| Plantillas de entrenamiento | `programs.tags`, kind `program` | `program_folders` + `programs.folder_id` |
-| Ejercicios | `exercises.tags`, kind `exercise` | **ninguna** |
+| Dominio                     | Etiquetas                         | Carpetas                                 |
+| --------------------------- | --------------------------------- | ---------------------------------------- |
+| Recetas                     | `meal_type_tags`, kind `recipe`   | `recipe_folders` + `recipes.folder_id`   |
+| Plantillas de entrenamiento | `programs.tags`, kind `program`   | `program_folders` + `programs.folder_id` |
+| Ejercicios                  | `exercises.tags`, kind `exercise` | **ninguna**                              |
 
 Recetas deja de tener copias propias (`features/trainer/recipes/folder-browser.tsx`, `folder-tree.ts`, `use-folders.ts`): consume lo compartido.
 

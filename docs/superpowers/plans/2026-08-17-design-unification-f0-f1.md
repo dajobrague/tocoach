@@ -26,28 +26,28 @@
 
 ### Tabla de Mapeo Canónica (todas las tareas de reskin la aplican)
 
-| Legacy | Reemplazo | Nota |
-|---|---|---|
-| `bg-gray-50` (canvas de página) | `bg-background` | |
-| `bg-white` (cards/slabs) | `bg-content1` | |
-| `border-gray-100/200/300` | `border-default-100/200/300` | `divide-gray-100` → `divide-default-100` |
-| `text-gray-900` / `text-black` | `text-foreground` | |
-| `text-gray-700` | `text-default-700` | |
-| `text-gray-500/600` | `text-default-500` | |
-| `text-gray-400` | `text-default-400` | |
-| `bg-gray-50/100` (tiles/inset) | `bg-default-50` / `bg-default-100` | |
-| `text-blue-600`, `border-blue-500/600`, `bg-blue-600` (acentos) | `text-primary`, `border-primary`, `bg-primary` | |
-| `bg-blue-50 border-blue-100/200` (info cards) | `rounded-large border border-primary/25 bg-primary/5` + texto `text-default-600`/`text-foreground` | receta canónica: `nutrition-tab-switch.tsx:45-57` |
-| pills `bg-blue-50 text-blue-700 border-blue-200` | `<OutlineChip tone="primary">` | |
-| `bg-red-50 text-red-600` (botones) | HeroUI `color="danger" variant="flat"` sin className de color | |
-| cajas rojas `bg-red-50 border-red-200 text-red-700` | `border-danger/20 bg-danger/5` + `text-danger` | |
-| `bg-emerald-100 text-emerald-700` (estado ok) | `border-success/40 bg-success/10 text-success-700` o Chip `color="success" variant="flat"` | |
-| `bg-amber-100 text-amber-700` (estado pendiente) | `border-warning/40 bg-warning/10` análogo | |
-| `bg-purple-*` / `indigo` / pasteles decorativos | `bg-primary/10 text-primary` o `bg-default-100 text-default-600` según intención | |
-| `text-white` sobre botón de color | quitar (HeroUI pone foreground) o `text-primary-foreground` | |
-| spinner div `animate-spin rounded-full border-b-2 ...` | `<Spinner color="primary" />` de HeroUI | |
-| headings sin fuente | añadir `font-heading` a h1/h2/títulos de card | |
-| empty/error states ad-hoc | `<CenteredState icon título subtítulo action?>` | |
+| Legacy                                                          | Reemplazo                                                                                          | Nota                                              |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `bg-gray-50` (canvas de página)                                 | `bg-background`                                                                                    |                                                   |
+| `bg-white` (cards/slabs)                                        | `bg-content1`                                                                                      |                                                   |
+| `border-gray-100/200/300`                                       | `border-default-100/200/300`                                                                       | `divide-gray-100` → `divide-default-100`          |
+| `text-gray-900` / `text-black`                                  | `text-foreground`                                                                                  |                                                   |
+| `text-gray-700`                                                 | `text-default-700`                                                                                 |                                                   |
+| `text-gray-500/600`                                             | `text-default-500`                                                                                 |                                                   |
+| `text-gray-400`                                                 | `text-default-400`                                                                                 |                                                   |
+| `bg-gray-50/100` (tiles/inset)                                  | `bg-default-50` / `bg-default-100`                                                                 |                                                   |
+| `text-blue-600`, `border-blue-500/600`, `bg-blue-600` (acentos) | `text-primary`, `border-primary`, `bg-primary`                                                     |                                                   |
+| `bg-blue-50 border-blue-100/200` (info cards)                   | `rounded-large border border-primary/25 bg-primary/5` + texto `text-default-600`/`text-foreground` | receta canónica: `nutrition-tab-switch.tsx:45-57` |
+| pills `bg-blue-50 text-blue-700 border-blue-200`                | `<OutlineChip tone="primary">`                                                                     |                                                   |
+| `bg-red-50 text-red-600` (botones)                              | HeroUI `color="danger" variant="flat"` sin className de color                                      |                                                   |
+| cajas rojas `bg-red-50 border-red-200 text-red-700`             | `border-danger/20 bg-danger/5` + `text-danger`                                                     |                                                   |
+| `bg-emerald-100 text-emerald-700` (estado ok)                   | `border-success/40 bg-success/10 text-success-700` o Chip `color="success" variant="flat"`         |                                                   |
+| `bg-amber-100 text-amber-700` (estado pendiente)                | `border-warning/40 bg-warning/10` análogo                                                          |                                                   |
+| `bg-purple-*` / `indigo` / pasteles decorativos                 | `bg-primary/10 text-primary` o `bg-default-100 text-default-600` según intención                   |                                                   |
+| `text-white` sobre botón de color                               | quitar (HeroUI pone foreground) o `text-primary-foreground`                                        |                                                   |
+| spinner div `animate-spin rounded-full border-b-2 ...`          | `<Spinner color="primary" />` de HeroUI                                                            |                                                   |
+| headings sin fuente                                             | añadir `font-heading` a h1/h2/títulos de card                                                      |                                                   |
+| empty/error states ad-hoc                                       | `<CenteredState icon título subtítulo action?>`                                                    |                                                   |
 
 **Colores de identidad que NO se tocan**: macros (protein=blue-500 etc., `macro-ui.tsx:11-15`), tipos de sesión (`session-type-style.ts:41-84`), tintes de meal-slot (`cycle-format.ts:21-58`), ámbar de récords (`exercise-progression-section.tsx:12-14`). Tienen rationale escrito; son producto, no deuda.
 
@@ -58,10 +58,12 @@
 ### Task 1: Foreground con contraste para primary/secondary
 
 **Files:**
+
 - Modify: `lib/theme/color-utils.ts` (añadir función al final)
 - Test: `lib/theme/__tests__/foreground.test.ts` (crear)
 
 **Interfaces:**
+
 - Produces: `pickForegroundHSL(hex: string): string` — devuelve el triple HSL (`"0 0% 100%"` blanco o `"222 47% 11%"` oscuro) que más contraste da sobre `hex`. Usa `getContrastRatio` de `lib/theme/contrast.ts`.
 
 - [ ] **Step 1: Test que falla**
@@ -128,10 +130,12 @@ Nota: si `getContrastRatio` no lanza con input inválido sino que devuelve `NaN`
 ### Task 2: render-css usa el foreground calculado + variante scoped para trainer
 
 **Files:**
+
 - Modify: `lib/theme/render-css.ts:164` y `:178` (foregrounds), `:112` (firma), `:149-151` (selector)
 - Test: `lib/theme/__tests__/render-css-scope.test.ts` (crear)
 
 **Interfaces:**
+
 - Consumes: `pickForegroundHSL` (Task 1).
 - Produces: `generateThemeCSS(theme: ThemeConfig, opts?: { scope?: string }): string` — sin `opts`, output idéntico al actual salvo los dos foregrounds; con `scope: ".trainer-app"`, TODOS los bloques de selectores usan `.trainer-app` en lugar de `html.light, html:not(.dark)` y `html ` (prefijos de overrides de clase, `render-css.ts:222-299`). También `renderTrainerThemeCSS(context: TenantMetadata): string | null` — espejo de `renderInlineThemeCSS` (misma validación/sanidad, leerla antes de implementar) pero con scope `.trainer-app`.
 
@@ -172,7 +176,7 @@ Si `DEFAULT_THEME` no existe con ese nombre en `schema.ts`, usar el helper de de
 - [ ] **Step 2: Verificar que falla** — Run: `npx vitest run lib/theme/__tests__/render-css-scope.test.ts`.
 - [ ] **Step 3: Implementar**
   1. En `generateThemeCSS`, reemplazar `:164` `--heroui-primary-foreground: 0 0% 100% !important;` por `--heroui-primary-foreground: ${pickForegroundHSL(theme.colors.brand)} !important;` y `:178` (secondary) por `${pickForegroundHSL(theme.colors.accent)}`.
-  2. Añadir `opts?: { scope?: string }`: `const sel = opts?.scope ?? "html.light,\nhtml:not(.dark)";` y usar `sel` en el bloque `:150-151`. Para los overrides de alta especificidad (`:222-299`, prefijo `html `), usar `` const prefix = opts?.scope ? `${opts.scope} ` : "html "; ``.
+  2. Añadir `opts?: { scope?: string }`: `const sel = opts?.scope ?? "html.light,\nhtml:not(.dark)";` y usar `sel` en el bloque `:150-151`. Para los overrides de alta especificidad (`:222-299`, prefijo `html `), usar ``const prefix = opts?.scope ? `${opts.scope} ` : "html ";``.
   3. Añadir `renderTrainerThemeCSS`: copiar la estructura de `renderInlineThemeCSS` (validación del theme, guard de CSS sospechoso, return null en fallo) llamando `generateThemeCSS(theme, { scope: ".trainer-app" })`.
 - [ ] **Step 4: Verificar** — Run: `npx vitest run lib/theme/ && npm run type-check`. Expected: PASS, incluidos los tests preexistentes de `lib/theme/__tests__/` (si alguno asserta el blanco fijo, actualizarlo: el cambio de foreground es intencional).
 - [ ] **Step 5: Reporte de tenants afectados** (verificación humana, no bloqueante): script rápido en scratchpad que recorra los `theme_json.colors.brand` de los tenants de prod (via MCP Supabase `execute_sql`: `select slug, theme_json->'colors'->>'brand' as brand from tenants where status='active'`) y aplique `pickForegroundHSL` a cada uno; listar cuáles flipean de blanco→oscuro para que David los revise visualmente tras el deploy. Guardar el listado en el PR description.
@@ -183,11 +187,13 @@ Si `DEFAULT_THEME` no existe con ese nombre en `schema.ts`, usar el helper de de
 ### Task 3: El trainer app adopta el tema del tenant
 
 **Files:**
+
 - Modify: `lib/tenant/loader.ts` (añadir `loadTenantMetadataByHost`)
 - Modify: `app/trainer/layout.tsx` (client → server + inyección de tema)
 - Create: `features/trainer/nav/trainer-shell-gate.tsx` (client component con la lógica actual de pathname)
 
 **Interfaces:**
+
 - Consumes: `renderTrainerThemeCSS` (Task 2), `getTrainerSession` (`lib/auth/session.ts` — verificar nombre exacto del helper server-side que lee la cookie `trainer-session`; el interface `TrainerSession` está en `session.ts:71` y trae `tenant_host: string`).
 - Produces: `loadTenantMetadataByHost(host: string): Promise<TenantMetadata | null>` — igual que `loadTenantMetadata` pero `.eq("host", ...)` con su propio cache (prefijo de key `host:` para no colisionar con el cache por slug).
 
@@ -289,11 +295,13 @@ Si `getTrainerSession` requiere `cookies()`/`headers()` explícitos o tiene otro
 ### Task 4: Kit — OutlineChip + CenteredState
 
 **Files:**
+
 - Create: `components/shared/outline-chip.tsx`, `components/shared/centered-state.tsx`
 - Modify (migración de canónicos): `components/client-dashboard/meal-cycle/menu-picker.tsx:41-61`, `components/client-dashboard/meal-cycle/meal-cycle-content.tsx:68-88`
 - Test: `components/shared/__tests__/kit.test.tsx` (crear; usar el setup de testing existente en `components/client-dashboard/__tests__/` como referencia de imports/config)
 
 **Interfaces:**
+
 - Produces: `OutlineChip({ children, tone = "primary", className }: { children: React.ReactNode; tone?: "primary" | "muted" | "success" | "warning" | "danger"; className?: string })` y `CenteredState({ icon, title, subtitle, action }: { icon: string; title: string; subtitle?: string; action?: React.ReactNode })`.
 
 - [ ] **Step 1: Tests que fallan**
@@ -418,11 +426,13 @@ Ojo `exactOptionalPropertyTypes`: los props opcionales se declaran `subtitle?: s
 ### Task 5: Kit — SegmentedControl
 
 **Files:**
+
 - Create: `components/shared/segmented-control.tsx`
 - Modify (migración): `components/client-dashboard/dashboard-content.tsx:561-593` (selector de período)
 - Test: añadir a `components/shared/__tests__/kit.test.tsx`
 
 **Interfaces:**
+
 - Produces: `SegmentedControl<K extends string>({ ariaLabel, onChange, options, value }: { ariaLabel: string; onChange: (key: K) => void; options: readonly { key: K; label: string }[]; value: K })`.
 
 - [ ] **Step 1: Test que falla**
@@ -513,10 +523,12 @@ export function SegmentedControl<K extends string>({
 ### Task 6: Kit — IconTile
 
 **Files:**
+
 - Create: `components/shared/icon-tile.tsx`
 - Test: añadir a `components/shared/__tests__/kit.test.tsx`
 
 **Interfaces:**
+
 - Produces: `IconTile({ className, icon, size = "md", tone = "primary" }: { className?: string; icon: string; size?: "sm" | "md" | "lg"; tone?: "primary" | "success" | "warning" | "danger" | "default" })`. Tiles con paleta custom (tipos de sesión) siguen usando su markup propio — NO migrar `session-card.tsx` (su tinte viene de `session-type-style.ts`, identidad de producto).
 
 - [ ] **Step 1: Test que falla**
@@ -602,10 +614,12 @@ export function IconTile({
 ### Task 8: Frame del perfil — página + tab bar
 
 **Files:**
+
 - Modify: `app/trainer/dashboard/clients/[clientId]/page.tsx:15-26` (LoadingScreen), `:17,83,99` (canvas), `:81-96` (error)
 - Modify: `components/dashboard/client-profile/client-profile-tabs.tsx:75-124` (guard + tab bar + canvas)
 
 **Interfaces:**
+
 - Consumes: `CenteredState` (Task 4), `Spinner` de HeroUI.
 
 - [ ] **Step 1: Página** — en `page.tsx`: (a) los tres `bg-gray-50` → `bg-background`; (b) `LoadingScreen` reemplaza el spinner div por HeroUI:
@@ -677,7 +691,11 @@ const handleTabChange = (key: TabKey) => {
 y al final del JSX raíz:
 
 ```tsx
-<Modal isOpen={pendingTab !== null} size="sm" onClose={() => setPendingTab(null)}>
+<Modal
+  isOpen={pendingTab !== null}
+  size="sm"
+  onClose={() => setPendingTab(null)}
+>
   <ModalContent>
     <ModalHeader className="font-heading">Cambios sin guardar</ModalHeader>
     <ModalBody className="text-sm text-default-600">
@@ -715,9 +733,11 @@ y al final del JSX raíz:
 ### Task 9: Header del perfil
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/client-profile-header.tsx` (reskin completo)
 
 **Interfaces:**
+
 - Consumes: `OutlineChip` (Task 4).
 
 - [ ] **Step 1: Aplicar** — sobre el archivo actual (203 líneas), estos reemplazos exactos:
@@ -740,9 +760,11 @@ y al final del JSX raíz:
 ### Task 10: Familia de modales del perfil
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/delete-client-modal.tsx`, `components/dashboard/client-profile/update-status-modal.tsx`, `components/dashboard/edit-client-modal.tsx`
 
 **Interfaces:**
+
 - Consumes: `IconTile` (Task 6).
 
 - [ ] **Step 1: delete-client-modal** — `:77` tile `bg-red-50` → `<IconTile icon="solar:trash-bin-trash-bold" tone="danger" />`; `:93-95` caja de advertencia: `bg-red-50 border-red-200` + emoji `⚠️` → `rounded-large border border-danger/20 bg-danger/5` + `<Icon className="text-danger" icon="solar:danger-triangle-bold" width={18} />`; `:144-148` confirm hand-styled `bg-red-600 text-white` / disabled `bg-gray-200 text-gray-400` → `<Button color="danger" isDisabled={...} isLoading={...}>` sin classNames de color.
@@ -756,11 +778,13 @@ y al final del JSX raíz:
 ### Task 11: Training tab — pasada de paleta
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/training-tabs.tsx:43-47,82`
 - Modify: `components/dashboard/client-profile/tabs/microcycle/week-strip.tsx:76,97`, `month-grid.tsx:118,128,147-166`, `day-cell-chip.tsx:116-118`, `day-detail.tsx:187-204,584,604,613`, `metrics-section.tsx:172-191`, `exercise-metrics-popover.tsx:60,69`
 - Modify: `components/dashboard/client-profile/tabs/workouts/history-date-filter.tsx:142,212-231`, `exercise-history-table.tsx` (callout ámbar: dejar; grays → tokens)
 
 **Interfaces:**
+
 - Consumes: `SegmentedControl` (Task 5), Tabla de Mapeo.
 
 - [ ] **Step 1: training-tabs.tsx** — pills: `tabList: "rounded-large bg-gray-100"` → `"rounded-large bg-default-100"`; `cursor: "bg-white shadow-sm"` → `"bg-content1 shadow-sm"`; `group-data-[selected=true]:text-gray-900` → `...:text-foreground`; badge de videos `:82` `bg-blue-600` → `bg-primary text-primary-foreground`.
@@ -777,10 +801,12 @@ y al final del JSX raíz:
 ### Task 12: Data-viz atoms de progreso
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/progress/ui-atoms.tsx:10-44` (ACCENT_COLORS pastel)
 - Modify: `components/dashboard/client-profile/tabs/neat/client-steps-section.tsx` y `components/dashboard/client-profile/tabs/progress/neat-section.tsx:78-106` (hex de recharts)
 
 **Interfaces:**
+
 - Produces: los StatCards de progreso aceptan tonos semánticos (`primary | success | warning | danger | default`) en lugar de nombres de paleta pastel (`purple`, `blue`...). Call-sites actualizados en el mismo task.
 
 - [ ] **Step 1:** Reescribir `ACCENT_COLORS` con tintes alpha (`bg-primary/10 text-primary`, `bg-success/10 text-success-700`, etc.) y renombrar keys a tonos semánticos; actualizar todos los call-sites (grep `accent="` en `tabs/`), mapeando `purple`→`primary`, `blue`→`primary`, `green`→`success`, `orange`→`warning`.
@@ -793,6 +819,7 @@ y al final del JSX raíz:
 ### Task 13: NEAT tab
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/neat-tab.tsx` (reskin completo: `:294-298,316,333-349,380-450,494`)
 
 - [ ] **Step 1:** Aplicar Tabla de Mapeo a todo el archivo. Puntos nombrados: info card `:333-349` (`bg-blue-50 border-blue-200`, `text-blue-600/900/700`) → receta info canónica (`border-primary/25 bg-primary/5`, icono `text-primary`, título `text-foreground`, cuerpo `text-default-600`); cards tri-pastel `:380` `border-2 border-gray-200` → `border border-default-200` (hairline, no `border-2`); tile `:385` `bg-blue-100` → `bg-primary/10 text-primary`; notas `:431` → receta info; weekdays `:438-446` `bg-purple-50 border-purple-100 text-purple-700` → `bg-default-100 text-default-600` (son metadata, no acento); header duplicado `:316` `text-2xl font-bold text-gray-900` → eliminar el título de página duplicado dentro del tab (el tab bar ya lo nombra) o degradarlo a `font-heading text-lg font-semibold text-foreground`; errores `:294-298` `text-red-500/600` → `<CenteredState icon="solar:danger-triangle-linear" title=... />`; headers de modal `:494` `bg-blue-50` → `<IconTile ... />`.
@@ -804,6 +831,7 @@ y al final del JSX raíz:
 ### Task 14: Supplements tab
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/supplements-tab.tsx` (`:330,348,378,381,505,551`)
 
 - [ ] **Step 1:** Tabla de Mapeo en todo el archivo. Nombrados: cards `:378` `bg-white border-gray-200 shadow-sm` → `bg-content1 border-default-200 shadow-sm`; hover `:551` `hover:border-slate-400` → `hover:border-default-400`; filas info `:330,348` `bg-gray-50/bg-slate-100` → `bg-default-50`; tile modal `:505` `bg-slate-100` → `<IconTile tone="default" ... />`; empty state `:381` círculo gris → `<CenteredState icon="solar:health-linear" title="Sin suplementos asignados" subtitle=... />`.
@@ -815,6 +843,7 @@ y al final del JSX raíz:
 ### Task 15: Access tab
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/access-tab.tsx` (`:73,91-92,107,116,157,199,217,237,276`)
 
 - [ ] **Step 1:** Tabla de Mapeo. Nombrados: tile `:91-92` → `<IconTile icon="solar:key-bold" />`; panels `:107,237` `bg-white border-gray-200 rounded-2xl shadow-sm` → `bg-content1 border-default-200 rounded-2xl shadow-sm`; círculos de paso `:116,157,199` `bg-blue-600 text-white` → `bg-primary text-primary-foreground`; final `:217` `bg-green-600` → `bg-success text-success-foreground`; troubleshooting ámbar `:276` → `border-warning/20 bg-warning/5` + textos `text-warning-700`/`text-default-600`; loading `:73` → `Spinner color="primary"`. Los emoji dentro del texto de WhatsApp (`:316-328`) son CONTENIDO del mensaje — no tocar.
@@ -826,6 +855,7 @@ y al final del JSX raíz:
 ### Task 16: Forms tab (shell)
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/forms-tab.tsx` (`:877-885,915-921,962,1017,1041,1158,1182,2204`)
 
 - [ ] **Step 1:** Unificar el tercer sistema de tabs: los dos `Tabs` con `cursor: "bg-black"` + `group-data-[selected=true]:text-black` (`:877-885`, `:915-921`) → mismas classNames pill que `training-tabs.tsx` post-Task 11 (`tabList: "rounded-large bg-default-100"`, `cursor: "bg-content1 shadow-sm"`, `group-data-[selected=true]:text-foreground`). Cards `bg-white border-gray-200` (`:962,1017,1041`) → `bg-content1 border-default-200`; info cards azules (`:1158,1182,2204`) → receta info canónica; resto por Tabla de Mapeo.
@@ -837,6 +867,7 @@ y al final del JSX raíz:
 ### Task 17: form-config-editor
 
 **Files:**
+
 - Modify: `components/dashboard/client-profile/tabs/form-config-editor.tsx` (`:106-115,582,616-619,665-666,695,779,783-792,818,829,836,924-969,945,990,1158-1187,1176,1207,1412,1438,1541,1602,1612,1643,1661,1706,1726,1753`)
 
 - [ ] **Step 1:** `TYPE_CHIP_STYLES` (`:106-115`): reescribir el mapa de pasteles fijos con tintes alpha semánticos manteniendo la distinción por tipo: number→`bg-primary/10 text-primary`, boolean→`bg-success/10 text-success-700`, choice→`bg-warning/10 text-warning-700`, text→`bg-default-100 text-default-600`, scale→`bg-secondary/10 text-secondary`, photo→`bg-danger/10 text-danger`, group→`bg-default-100 text-default-600` (ajustar keys reales al leer el mapa).

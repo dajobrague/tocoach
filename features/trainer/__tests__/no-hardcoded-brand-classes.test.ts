@@ -87,6 +87,16 @@ describe("perfil de cliente sin literales de color", () => {
     expect(read(file)).not.toContain("focus:outline-none");
   });
 
+  // /trainer/dashboard es un redirector que ignora la query y cae en métricas
+  // salvo que localStorage.activeSection diga otra cosa, así que "?tab=clients"
+  // nunca llevaba a clientes. Se navega a la ruta real.
+  it("el perfil vuelve a la ruta real de clientes, no a ?tab=", () => {
+    const src = read("../../../app/trainer/dashboard/clients/[clientId]/page.tsx");
+
+    expect(src).not.toContain("/trainer/dashboard?tab=");
+    expect(src).toContain('router.push("/trainer/dashboard/clients")');
+  });
+
   it("el raíl de tabs no usa confirm nativo (congela HeroUI hasta recargar)", () => {
     const src = read(
       "../../../components/dashboard/client-profile/client-profile-tabs.tsx"

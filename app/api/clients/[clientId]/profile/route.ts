@@ -111,6 +111,7 @@ export async function GET(
       sex: client.sex ?? null,
       heightCm: client.height_cm !== null ? Number(client.height_cm) : null,
       nationalId: client.national_id,
+      lastLoginAt: client.last_login_at,
       location,
       tenantSlug: tenant?.slug || session.tenant_host || "",
     });
