@@ -1,8 +1,9 @@
 "use client";
 
 // Card "Días del microciclo": tiles Día 1..N con la sesión asignada (o
-// Descanso). Tap en un tile abre un Popover con las sesiones del programa
-// para asignar + "Descanso" para limpiar; cada cambio guarda al momento.
+// Descanso). Tap en un tile abre un Popover con pestañas Fuerza | Cardio y
+// las sesiones de todos los programas activos de ese tipo, agrupadas por
+// programa, + "Descanso" para limpiar; cada cambio guarda al momento.
 // Interactivo como los días del plan en nutrición (pedido de David): un
 // tile punteado "+ Día" agrega al final y cada día muestra una "×" al pasar
 // el mouse para quitarlo (los siguientes se corren) — sin slider ni modal
@@ -11,11 +12,10 @@
 // prescripciones futuras…") de la pantalla vieja.
 
 import type { MicrocycleState } from "./use-microcycle-state";
-import type { WorkoutProgram } from "./training-api";
+import type { ProgramCategory, WorkoutProgram } from "./training-api";
 
 import {
   Button,
-  Chip,
   Input,
   Modal,
   ModalBody,
@@ -31,6 +31,8 @@ import { Icon } from "@iconify/react";
 import { useState } from "react";
 
 import { CATEGORY_VISUAL, programCategory } from "./programa-format";
+
+import { SegmentedControl } from "@/components/shared/segmented-control";
 
 const MAX_DAYS = 28;
 
@@ -78,7 +80,30 @@ export function MicrocycleDaysCard({
       Number(programCategory(b) === "cardio")
   );
   const sessions = orderedPrograms.flatMap((program) => program.sessions);
+  // Pestañas del popover por TIPO de sesión (lo que antes decía el chip de
+  // cada fila); dentro de cada pestaña, agrupadas por programa. Con muchas
+  // sesiones una lista plana fuerza+cardio se volvía inmanejable.
+  const groupsOf = (category: ProgramCategory) =>
+    orderedPrograms
+      .map((program) => ({
+        program,
+        sessions: program.sessions.filter(
+          (session) => session.sessionType === category
+        ),
+      }))
+      .filter((group) => group.sessions.length > 0);
+  const tabGroups = {
+    strength: groupsOf("strength"),
+    cardio: groupsOf("cardio"),
+  };
+  const tabCount = (category: ProgramCategory) =>
+    tabGroups[category].reduce(
+      (total, group) => total + group.sessions.length,
+      0
+    );
   const [openDay, setOpenDay] = useState<number | null>(null);
+  // Pestaña activa; al abrir un día con sesión asignada salta a su tipo.
+  const [pickerTab, setPickerTab] = useState<ProgramCategory>("strength");
   const [dateOpen, setDateOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState(state.startDate);
   const [dateConfirm, setDateConfirm] = useState(false);
@@ -290,7 +315,21 @@ export function MicrocycleDaysCard({
                     <Popover
                       isOpen={openDay === day}
                       placement="bottom"
-                      onOpenChange={(isOpen) => setOpenDay(isOpen ? day : null)}
+                      onOpenChange={(isOpen) => {
+                        if (isOpen) {
+                          const assigned =
+                            sessionId !== null
+                              ? sessions.find(
+                                  (session) => session.id === sessionId
+                                )
+                              : undefined;
+
+                          if (assigned !== undefined) {
+                            setPickerTab(assigned.sessionType);
+                          }
+                        }
+                        setOpenDay(isOpen ? day : null);
+                      }}
                     >
                       <PopoverTrigger>
                         <button
@@ -325,26 +364,40 @@ export function MicrocycleDaysCard({
                           )}
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-64 p-1.5">
-                        <div className="flex w-full flex-col gap-0.5">
-                          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
+                      <PopoverContent className="w-72 p-1.5">
+                        <div className="flex w-full flex-col gap-1">
+                          <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
                             Asignar al día {day}
                           </p>
-                          {/* Solo la lista scrollea: con dos programas la
-                              lista crece y "Descanso" tiene que seguir a la
-                              vista sin buscarlo al fondo. */}
-                          <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
-                            {sessions.length === 0 && (
+                          <SegmentedControl
+                            ariaLabel="Tipo de sesión"
+                            options={[
+                              {
+                                key: "strength",
+                                label: `Fuerza · ${tabCount("strength")}`,
+                              },
+                              {
+                                key: "cardio",
+                                label: `Cardio · ${tabCount("cardio")}`,
+                              },
+                            ]}
+                            value={pickerTab}
+                            onChange={setPickerTab}
+                          />
+                          {/* Solo la lista scrollea: "Descanso" tiene que
+                              seguir a la vista sin buscarlo al fondo. */}
+                          <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+                            {tabGroups[pickerTab].length === 0 && (
                               <p className="px-2 py-1.5 text-xs text-default-500">
-                                Ningún programa activo tiene sesiones todavía.
+                                Sin sesiones de{" "}
+                                {CATEGORY_VISUAL[pickerTab].label.toLowerCase()}{" "}
+                                en los programas activos.
                               </p>
                             )}
-                            {/* Agrupadas por programa (fuerza | cardio): la
-                              cabecera del grupo solo aparece cuando hay más
-                              de un programa activo. */}
-                            {orderedPrograms
-                              .filter((program) => program.sessions.length > 0)
-                              .map((program) => {
+                            {/* Cabecera de grupo solo si en la pestaña hay
+                                sesiones de más de un programa. */}
+                            {tabGroups[pickerTab].map(
+                              ({ program, sessions: groupSessions }) => {
                                 const programVisual =
                                   CATEGORY_VISUAL[programCategory(program)];
 
@@ -353,7 +406,7 @@ export function MicrocycleDaysCard({
                                     key={program.programId}
                                     className="flex flex-col gap-0.5"
                                   >
-                                    {programs.length > 1 && (
+                                    {tabGroups[pickerTab].length > 1 && (
                                       <p className="flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-gray-700">
                                         <span
                                           className={`h-1.5 w-1.5 shrink-0 rounded-full ${programVisual.dot}`}
@@ -363,42 +416,32 @@ export function MicrocycleDaysCard({
                                         </span>
                                       </p>
                                     )}
-                                    {program.sessions.map((session) => {
-                                      const visual =
-                                        CATEGORY_VISUAL[session.sessionType];
-
-                                      return (
-                                        <button
-                                          key={session.id}
-                                          className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
-                                            sessionId === session.id
-                                              ? "bg-gray-50 font-medium"
-                                              : ""
-                                          }`}
-                                          type="button"
-                                          onClick={() => {
-                                            state.assign(day, session.id);
-                                            setOpenDay(null);
-                                          }}
-                                        >
-                                          <span className="truncate text-gray-900">
-                                            {session.name}
-                                          </span>
-                                          <Chip
-                                            className={`shrink-0 ${visual.square}`}
-                                            size="sm"
-                                            variant="flat"
-                                          >
-                                            <span className="text-[10px]">
-                                              {visual.label}
-                                            </span>
-                                          </Chip>
-                                        </button>
-                                      );
-                                    })}
+                                    {groupSessions.map((session) => (
+                                      <button
+                                        key={session.id}
+                                        className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
+                                          sessionId === session.id
+                                            ? "bg-gray-50 font-medium"
+                                            : ""
+                                        }`}
+                                        type="button"
+                                        onClick={() => {
+                                          state.assign(day, session.id);
+                                          setOpenDay(null);
+                                        }}
+                                      >
+                                        <span className="truncate text-gray-900">
+                                          {session.name}
+                                        </span>
+                                        <span className="shrink-0 text-[11px] text-default-400 tabular-nums">
+                                          {session.exercises.length} ej.
+                                        </span>
+                                      </button>
+                                    ))}
                                   </div>
                                 );
-                              })}
+                              }
+                            )}
                           </div>
                           <div className="my-0.5 border-t border-gray-100" />
                           <button
