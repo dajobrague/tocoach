@@ -267,6 +267,7 @@ export function CreateProgramModal({
   isOpen,
   clientId,
   focusTemplates,
+  initialCategory,
   onClose,
   onCreated,
 }: {
@@ -274,8 +275,10 @@ export function CreateProgramModal({
   clientId: string;
   /** true cuando se abre desde "Usar una plantilla" del empty state. */
   focusTemplates: boolean;
+  /** Tile preseleccionado: la card "Programa de cardio" abre en cardio. */
+  initialCategory: ProgramCategory;
   onClose: () => void;
-  onCreated: (programId: string) => void;
+  onCreated: (programId: string, category: ProgramCategory) => void;
 }) {
   const { createProgram } = useProgramMutations(clientId);
   const [form, setForm] = useState<ProgramFormState>(EMPTY_FORM);
@@ -286,7 +289,7 @@ export function CreateProgramModal({
 
   useEffect(() => {
     if (isOpen) {
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, category: initialCategory });
       setTemplateId("");
       createProgram.reset();
     }
@@ -311,7 +314,7 @@ export function CreateProgramModal({
       },
       {
         onSuccess: (refs) => {
-          onCreated(refs.programId);
+          onCreated(refs.programId, form.category);
           onClose();
         },
       }
@@ -642,6 +645,12 @@ export function PauseOthersModal({
   onClose: () => void;
 }) {
   const { updateProgramStatus } = useProgramMutations(clientId);
+  // Solo se ofrecen los activos de la MISMA categoría que el programa nuevo:
+  // fuerza y cardio conviven activos a propósito (Loom JC, 10 sep).
+  const othersLabel =
+    others[0] !== undefined
+      ? CATEGORY_VISUAL[programCategory(others[0])].label.toLowerCase()
+      : "";
   const [selected, setSelected] = useState<string[]>([]);
   // Ya pausados en ESTA apertura del modal — tras un fallo parcial la lista
   // y los botones deben reflejar lo que realmente pasó en el servidor.
@@ -730,8 +739,10 @@ export function PauseOthersModal({
         <ModalBody className="gap-3">
           <p className="text-sm text-default-600">
             Este cliente ya tenía{" "}
-            {others.length === 1 ? "otro programa" : "otros programas"} en
-            marcha. Mientras sigan activos, el cliente verá las sesiones de
+            {others.length === 1
+              ? `otro programa de ${othersLabel}`
+              : `otros programas de ${othersLabel}`}{" "}
+            en marcha. Mientras sigan activos, el cliente verá las sesiones de
             todos a la vez. Marca los que quieras pausar (podrás reactivarlos
             cuando quieras); deja sin marcar los que deban convivir, como un
             plan de cardio o movilidad.

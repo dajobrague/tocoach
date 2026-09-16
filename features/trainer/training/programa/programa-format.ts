@@ -189,3 +189,43 @@ export function programToUpdateInput(
       : {}),
   };
 }
+
+// ─── Selección por categoría (Loom JC, 10 sep) ──────────────────────────────
+
+export type SelectedByCategory = Record<ProgramCategory, string | null>;
+
+export interface CategorySelection {
+  /** Programa que muestra cada card: el elegido a mano en esa categoría; si
+   *  no, el primer activo; si no, el primer pausado (para poder reactivarlo). */
+  byCategory: Record<ProgramCategory, WorkoutProgram | null>;
+  /** Card que manda sobre la cabecera, los modales y el drawer. Si la
+   *  categoría enfocada no tiene programa, pasa a la otra. */
+  focused: ProgramCategory;
+}
+
+export function pickByCategory(
+  programs: WorkoutProgram[],
+  selectedIds: SelectedByCategory,
+  focus: ProgramCategory
+): CategorySelection {
+  const pick = (category: ProgramCategory): WorkoutProgram | null => {
+    const own = programs.filter(
+      (program) =>
+        programCategory(program) === category &&
+        (program.status === "active" || program.status === "paused")
+    );
+
+    return (
+      own.find((program) => program.programId === selectedIds[category]) ??
+      own.find((program) => program.status === "active") ??
+      own[0] ??
+      null
+    );
+  };
+  const byCategory = { strength: pick("strength"), cardio: pick("cardio") };
+  const other: ProgramCategory = focus === "strength" ? "cardio" : "strength";
+  const focused =
+    byCategory[focus] !== null || byCategory[other] === null ? focus : other;
+
+  return { byCategory, focused };
+}

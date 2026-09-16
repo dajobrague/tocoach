@@ -11,7 +11,7 @@
 // prescripciones futuras…") de la pantalla vieja.
 
 import type { MicrocycleState } from "./use-microcycle-state";
-import type { WorkoutSession } from "./training-api";
+import type { WorkoutProgram } from "./training-api";
 
 import {
   Button,
@@ -30,14 +30,17 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
-import { CATEGORY_VISUAL } from "./programa-format";
+import { CATEGORY_VISUAL, programCategory } from "./programa-format";
 
 const MAX_DAYS = 28;
 
 interface MicrocycleDaysCardProps {
   state: MicrocycleState;
-  /** Sesiones del programa seleccionado (las asignables desde el popover). */
-  sessions: WorkoutSession[];
+  /** Programas ACTIVOS del cliente. El popover ofrece las sesiones de TODOS
+   *  (Loom JC, 10 sep), no solo las del programa seleccionado: con fuerza y
+   *  cardio activos a la vez, un cardio en día de descanso se asigna sin
+   *  cambiar de programa. Un día sigue teniendo UNA sesión. */
+  programs: WorkoutProgram[];
 }
 
 interface ResolvedSlot {
@@ -66,8 +69,15 @@ function formatStartDate(ymd: string): string {
 
 export function MicrocycleDaysCard({
   state,
-  sessions,
+  programs,
 }: MicrocycleDaysCardProps) {
+  // Fuerza primero, cardio después: mismo orden que las cards del toolbar.
+  const orderedPrograms = [...programs].sort(
+    (a, b) =>
+      Number(programCategory(a) === "cardio") -
+      Number(programCategory(b) === "cardio")
+  );
+  const sessions = orderedPrograms.flatMap((program) => program.sessions);
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [dateOpen, setDateOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState(state.startDate);
@@ -79,10 +89,10 @@ export function MicrocycleDaysCard({
   const [pageStart, setPageStart] = useState(1);
 
   const resolveSlot = (sessionId: string): ResolvedSlot => {
-    // El check de ocultas va PRIMERO: si el trainer tiene seleccionado el
-    // propio programa pausado, sus sesiones también están en `sessions` y
-    // el short-circuit por "own" suprimía la marca — justo en la vista
-    // donde el trainer va a confirmar que el pause funcionó.
+    // El check de ocultas va PRIMERO: `sessions` solo trae programas
+    // activos, pero si eso cambia el short-circuit por "own" suprimiría la
+    // marca — justo en la vista donde el trainer confirma que el pause
+    // funcionó.
     const hiddenFirst = state.hiddenSessions.find(
       (session) => session.id === sessionId
     );
@@ -320,43 +330,76 @@ export function MicrocycleDaysCard({
                           <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
                             Asignar al día {day}
                           </p>
-                          {sessions.length === 0 && (
-                            <p className="px-2 py-1.5 text-xs text-default-500">
-                              Este programa aún no tiene sesiones.
-                            </p>
-                          )}
-                          {sessions.map((session) => {
-                            const visual = CATEGORY_VISUAL[session.sessionType];
+                          {/* Solo la lista scrollea: con dos programas la
+                              lista crece y "Descanso" tiene que seguir a la
+                              vista sin buscarlo al fondo. */}
+                          <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+                            {sessions.length === 0 && (
+                              <p className="px-2 py-1.5 text-xs text-default-500">
+                                Ningún programa activo tiene sesiones todavía.
+                              </p>
+                            )}
+                            {/* Agrupadas por programa (fuerza | cardio): la
+                              cabecera del grupo solo aparece cuando hay más
+                              de un programa activo. */}
+                            {orderedPrograms
+                              .filter((program) => program.sessions.length > 0)
+                              .map((program) => {
+                                const programVisual =
+                                  CATEGORY_VISUAL[programCategory(program)];
 
-                            return (
-                              <button
-                                key={session.id}
-                                className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
-                                  sessionId === session.id
-                                    ? "bg-gray-50 font-medium"
-                                    : ""
-                                }`}
-                                type="button"
-                                onClick={() => {
-                                  state.assign(day, session.id);
-                                  setOpenDay(null);
-                                }}
-                              >
-                                <span className="truncate text-gray-900">
-                                  {session.name}
-                                </span>
-                                <Chip
-                                  className={`shrink-0 ${visual.square}`}
-                                  size="sm"
-                                  variant="flat"
-                                >
-                                  <span className="text-[10px]">
-                                    {visual.label}
-                                  </span>
-                                </Chip>
-                              </button>
-                            );
-                          })}
+                                return (
+                                  <div
+                                    key={program.programId}
+                                    className="flex flex-col gap-0.5"
+                                  >
+                                    {programs.length > 1 && (
+                                      <p className="flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-gray-700">
+                                        <span
+                                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${programVisual.dot}`}
+                                        />
+                                        <span className="truncate">
+                                          {program.name}
+                                        </span>
+                                      </p>
+                                    )}
+                                    {program.sessions.map((session) => {
+                                      const visual =
+                                        CATEGORY_VISUAL[session.sessionType];
+
+                                      return (
+                                        <button
+                                          key={session.id}
+                                          className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
+                                            sessionId === session.id
+                                              ? "bg-gray-50 font-medium"
+                                              : ""
+                                          }`}
+                                          type="button"
+                                          onClick={() => {
+                                            state.assign(day, session.id);
+                                            setOpenDay(null);
+                                          }}
+                                        >
+                                          <span className="truncate text-gray-900">
+                                            {session.name}
+                                          </span>
+                                          <Chip
+                                            className={`shrink-0 ${visual.square}`}
+                                            size="sm"
+                                            variant="flat"
+                                          >
+                                            <span className="text-[10px]">
+                                              {visual.label}
+                                            </span>
+                                          </Chip>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                          </div>
                           <div className="my-0.5 border-t border-gray-100" />
                           <button
                             className="flex w-full items-center gap-2 rounded-medium px-2 py-1.5 text-left text-sm text-default-500 transition-colors hover:bg-gray-100"

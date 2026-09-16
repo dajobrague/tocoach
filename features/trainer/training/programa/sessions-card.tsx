@@ -1,6 +1,7 @@
 "use client";
 
-// Card "Sesiones" del programa seleccionado: lista reordenable (dnd-kit) de
+// Card "Sesiones de fuerza" / "Sesiones de cardio" (una por categoría, una
+// debajo de la otra — Loom JC, 10 sep): lista reordenable (dnd-kit) de
 // filas de sesión + modales de alta, renombre, duplicado y borrado. El drag
 // llama reorderSessions.mutate de useSessionMutations, que ya parchea el
 // cache optimistamente con rollback — aquí no se duplica esa lógica.
@@ -42,12 +43,15 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
-import { sessionDayLabel } from "./programa-format";
+import { CATEGORY_VISUAL, sessionDayLabel } from "./programa-format";
 import { SessionRow } from "./session-row";
 import { useSessionMutations } from "./use-training";
 
 interface SessionsCardProps {
   clientId: string;
+  /** Categoría de la card: título, icono y tipo por defecto de la sesión
+   *  nueva. El programa puede seguir mezclando tipos (toggle del modal). */
+  category: ProgramCategory;
   program: WorkoutProgram;
   /** Slots del microciclo (día → session_id) para los subtítulos "Día X". */
   slotByDay: Map<number, string | null>;
@@ -96,6 +100,7 @@ function SortableSessionItem({
 
 export function SessionsCard({
   clientId,
+  category,
   program,
   slotByDay,
   getLogsForExercise,
@@ -152,7 +157,7 @@ export function SessionsCard({
   };
 
   const openNameModal = (modal: NameModal) => {
-    if (modal.kind === "add") setAddType("strength");
+    if (modal.kind === "add") setAddType(category);
     setError(null);
     setNameModal(modal);
     setNameDraft(
@@ -196,6 +201,7 @@ export function SessionsCard({
     }
   };
 
+  const visual = CATEGORY_VISUAL[category];
   const modalTitle =
     nameModal?.kind === "add"
       ? "Añadir sesión"
@@ -207,12 +213,19 @@ export function SessionsCard({
     <div className="rounded-large border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-medium bg-emerald-50 text-emerald-600">
-            <Icon icon="solar:dumbbell-bold" width={15} />
+          <span
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-medium ${visual.square}`}
+          >
+            <Icon icon={visual.icon} width={15} />
           </span>
-          <h3 className="text-sm font-semibold text-gray-900">Sesiones</h3>
+          <h3 className="shrink-0 text-sm font-semibold text-gray-900">
+            Sesiones de {visual.label.toLowerCase()}
+          </h3>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-default-600 tabular-nums">
             {program.sessions.length}
+          </span>
+          <span className="truncate text-xs text-default-500">
+            {program.name}
           </span>
         </div>
         <Button
@@ -427,6 +440,45 @@ export function SessionsCard({
           </ModalFooter>
         </ModalContent>
       </Modal>
+    </div>
+  );
+}
+
+/** Card de una categoría SIN programa: misma cabecera que SessionsCard y un
+ *  CTA que abre "Nuevo programa" con esa categoría preseleccionada, para que
+ *  fuerza y cardio se vean siempre una debajo de la otra. */
+export function EmptySessionsCard({
+  category,
+  onCreateProgram,
+}: {
+  category: ProgramCategory;
+  onCreateProgram: () => void;
+}) {
+  const visual = CATEGORY_VISUAL[category];
+  const label = visual.label.toLowerCase();
+
+  return (
+    <div className="rounded-large border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3.5">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-medium ${visual.square}`}
+        >
+          <Icon icon={visual.icon} width={15} />
+        </span>
+        <h3 className="text-sm font-semibold text-gray-900">
+          Sesiones de {label}
+        </h3>
+      </div>
+      <div className="p-4">
+        <button
+          className="flex w-full flex-col items-center gap-1.5 rounded-large border border-dashed border-gray-300 py-6 text-sm text-default-500 transition-colors hover:border-gray-400 hover:bg-gray-50"
+          type="button"
+          onClick={onCreateProgram}
+        >
+          <Icon icon="solar:add-circle-bold" width={20} />
+          Este cliente no tiene programa de {label}. Crear uno
+        </button>
+      </div>
     </div>
   );
 }

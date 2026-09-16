@@ -1,10 +1,14 @@
 "use client";
 
-// Card-botón "PROGRAMA ACTUAL" con dropdown de todos los programas activos
-// (ambas categorías, cada uno con su punto de color) + "Nuevo programa".
+// Una card-botón POR CATEGORÍA ("Programa de fuerza" | "Programa de cardio"),
+// una al lado de la otra en el toolbar (Loom JC, 10 sep: "este mismo cuadro
+// que pone programa actual, uno al lado del otro, uno para fuerza y otro para
+// cardio"). Cada card lista SOLO los programas de su categoría (activos y
+// pausados) + "Nuevo programa de …". La card enfocada (ring) es la que manda
+// sobre la cabecera, los modales y el drawer.
 // Imita el patrón visual de features/trainer/cycles/cycle-selector.tsx.
 
-import type { WorkoutProgram } from "./training-api";
+import type { ProgramCategory, WorkoutProgram } from "./training-api";
 
 import {
   Chip,
@@ -16,69 +20,75 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
-import {
-  CATEGORY_VISUAL,
-  programCategory,
-  programStatus,
-} from "./programa-format";
+import { CATEGORY_VISUAL, programStatus } from "./programa-format";
 
-interface ProgramSelectorProps {
-  /** Programas con status "active". */
+interface ProgramCategoryCardProps {
+  category: ProgramCategory;
+  /** Programas activos de ESTA categoría. */
   programs: WorkoutProgram[];
-  /** Programas pausados — sección aparte para poder verlos y reactivarlos. */
+  /** Pausados de esta categoría — sección aparte para verlos y reactivarlos. */
   pausedPrograms: WorkoutProgram[];
-  activeId: string | null;
+  /** Programa que muestra la card (null = "Sin programa"). */
+  selected: WorkoutProgram | null;
+  /** true = esta card manda sobre la cabecera y los modales. */
+  isFocused: boolean;
   onSelect: (programId: string) => void;
   onCreateNew: () => void;
 }
 
-export function ProgramSelector({
+const sessionsLabel = (count: number) =>
+  `${count} ${count === 1 ? "sesión" : "sesiones"}`;
+
+export function ProgramCategoryCard({
+  category,
   programs,
   pausedPrograms,
-  activeId,
+  selected,
+  isFocused,
   onSelect,
   onCreateNew,
-}: ProgramSelectorProps) {
-  const active =
-    [...programs, ...pausedPrograms].find(
-      (program) => program.programId === activeId
-    ) ?? null;
-  const activeVisual =
-    active !== null ? CATEGORY_VISUAL[programCategory(active)] : null;
-  const activeStatus = active !== null ? programStatus(active.status) : null;
+}: ProgramCategoryCardProps) {
+  const visual = CATEGORY_VISUAL[category];
+  const label = visual.label.toLowerCase();
+  const status = selected !== null ? programStatus(selected.status) : null;
 
   return (
     <Dropdown placement="bottom-end">
       <DropdownTrigger>
         <button
-          className="group flex min-w-[14rem] items-center gap-2.5 rounded-large border border-gray-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition-all hover:border-gray-300 hover:shadow data-[open=true]:border-slate-300 data-[open=true]:ring-1 data-[open=true]:ring-slate-200"
+          className={`group flex min-w-[12rem] items-center gap-2.5 rounded-large border bg-white px-2.5 py-1.5 text-left shadow-sm transition-all hover:border-gray-300 hover:shadow data-[open=true]:border-slate-300 data-[open=true]:ring-1 data-[open=true]:ring-slate-200 ${
+            isFocused
+              ? "border-gray-400 ring-1 ring-gray-300"
+              : "border-gray-200"
+          }`}
           type="button"
         >
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-medium ${activeVisual?.square ?? "bg-slate-100 text-slate-700"}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-medium ${visual.square}`}
           >
-            <Icon
-              icon={activeVisual?.icon ?? "solar:dumbbell-bold"}
-              width={18}
-            />
+            <Icon icon={visual.icon} width={18} />
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-default-500">
-              Programa actual
+              Programa de {label}
             </span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-gray-900">
-                {active?.name ?? "Sin programa"}
+              <span
+                className={`truncate text-sm font-semibold ${
+                  selected !== null ? "text-gray-900" : "text-default-400"
+                }`}
+              >
+                {selected?.name ?? "Sin programa"}
               </span>
-              {activeStatus !== null && (
+              {status !== null && (
                 <Chip
                   className="h-[18px] shrink-0 px-1"
-                  color={activeStatus.color}
+                  color={status.color}
                   size="sm"
                   variant="flat"
                 >
                   <span className="text-[10px] font-medium">
-                    {activeStatus.label}
+                    {status.label}
                   </span>
                 </Chip>
               )}
@@ -94,8 +104,8 @@ export function ProgramSelector({
       {/* selectionMode es obligatorio para que react-aria pinte selectedKeys;
           onAction sigue disparando una sola vez por click. */}
       <DropdownMenu
-        aria-label="Seleccionar programa"
-        selectedKeys={activeId !== null ? [activeId] : []}
+        aria-label={`Seleccionar programa de ${label}`}
+        selectedKeys={selected !== null ? [selected.programId] : []}
         selectionMode="single"
         onAction={(key) => {
           if (key === "new-program") onCreateNew();
@@ -108,35 +118,31 @@ export function ProgramSelector({
                 <DropdownSection
                   key="active-section"
                   showDivider
-                  title="Programas activos"
+                  title="Activos"
                 >
-                  {programs.map((program) => {
-                    const visual = CATEGORY_VISUAL[programCategory(program)];
-
-                    return (
-                      <DropdownItem
-                        key={program.programId}
-                        description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
-                        endContent={
-                          /* Pin = programa principal (ancla del microciclo). */
-                          program.isPrimary === true ? (
-                            <Icon
-                              className="shrink-0 text-default-400"
-                              icon="solar:star-bold"
-                              width={13}
-                            />
-                          ) : null
-                        }
-                        startContent={
-                          <span
-                            className={`h-2 w-2 rounded-full ${visual.dot}`}
+                  {programs.map((program) => (
+                    <DropdownItem
+                      key={program.programId}
+                      description={sessionsLabel(program.sessions.length)}
+                      endContent={
+                        /* Pin = programa principal (ancla del microciclo). */
+                        program.isPrimary === true ? (
+                          <Icon
+                            className="shrink-0 text-default-400"
+                            icon="solar:star-bold"
+                            width={13}
                           />
-                        }
-                      >
-                        {program.name}
-                      </DropdownItem>
-                    );
-                  })}
+                        ) : null
+                      }
+                      startContent={
+                        <span
+                          className={`h-2 w-2 rounded-full ${visual.dot}`}
+                        />
+                      }
+                    >
+                      {program.name}
+                    </DropdownItem>
+                  ))}
                 </DropdownSection>,
               ]
             : []),
@@ -149,25 +155,21 @@ export function ProgramSelector({
                   showDivider
                   title="Pausados"
                 >
-                  {pausedPrograms.map((program) => {
-                    const visual = CATEGORY_VISUAL[programCategory(program)];
-
-                    return (
-                      <DropdownItem
-                        key={program.programId}
-                        description={`${visual.label} · ${program.sessions.length} ${program.sessions.length === 1 ? "sesión" : "sesiones"}`}
-                        startContent={
-                          <Icon
-                            className="text-default-400"
-                            icon="solar:pause-circle-linear"
-                            width={14}
-                          />
-                        }
-                      >
-                        <span className="text-default-600">{program.name}</span>
-                      </DropdownItem>
-                    );
-                  })}
+                  {pausedPrograms.map((program) => (
+                    <DropdownItem
+                      key={program.programId}
+                      description={sessionsLabel(program.sessions.length)}
+                      startContent={
+                        <Icon
+                          className="text-default-400"
+                          icon="solar:pause-circle-linear"
+                          width={14}
+                        />
+                      }
+                    >
+                      <span className="text-default-600">{program.name}</span>
+                    </DropdownItem>
+                  ))}
                 </DropdownSection>,
               ]
             : []),
@@ -182,7 +184,7 @@ export function ProgramSelector({
                 />
               }
             >
-              Nuevo programa
+              Nuevo programa de {label}
             </DropdownItem>
           </DropdownSection>,
         ]}
