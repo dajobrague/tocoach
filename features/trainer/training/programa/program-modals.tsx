@@ -27,7 +27,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
-import { programCategory } from "./programa-format";
+import { CATEGORY_VISUAL, programCategory } from "./programa-format";
 import { useProgramMutations, useProgramTemplates } from "./use-training";
 
 function ErrorNote({ message }: { message: string }) {
@@ -35,6 +35,91 @@ function ErrorNote({ message }: { message: string }) {
     <div className="flex items-center gap-2 rounded-large border border-danger-200 bg-danger-50 p-2.5 text-sm text-danger-700">
       <Icon icon="solar:danger-bold" width={16} />
       {message}
+    </div>
+  );
+}
+
+/** Fuerza | Cardio como tiles grandes al INICIO del formulario (mismo patrón
+ *  que "Tipo de ejercicio" en add-exercise-library-modal). La categoría filtra
+ *  las plantillas, así que tiene que ser lo primero que se elige (Loom JC,
+ *  10 sep): con el Select a media anchura debajo de la plantilla nadie
+ *  entendía por qué no aparecían las plantillas de cardio. */
+const CATEGORY_TILE: Record<
+  ProgramCategory,
+  { hint: string; selected: string; accent: string; iconWrap: string }
+> = {
+  strength: {
+    hint: "Pesas, máquinas y resistencia",
+    selected: "border-slate-500 bg-slate-100 shadow-md",
+    accent: "text-slate-700",
+    iconWrap: "bg-slate-200",
+  },
+  cardio: {
+    hint: "Carrera, bici, HIIT y resistencia",
+    selected: "border-rose-500 bg-rose-50 shadow-md",
+    accent: "text-rose-600",
+    iconWrap: "bg-rose-200",
+  },
+};
+
+function CategoryTiles({
+  value,
+  isDisabled,
+  onChange,
+}: {
+  value: ProgramCategory;
+  isDisabled: boolean;
+  onChange: (category: ProgramCategory) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {(["strength", "cardio"] as const).map((category) => {
+        const visual = CATEGORY_VISUAL[category];
+        const tile = CATEGORY_TILE[category];
+        const isSelected = value === category;
+
+        return (
+          <button
+            key={category}
+            aria-pressed={isSelected}
+            className={`relative rounded-xl border-2 p-4 transition-all disabled:opacity-60 ${
+              isSelected
+                ? tile.selected
+                : "border-gray-200 bg-white hover:border-gray-300"
+            }`}
+            disabled={isDisabled}
+            type="button"
+            onClick={() => onChange(category)}
+          >
+            {isSelected && (
+              <Icon
+                className={`absolute right-2 top-2 ${tile.accent}`}
+                icon="solar:check-circle-bold"
+                width={22}
+              />
+            )}
+            <div className="flex flex-col items-center gap-2">
+              <div
+                className={`rounded-full p-3 ${isSelected ? tile.iconWrap : "bg-gray-100"}`}
+              >
+                <Icon
+                  className={isSelected ? tile.accent : "text-gray-400"}
+                  icon={visual.icon}
+                  width={32}
+                />
+              </div>
+              <div className="text-center">
+                <p
+                  className={`text-base font-bold ${isSelected ? "text-gray-900" : "text-gray-700"}`}
+                >
+                  {visual.label}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500">{tile.hint}</p>
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -113,35 +198,15 @@ function ProgramFormFields({
         variant="bordered"
         onValueChange={(name) => onChange({ name })}
       />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Select
-          disallowEmptySelection
-          isRequired
-          isDisabled={isDisabled}
-          label="Categoría"
-          selectedKeys={[form.category]}
-          variant="bordered"
-          onSelectionChange={(keys) => {
-            const key = Array.from(keys)[0];
-
-            if (key === "strength" || key === "cardio") {
-              onChange({ category: key });
-            }
-          }}
-        >
-          <SelectItem key="strength">Fuerza</SelectItem>
-          <SelectItem key="cardio">Cardio</SelectItem>
-        </Select>
-        <Input
-          isRequired
-          isDisabled={isDisabled}
-          label="Tipo"
-          placeholder="Ej: Hipertrofia, HIIT..."
-          value={form.type}
-          variant="bordered"
-          onValueChange={(type) => onChange({ type })}
-        />
-      </div>
+      <Input
+        isRequired
+        isDisabled={isDisabled}
+        label="Tipo"
+        placeholder="Ej: Hipertrofia, HIIT..."
+        value={form.type}
+        variant="bordered"
+        onValueChange={(type) => onChange({ type })}
+      />
       {form.category === "strength" ? (
         <Input
           isRequired
@@ -271,6 +336,11 @@ export function CreateProgramModal({
           Nuevo programa
         </ModalHeader>
         <ModalBody className="gap-4">
+          <CategoryTiles
+            isDisabled={createProgram.isPending}
+            value={form.category}
+            onChange={(category) => patch({ category })}
+          />
           <Select
             autoFocus={focusTemplates}
             isDisabled={createProgram.isPending}
@@ -415,6 +485,11 @@ export function EditProgramModal({
           Editar programa
         </ModalHeader>
         <ModalBody className="gap-4">
+          <CategoryTiles
+            isDisabled={updateProgram.isPending}
+            value={form.category}
+            onChange={(category) => patch({ category })}
+          />
           <ProgramFormFields
             form={form}
             isDisabled={updateProgram.isPending}
