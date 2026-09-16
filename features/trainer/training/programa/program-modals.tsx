@@ -27,7 +27,11 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
-import { CATEGORY_VISUAL, programCategory } from "./programa-format";
+import {
+  CATEGORY_TILE,
+  CATEGORY_VISUAL,
+  programCategory,
+} from "./programa-format";
 import { useProgramMutations, useProgramTemplates } from "./use-training";
 
 function ErrorNote({ message }: { message: string }) {
@@ -44,24 +48,6 @@ function ErrorNote({ message }: { message: string }) {
  *  las plantillas, así que tiene que ser lo primero que se elige (Loom JC,
  *  10 sep): con el Select a media anchura debajo de la plantilla nadie
  *  entendía por qué no aparecían las plantillas de cardio. */
-const CATEGORY_TILE: Record<
-  ProgramCategory,
-  { hint: string; selected: string; accent: string; iconWrap: string }
-> = {
-  strength: {
-    hint: "Pesas, máquinas y resistencia",
-    selected: "border-slate-500 bg-slate-100 shadow-md",
-    accent: "text-slate-700",
-    iconWrap: "bg-slate-200",
-  },
-  cardio: {
-    hint: "Carrera, bici, HIIT y resistencia",
-    selected: "border-rose-500 bg-rose-50 shadow-md",
-    accent: "text-rose-600",
-    iconWrap: "bg-rose-200",
-  },
-};
-
 function CategoryTiles({
   value,
   isDisabled,

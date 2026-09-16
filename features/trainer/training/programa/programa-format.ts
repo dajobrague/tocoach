@@ -229,3 +229,23 @@ export function pickByCategory(
 
   return { byCategory, focused };
 }
+
+/** Colores de los tiles Fuerza | Cardio (modal de programa) y de las pestañas
+ *  del selector de sesión del día: misma paleta en los dos sitios. */
+export const CATEGORY_TILE: Record<
+  ProgramCategory,
+  { hint: string; selected: string; accent: string; iconWrap: string }
+> = {
+  strength: {
+    hint: "Pesas, máquinas y resistencia",
+    selected: "border-slate-500 bg-slate-100 shadow-md",
+    accent: "text-slate-700",
+    iconWrap: "bg-slate-200",
+  },
+  cardio: {
+    hint: "Carrera, bici, HIIT y resistencia",
+    selected: "border-rose-500 bg-rose-50 shadow-md",
+    accent: "text-rose-600",
+    iconWrap: "bg-rose-200",
+  },
+};

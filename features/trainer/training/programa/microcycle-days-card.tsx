@@ -30,9 +30,11 @@ import {
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
-import { CATEGORY_VISUAL, programCategory } from "./programa-format";
-
-import { SegmentedControl } from "@/components/shared/segmented-control";
+import {
+  CATEGORY_TILE,
+  CATEGORY_VISUAL,
+  programCategory,
+} from "./programa-format";
 
 const MAX_DAYS = 28;
 
@@ -369,21 +371,45 @@ export function MicrocycleDaysCard({
                           <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
                             Asignar al día {day}
                           </p>
-                          <SegmentedControl
-                            ariaLabel="Tipo de sesión"
-                            options={[
-                              {
-                                key: "strength",
-                                label: `Fuerza · ${tabCount("strength")}`,
-                              },
-                              {
-                                key: "cardio",
-                                label: `Cardio · ${tabCount("cardio")}`,
-                              },
-                            ]}
-                            value={pickerTab}
-                            onChange={setPickerTab}
-                          />
+                          {/* Pestañas con el icono y color de los tiles del
+                              modal de programa (misma paleta, CATEGORY_TILE). */}
+                          <div
+                            aria-label="Tipo de sesión"
+                            className="grid grid-cols-2 gap-1.5 px-0.5"
+                            role="tablist"
+                          >
+                            {(["strength", "cardio"] as const).map(
+                              (category) => {
+                                const visual = CATEGORY_VISUAL[category];
+                                const tile = CATEGORY_TILE[category];
+                                const isActive = pickerTab === category;
+
+                                return (
+                                  <button
+                                    key={category}
+                                    aria-selected={isActive}
+                                    className={`flex items-center justify-center gap-1.5 rounded-large border-2 px-2 py-1.5 text-xs font-semibold transition-all ${
+                                      isActive
+                                        ? `${tile.selected} text-gray-900`
+                                        : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                                    }`}
+                                    role="tab"
+                                    type="button"
+                                    onClick={() => setPickerTab(category)}
+                                  >
+                                    <Icon
+                                      className={
+                                        isActive ? tile.accent : "text-gray-400"
+                                      }
+                                      icon={visual.icon}
+                                      width={16}
+                                    />
+                                    {visual.label} · {tabCount(category)}
+                                  </button>
+                                );
+                              }
+                            )}
+                          </div>
                           {/* Solo la lista scrollea: "Descanso" tiene que
                               seguir a la vista sin buscarlo al fondo. */}
                           <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
