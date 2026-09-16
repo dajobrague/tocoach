@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardBody,
-  Chip,
   Dropdown,
   DropdownItem,
   DropdownMenu,
@@ -17,23 +16,18 @@ import {
 import { Icon } from "@iconify/react";
 import React, { useEffect, useId, useState } from "react";
 
+import { ClientStatusDropdown } from "../client-status-dropdown";
+
 import { MockClient } from "@/lib/mock-data/client-profile-mock";
 
 interface ClientProfileHeaderProps {
   client: MockClient;
   onBack: () => void;
   onEdit?: () => void;
-  onUpdateStatus?: () => void;
+  /** Se llama cuando el servidor ya ha guardado el nuevo estado. */
+  onStatusChange: (status: string) => void;
   onDelete?: () => void;
 }
-
-type StatusColor = "success" | "primary" | "warning" | "default" | "secondary";
-
-const STATUS_COLORS: Record<string, StatusColor> = {
-  Activo: "success",
-  "Onboarding Completado": "secondary",
-  "Programación Inicial Pendiente": "warning",
-};
 
 const SEX_LABELS: Record<string, string> = {
   male: "Hombre",
@@ -165,7 +159,7 @@ export default function ClientProfileHeader({
   onBack,
   onDelete,
   onEdit,
-  onUpdateStatus,
+  onStatusChange,
 }: ClientProfileHeaderProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -227,13 +221,13 @@ export default function ClientProfileHeader({
                 «{client.nickName}»
               </span>
             )}
-            <Chip
-              color={STATUS_COLORS[client.status] ?? "default"}
-              size="sm"
-              variant="flat"
-            >
-              {client.status}
-            </Chip>
+            {/* El tag de estado es el control para cambiarlo: siempre a la
+                vista junto al nombre, no escondido en el menú de la ficha. */}
+            <ClientStatusDropdown
+              clientId={client.id}
+              status={client.status}
+              onChange={onStatusChange}
+            />
           </div>
 
           <Button
@@ -296,10 +290,10 @@ export default function ClientProfileHeader({
                     </Button>
                   )}
 
-                  {/* Acciones secundarias tras un menú, como en la card de
-                      programa: deja una sola acción visible y aparta la
-                      destructiva de un clic accidental. */}
-                  {(onUpdateStatus || onDelete) && (
+                  {/* La destructiva tras un menú, como en la card de
+                      programa: deja una sola acción visible y la aparta de
+                      un clic accidental. */}
+                  {onDelete && (
                     <Dropdown placement="bottom-end">
                       <DropdownTrigger>
                         <Button
@@ -314,48 +308,23 @@ export default function ClientProfileHeader({
                       <DropdownMenu
                         aria-label="Más acciones del cliente"
                         onAction={(key) => {
-                          if (key === "status") onUpdateStatus?.();
-                          else if (key === "delete") onDelete?.();
+                          if (key === "delete") onDelete();
                         }}
                       >
-                        {/* Array con spread: las colecciones de HeroUI no
-                            aceptan null entre los hijos. */}
-                        {[
-                          ...(onUpdateStatus
-                            ? [
-                                <DropdownItem
-                                  key="status"
-                                  description="Activo, onboarding, pendiente…"
-                                  startContent={
-                                    <Icon
-                                      icon="solar:refresh-linear"
-                                      width={16}
-                                    />
-                                  }
-                                >
-                                  Cambiar estado
-                                </DropdownItem>,
-                              ]
-                            : []),
-                          ...(onDelete
-                            ? [
-                                <DropdownItem
-                                  key="delete"
-                                  className="text-danger"
-                                  color="danger"
-                                  description="Borra el cliente y su historial"
-                                  startContent={
-                                    <Icon
-                                      icon="solar:trash-bin-trash-linear"
-                                      width={16}
-                                    />
-                                  }
-                                >
-                                  Eliminar cliente
-                                </DropdownItem>,
-                              ]
-                            : []),
-                        ]}
+                        <DropdownItem
+                          key="delete"
+                          className="text-danger"
+                          color="danger"
+                          description="Borra el cliente y su historial"
+                          startContent={
+                            <Icon
+                              icon="solar:trash-bin-trash-linear"
+                              width={16}
+                            />
+                          }
+                        >
+                          Eliminar cliente
+                        </DropdownItem>
                       </DropdownMenu>
                     </Dropdown>
                   )}

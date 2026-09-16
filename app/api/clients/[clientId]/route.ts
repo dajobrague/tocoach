@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
+import { isClientStatusOption } from "@/lib/constants/client-status";
 
 // PUT - Update client information
 export async function PUT(
@@ -89,6 +90,59 @@ export async function PUT(
     });
   } catch (error) {
     console.error("[Update Client API] Error:", error);
+
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH - Change only the client's status (chip dropdown in header / list).
+// Separate from PUT so a one-field change never has to resend the whole
+// profile and risk wiping fields the caller never loaded.
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> }
+) {
+  try {
+    const session = await getTrainerSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { clientId } = await params;
+    const body = await request.json().catch(() => ({}));
+    const status = body?.status;
+
+    if (!isClientStatusOption(status)) {
+      return NextResponse.json({ error: "Estado no válido" }, { status: 400 });
+    }
+
+    const supabase = createServerSupabaseClient();
+
+    // Tenant filter on the update itself: zero rows means not ours (or gone).
+    const { data, error } = await supabase
+      .from("clients")
+      .update({ status })
+      .eq("id", Number(clientId))
+      .eq("tenant", session.trainer_id)
+      .select("id, status")
+      .single();
+
+    if (error || !data) {
+      console.error("[Update Client Status API] Error:", error);
+
+      return NextResponse.json(
+        { error: "Client not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, status: data.status });
+  } catch (error) {
+    console.error("[Update Client Status API] Error:", error);
 
     return NextResponse.json(
       { error: "Internal server error" },

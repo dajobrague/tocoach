@@ -11,7 +11,6 @@ import ClientProfileHeader, {
 } from "@/components/dashboard/client-profile/client-profile-header";
 import ClientProfileTabs from "@/components/dashboard/client-profile/client-profile-tabs";
 import DeleteClientModal from "@/components/dashboard/client-profile/delete-client-modal";
-import UpdateStatusModal from "@/components/dashboard/client-profile/update-status-modal";
 import { useModalParam } from "@/components/dashboard/client-profile/use-url-state";
 import EditClientModal from "@/components/dashboard/edit-client-modal";
 import { CenteredState } from "@/components/shared/centered-state";
@@ -76,10 +75,6 @@ function ClientProfileInner() {
     fetchClientData();
   };
 
-  const handleStatusUpdateSuccess = () => {
-    fetchClientData();
-  };
-
   const handleDeleteSuccess = () => {
     router.push("/trainer/dashboard/clients");
   };
@@ -121,7 +116,9 @@ function ClientProfileInner() {
         onBack={handleBack}
         onDelete={() => openModal("delete")}
         onEdit={() => openModal("edit")}
-        onUpdateStatus={() => openModal("status")}
+        onStatusChange={(status) =>
+          setClient((prev) => (prev ? { ...prev, status } : prev))
+        }
       />
       <ClientProfileTabs clientId={clientId} clientName={client.name} />
 
@@ -152,18 +149,6 @@ function ClientProfileInner() {
           isOpen={modal === "edit"}
           onClose={closeModal}
           onSuccess={handleEditSuccess}
-        />
-      )}
-
-      {/* Update Status Modal */}
-      {client && (
-        <UpdateStatusModal
-          clientId={clientId}
-          clientName={client.name}
-          currentStatus={client.status}
-          isOpen={modal === "status"}
-          onClose={closeModal}
-          onSuccess={handleStatusUpdateSuccess}
         />
       )}
 

@@ -14,6 +14,7 @@ import {
 import { useMemo, useState, useEffect } from "react";
 
 import { IconTile } from "@/components/shared/icon-tile";
+import { CLIENT_STATUS_OPTIONS } from "@/lib/constants/client-status";
 
 const countries = require("i18n-iso-countries");
 
@@ -173,16 +174,6 @@ export default function EditClientModal({
       onClose();
     }
   };
-
-  const statusOptions = [
-    { value: "Activo", label: "Activo" },
-    { value: "Onboarding Completado", label: "Onboarding Completado" },
-    {
-      value: "Programación Inicial Pendiente",
-      label: "Programación Inicial Pendiente",
-    },
-    { value: "Inactivo", label: "Inactivo" },
-  ];
 
   return (
     <Modal
@@ -386,8 +377,8 @@ export default function EditClientModal({
                   handleChange("status", value || "");
                 }}
               >
-                {statusOptions.map((option) => (
-                  <SelectItem key={option.value}>{option.label}</SelectItem>
+                {CLIENT_STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option}>{option}</SelectItem>
                 ))}
               </Select>
             </div>

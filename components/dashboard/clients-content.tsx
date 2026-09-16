@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardBody,
-  Chip,
   Input,
   Skeleton,
   Table,
@@ -19,12 +18,13 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import AddClientModal from "./add-client-modal";
+import { ClientStatusDropdown } from "./client-status-dropdown";
+
 import { CenteredState } from "@/components/shared/centered-state";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import { SegmentedControl } from "@/components/shared/segmented-control";
 import { StatTile } from "@/components/shared/stat-tile";
-
-import AddClientModal from "./add-client-modal";
 
 const STATUS_FILTERS = [
   { key: "all", label: "Todos" },
@@ -89,15 +89,6 @@ const CHECK_IN_CHIPS: Record<
   expired: { label: "Expirado", tone: "danger" },
   not_due: { label: "Programado", tone: "muted" },
   disabled: { label: "Desactivado", tone: "muted" },
-};
-
-const STATUS_COLORS: Record<
-  string,
-  "success" | "secondary" | "warning" | "default"
-> = {
-  Activo: "success",
-  "Onboarding Completado": "secondary",
-  "Programación Inicial Pendiente": "warning",
 };
 
 const CHECK_IN_RANK: Record<CheckInSortMode, CheckInListStatus[]> = {
@@ -331,8 +322,8 @@ export default function ClientsContent() {
                     <SegmentedControl
                       ariaLabel="Filtrar por estado"
                       className="!w-auto"
-                      size="md"
                       options={STATUS_FILTERS}
+                      size="md"
                       value={statusFilter}
                       onChange={setStatusFilter}
                     />
@@ -345,8 +336,8 @@ export default function ClientsContent() {
                     <SegmentedControl
                       ariaLabel="Ordenar por check-in"
                       className="!w-auto"
-                      size="md"
                       options={SORT_MODES}
+                      size="md"
                       value={sortMode}
                       onChange={setSortMode}
                     />
@@ -488,15 +479,19 @@ export default function ClientsContent() {
                             </TableCell>
 
                             <TableCell>
-                              <Chip
-                                color={
-                                  STATUS_COLORS[client.status] ?? "default"
+                              {/* Mismo control que en la ficha: el estado se
+                                  cambia desde la propia fila. */}
+                              <ClientStatusDropdown
+                                clientId={client.id}
+                                status={client.status}
+                                onChange={(status) =>
+                                  setClients((prev) =>
+                                    prev.map((c) =>
+                                      c.id === client.id ? { ...c, status } : c
+                                    )
+                                  )
                                 }
-                                size="sm"
-                                variant="flat"
-                              >
-                                {client.status}
-                              </Chip>
+                              />
                             </TableCell>
 
                             <TableCell>

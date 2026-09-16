@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { DEFAULT_CLIENT_STATUS } from "@/lib/constants/client-status";
 
 // POST - Create a new client
 export async function POST(request: NextRequest) {
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
       country: body.country || null,
       zip: body.zip || null,
       national_id: body.nationalId || null,
-      status: "Onboarding Completado", // Default status for new clients
+      status: DEFAULT_CLIENT_STATUS,
       sign_up_date: new Date().toISOString(),
       profile_picture_url: null,
     };

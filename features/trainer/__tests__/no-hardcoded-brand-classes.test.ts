@@ -59,7 +59,7 @@ describe("perfil de cliente sin literales de color", () => {
     "../../../components/dashboard/client-profile/client-profile-header.tsx",
     "../../../components/dashboard/client-profile/client-profile-tabs.tsx",
     "../../../components/dashboard/client-profile/delete-client-modal.tsx",
-    "../../../components/dashboard/client-profile/update-status-modal.tsx",
+    "../../../components/dashboard/client-status-dropdown.tsx",
     "../../../components/dashboard/edit-client-modal.tsx",
     "../../../app/trainer/dashboard/clients/[clientId]/page.tsx",
     "../../../components/dashboard/clients-content.tsx",
