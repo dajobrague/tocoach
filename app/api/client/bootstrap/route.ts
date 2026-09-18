@@ -6,6 +6,7 @@ import {
   updateClientLastLogin,
 } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { resolveTenantLogoUrl } from "@/lib/tenant/logo";
 
 // Sello de "último acceso" como mucho una vez por hora: el query del shell
 // refresca este endpoint cada 5 min mientras la app está abierta.
@@ -101,7 +102,7 @@ export async function GET(_request: NextRequest) {
         clientId: session.client_id.toString(),
         firstName,
         lastName,
-        logoUrl: tenant?.logo_url || "",
+        logoUrl: resolveTenantLogoUrl(tenant?.logo_url, tenant?.theme_json),
         trainerName: tenant?.theme_json?.meta?.name || "Your Trainer",
         clientProfilePicture: profile?.profile_picture_url || "",
         tenantSlug: session.tenant_slug,

@@ -8,7 +8,7 @@ vi.mock("@/lib/clients/supabase-api", () => ({
 }));
 vi.mock("@/lib/tenant/loader", () => ({ clearTenantCache: vi.fn() }));
 
-import { PATCH } from "../route";
+import { GET, PATCH } from "../route";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
@@ -59,6 +59,45 @@ function patch(body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
 }
+
+describe("GET /api/brand/config", () => {
+  it("resolves the logo past a persisted blob: preview (what clients see)", async () => {
+    const real =
+      "https://x.supabase.co/storage/v1/object/public/trainer-logos/t/logo.png";
+
+    vi.mocked(getTrainerSession).mockResolvedValue({
+      trainer_id: "t-1",
+      tenant_host: "joangarcia",
+      email: "j@example.test",
+      full_name: "Joan",
+      iat: 0,
+      exp: 0,
+    } as never);
+    vi.mocked(createSupabaseClient).mockReturnValue({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({
+              data: {
+                slug: "joangarcia",
+                host: "joangarcia",
+                theme_slug: "default",
+                logo_url: "blob:https://app.topcoach.io/39d5e669",
+                theme_json: { assets: { logo: "blob:x" }, logo: { url: real } },
+              },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as never);
+
+    const res = await GET(new NextRequest("http://localhost/api/brand/config"));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).logo_url).toBe(real);
+  });
+});
 
 describe("PATCH /api/brand/config", () => {
   beforeEach(() => {

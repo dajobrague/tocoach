@@ -8,6 +8,7 @@
 
 import { createSupabaseAdminClient } from "@/lib/clients/supabase-admin";
 import { logTenantContext } from "@/lib/security/encryption";
+import { resolveTenantLogoUrl } from "@/lib/tenant/logo";
 import { TenantContext, TenantMetadata } from "@/lib/tenant/types";
 
 // Lazy Supabase client initialization to avoid connection pool issues
@@ -83,7 +84,7 @@ async function loadTenantMetadata(
       stripe_customer_portal_conf: data.stripe_customer_portal_conf || {},
       maintenance_reason: data.maintenance_reason,
       maintenance_until: data.maintenance_until,
-      logo_url: data.logo_url,
+      logo_url: resolveTenantLogoUrl(data.logo_url, data.theme_json),
     };
 
     // Cache metadata (no secrets)
@@ -161,7 +162,7 @@ export async function loadTenantMetadataByHost(
       stripe_customer_portal_conf: data.stripe_customer_portal_conf || {},
       maintenance_reason: data.maintenance_reason,
       maintenance_until: data.maintenance_until,
-      logo_url: data.logo_url,
+      logo_url: resolveTenantLogoUrl(data.logo_url, data.theme_json),
     };
 
     // Cache metadata (no secrets)

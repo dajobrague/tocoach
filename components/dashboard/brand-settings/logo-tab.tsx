@@ -83,7 +83,12 @@ export default function BrandLogoTab() {
           setTimeout(() => setMessage(null), 5000);
         } else {
           console.error("Logo upload failed:", result.error);
-          setMessage({ type: "error", text: "Error al subir el logo" });
+          // El servidor ya explica el motivo ("máximo 2MB", "usa PNG, JPG…");
+          // sin mostrarlo el trainer solo veía "Error al subir el logo".
+          setMessage({
+            type: "error",
+            text: result.error || "Error al subir el logo",
+          });
         }
       } catch (error) {
         console.error("Logo upload error:", error);
@@ -223,6 +228,10 @@ export default function BrandLogoTab() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  {/* El dropzone abre el selector a través de este input
+                      oculto; sin él, "Cambiar" no hacía nada cuando ya
+                      había un logo (solo existía en la vista "sin logo"). */}
+                  <input {...getInputProps()} />
                   <Button
                     className="border-gray-300"
                     size="sm"

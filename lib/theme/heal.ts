@@ -19,6 +19,29 @@ import type { ThemeConfig } from "./schema";
 
 import { defaultTheme } from "./schema";
 
+import { isHttpsUrl } from "@/lib/tenant/logo";
+
+/**
+ * Quita `key` cuando no es una URL https: un `blob:` de vista previa colado
+ * en `assets.logo` / `logo.url` / `meta.logoUrl` dejaba al cliente con el
+ * icono de fallback en vez del logo (pasó en prod, tenant joangarcia). Un
+ * `null` explícito ("sin logo") se conserva.
+ */
+function withoutNonHttps<T extends Record<string, any>>(
+  obj: T,
+  key: string
+): T {
+  const value = obj[key];
+
+  if (value === undefined || value === null || isHttpsUrl(value)) {
+    return obj;
+  }
+
+  const { [key]: _dropped, ...rest } = obj;
+
+  return rest as T;
+}
+
 const HEX_RE = /^#?[0-9A-Fa-f]{6}$/;
 
 function isRecord(v: unknown): v is Record<string, any> {
@@ -96,13 +119,20 @@ export function healThemeJson(raw: unknown): Record<string, any> {
 
   return {
     ...t,
-    meta: {
-      ...meta,
-      name:
-        typeof meta.name === "string" && meta.name.trim() !== ""
-          ? meta.name
-          : d.meta.name,
-    },
+    ...(isRecord(t.assets)
+      ? { assets: withoutNonHttps(t.assets, "logo") }
+      : {}),
+    ...(isRecord(t.logo) ? { logo: withoutNonHttps(t.logo, "url") } : {}),
+    meta: withoutNonHttps(
+      {
+        ...meta,
+        name:
+          typeof meta.name === "string" && meta.name.trim() !== ""
+            ? meta.name
+            : d.meta.name,
+      },
+      "logoUrl"
+    ),
     fonts: {
       ...fonts,
       heading: healFont(fonts.heading, d.fonts.heading),

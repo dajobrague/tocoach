@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { clearTenantCache } from "@/lib/tenant/loader";
+import { isHttpsUrl, resolveTenantLogoUrl } from "@/lib/tenant/logo";
 import { healThemeJson } from "@/lib/theme/heal";
 import { validateTheme } from "@/lib/theme/schema";
 
@@ -41,9 +42,10 @@ export async function GET(request: NextRequest) {
       logo_url: string | null;
     };
 
-    // Resolve logo URL: prefer the direct column, fallback to theme_json
+    // Same resolution the client app uses, so the trainer previews what
+    // their clients actually see (and never a dead blob: preview).
     const logoUrl =
-      tenantData.logo_url || tenantData.theme_json?.assets?.logo || null;
+      resolveTenantLogoUrl(tenantData.logo_url, tenantData.theme_json) || null;
 
     return NextResponse.json({
       slug: tenantData.slug,
@@ -59,24 +61,6 @@ export async function GET(request: NextRequest) {
       { error: "Internal server error" },
       { status: 500 }
     );
-  }
-}
-
-/**
- * Validates that a value intended for persistence is a real HTTPS URL.
- * Rejects in-browser blob: URLs, data: URLs, plain strings, and anything
- * else that would silently break the second a client closes their tab.
- */
-function isPersistableImageUrl(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0) {
-    return false;
-  }
-  try {
-    const parsed = new URL(value);
-
-    return parsed.protocol === "https:";
-  } catch {
-    return false;
   }
 }
 
@@ -96,7 +80,7 @@ export async function PATCH(request: NextRequest) {
     // get persisted and break for every other viewer once the uploader
     // closes their tab.
     if (body.logo_url !== undefined && body.logo_url !== null) {
-      if (!isPersistableImageUrl(body.logo_url)) {
+      if (!isHttpsUrl(body.logo_url)) {
         return NextResponse.json(
           {
             error:
@@ -110,7 +94,7 @@ export async function PATCH(request: NextRequest) {
     if (
       body.assets?.logo !== undefined &&
       body.assets?.logo !== null &&
-      !isPersistableImageUrl(body.assets.logo)
+      !isHttpsUrl(body.assets.logo)
     ) {
       return NextResponse.json(
         {
