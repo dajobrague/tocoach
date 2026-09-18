@@ -1,8 +1,15 @@
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
-import { getClientSession } from "@/lib/auth/client-session";
+import {
+  getClientSession,
+  updateClientLastLogin,
+} from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+
+// Sello de "último acceso" como mucho una vez por hora: el query del shell
+// refresca este endpoint cada 5 min mientras la app está abierta.
+const LAST_SEEN_THROTTLE_MS = 60 * 60 * 1000;
 
 /**
  * GET /api/client/bootstrap
@@ -36,10 +43,23 @@ export async function GET(_request: NextRequest) {
         .single(),
       supabase
         .from("clients")
-        .select("id, name, last_name, profile_picture_url")
+        .select("id, name, last_name, profile_picture_url, last_login_at")
         .eq("id", session.client_id)
         .single(),
     ]);
+
+    // `clients.last_login_at` es lo que el trainer ve como "Último acceso",
+    // pero solo se sellaba al introducir la contraseña. Como la sesión de
+    // cliente dura 30 días, alguien que entrena a diario aparecía con
+    // "hace 12 días". Este endpoint se llama al abrir la app, así que el
+    // sello pasa a significar "última vez que abrió la app".
+    const lastSeen = profileResult.data?.last_login_at
+      ? new Date(profileResult.data.last_login_at).getTime()
+      : 0;
+
+    if (Date.now() - lastSeen > LAST_SEEN_THROTTLE_MS) {
+      updateClientLastLogin(session.client_id).catch(console.warn);
+    }
 
     // Fetch trainer's community_url if tenant has a trainer_id
     let communityUrl: string | null = null;

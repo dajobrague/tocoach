@@ -164,6 +164,31 @@ export async function PATCH(request: NextRequest) {
       }),
     };
 
+    // `brand_name` (pestaña Logo) es el nombre de la plataforma, no solo el
+    // texto junto al logo: el wizard siembra meta.name, meta.logoText,
+    // meta.description y logo.text desde ese mismo campo, así que aquí se
+    // actualizan los cuatro. Antes la ruta lo ignoraba y el nombre solo se
+    // podía cambiar pidiéndolo a soporte.
+    const brandName =
+      typeof body.brand_name === "string" ? body.brand_name.trim() : "";
+
+    if (brandName) {
+      const meta: Record<string, any> = currentTheme.meta || {};
+      const oldName = typeof meta.name === "string" ? meta.name : "";
+      const description =
+        oldName && typeof meta.description === "string"
+          ? meta.description.replace(oldName, brandName)
+          : `${brandName} - Plataforma de Coaching`;
+
+      updatedTheme.meta = {
+        ...meta,
+        name: brandName,
+        logoText: brandName,
+        description,
+      };
+      updatedTheme.logo = { ...(currentTheme.logo || {}), text: brandName };
+    }
+
     // Sanea el theme resultante para que SIEMPRE pase la validación del
     // generador de CSS. Sin esto, un theme_json sembrado incompleto (p.ej.
     // por /api/auth/register) seguía inválido tras guardar colores y el

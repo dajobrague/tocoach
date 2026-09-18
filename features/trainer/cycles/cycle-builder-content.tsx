@@ -373,6 +373,9 @@ export function CycleBuilderContent({
                 onClearDay={() => setClearDayOpen(true)}
                 onCopyFromDay={() => setDayCopyMode("copyFrom")}
                 onDuplicateDay={() => setDayCopyMode("duplicate")}
+                onDuplicateSlot={(slotId) =>
+                  mutations.duplicateSlotM.mutate(slotId)
+                }
                 onEditPortions={(slotId, option) =>
                   setEditing({ slotId, option })
                 }
