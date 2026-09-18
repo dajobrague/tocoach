@@ -284,11 +284,11 @@ export default function BrandLogoTab() {
       {/* Logo Text Fallback */}
       <div className="space-y-3">
         <label className="text-sm font-medium text-black">
-          Texto de marca (alternativo)
+          Nombre de tu plataforma
         </label>
         <Input
           className="font-body"
-          description="Se mostrará si no hay logo subido"
+          description="Aparece en la pantalla de acceso de tus clientes y junto al logo (o en su lugar si no hay logo)"
           placeholder="Mi Marca"
           value={logoText}
           variant="bordered"

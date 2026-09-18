@@ -1,17 +1,10 @@
 // Save slug configuration API
 import { NextRequest, NextResponse } from "next/server";
 
-import { getTrainerSession } from "@/lib/auth/session";
+import { getTrainerSession, setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-
-// Tables that hold a trainer's data and cascade off `tenants.host`. If
-// the trainer already has rows in any of these, changing `tenants.host`
-// hits the 27 incoming FK constraints (none of which declare ON UPDATE
-// CASCADE) and Postgres rejects the UPDATE with code 23503. We use this
-// list for a pre-flight check that returns a clear error to the trainer
-// instead of the previous opaque "Error al actualizar el registro del
-// tenant" — which is what Rodrigo Alderete was hitting.
-const TENANT_DATA_TABLES = ["clients", "exercises", "programs"] as const;
+import { clearTenantCache } from "@/lib/tenant/loader";
+import { renameTenant } from "@/lib/tenant/rename";
 
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseClient();
@@ -34,8 +27,29 @@ export async function POST(request: NextRequest) {
 
     const normalizedSlug = slug.toLowerCase().trim();
 
+    // El tenant actual se lee de la DB, no de la sesión: la cookie puede
+    // llevar un tenant_host obsoleto (pasó en prod con 6 trainers).
+    const { data: existingTenant, error: findError } = await supabase
+      .from("tenants")
+      .select("host, slug")
+      .eq("trainer_id", session.trainer_id)
+      .maybeSingle();
+
+    if (findError) {
+      console.error("[Save Slug] Tenant lookup failed", {
+        correlationId,
+        trainer_id: session.trainer_id,
+        error: findError,
+      });
+
+      return NextResponse.json(
+        { error: "Error al buscar tu plataforma" },
+        { status: 500 }
+      );
+    }
+
     // No-op: the trainer is "changing" to the slug they already own.
-    if (normalizedSlug === session.tenant_host) {
+    if (existingTenant?.host === normalizedSlug) {
       return NextResponse.json({
         success: true,
         domain: normalizedSlug,
@@ -43,116 +57,42 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Pre-flight collision check. `tenants.host` is the primary key, so
-    // an UPDATE to a value already taken by another trainer would error
-    // with code 23505 (unique violation). Detect it up front so we can
-    // surface a clean "ya está en uso" message instead of a generic
-    // 500.
-    const { data: collision, error: collisionError } = await supabase
-      .from("tenants")
-      .select("host, trainer_id")
-      .eq("host", normalizedSlug)
-      .maybeSingle();
+    if (existingTenant) {
+      // `tenants.host` es la PK y está copiada como FK en 40+ tablas hijas sin
+      // ON UPDATE CASCADE: el rename lo hace la función SQL `rename_tenant`
+      // en una sola transacción (antes esta ruta lo bloqueaba en cuanto el
+      // trainer tenía datos y había que hacerlo a mano desde soporte).
+      const renamed = await renameTenant(
+        supabase,
+        existingTenant.host,
+        normalizedSlug
+      );
 
-    if (collisionError) {
-      console.error("[Save Slug] Collision check failed", {
+      if (!renamed.ok) {
+        console.error("[Save Slug] rename_tenant failed", {
+          correlationId,
+          trainer_id: session.trainer_id,
+          from: existingTenant.host,
+          to: normalizedSlug,
+          error: renamed.cause,
+        });
+
+        return NextResponse.json(
+          { error: renamed.error },
+          { status: renamed.status }
+        );
+      }
+
+      console.log("[Save Slug] Renamed tenant", {
         correlationId,
         trainer_id: session.trainer_id,
-        target_slug: normalizedSlug,
-        error: collisionError,
+        from: existingTenant.host,
+        to: normalizedSlug,
+        repointed: renamed.repointed,
       });
-
-      return NextResponse.json(
-        { error: "Error al verificar disponibilidad del dominio" },
-        { status: 500 }
-      );
-    }
-
-    if (collision && collision.trainer_id !== session.trainer_id) {
-      return NextResponse.json(
-        { error: "Ese dominio ya está en uso por otro entrenador" },
-        { status: 409 }
-      );
-    }
-
-    // Pre-flight cascade check. The 27 FKs to `tenants(host)` are
-    // declared `ON DELETE CASCADE` but not `ON UPDATE CASCADE`, so any
-    // row in a child table that already references this trainer's
-    // current host will block the rename with Postgres error 23503. We
-    // probe the most-populated child tables for the trainer's own data
-    // and return a clear error rather than letting the UPDATE blow up
-    // with an opaque message. Long-term fix is a migration that adds
-    // ON UPDATE CASCADE everywhere; until then, host changes only work
-    // for trainers who haven't started populating their tenant.
-    if (session.tenant_host) {
-      for (const table of TENANT_DATA_TABLES) {
-        const { count, error: probeError } = await supabase
-          .from(table)
-          .select("*", { count: "exact", head: true })
-          .eq("tenant_host", session.tenant_host);
-
-        if (probeError) {
-          console.warn("[Save Slug] Cascade probe failed", {
-            correlationId,
-            trainer_id: session.trainer_id,
-            table,
-            error: probeError,
-          });
-          continue;
-        }
-
-        if ((count ?? 0) > 0) {
-          console.warn("[Save Slug] Blocked rename, trainer has data", {
-            correlationId,
-            trainer_id: session.trainer_id,
-            current_host: session.tenant_host,
-            target_slug: normalizedSlug,
-            blocking_table: table,
-            row_count: count,
-          });
-
-          return NextResponse.json(
-            {
-              error:
-                "No se puede cambiar el dominio porque ya tienes datos en tu plataforma (clientes, ejercicios o programas). Contacta a soporte para hacer la migración.",
-              code: "tenant_has_data",
-            },
-            { status: 409 }
-          );
-        }
-      }
-    }
-
-    // First, find existing tenant for this trainer
-    const { data: existingTenant, error: findError } = await supabase
-      .from("tenants")
-      .select("slug, theme_json")
-      .eq("trainer_id", session.trainer_id)
-      .single();
-
-    let tenantError;
-
-    if (existingTenant) {
-      // Update existing tenant record
-      const updateData = {
-        slug: normalizedSlug,
-        host: normalizedSlug, // Keep host in sync with slug for now
-        status: "active" as const,
-      };
-
-      const { error } = await supabase
-        .from("tenants")
-        .update(updateData)
-        .eq("trainer_id", session.trainer_id);
-
-      tenantError = error;
-      console.log(
-        `[Save Slug] Updated existing tenant from ${existingTenant.slug} to ${normalizedSlug}`,
-        { correlationId, findError: findError ?? null }
-      );
     } else {
       // Create new tenant record
-      const { error } = await supabase.from("tenants").insert({
+      const { error: insertError } = await supabase.from("tenants").insert({
         slug: normalizedSlug,
         host: normalizedSlug, // Keep host in sync with slug for now
         theme_slug: "default",
@@ -181,75 +121,57 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      tenantError = error;
+      if (insertError) {
+        console.error("[Save Slug] Tenant insert error", {
+          correlationId,
+          trainer_id: session.trainer_id,
+          target_slug: normalizedSlug,
+          error: insertError,
+        });
+
+        const errCode = (insertError as { code?: string }).code;
+
+        if (errCode === "23505") {
+          return NextResponse.json(
+            { error: "Ese dominio ya está en uso por otro entrenador" },
+            { status: 409 }
+          );
+        }
+
+        return NextResponse.json(
+          { error: "Error al crear el registro del tenant" },
+          { status: 500 }
+        );
+      }
+
+      // `trainers.tenant_host` se actualiza DESPUÉS del tenant: es un puntero a
+      // `tenants.host` y si se escribiera antes y el insert fallara, quedaría
+      // apuntando a un host inexistente y toda escritura del trainer rompería
+      // con 23503. (En el rename lo hace la propia función SQL.)
+      const { error: trainerError } = await supabase
+        .from("trainers")
+        .update({
+          tenant_host: normalizedSlug,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", session.trainer_id);
+
+      if (trainerError) {
+        console.error("[Save Slug] Trainer update error", {
+          correlationId,
+          trainer_id: session.trainer_id,
+          target_slug: normalizedSlug,
+          error: trainerError,
+        });
+
+        return NextResponse.json(
+          { error: "Error al actualizar el perfil del entrenador" },
+          { status: 500 }
+        );
+      }
+
+      clearTenantCache(normalizedSlug);
       console.log(`[Save Slug] Created new tenant record: ${normalizedSlug}`);
-    }
-
-    if (tenantError) {
-      console.error("[Save Slug] Tenant operation error", {
-        correlationId,
-        trainer_id: session.trainer_id,
-        target_slug: normalizedSlug,
-        error: tenantError,
-      });
-
-      // Postgres error codes Supabase typically surfaces here:
-      //   23505 = unique_violation (slug already taken by another trainer)
-      //   23503 = foreign_key_violation (cascade probe missed something)
-      // The pre-flight checks above should normally short-circuit these,
-      // but if they slip through we still want a discriminated response
-      // instead of a generic 500.
-      const errCode = (tenantError as { code?: string }).code;
-
-      if (errCode === "23505") {
-        return NextResponse.json(
-          { error: "Ese dominio ya está en uso por otro entrenador" },
-          { status: 409 }
-        );
-      }
-
-      if (errCode === "23503") {
-        return NextResponse.json(
-          {
-            error:
-              "No se puede cambiar el dominio porque ya tienes datos en tu plataforma. Contacta a soporte.",
-            code: "tenant_has_data",
-          },
-          { status: 409 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: "Error al actualizar el registro del tenant" },
-        { status: 500 }
-      );
-    }
-
-    // `trainers.tenant_host` se actualiza DESPUÉS del tenant: es un puntero a
-    // `tenants.host` (FK en 27 tablas hijas) y si se escribiera antes y el
-    // rename del tenant fallara, quedaría apuntando a un host inexistente y
-    // toda escritura del trainer con tenant_host (revisiones de video, chat,
-    // notificaciones) rompería con 23503. Pasó en prod con 6 trainers.
-    const { error: trainerError } = await supabase
-      .from("trainers")
-      .update({
-        tenant_host: normalizedSlug,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", session.trainer_id);
-
-    if (trainerError) {
-      console.error("[Save Slug] Trainer update error", {
-        correlationId,
-        trainer_id: session.trainer_id,
-        target_slug: normalizedSlug,
-        error: trainerError,
-      });
-
-      return NextResponse.json(
-        { error: "Error al actualizar el perfil del entrenador" },
-        { status: 500 }
-      );
     }
 
     console.log("[Save Slug] Successfully updated slug", {
@@ -258,11 +180,24 @@ export async function POST(request: NextRequest) {
       target_slug: normalizedSlug,
     });
 
-    return NextResponse.json({
+    // La cookie del trainer lleva `tenant_host` dentro: se reemite con el
+    // nuevo para que no tenga que cerrar sesión (con la vieja, todo write
+    // daría 23503 contra un host que ya no existe).
+    const response = NextResponse.json({
       success: true,
       domain: normalizedSlug,
       message: "Slug guardado correctamente",
     });
+
+    await setSessionCookie(
+      response,
+      session.trainer_id,
+      normalizedSlug,
+      session.email,
+      session.full_name
+    );
+
+    return response;
   } catch (error) {
     console.error("[Save Slug] Unexpected error", {
       correlationId,

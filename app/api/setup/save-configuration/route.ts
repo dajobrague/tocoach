@@ -1,8 +1,10 @@
 // Save complete setup configuration (theme, domain, logo, fonts)
 import { NextRequest, NextResponse } from "next/server";
 
-import { getTrainerSession } from "@/lib/auth/session";
+import { getTrainerSession, setSessionCookie } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { clearTenantCache } from "@/lib/tenant/loader";
+import { renameTenant } from "@/lib/tenant/rename";
 import { healThemeJson } from "@/lib/theme/heal";
 
 export async function POST(request: NextRequest) {
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
     // Check if tenant already exists for this trainer
     const { data: existingTenant, error: findError } = await supabase
       .from("tenants")
-      .select("slug, theme_json")
+      .select("host, slug, theme_json")
       .eq("trainer_id", session.trainer_id)
       .maybeSingle();
 
@@ -88,6 +90,30 @@ export async function POST(request: NextRequest) {
         "[Save Configuration] Updating existing tenant:",
         existingTenant.slug
       );
+
+      // Cambio de slug: `tenants.host` es PK con 40+ FKs sin ON UPDATE
+      // CASCADE, así que lo hace la función SQL `rename_tenant` (atómica).
+      // Un UPDATE directo de host fallaría con 23503 en cuanto hay datos.
+      if (existingTenant.host !== normalizedSlug) {
+        const renamed = await renameTenant(
+          supabase,
+          existingTenant.host,
+          normalizedSlug
+        );
+
+        if (!renamed.ok) {
+          console.error("[Save Configuration] rename_tenant failed", {
+            from: existingTenant.host,
+            to: normalizedSlug,
+            error: renamed.cause,
+          });
+
+          return NextResponse.json(
+            { success: false, error: renamed.error },
+            { status: renamed.status }
+          );
+        }
+      }
 
       const { data, error } = await supabase
         .from("tenants")
@@ -172,7 +198,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    clearTenantCache(normalizedSlug);
+
+    // La cookie del trainer lleva `tenant_host`: se reemite con el slug
+    // guardado para que no tenga que cerrar sesión tras el wizard.
+    const response = NextResponse.json({
       success: true,
       message: "Configuración guardada exitosamente",
       tenant: {
@@ -180,6 +210,16 @@ export async function POST(request: NextRequest) {
         slug: result.slug,
       },
     });
+
+    await setSessionCookie(
+      response,
+      session.trainer_id,
+      normalizedSlug,
+      session.email,
+      session.full_name
+    );
+
+    return response;
   } catch (error) {
     console.error("[Save Configuration] Unexpected error:", error);
 
