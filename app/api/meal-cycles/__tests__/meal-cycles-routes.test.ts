@@ -12,6 +12,7 @@ const cycleMocks = vi.hoisted(() => ({
   addSlot: vi.fn(),
   updateSlot: vi.fn(),
   deleteSlot: vi.fn(),
+  duplicateSlot: vi.fn(),
 }));
 const optionMocks = vi.hoisted(() => ({
   addRecipeOption: vi.fn(),
@@ -63,6 +64,7 @@ import {
   DELETE as slotDELETE,
   PATCH as slotPATCH,
 } from "../[id]/slots/[slotId]/route";
+import { POST as duplicatePOST } from "../[id]/slots/[slotId]/duplicate/route";
 import { POST as optionPOST } from "../[id]/slots/[slotId]/options/route";
 import {
   DELETE as optionDELETE,
@@ -326,6 +328,27 @@ describe("slot reorder / delete", () => {
     cycleMocks.deleteSlot.mockResolvedValue(null);
 
     const res = await slotDELETE(getReq(), slotCtx());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("duplicates a slot (201) with the tenant-scoped service call", async () => {
+    cycleMocks.duplicateSlot.mockResolvedValue({
+      id: "s2",
+      label: "Desayuno (copia)",
+    });
+
+    const res = await duplicatePOST(getReq(), slotCtx());
+
+    expect(res.status).toBe(201);
+    expect(cycleMocks.duplicateSlot).toHaveBeenCalledWith("acme.tenant", "s1");
+    expect((await res.json()).data.label).toBe("Desayuno (copia)");
+  });
+
+  it("duplicate returns 404 when the slot isn't the tenant's", async () => {
+    cycleMocks.duplicateSlot.mockResolvedValue(null);
+
+    const res = await duplicatePOST(getReq(), slotCtx());
 
     expect(res.status).toBe(404);
   });

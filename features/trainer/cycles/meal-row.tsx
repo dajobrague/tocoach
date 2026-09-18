@@ -30,6 +30,8 @@ interface MealRowProps {
   /** Promote an alternative: the component's option ids, new primary first. */
   onMakePrimary: (orderedOptionIds: string[]) => void;
   onRemoveSlot: () => void;
+  /** Copy this meal right below itself, options included. */
+  onDuplicateSlot: () => void;
   onRemoveOption: (optionId: string) => void;
   onEditPortions: (option: SlotOption) => void;
   onRelabel: (label: string) => void;
@@ -53,6 +55,7 @@ export function MealRow({
   onAddAlternative,
   onMakePrimary,
   onRemoveSlot,
+  onDuplicateSlot,
   onRemoveOption,
   onEditPortions,
   onRelabel,
@@ -167,6 +170,7 @@ export function MealRow({
               aria-label="Acciones de comida"
               onAction={(key) => {
                 if (key === "rename") startRenameAfterMenu();
+                else if (key === "duplicate") onDuplicateSlot();
                 else if (key === "remove") onRemoveSlot();
               }}
             >
@@ -177,6 +181,12 @@ export function MealRow({
                 }
               >
                 Renombrar comida
+              </DropdownItem>
+              <DropdownItem
+                key="duplicate"
+                startContent={<Icon icon="solar:copy-linear" width={16} />}
+              >
+                Duplicar comida
               </DropdownItem>
               <DropdownItem
                 key="remove"

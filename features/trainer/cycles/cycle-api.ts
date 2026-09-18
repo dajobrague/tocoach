@@ -391,6 +391,17 @@ export function deleteSlot(
   return sendJson<CycleSlot>(`${BASE}/${cycleId}/slots/${slotId}`, "DELETE");
 }
 
+/** Duplicate a meal inside its own day: the copy lands right below it, options verbatim. */
+export function duplicateSlot(
+  cycleId: string,
+  slotId: string
+): Promise<CycleSlot> {
+  return sendJson<CycleSlot>(
+    `${BASE}/${cycleId}/slots/${slotId}/duplicate`,
+    "POST"
+  );
+}
+
 /** Replace `targetDayIndex` with a copy of `sourceDayIndex` (verbatim options). */
 export function copyDay(
   cycleId: string,

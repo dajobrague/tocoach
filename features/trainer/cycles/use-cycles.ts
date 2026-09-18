@@ -33,6 +33,7 @@ import {
   deleteGoalPreset,
   deleteOption,
   deleteSlot,
+  duplicateSlot,
   fetchClientVisibility,
   fetchDietPdf,
   fetchClientGoals,
@@ -315,6 +316,10 @@ export function useCycleMutations(cycleId: string) {
     mutationFn: (slotId: string) => deleteSlot(cycleId, slotId),
     onSuccess: invalidate,
   });
+  const duplicateSlotM = useMutation({
+    mutationFn: (slotId: string) => duplicateSlot(cycleId, slotId),
+    onSuccess: invalidate,
+  });
   const addOptionM = useMutation({
     mutationFn: (vars: { slotId: string; selection: OptionSelection }) =>
       addOption(cycleId, vars.slotId, vars.selection),
@@ -449,6 +454,7 @@ export function useCycleMutations(cycleId: string) {
     addSlotM,
     updateSlotM,
     deleteSlotM,
+    duplicateSlotM,
     addOptionM,
     deleteOptionM,
     updateOptionPortionsM,

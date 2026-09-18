@@ -195,6 +195,68 @@ describe("MealCycleService API methods (integration, local DB)", () => {
     expect(day0.map((slot) => slot.label)).toEqual(["Desayuno", "Comida"]);
   });
 
+  it("duplicateSlot copies a meal right below itself, options included", async () => {
+    const recipe = await recipes.create(TEST_TENANT_HOST, TEST_TRAINER_ID, {
+      name: "Avena",
+      status: "active",
+    });
+
+    await recipeIngredients.add(TEST_TENANT_HOST, recipe.id, {
+      name: "Avena",
+      quantity: 100,
+      unit: "g",
+      nutrientsPer100g: { kcal: 100, protein_g: 5 },
+    });
+
+    const cycleId = await draftFor(clientA);
+    const first = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Desayuno",
+      position: 0,
+    });
+
+    await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Cena",
+      position: 1,
+    });
+    await options.addRecipeOption(TEST_TENANT_HOST, first!.id, recipe.id);
+
+    const copy = await cycles.duplicateSlot(TEST_TENANT_HOST, first!.id);
+
+    expect(copy?.label).toBe("Desayuno (copia)");
+    expect(copy?.day_index).toBe(0);
+    expect(copy?.position).toBe(1);
+
+    const tree = await cycles.getByIdWithTree(TEST_TENANT_HOST, cycleId);
+    const day0 = (tree?.slots ?? [])
+      .filter((slot) => slot.day_index === 0)
+      .sort((a, b) => a.position - b.position);
+
+    // Copy sits right below the original; "Cena" shifted down one position.
+    expect(day0.map((slot) => slot.label)).toEqual([
+      "Desayuno",
+      "Desayuno (copia)",
+      "Cena",
+    ]);
+    expect(day0.map((slot) => slot.position)).toEqual([0, 1, 2]);
+    expect(day0[1]?.options[0]?.source_ref_id).toBe(recipe.id);
+    expect(day0[1]?.options[0]?.item_snapshot.name).toBe("Avena");
+    // The original keeps its own option (copied, not moved).
+    expect(day0[0]?.options).toHaveLength(1);
+  });
+
+  it("duplicateSlot returns null for another tenant's slot", async () => {
+    const cycleId = await draftFor(clientA);
+    const slot = await cycles.addSlot(TEST_TENANT_HOST, cycleId, {
+      dayIndex: 0,
+      label: "Desayuno",
+      position: 0,
+    });
+
+    expect(await cycles.duplicateSlot(OTHER_TENANT, slot!.id)).toBeNull();
+  });
+
   it("copyDay rejects equal source/target and out-of-range days", async () => {
     const cycleId = await draftFor(clientA); // duration 3 → valid 0..2
 

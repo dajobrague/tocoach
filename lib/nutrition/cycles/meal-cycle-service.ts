@@ -216,6 +216,88 @@ export class MealCycleService {
   }
 
   /**
+   * Duplicate a meal inside its own day ("Duplicar comida"): the copy lands
+   * right below the original (later meals shift down one position), is
+   * labelled "<label> (copia)" so the trainer renames it, and gets the
+   * original's options copied verbatim — frozen snapshots included, exactly
+   * like {@link copyDay}. Client selections are not copied. Tenant-scoped;
+   * returns null when the slot isn't the tenant's.
+   */
+  async duplicateSlot(
+    tenantHost: string,
+    slotId: string
+  ): Promise<MealSlotRow | null> {
+    const source = await this.getSlot(tenantHost, slotId);
+
+    if (source === null) {
+      return null;
+    }
+
+    // Make room right below the original. Highest position first so a
+    // unique (day, position) index never sees two rows on the same slot.
+    // ponytail: one UPDATE per later meal; a day has 3-6 meals.
+    const { data: laterData, error: laterError } = await this.client
+      .from(SLOTS_TABLE)
+      .select("id, position")
+      .eq("tenant_host", tenantHost)
+      .eq("cycle_id", source.cycle_id)
+      .eq("day_index", source.day_index)
+      .gt("position", source.position)
+      .order("position", { ascending: false });
+
+    if (laterError !== null) {
+      throw new Error(
+        `MealCycleService.duplicateSlot siblings: ${laterError.message}`
+      );
+    }
+
+    for (const later of (laterData ?? []) as Pick<
+      MealSlotRow,
+      "id" | "position"
+    >[]) {
+      const { error } = await this.client
+        .from(SLOTS_TABLE)
+        .update({ position: later.position + 1 })
+        .eq("tenant_host", tenantHost)
+        .eq("id", later.id);
+
+      if (error !== null) {
+        throw new Error(
+          `MealCycleService.duplicateSlot shift failed: ${error.message}`
+        );
+      }
+    }
+
+    const { data, error } = await this.client
+      .from(SLOTS_TABLE)
+      .insert({
+        cycle_id: source.cycle_id,
+        tenant_host: tenantHost,
+        day_index: source.day_index,
+        label: `${source.label.trim() || "Comida"} (copia)`,
+        position: source.position + 1,
+      })
+      .select()
+      .single();
+
+    if (error !== null) {
+      throw new Error(
+        `MealCycleService.duplicateSlot insert failed: ${error.message}`
+      );
+    }
+
+    const created = data as MealSlotRow;
+    const options = new MealSlotOptionService(this.client);
+
+    await options.copyOptionsToSlots(
+      tenantHost,
+      new Map([[source.id, created.id]])
+    );
+
+    return created;
+  }
+
+  /**
    * Replace `targetDayIndex` with a copy of `sourceDayIndex`: delete the target
    * day's slots (cascading their options), then recreate each source slot on the
    * target day and copy its options verbatim — the frozen snapshots (and their
