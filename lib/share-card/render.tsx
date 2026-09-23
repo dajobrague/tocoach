@@ -4,12 +4,11 @@ import "server-only";
 // contenedor con display:flex). Lo usan la ruta del cliente y la vista
 // previa del entrenador, así ambos ven exactamente la misma imagen.
 //
-// Estilos (Fase 2):
-//   dark    — 1080×1920, fondo oscuro. Default.
-//   light   — 1080×1920, fondo claro con el color de marca.
-//   sticker — 1080×1350 TOTALMENTE transparente (sin panel): texto blanco
-//             con sombra para ponerlo encima de una foto propia en Stories
-//             (como Hevy/Strava).
+// Todos los estilos son 1080×1350 con fondo TRANSPARENTE, como los stickers
+// de Strava: el cliente los pone encima de su propia foto en Stories.
+//   panel — recuadro oscuro redondeado. Default.
+//   white — sin recuadro, texto blanco con sombra (fotos oscuras).
+//   ink   — sin recuadro, texto oscuro con halo claro (fotos claras).
 
 import type { ShareCardBranding } from "./branding";
 import type { ShareCardSettings } from "./settings";
@@ -52,51 +51,66 @@ function luminance(hex: string): number {
 }
 
 interface Palette {
-  background: string;
+  /** Recuadro detrás del contenido; null = sin recuadro. */
+  panelBg: string | null;
   ink: string;
   accent: string;
   recordBg: string;
   recordInk: string;
+  /** Sombra del texto sin recuadro, para leerse sobre cualquier foto. */
+  textShadow: string | null;
+  footerOpacity: number;
+  initialsInk: string;
 }
 
 function paletteFor(
   style: ShareCardSettings["style"],
   brand: string | null
 ): Palette {
-  if (style === "sticker") {
-    // Sin fondo: blanco, que es lo que se lee sobre casi cualquier foto.
-    const ink = "#FFFFFF";
+  // El color de marca solo como acento si se lee sobre el texto base.
+  const brandOnDark = brand !== null && luminance(brand) >= 0.25 ? brand : null;
 
-    return {
-      background: "transparent",
-      ink,
-      accent: brand !== null && luminance(brand) >= 0.25 ? brand : ink,
-      recordBg: "transparent",
-      recordInk: "#FFC94D",
-    };
-  }
-
-  if (style === "light") {
-    // El color de marca solo si se lee sobre blanco.
+  if (style === "ink") {
     const ink = "#151A21";
 
     return {
-      background: "linear-gradient(170deg, #FFFFFF 0%, #EEF1F4 100%)",
+      panelBg: null,
       ink,
       accent: brand !== null && luminance(brand) <= 0.6 ? brand : ink,
-      recordBg: "#FFF1CC",
-      recordInk: "#7A5200",
+      recordBg: "transparent",
+      recordInk: "#8A5A00",
+      textShadow: "0 1px 12px rgba(255, 255, 255, 0.7)",
+      footerOpacity: 0.8,
+      initialsInk: "#FFFFFF",
+    };
+  }
+
+  if (style === "white") {
+    const ink = "#FFFFFF";
+
+    return {
+      panelBg: null,
+      ink,
+      accent: brandOnDark ?? ink,
+      recordBg: "transparent",
+      recordInk: "#FFC94D",
+      textShadow: "0 2px 14px rgba(0, 0, 0, 0.55)",
+      footerOpacity: 0.85,
+      initialsInk: "#0B0F14",
     };
   }
 
   const ink = "#F2F5F8";
 
   return {
-    background: "linear-gradient(170deg, #1E2833 0%, #0B0F14 72%)",
+    panelBg: "rgba(11, 15, 20, 0.86)",
     ink,
-    accent: brand !== null && luminance(brand) >= 0.25 ? brand : ink,
+    accent: brandOnDark ?? ink,
     recordBg: "rgba(255, 196, 64, 0.16)",
     recordInk: "#FFC94D",
+    textShadow: null,
+    footerOpacity: 0.5,
+    initialsInk: "#0B0F14",
   };
 }
 
@@ -181,7 +195,6 @@ export async function renderShareCard(
   headers: Record<string, string>
 ): Promise<ImageResponse> {
   const [regular, bold] = await loadFonts();
-  const sticker = settings.style === "sticker";
   const palette = paletteFor(settings.style, content.branding.brandColor);
   const tiles = tilesFor(content.stats, settings.stats);
   const record = settings.stats.includes("records")
@@ -199,9 +212,8 @@ export async function renderShareCard(
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  // El sticker es más compacto: escala tipográfica ~0.8.
-  const s = sticker ? 0.8 : 1;
-  const px = (n: number) => Math.round(n * s);
+  // Escala tipográfica del sticker (el dibujo original era para 1080×1920).
+  const px = (n: number) => Math.round(n * 0.8);
 
   const brandRow = (
     <div style={{ display: "flex", alignItems: "center", gap: px(32) }}>
@@ -226,7 +238,7 @@ export async function renderShareCard(
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: palette.accent,
-            color: settings.style === "light" ? "#FFFFFF" : "#0B0F14",
+            color: palette.initialsInk,
             fontSize: px(56),
             fontWeight: 700,
           }}
@@ -254,7 +266,7 @@ export async function renderShareCard(
         style={{
           display: "flex",
           flexDirection: "column",
-          marginTop: sticker ? px(70) : "auto",
+          marginTop: px(70),
           gap: px(18),
         }}
       >
@@ -346,8 +358,8 @@ export async function renderShareCard(
             alignItems: "center",
             gap: px(24),
             marginTop: px(80),
-            // Sin fondo en el sticker: la franja se queda en el texto.
-            padding: sticker ? 0 : `${px(30)}px ${px(36)}px`,
+            // Sin recuadro: la franja se queda en el texto.
+            padding: palette.panelBg === null ? 0 : `${px(30)}px ${px(36)}px`,
             borderRadius: px(32),
             backgroundColor: palette.recordBg,
             color: palette.recordInk,
@@ -376,7 +388,7 @@ export async function renderShareCard(
           letterSpacing: 4,
           textTransform: "uppercase",
           // Sobre una foto el gris al 50% se pierde.
-          opacity: sticker ? 0.85 : 0.5,
+          opacity: palette.footerOpacity,
         }}
       >
         <span>{sessionNumber}</span>
@@ -385,7 +397,7 @@ export async function renderShareCard(
     </div>
   );
 
-  const element = sticker ? (
+  const element = (
     <div
       style={{
         width: "100%",
@@ -402,37 +414,28 @@ export async function renderShareCard(
           display: "flex",
           flexDirection: "column",
           width: "100%",
-          padding: "40px 32px",
           color: palette.ink,
-          // Legible sobre fotos claras sin necesidad de fondo.
-          textShadow: "0 2px 14px rgba(0, 0, 0, 0.55)",
+          ...(palette.panelBg !== null
+            ? {
+                padding: "72px 72px 64px",
+                borderRadius: 64,
+                backgroundColor: palette.panelBg,
+              }
+            : { padding: "40px 32px" }),
+          ...(palette.textShadow !== null
+            ? { textShadow: palette.textShadow }
+            : {}),
         }}
       >
         {brandRow}
         {body}
       </div>
     </div>
-  ) : (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        padding: "120px 96px 110px",
-        color: palette.ink,
-        fontFamily: "Barlow",
-        backgroundImage: palette.background,
-      }}
-    >
-      {brandRow}
-      {body}
-    </div>
   );
 
   return new ImageResponse(element, {
     width: 1080,
-    height: sticker ? 1350 : 1920,
+    height: 1350,
     fonts: [
       { name: "Barlow", data: regular, weight: 500, style: "normal" },
       { name: "Barlow", data: bold, weight: 700, style: "normal" },

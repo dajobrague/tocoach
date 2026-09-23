@@ -3,7 +3,11 @@
 // al portal del cliente vía ClientTenantInfo. Puro: lo usan la pestaña de
 // ajustes, las rutas de imagen y el botón del cliente.
 
-export const SHARE_CARD_STYLES = ["dark", "light", "sticker"] as const;
+// Todos transparentes, como los stickers de Strava (David, 23 sep):
+//   panel — recuadro oscuro redondeado sobre fondo transparente.
+//   white — sin recuadro, texto blanco (fotos oscuras).
+//   ink   — sin recuadro, texto oscuro (fotos claras).
+export const SHARE_CARD_STYLES = ["panel", "white", "ink"] as const;
 
 export type ShareCardStyle = (typeof SHARE_CARD_STYLES)[number];
 
@@ -38,7 +42,7 @@ export interface ShareCardSettings {
 
 export const DEFAULT_SHARE_CARD_SETTINGS: ShareCardSettings = {
   enabled: true,
-  style: "dark",
+  style: "panel",
   stats: [...SHARE_CARD_STATS],
 };
 

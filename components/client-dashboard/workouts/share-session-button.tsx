@@ -1,7 +1,7 @@
 "use client";
 
 // "Compartir sesión" (llamada JC, 15 sep): abre una vista previa de la
-// tarjeta 9:16 que genera el servidor y la comparte con el menú nativo del
+// tarjeta (sticker transparente 4:5) que genera el servidor y la comparte con el menú nativo del
 // móvil (Instagram, WhatsApp…). La imagen se descarga al abrir el modal, así
 // el tap de "Compartir" llama a navigator.share con el File ya listo — el
 // navegador exige que share() ocurra dentro del gesto, sin awaits previos.
@@ -148,7 +148,7 @@ export function ShareSessionButton({
           <ModalHeader className="font-heading">Comparte tu sesión</ModalHeader>
           <ModalBody className="items-center">
             {card.status === "loading" ? (
-              <div className="flex aspect-[9/16] w-full max-w-[260px] items-center justify-center rounded-xl bg-default-100">
+              <div className="flex aspect-[4/5] w-full max-w-[260px] items-center justify-center rounded-xl bg-default-100">
                 <Spinner />
               </div>
             ) : card.status === "error" ? (
@@ -157,12 +157,12 @@ export function ShareSessionButton({
               </p>
             ) : (
               <>
-                {/* bg gris solo en la vista previa: el estilo sticker es
-                    blanco sobre transparente y en el modal no se vería. */}
+                {/* Fondo tipo foto solo en la vista previa: la imagen es
+                    transparente (sticker) y sobre el modal no se leería. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt={`Resumen de ${sessionName}`}
-                  className="h-auto w-full max-w-[260px] rounded-xl bg-slate-500 shadow-md"
+                  className="h-auto w-full max-w-[260px] rounded-xl bg-gradient-to-br from-[#d9c7a8] via-[#8a8f8c] to-[#3b4a5a] shadow-md"
                   src={card.url}
                 />
                 <p className="text-center text-xs text-default-500">

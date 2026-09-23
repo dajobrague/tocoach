@@ -29,30 +29,35 @@ import {
   SHARE_CARD_STAT_LABELS,
 } from "@/lib/share-card/settings";
 
+// Fondo "tipo foto" para ver los stickers transparentes (texto blanco y
+// oscuro se leen sobre él, igual que sobre una foto real).
+const PHOTO_BACKDROP =
+  "bg-gradient-to-br from-[#d9c7a8] via-[#8a8f8c] to-[#3b4a5a]";
+
 const STYLE_OPTIONS: Array<{
   key: ShareCardStyle;
   title: string;
   description: string;
-  swatch: string;
+  /** Muestra en miniatura sobre el fondo tipo foto. */
+  sample: string;
 }> = [
   {
-    key: "dark",
-    title: "Oscuro",
-    description: "Historia completa con fondo oscuro.",
-    swatch: "bg-gradient-to-b from-slate-700 to-slate-950",
+    key: "panel",
+    title: "Recuadro",
+    description: "Recuadro oscuro sobre tu foto. Se lee siempre.",
+    sample: "rounded-md bg-slate-950/85 px-2 py-1 text-white",
   },
   {
-    key: "light",
-    title: "Claro",
-    description: "Historia completa con fondo claro y tu color.",
-    swatch: "bg-gradient-to-b from-white to-slate-200 border border-gray-200",
+    key: "white",
+    title: "Texto blanco",
+    description: "Sin recuadro. Para fotos oscuras.",
+    sample: "text-white [text-shadow:0_1px_6px_rgba(0,0,0,.6)]",
   },
   {
-    key: "sticker",
-    title: "Sticker",
-    description: "Sin fondo: texto blanco para ponerlo sobre tu foto.",
-    swatch:
-      "bg-[conic-gradient(#e5e7eb_25%,#fff_0_50%,#e5e7eb_0_75%,#fff_0)] bg-[length:12px_12px] border border-gray-200",
+    key: "ink",
+    title: "Texto oscuro",
+    description: "Sin recuadro. Para fotos claras.",
+    sample: "text-slate-900 [text-shadow:0_1px_6px_rgba(255,255,255,.7)]",
   },
 ];
 
@@ -216,8 +221,14 @@ export default function ShareCardTab() {
                     }
                   >
                     <span
-                      className={`h-16 w-full rounded-lg ${option.swatch}`}
-                    />
+                      className={`flex h-16 w-full items-center justify-center rounded-lg ${PHOTO_BACKDROP}`}
+                    >
+                      <span
+                        className={`text-sm font-bold tabular-nums ${option.sample}`}
+                      >
+                        8.420 kg
+                      </span>
+                    </span>
                     <span>
                       <span className="block text-sm font-semibold text-gray-900">
                         {option.title}
@@ -271,7 +282,9 @@ export default function ShareCardTab() {
           <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
             Vista previa
           </h4>
-          <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-[conic-gradient(#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px]">
+          <div
+            className={`relative overflow-hidden rounded-xl border border-gray-200 ${PHOTO_BACKDROP}`}
+          >
             {previewSrc !== null ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -282,7 +295,7 @@ export default function ShareCardTab() {
                 onLoad={() => setPreviewLoading(false)}
               />
             ) : (
-              <div className="aspect-[9/16] w-full" />
+              <div className="aspect-[4/5] w-full" />
             )}
             {previewLoading ? (
               <div className="absolute inset-0 flex items-center justify-center bg-white/40">
@@ -291,7 +304,8 @@ export default function ShareCardTab() {
             ) : null}
           </div>
           <p className="text-xs text-gray-500">
-            Sesión de ejemplo con tu logo, tu nombre y tu color.
+            Sesión de ejemplo con tu logo, tu nombre y tu color. El fondo es
+            transparente: tu cliente lo pone sobre su foto.
           </p>
         </section>
       </div>

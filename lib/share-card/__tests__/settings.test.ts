@@ -25,24 +25,24 @@ describe("share card settings", () => {
           stats: ["reps", "x", "volume"],
         },
       })
-    ).toEqual({ enabled: false, style: "dark", stats: ["volume", "reps"] });
+    ).toEqual({ enabled: false, style: "panel", stats: ["volume", "reps"] });
   });
 
   it("el PUT rechaza valores desconocidos", () => {
     expect(
       validateShareCardSettings({
         enabled: true,
-        style: "light",
+        style: "white",
         stats: ["sets"],
       })
-    ).toEqual({ enabled: true, style: "light", stats: ["sets"] });
+    ).toEqual({ enabled: true, style: "white", stats: ["sets"] });
     expect(
       validateShareCardSettings({
         enabled: true,
-        style: "light",
+        style: "white",
         stats: ["kcal"],
       })
     ).toBeNull();
-    expect(validateShareCardSettings({ style: "dark", stats: [] })).toBeNull();
+    expect(validateShareCardSettings({ style: "panel", stats: [] })).toBeNull();
   });
 });
