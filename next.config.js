@@ -15,6 +15,10 @@ const nextConfig = {
       "./node_modules/ffmpeg-static/ffmpeg",
     ],
     "/api/exercises/upload-video": ["./node_modules/ffmpeg-static/ffmpeg"],
+    // Fuentes de la tarjeta de sesión: se leen con readFile en runtime.
+    "/api/client/scheduled-sessions/[date]/share-card": [
+      "./assets/fonts/*.ttf",
+    ],
   },
 
   // `ffmpeg-static` resolves its binary path with `__dirname`, but the bundler

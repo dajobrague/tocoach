@@ -24,6 +24,7 @@ import {
   useSetStartTime,
 } from "./hooks/use-scheduled-session-state";
 import { getSessionTypeStyle } from "./session-type-style";
+import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
@@ -360,6 +361,11 @@ export function ActiveSessionView({
           <span className="flex-1 text-sm font-body font-medium text-success-700">
             Entrenamiento completado
           </span>
+          <ShareSessionButton
+            scheduledDate={scheduledDate}
+            sessionId={session.id}
+            sessionName={session.name}
+          />
           {schedState.data?.completedManually === true ? (
             <Button
               className="shrink-0"
