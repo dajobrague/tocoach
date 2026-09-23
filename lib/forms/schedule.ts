@@ -779,3 +779,73 @@ export function formatScheduleDescription(
 
   return `Cada ${n} semanas, los ${days} a las ${timeStr}`;
 }
+
+// ─── Vista "cierre + margen" (JC, 23 sep) ───────────────────────────────────
+// El trainer piensa en CUÁNDO SE CIERRA el check-in y cuántos días antes se
+// abre; en BD sigue guardado como apertura (days_of_week + time) + plazo
+// (grace_period_hours). cierre = apertura + plazo, así que es solo un cambio
+// de vista: ni validación ni cron ni cálculo de plazos cambian.
+// ponytail: se suma en minutos de reloj; un cambio de horario (DST) dentro
+// del plazo mueve el cierre real 1h dos veces al año, igual que hoy.
+
+const MINUTES_PER_DAY = 24 * 60;
+
+export interface CheckInCloseView {
+  /** Días de la semana (0=domingo) en que se CIERRA cada check-in. */
+  closeDays: number[];
+  /** Hora local de cierre, "H:MM". */
+  closeTime: string;
+  /** Cuánto antes del cierre se abre (= grace_period_hours). */
+  marginHours: number;
+}
+
+function shiftDays(days: number[], by: number): number[] {
+  return [...new Set(days.map((d) => (((d + by) % 7) + 7) % 7))].sort(
+    (a, b) => a - b
+  );
+}
+
+function minutesToTime(minutes: number): string {
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Apertura + plazo guardados → cierre + margen para el editor. */
+export function toCloseView(
+  schedule: Pick<
+    CheckInSchedule,
+    "days_of_week" | "time" | "grace_period_hours"
+  >
+): CheckInCloseView {
+  const [h, m] = parseTime(schedule.time);
+  const total = h * 60 + m + schedule.grace_period_hours * 60;
+  const minuteOfDay =
+    ((total % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+
+  return {
+    closeDays: shiftDays(
+      schedule.days_of_week,
+      Math.floor(total / MINUTES_PER_DAY)
+    ),
+    closeTime: minutesToTime(minuteOfDay),
+    marginHours: schedule.grace_period_hours,
+  };
+}
+
+/** Cierre + margen del editor → apertura + plazo a guardar. */
+export function fromCloseView(
+  view: CheckInCloseView
+): Pick<CheckInSchedule, "days_of_week" | "time" | "grace_period_hours"> {
+  const [h, m] = parseTime(view.closeTime);
+  const total = h * 60 + m - view.marginHours * 60;
+  const minuteOfDay =
+    ((total % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+
+  return {
+    days_of_week: shiftDays(
+      view.closeDays,
+      Math.floor(total / MINUTES_PER_DAY)
+    ),
+    time: minutesToTime(minuteOfDay),
+    grace_period_hours: view.marginHours,
+  };
+}

@@ -28,8 +28,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  formatScheduleDescription,
+  type CheckInCloseView,
+  fromCloseView,
   getScheduleOrDefault,
+  toCloseView,
 } from "@/lib/forms/schedule";
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -76,12 +78,37 @@ const COMMON_TIMEZONES: { id: string; label: string }[] = [
   { id: "America/Los_Angeles", label: "EE. UU. (Pacífico)" },
 ];
 
-const GRACE_OPTIONS: { value: number; label: string }[] = [
-  { value: 24, label: "24 horas" },
-  { value: 48, label: "48 horas" },
-  { value: 72, label: "72 horas" },
-  { value: 168, label: "1 semana" },
+/** "Se abre N días antes del cierre" (JC, 23 sep). 1–7 días = el rango
+ *  12–168h que acepta la validación del servidor. */
+const MARGIN_DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
+
+const DAY_NAMES = [
+  "domingo",
+  "lunes",
+  "martes",
+  "miércoles",
+  "jueves",
+  "viernes",
+  "sábado",
 ];
+
+function formatDayList(days: number[]): string {
+  // Lunes primero, como los chips.
+  const names = [...days]
+    .sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
+    .map((d) => DAY_NAMES[d] ?? "");
+
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+function formatMargin(hours: number): string {
+  if (hours % 24 !== 0) return `${hours} horas`;
+  const days = hours / 24;
+
+  return days === 1 ? "1 día" : `${days} días`;
+}
 
 /** Monday → Sunday (L … D). */
 const DAY_CHIPS: { dow: number; short: string }[] = [
@@ -561,10 +588,21 @@ export function CheckInScheduleEditor({
     });
   }, []);
 
+  // El editor muestra CIERRE + margen; el draft sigue guardando apertura +
+  // plazo (ver toCloseView en lib/forms/schedule.ts).
+  const updateClose = useCallback((patch: Partial<CheckInCloseView>) => {
+    setDraft((prev) =>
+      prev
+        ? { ...prev, ...fromCloseView({ ...toCloseView(prev), ...patch }) }
+        : prev
+    );
+  }, []);
+
   const toggleDay = useCallback((dow: number) => {
     setDraft((prev) => {
       if (!prev) return prev;
-      let days = [...prev.days_of_week];
+      const view = toCloseView(prev);
+      let days = [...view.closeDays];
       const has = days.includes(dow);
 
       if (has) {
@@ -581,7 +619,11 @@ export function CheckInScheduleEditor({
       // the "Vista previa" honest.
       const times_per_week = Math.max(1, days.length);
 
-      return { ...prev, days_of_week: days, times_per_week };
+      return {
+        ...prev,
+        ...fromCloseView({ ...view, closeDays: days }),
+        times_per_week,
+      };
     });
     setInlineErrors((e) => {
       if (!e.days_of_week) return e;
@@ -731,6 +773,7 @@ export function CheckInScheduleEditor({
     }
 
     const formDisabled = !draft.enabled;
+    const closeView = toCloseView(draft);
 
     return (
       <>
@@ -767,7 +810,7 @@ export function CheckInScheduleEditor({
               check-ins dentro de cada semana activa. */}
           <div>
             <div className="mb-2 flex items-baseline justify-between gap-2">
-              <p className="text-sm font-medium text-default-700">Frecuencia</p>
+              <p className="text-sm font-medium text-default-700">Se cierra</p>
               {inlineErrors.interval_weeks || inlineErrors.days_of_week ? (
                 <p className="text-xs text-danger">
                   {inlineErrors.interval_weeks ?? inlineErrors.days_of_week}
@@ -806,7 +849,7 @@ export function CheckInScheduleEditor({
               />
               <div className="flex flex-wrap gap-1">
                 {DAY_CHIPS.map(({ dow, short }) => {
-                  const selected = draft.days_of_week.includes(dow);
+                  const selected = closeView.closeDays.includes(dow);
 
                   return (
                     <Button
@@ -828,19 +871,19 @@ export function CheckInScheduleEditor({
             </div>
           </div>
 
-          {/* Hora + Zona horaria + Tiempo límite — una sola fila en sm+, se
-              apila en móvil. Elimina tres filas separadas para ahorrar alto. */}
+          {/* Hora de cierre + Zona horaria + Se abre — una sola fila en sm+,
+              se apila en móvil. */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto]">
             <Input
               classNames={{ base: "sm:w-32" }}
               errorMessage={inlineErrors.time}
               isInvalid={Boolean(inlineErrors.time)}
-              label="Hora"
+              label="Hora de cierre"
               size="sm"
               type="time"
-              value={toTimeInputValue(draft.time)}
+              value={toTimeInputValue(closeView.closeTime)}
               onValueChange={(v) =>
-                updateDraft({ time: fromTimeInputValue(v) })
+                updateClose({ closeTime: fromTimeInputValue(v) })
               }
             />
 
@@ -880,26 +923,28 @@ export function CheckInScheduleEditor({
 
             <Select
               classNames={{ base: "sm:w-40" }}
-              label="Tiempo límite"
-              selectedKeys={new Set([String(draft.grace_period_hours)])}
+              label="Se abre"
+              selectedKeys={new Set([String(closeView.marginHours)])}
               size="sm"
               onSelectionChange={(keys) => {
                 const v = Array.from(keys)[0];
 
                 if (v) {
-                  updateDraft({ grace_period_hours: parseInt(String(v), 10) });
+                  updateClose({ marginHours: parseInt(String(v), 10) });
                 }
               }}
             >
               <>
-                {GRACE_OPTIONS.map((o) => (
-                  <SelectItem key={String(o.value)}>{o.label}</SelectItem>
+                {MARGIN_DAY_OPTIONS.map((days) => (
+                  <SelectItem key={String(days * 24)}>
+                    {`${formatMargin(days * 24)} antes`}
+                  </SelectItem>
                 ))}
-                {!GRACE_OPTIONS.some(
-                  (o) => o.value === draft.grace_period_hours
-                ) ? (
-                  <SelectItem key={String(draft.grace_period_hours)}>
-                    {draft.grace_period_hours} horas (actual)
+                {/* Plazos legacy no múltiplos de 24 (p. ej. 12h, 36h). */}
+                {closeView.marginHours % 24 !== 0 ||
+                closeView.marginHours > 168 ? (
+                  <SelectItem key={String(closeView.marginHours)}>
+                    {`${formatMargin(closeView.marginHours)} antes (actual)`}
                   </SelectItem>
                 ) : null}
               </>
@@ -924,11 +969,14 @@ export function CheckInScheduleEditor({
                 <strong className="text-foreground">
                   {draft.custom_name.trim() || "Check-in"}
                 </strong>
-                : {formatScheduleDescription(draft)}{" "}
-                <span className="text-default-500">
-                  ({draft.timezone} · {draft.grace_period_hours}h para
-                  completar)
-                </span>
+                : se cierra{" "}
+                {draft.interval_weeks > 1
+                  ? `cada ${draft.interval_weeks} semanas, los`
+                  : "cada"}{" "}
+                {formatDayList(closeView.closeDays)} a las{" "}
+                {toTimeInputValue(closeView.closeTime)} y se abre{" "}
+                {formatMargin(closeView.marginHours)} antes{" "}
+                <span className="text-default-500">({draft.timezone})</span>
               </span>
             )}
           </div>
