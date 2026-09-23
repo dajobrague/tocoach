@@ -224,6 +224,26 @@ export function useExerciseMutations(
       duplicateExercise(clientId, programId, sessionId, sessionExerciseId),
     onSuccess: invalidate,
   });
+  const copyExerciseToM = useMutation({
+    mutationFn: (vars: {
+      sessionExerciseId: string;
+      targetSessionId: string;
+      move: boolean;
+    }) =>
+      duplicateExercise(
+        clientId,
+        programId,
+        sessionId,
+        vars.sessionExerciseId,
+        {
+          sessionId: vars.targetSessionId,
+          move: vars.move,
+        }
+      ),
+    // onSettled: si se copió pero no se pudo borrar el original, la copia
+    // tiene que aparecer igual.
+    onSettled: invalidate,
+  });
   const reorderExercisesM = useMutation({
     mutationFn: (reorder: ExerciseOrderItem[]) =>
       reorderExercises(clientId, programId, sessionId, reorder),
@@ -254,6 +274,7 @@ export function useExerciseMutations(
     updateExercise: updateExerciseM,
     deleteExercise: deleteExerciseM,
     duplicateExercise: duplicateExerciseM,
+    copyExerciseTo: copyExerciseToM,
     reorderExercises: reorderExercisesM,
   };
 }

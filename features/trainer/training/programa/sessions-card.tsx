@@ -271,6 +271,9 @@ export function SessionsCard({
                     programId={program.programId}
                     recentlyDuplicatedExerciseId={recentlyDuplicatedExerciseId}
                     session={session}
+                    siblingSessions={program.sessions.filter(
+                      (other) => other.id !== session.id
+                    )}
                     onAddExercise={() => onAddExercise(session)}
                     onEditExercise={(exercise) =>
                       onEditExercise(session, exercise)

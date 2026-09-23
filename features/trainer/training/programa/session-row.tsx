@@ -51,6 +51,8 @@ interface SessionRowProps {
   clientId: string;
   programId: string;
   session: WorkoutSession;
+  /** Resto de sesiones del programa: destino de "Mover / copiar a". */
+  siblingSessions: WorkoutSession[];
   /** "Día 1, 4" según el microciclo, o null si no está asignada. */
   dayLabel: string | null;
   isExpanded: boolean;
@@ -104,6 +106,7 @@ export function SessionRow({
   clientId,
   programId,
   session,
+  siblingSessions,
   dayLabel,
   isExpanded,
   dragHandleProps,
@@ -386,6 +389,93 @@ export function SessionRow({
                             width={15}
                           />
                         </Button>
+                        {/* JC, 22 sep: llevarse un ejercicio de Empuje B a
+                            la A sin rehacerlo. Copia/mueve al FINAL de la
+                            sesión destino con la prescripción completa. */}
+                        {siblingSessions.length > 0 && (
+                          <Dropdown placement="bottom-end">
+                            <DropdownTrigger>
+                              <Button
+                                isIconOnly
+                                aria-label={`Mover o copiar ${exercise.name} a otra sesión`}
+                                isDisabled={
+                                  exercise.id === undefined ||
+                                  mutations.copyExerciseTo.isPending
+                                }
+                                size="sm"
+                                title="Mover o copiar a otra sesión"
+                                variant="light"
+                              >
+                                <Icon
+                                  className="text-gray-600"
+                                  icon="solar:transfer-horizontal-linear"
+                                  width={15}
+                                />
+                              </Button>
+                            </DropdownTrigger>
+                            <DropdownMenu
+                              aria-label="Sesión destino"
+                              items={siblingSessions.flatMap((target) => [
+                                {
+                                  key: `move:${target.id}`,
+                                  target,
+                                  move: true,
+                                },
+                                {
+                                  key: `copy:${target.id}`,
+                                  target,
+                                  move: false,
+                                },
+                              ])}
+                              onAction={(key) => {
+                                const [mode, targetSessionId] =
+                                  String(key).split(":");
+
+                                if (
+                                  exercise.id === undefined ||
+                                  targetSessionId === undefined
+                                )
+                                  return;
+                                setActionError(null);
+                                mutations.copyExerciseTo.mutate(
+                                  {
+                                    sessionExerciseId: exercise.id,
+                                    targetSessionId,
+                                    move: mode === "move",
+                                  },
+                                  {
+                                    onError: (error) =>
+                                      setActionError(
+                                        error instanceof Error
+                                          ? error.message
+                                          : "No se pudo mover el ejercicio"
+                                      ),
+                                  }
+                                );
+                              }}
+                            >
+                              {(item) => (
+                                <DropdownItem
+                                  key={item.key}
+                                  startContent={
+                                    <Icon
+                                      className="text-gray-500"
+                                      icon={
+                                        item.move
+                                          ? "solar:arrow-right-linear"
+                                          : "solar:copy-linear"
+                                      }
+                                      width={14}
+                                    />
+                                  }
+                                >
+                                  {item.move ? "Mover a" : "Copiar a"}{" "}
+                                  <strong>{item.target.name}</strong>
+                                </DropdownItem>
+                              )}
+                            </DropdownMenu>
+                          </Dropdown>
+                        )}
                         <Button
                           isIconOnly
                           aria-label={`Editar ${exercise.name}`}

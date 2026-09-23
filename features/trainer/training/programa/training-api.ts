@@ -462,17 +462,26 @@ export function deleteExercise(
   );
 }
 
-/** Clona un ejercicio con su prescripción completa, justo debajo del original. */
+/** Clona un ejercicio con su prescripción completa, justo debajo del original.
+ *  Con `target`, la copia va al final de otra sesión del programa y
+ *  `move` borra el original. */
 export function duplicateExercise(
   clientId: string,
   programId: string,
   sessionId: string,
-  sessionExerciseId: string
+  sessionExerciseId: string,
+  target?: { sessionId: string; move: boolean }
 ): Promise<SessionExerciseRow> {
   return sendJson<{ exercise: SessionExerciseRow }>(
     `${base(clientId)}/${programId}/sessions/${sessionId}/exercises/duplicate`,
     "POST",
-    { sessionExerciseId }
+    target === undefined
+      ? { sessionExerciseId }
+      : {
+          sessionExerciseId,
+          targetSessionId: target.sessionId,
+          move: target.move,
+        }
   ).then((body) => body.exercise);
 }
 
