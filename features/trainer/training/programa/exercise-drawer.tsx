@@ -448,18 +448,25 @@ export function ExerciseDrawer({
                     </p>
                   )}
                 </div>
-                {listOpen === false && (
-                  <Button
-                    size="sm"
-                    startContent={
-                      <Icon icon="solar:refresh-linear" width={14} />
-                    }
-                    variant="light"
-                    onPress={() => setListOpen(true)}
-                  >
-                    Cambiar
-                  </Button>
-                )}
+                {/* Con el listado abierto el mismo botón lo cierra (JC, 22
+                    sep): si abrió "Cambiar" por error no tenía salida. */}
+                <Button
+                  size="sm"
+                  startContent={
+                    <Icon
+                      icon={
+                        listOpen
+                          ? "solar:close-circle-linear"
+                          : "solar:refresh-linear"
+                      }
+                      width={14}
+                    />
+                  }
+                  variant="light"
+                  onPress={() => setListOpen(!listOpen)}
+                >
+                  {listOpen ? "Cerrar" : "Cambiar"}
+                </Button>
               </div>
             )}
 
