@@ -7,8 +7,9 @@ import "server-only";
 // Estilos (Fase 2):
 //   dark    — 1080×1920, fondo oscuro. Default.
 //   light   — 1080×1920, fondo claro con el color de marca.
-//   sticker — 1080×1350 con fondo TRANSPARENTE: un panel para poner encima
-//             de una foto propia en Stories (como Hevy/Strava).
+//   sticker — 1080×1350 TOTALMENTE transparente (sin panel): texto blanco
+//             con sombra para ponerlo encima de una foto propia en Stories
+//             (como Hevy/Strava).
 
 import type { ShareCardBranding } from "./branding";
 import type { ShareCardSettings } from "./settings";
@@ -62,6 +63,19 @@ function paletteFor(
   style: ShareCardSettings["style"],
   brand: string | null
 ): Palette {
+  if (style === "sticker") {
+    // Sin fondo: blanco, que es lo que se lee sobre casi cualquier foto.
+    const ink = "#FFFFFF";
+
+    return {
+      background: "transparent",
+      ink,
+      accent: brand !== null && luminance(brand) >= 0.25 ? brand : ink,
+      recordBg: "transparent",
+      recordInk: "#FFC94D",
+    };
+  }
+
   if (style === "light") {
     // El color de marca solo si se lee sobre blanco.
     const ink = "#151A21";
@@ -332,7 +346,8 @@ export async function renderShareCard(
             alignItems: "center",
             gap: px(24),
             marginTop: px(80),
-            padding: `${px(30)}px ${px(36)}px`,
+            // Sin fondo en el sticker: la franja se queda en el texto.
+            padding: sticker ? 0 : `${px(30)}px ${px(36)}px`,
             borderRadius: px(32),
             backgroundColor: palette.recordBg,
             color: palette.recordInk,
@@ -360,7 +375,8 @@ export async function renderShareCard(
           fontWeight: 500,
           letterSpacing: 4,
           textTransform: "uppercase",
-          opacity: 0.5,
+          // Sobre una foto el gris al 50% se pierde.
+          opacity: sticker ? 0.85 : 0.5,
         }}
       >
         <span>{sessionNumber}</span>
@@ -386,10 +402,10 @@ export async function renderShareCard(
           display: "flex",
           flexDirection: "column",
           width: "100%",
-          padding: "72px 72px 64px",
-          borderRadius: 64,
-          backgroundColor: "rgba(11, 15, 20, 0.86)",
+          padding: "40px 32px",
           color: palette.ink,
+          // Legible sobre fotos claras sin necesidad de fondo.
+          textShadow: "0 2px 14px rgba(0, 0, 0, 0.55)",
         }}
       >
         {brandRow}

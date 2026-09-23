@@ -157,10 +157,12 @@ export function ShareSessionButton({
               </p>
             ) : (
               <>
+                {/* bg gris solo en la vista previa: el estilo sticker es
+                    blanco sobre transparente y en el modal no se vería. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt={`Resumen de ${sessionName}`}
-                  className="h-auto w-full max-w-[260px] rounded-xl shadow-md"
+                  className="h-auto w-full max-w-[260px] rounded-xl bg-slate-500 shadow-md"
                   src={card.url}
                 />
                 <p className="text-center text-xs text-default-500">

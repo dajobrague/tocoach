@@ -50,7 +50,7 @@ const STYLE_OPTIONS: Array<{
   {
     key: "sticker",
     title: "Sticker",
-    description: "Fondo transparente para ponerlo sobre una foto.",
+    description: "Sin fondo: texto blanco para ponerlo sobre tu foto.",
     swatch:
       "bg-[conic-gradient(#e5e7eb_25%,#fff_0_50%,#e5e7eb_0_75%,#fff_0)] bg-[length:12px_12px] border border-gray-200",
   },

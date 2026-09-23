@@ -19,12 +19,17 @@ export function logoUrlIsAllowed(rawUrl: string): boolean {
     }
   })();
 
-  if (!allowedHost) return false;
-
   try {
     const parsed = new URL(rawUrl);
 
     if (parsed.protocol !== "https:") return false;
+
+    // Cualquier proyecto de Supabase Cloud (host público, nunca interno):
+    // los logos viven en el Storage de prod, y en local
+    // NEXT_PUBLIC_SUPABASE_URL es 127.0.0.1 — sin esto la tarjeta y el
+    // icono PWA salían siempre sin logo en desarrollo.
+    if (parsed.hostname.endsWith(".supabase.co")) return true;
+    if (!allowedHost) return false;
 
     // Allow exact match or any subdomain of the Supabase project host.
     return (
