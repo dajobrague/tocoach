@@ -7,7 +7,8 @@
 // Interactivo como los días del plan en nutrición (pedido de David): un
 // tile punteado "+ Día" agrega al final y cada día muestra una "×" al pasar
 // el mouse para quitarlo (los siguientes se corren) — sin slider ni modal
-// de ajustes. La fecha de inicio vive junto al título como pill editable;
+// de ajustes. Filas de 7 (pedido JC, 22 sep): todo el microciclo de un
+// vistazo y cada fila = una semana natural desde la fecha de inicio. La fecha de inicio vive junto al título como pill editable;
 // cambiarla conserva el guardarraíl de confirmación ("borrará las
 // prescripciones futuras…") de la pantalla vieja.
 
@@ -110,10 +111,6 @@ export function MicrocycleDaysCard({
   const [dateDraft, setDateDraft] = useState(state.startDate);
   const [dateConfirm, setDateConfirm] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<number | null>(null);
-  // Paginación como pidió David: máximo 10 tiles visibles; flechas para el
-  // resto. El "+" vive junto al ÚLTIMO día, así que solo aparece cuando la
-  // ventana alcanza el final.
-  const [pageStart, setPageStart] = useState(1);
 
   const resolveSlot = (sessionId: string): ResolvedSlot => {
     // El check de ocultas va PRIMERO: `sessions` solo trae programas
@@ -179,21 +176,17 @@ export function MicrocycleDaysCard({
     }
   };
 
-  const PAGE_SIZE = 10;
-  // Clampea la ventana si la duración bajó (quitar días) o subió (agregar).
-  const maxStart = Math.max(1, state.durationDays - PAGE_SIZE + 1);
-  const windowStart = Math.min(pageStart, maxStart);
-  const windowEnd = Math.min(windowStart + PAGE_SIZE - 1, state.durationDays);
-  const canPageLeft = windowStart > 1;
-  const canPageRight = windowEnd < state.durationDays;
-  const lastDayVisible = windowEnd === state.durationDays;
-  const days = Array.from(
-    { length: windowEnd - windowStart + 1 },
-    (_, i) => windowStart + i
-  );
-
-  const goToEnd = () =>
-    setPageStart(Math.max(1, state.durationDays + 1 - PAGE_SIZE + 1));
+  const days = Array.from({ length: state.durationDays }, (_, i) => i + 1);
+  // Cabecera de columnas: el Día 1 cae en el día de semana de la fecha de
+  // inicio, así cada columna es siempre el mismo día de la semana.
+  const start = new Date(`${state.startDate}T00:00:00`);
+  const weekdays = Number.isNaN(start.getTime())
+    ? []
+    : Array.from({ length: 7 }, (_, i) =>
+        new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+          .toLocaleDateString("es-ES", { weekday: "short" })
+          .replaceAll(".", "")
+      );
 
   return (
     <div className="rounded-large border border-gray-200 bg-white shadow-sm">
@@ -290,257 +283,230 @@ export function MicrocycleDaysCard({
             {state.errorMessage ?? "No se pudo cargar el microciclo"}
           </div>
         ) : (
-          <div className="flex items-stretch gap-3">
-            {canPageLeft ? (
-              <button
-                aria-label="Días anteriores"
-                className="flex w-8 shrink-0 items-center justify-center rounded-large border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
-                type="button"
-                onClick={() =>
-                  setPageStart(Math.max(1, windowStart - PAGE_SIZE))
-                }
+          <div className="grid grid-cols-7 gap-2">
+            {weekdays.map((weekday) => (
+              <span
+                key={weekday}
+                className="text-center text-[10px] font-semibold uppercase tracking-wider text-default-400"
               >
-                <Icon icon="solar:alt-arrow-left-linear" width={16} />
-              </button>
-            ) : null}
+                {weekday}
+              </span>
+            ))}
+            {days.map((day) => {
+              const sessionId = state.slotByDay.get(day) ?? null;
+              const resolved =
+                sessionId !== null ? resolveSlot(sessionId) : null;
 
-            {/* Grilla de fracciones iguales (receta del day-selector de
-                nutrición): los tiles se achican a medida que hay más días. */}
-            <div className="grid flex-1 auto-cols-fr grid-flow-col gap-2">
-              {days.map((day) => {
-                const sessionId = state.slotByDay.get(day) ?? null;
-                const resolved =
-                  sessionId !== null ? resolveSlot(sessionId) : null;
+              return (
+                <div key={day} className="group relative min-w-0">
+                  <Popover
+                    isOpen={openDay === day}
+                    placement="bottom"
+                    onOpenChange={(isOpen) => {
+                      if (isOpen) {
+                        const assigned =
+                          sessionId !== null
+                            ? sessions.find(
+                                (session) => session.id === sessionId
+                              )
+                            : undefined;
 
-                return (
-                  <div key={day} className="group relative">
-                    <Popover
-                      isOpen={openDay === day}
-                      placement="bottom"
-                      onOpenChange={(isOpen) => {
-                        if (isOpen) {
-                          const assigned =
-                            sessionId !== null
-                              ? sessions.find(
-                                  (session) => session.id === sessionId
-                                )
-                              : undefined;
-
-                          if (assigned !== undefined) {
-                            setPickerTab(assigned.sessionType);
-                          }
+                        if (assigned !== undefined) {
+                          setPickerTab(assigned.sessionType);
                         }
-                        setOpenDay(isOpen ? day : null);
-                      }}
-                    >
-                      <PopoverTrigger>
-                        <button
-                          className={`flex h-full w-full flex-col gap-0.5 rounded-large border px-3 py-3 text-left transition-all ${
-                            openDay === day
-                              ? "border-blue-500 bg-blue-50/50 shadow-sm ring-1 ring-blue-500"
-                              : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+                      }
+                      setOpenDay(isOpen ? day : null);
+                    }}
+                  >
+                    <PopoverTrigger>
+                      <button
+                        className={`flex h-full w-full flex-col gap-0.5 rounded-large border px-3 py-3 text-left transition-all ${
+                          openDay === day
+                            ? "border-blue-500 bg-blue-50/50 shadow-sm ring-1 ring-blue-500"
+                            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+                        }`}
+                        type="button"
+                      >
+                        <span className="truncate text-sm font-semibold text-gray-900">
+                          Día {day}
+                        </span>
+                        <span
+                          className={`line-clamp-2 text-xs ${
+                            resolved === null
+                              ? "text-default-400"
+                              : resolved.isHidden === true
+                                ? "font-medium text-default-400 line-through decoration-default-300"
+                                : resolved.isCardio
+                                  ? "font-medium text-rose-600"
+                                  : "font-medium text-gray-700"
                           }`}
-                          type="button"
                         >
-                          <span className="truncate text-sm font-semibold text-gray-900">
-                            Día {day}
+                          {resolved?.name ?? "Descanso"}
+                        </span>
+                        {resolved?.isHidden === true && (
+                          <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600">
+                            <Icon icon="solar:eye-closed-linear" width={11} />
+                            No visible (pausado)
                           </span>
-                          <span
-                            className={`line-clamp-2 text-xs ${
-                              resolved === null
-                                ? "text-default-400"
-                                : resolved.isHidden === true
-                                  ? "font-medium text-default-400 line-through decoration-default-300"
-                                  : resolved.isCardio
-                                    ? "font-medium text-rose-600"
-                                    : "font-medium text-gray-700"
-                            }`}
-                          >
-                            {resolved?.name ?? "Descanso"}
-                          </span>
-                          {resolved?.isHidden === true && (
-                            <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600">
-                              <Icon icon="solar:eye-closed-linear" width={11} />
-                              No visible (pausado)
-                            </span>
-                          )}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-72 p-1.5">
-                        <div className="flex w-full flex-col gap-1">
-                          <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
-                            Asignar al día {day}
-                          </p>
-                          {/* Pestañas con el icono y color de los tiles del
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-1.5">
+                      <div className="flex w-full flex-col gap-1">
+                        <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-default-500">
+                          Asignar al día {day}
+                        </p>
+                        {/* Pestañas con el icono y color de los tiles del
                               modal de programa (misma paleta, CATEGORY_TILE). */}
-                          <div
-                            aria-label="Tipo de sesión"
-                            className="grid grid-cols-2 gap-1.5 px-0.5"
-                            role="tablist"
-                          >
-                            {(["strength", "cardio"] as const).map(
-                              (category) => {
-                                const visual = CATEGORY_VISUAL[category];
-                                const tile = CATEGORY_TILE[category];
-                                const isActive = pickerTab === category;
+                        <div
+                          aria-label="Tipo de sesión"
+                          className="grid grid-cols-2 gap-1.5 px-0.5"
+                          role="tablist"
+                        >
+                          {(["strength", "cardio"] as const).map((category) => {
+                            const visual = CATEGORY_VISUAL[category];
+                            const tile = CATEGORY_TILE[category];
+                            const isActive = pickerTab === category;
 
-                                return (
-                                  <button
-                                    key={category}
-                                    aria-selected={isActive}
-                                    className={`flex items-center justify-center gap-1.5 rounded-large border-2 px-2 py-1.5 text-xs font-semibold transition-all ${
-                                      isActive
-                                        ? `${tile.selected} text-gray-900`
-                                        : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
-                                    }`}
-                                    role="tab"
-                                    type="button"
-                                    onClick={() => setPickerTab(category)}
-                                  >
-                                    <Icon
-                                      className={
-                                        isActive ? tile.accent : "text-gray-400"
-                                      }
-                                      icon={visual.icon}
-                                      width={16}
-                                    />
-                                    {visual.label} · {tabCount(category)}
-                                  </button>
-                                );
-                              }
-                            )}
-                          </div>
-                          {/* Solo la lista scrollea: "Descanso" tiene que
-                              seguir a la vista sin buscarlo al fondo. */}
-                          <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
-                            {tabGroups[pickerTab].length === 0 && (
-                              <p className="px-2 py-1.5 text-xs text-default-500">
-                                Sin sesiones de{" "}
-                                {CATEGORY_VISUAL[pickerTab].label.toLowerCase()}{" "}
-                                en los programas activos.
-                              </p>
-                            )}
-                            {/* Cabecera de grupo solo si en la pestaña hay
-                                sesiones de más de un programa. */}
-                            {tabGroups[pickerTab].map(
-                              ({ program, sessions: groupSessions }) => {
-                                const programVisual =
-                                  CATEGORY_VISUAL[programCategory(program)];
-
-                                return (
-                                  <div
-                                    key={program.programId}
-                                    className="flex flex-col gap-0.5"
-                                  >
-                                    {tabGroups[pickerTab].length > 1 && (
-                                      <p className="flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-gray-700">
-                                        <span
-                                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${programVisual.dot}`}
-                                        />
-                                        <span className="truncate">
-                                          {program.name}
-                                        </span>
-                                      </p>
-                                    )}
-                                    {groupSessions.map((session) => (
-                                      <button
-                                        key={session.id}
-                                        className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
-                                          sessionId === session.id
-                                            ? "bg-gray-50 font-medium"
-                                            : ""
-                                        }`}
-                                        type="button"
-                                        onClick={() => {
-                                          state.assign(day, session.id);
-                                          setOpenDay(null);
-                                        }}
-                                      >
-                                        <span className="truncate text-gray-900">
-                                          {session.name}
-                                        </span>
-                                        <span className="shrink-0 text-[11px] text-default-400 tabular-nums">
-                                          {session.exercises.length} ej.
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                );
-                              }
-                            )}
-                          </div>
-                          <div className="my-0.5 border-t border-gray-100" />
-                          <button
-                            className="flex w-full items-center gap-2 rounded-medium px-2 py-1.5 text-left text-sm text-default-500 transition-colors hover:bg-gray-100"
-                            type="button"
-                            onClick={() => {
-                              state.assign(day, null);
-                              setOpenDay(null);
-                            }}
-                          >
-                            <Icon icon="solar:moon-stars-linear" width={14} />
-                            Descanso
-                          </button>
+                            return (
+                              <button
+                                key={category}
+                                aria-selected={isActive}
+                                className={`flex items-center justify-center gap-1.5 rounded-large border-2 px-2 py-1.5 text-xs font-semibold transition-all ${
+                                  isActive
+                                    ? `${tile.selected} text-gray-900`
+                                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                                }`}
+                                role="tab"
+                                type="button"
+                                onClick={() => setPickerTab(category)}
+                              >
+                                <Icon
+                                  className={
+                                    isActive ? tile.accent : "text-gray-400"
+                                  }
+                                  icon={visual.icon}
+                                  width={16}
+                                />
+                                {visual.label} · {tabCount(category)}
+                              </button>
+                            );
+                          })}
                         </div>
-                      </PopoverContent>
-                    </Popover>
+                        {/* Solo la lista scrollea: "Descanso" tiene que
+                              seguir a la vista sin buscarlo al fondo. */}
+                        <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+                          {tabGroups[pickerTab].length === 0 && (
+                            <p className="px-2 py-1.5 text-xs text-default-500">
+                              Sin sesiones de{" "}
+                              {CATEGORY_VISUAL[pickerTab].label.toLowerCase()}{" "}
+                              en los programas activos.
+                            </p>
+                          )}
+                          {/* Cabecera de grupo solo si en la pestaña hay
+                                sesiones de más de un programa. */}
+                          {tabGroups[pickerTab].map(
+                            ({ program, sessions: groupSessions }) => {
+                              const programVisual =
+                                CATEGORY_VISUAL[programCategory(program)];
 
-                    {/* × al hover — receta EXACTA del day-selector de
+                              return (
+                                <div
+                                  key={program.programId}
+                                  className="flex flex-col gap-0.5"
+                                >
+                                  {tabGroups[pickerTab].length > 1 && (
+                                    <p className="flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-gray-700">
+                                      <span
+                                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${programVisual.dot}`}
+                                      />
+                                      <span className="truncate">
+                                        {program.name}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {groupSessions.map((session) => (
+                                    <button
+                                      key={session.id}
+                                      className={`flex w-full items-center justify-between gap-2 rounded-medium px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-100 ${
+                                        sessionId === session.id
+                                          ? "bg-gray-50 font-medium"
+                                          : ""
+                                      }`}
+                                      type="button"
+                                      onClick={() => {
+                                        state.assign(day, session.id);
+                                        setOpenDay(null);
+                                      }}
+                                    >
+                                      <span className="truncate text-gray-900">
+                                        {session.name}
+                                      </span>
+                                      <span className="shrink-0 text-[11px] text-default-400 tabular-nums">
+                                        {session.exercises.length} ej.
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                        <div className="my-0.5 border-t border-gray-100" />
+                        <button
+                          className="flex w-full items-center gap-2 rounded-medium px-2 py-1.5 text-left text-sm text-default-500 transition-colors hover:bg-gray-100"
+                          type="button"
+                          onClick={() => {
+                            state.assign(day, null);
+                            setOpenDay(null);
+                          }}
+                        >
+                          <Icon icon="solar:moon-stars-linear" width={14} />
+                          Descanso
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* × al hover — receta EXACTA del day-selector de
                         nutrición: 16px, sin círculo ni sombra, esquina
                         superior derecha. */}
-                    {state.durationDays > 1 ? (
-                      <button
-                        aria-label={`Quitar día ${day}`}
-                        className="absolute right-1 top-1 z-10 flex items-center justify-center rounded-full text-sm font-bold leading-none text-gray-400 opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                        style={{
-                          height: 16,
-                          width: 16,
-                          minHeight: 0,
-                          minWidth: 0,
-                          padding: 0,
-                        }}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (resolved !== null) {
-                            setRemoveTarget(day);
-                          } else {
-                            state.removeDay(day);
-                          }
-                        }}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+                  {state.durationDays > 1 ? (
+                    <button
+                      aria-label={`Quitar día ${day}`}
+                      className="absolute right-1 top-1 z-10 flex items-center justify-center rounded-full text-sm font-bold leading-none text-gray-400 opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                      style={{
+                        height: 16,
+                        width: 16,
+                        minHeight: 0,
+                        minWidth: 0,
+                        padding: 0,
+                      }}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (resolved !== null) {
+                          setRemoveTarget(day);
+                        } else {
+                          state.removeDay(day);
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
 
-            {canPageRight ? (
-              <button
-                aria-label="Días siguientes"
-                className="flex w-8 shrink-0 items-center justify-center rounded-large border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
-                type="button"
-                onClick={() =>
-                  setPageStart(Math.min(maxStart, windowStart + PAGE_SIZE))
-                }
-              >
-                <Icon icon="solar:alt-arrow-right-linear" width={16} />
-              </button>
-            ) : null}
-
-            {/* "+" siempre junto al último día (visible solo cuando la
-                ventana llega al final) — tile lateral como en nutrición. */}
-            {lastDayVisible && state.durationDays < MAX_DAYS ? (
+            {/* "+" ocupa la celda siguiente al último día: si la fila está
+                llena, baja solo a la fila de abajo. */}
+            {state.durationDays < MAX_DAYS ? (
               <button
                 aria-label="Agregar día"
-                className="flex shrink-0 flex-col items-center justify-center gap-1 self-stretch rounded-large border border-dashed border-gray-300 px-4 text-xs font-medium text-default-500 transition-all hover:border-blue-400 hover:bg-blue-50/40 hover:text-blue-600"
+                className="flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-large border border-dashed border-gray-300 text-xs font-medium text-default-500 transition-all hover:border-blue-400 hover:bg-blue-50/40 hover:text-blue-600"
                 type="button"
-                onClick={() => {
-                  state.addDay();
-                  goToEnd();
-                }}
+                onClick={() => state.addDay()}
               >
                 <Icon icon="solar:add-circle-linear" width={22} />
                 Día
