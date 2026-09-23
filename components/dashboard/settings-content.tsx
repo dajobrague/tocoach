@@ -7,6 +7,7 @@ import React from "react";
 import BrandColorsTab from "./brand-settings/colors-tab";
 import BrandDomainTab from "./brand-settings/domain-tab";
 import BrandLogoTab from "./brand-settings/logo-tab";
+import ShareCardTab from "./brand-settings/share-card-tab";
 import BrandTypographyTab from "./brand-settings/typography-tab";
 import ProfileTab from "./settings/profile-tab";
 
@@ -40,6 +41,12 @@ export default function SettingsContent({
       title: "Tipografía",
       icon: "solar:text-field-linear",
       component: <BrandTypographyTab />,
+    },
+    {
+      key: "share-card",
+      title: "Tarjeta de sesión",
+      icon: "solar:share-linear",
+      component: <ShareCardTab />,
     },
     {
       key: "domain",

@@ -20,7 +20,9 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { useTenant } from "@/components/tenant-provider";
 import { clientFetch } from "@/lib/auth/client-token-storage";
+import { shareCardSettingsFromFeatures } from "@/lib/share-card/settings";
 
 interface ShareSessionButtonProps {
   scheduledDate: string;
@@ -49,6 +51,8 @@ export function ShareSessionButton({
   sessionId,
   sessionName,
 }: ShareSessionButtonProps) {
+  // El entrenador puede desactivarla (Ajustes → Marca → Tarjeta de sesión).
+  const enabled = shareCardSettingsFromFeatures(useTenant()?.features).enabled;
   const [isOpen, setIsOpen] = useState(false);
   const [card, setCard] = useState<CardState>({ status: "loading" });
   const [shareFailed, setShareFailed] = useState(false);
@@ -118,6 +122,8 @@ export function ShareSessionButton({
     link.remove();
   };
 
+  if (!enabled) return null;
+
   return (
     <>
       <Button
@@ -154,7 +160,7 @@ export function ShareSessionButton({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt={`Resumen de ${sessionName}`}
-                  className="aspect-[9/16] w-full max-w-[260px] rounded-xl shadow-md"
+                  className="h-auto w-full max-w-[260px] rounded-xl shadow-md"
                   src={card.url}
                 />
                 <p className="text-center text-xs text-default-500">

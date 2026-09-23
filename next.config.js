@@ -19,6 +19,7 @@ const nextConfig = {
     "/api/client/scheduled-sessions/[date]/share-card": [
       "./assets/fonts/*.ttf",
     ],
+    "/api/trainer/share-card/preview": ["./assets/fonts/*.ttf"],
   },
 
   // `ffmpeg-static` resolves its binary path with `__dirname`, but the bundler
