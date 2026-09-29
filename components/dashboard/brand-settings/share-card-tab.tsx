@@ -43,9 +43,10 @@ const STYLE_OPTIONS: Array<{
 }> = [
   {
     key: "panel",
-    title: "Recuadro",
-    description: "Recuadro oscuro sobre tu foto. Se lee siempre.",
-    sample: "rounded-md bg-slate-950/85 px-2 py-1 text-white",
+    title: "Cristal",
+    description: "Tarjetas de cristal sobre la foto. Se lee siempre.",
+    sample:
+      "rounded-md border border-white/25 bg-white/15 px-2 py-1 text-white",
   },
   {
     key: "white",

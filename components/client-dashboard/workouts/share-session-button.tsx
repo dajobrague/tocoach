@@ -7,6 +7,13 @@
 // navegador exige que share() ocurra dentro del gesto, sin awaits previos.
 // Donde no se puede compartir archivos (Firefox, escritorio, algunas PWA de
 // iOS) queda "Guardar imagen" y mantener pulsada la vista previa.
+//
+// Instagram (David, 29 sep): un archivo compartido lo usa como FONDO de la
+// historia y rellena lo transparente. Para que el sticker quede encima de la
+// foto que el cliente elige en Instagram hay que hacer como Strava: copiar el
+// PNG al portapapeles y pegarlo en la historia. Desde web no se puede
+// preseleccionar la app del menú de compartir (eso es la API nativa de
+// Stories, solo para apps nativas).
 
 import {
   Button,
@@ -56,6 +63,7 @@ export function ShareSessionButton({
   const [isOpen, setIsOpen] = useState(false);
   const [card, setCard] = useState<CardState>({ status: "loading" });
   const [shareFailed, setShareFailed] = useState(false);
+  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -65,6 +73,7 @@ export function ShareSessionButton({
 
     setCard({ status: "loading" });
     setShareFailed(false);
+    setCopy("idle");
     clientFetch(
       `/api/client/scheduled-sessions/${scheduledDate}/share-card?sessionId=${encodeURIComponent(sessionId)}`,
       { cache: "no-store" }
@@ -109,6 +118,27 @@ export function ShareSessionButton({
       console.warn("[ShareSession] share failed:", error);
       setShareFailed(true);
     });
+  };
+
+  const canCopyImage =
+    typeof navigator !== "undefined" &&
+    typeof navigator.clipboard?.write === "function" &&
+    typeof ClipboardItem !== "undefined";
+
+  // Dentro del gesto y sin awaits antes de write() (Safari lo exige).
+  const copyForInstagram = () => {
+    if (card.status !== "ready") return;
+    navigator.clipboard
+      .write([new ClipboardItem({ "image/png": card.file })])
+      .then(() => {
+        setCopy("copied");
+        // Abre la cámara de historias; si no hay Instagram no pasa nada.
+        window.location.href = "instagram://story-camera";
+      })
+      .catch((error: unknown) => {
+        console.warn("[ShareSession] clipboard failed:", error);
+        setCopy("failed");
+      });
   };
 
   const download = () => {
@@ -165,30 +195,54 @@ export function ShareSessionButton({
                   className="h-auto w-full max-w-[260px] rounded-xl bg-gradient-to-br from-[#d9c7a8] via-[#8a8f8c] to-[#3b4a5a] shadow-md"
                   src={card.url}
                 />
-                <p className="text-center text-xs text-default-500">
-                  {shareFailed || !canShareFile
-                    ? "También puedes mantener pulsada la imagen para guardarla."
-                    : "Súbela a tus historias y etiqueta a tu entrenador."}
-                </p>
+                {copy === "copied" ? (
+                  <ol className="list-decimal space-y-1 pl-5 text-xs text-default-600">
+                    <li>En Instagram, crea una historia con tu foto.</li>
+                    <li>
+                      Toca «Añadir sticker» o pulsa en la pantalla y elige
+                      «Pegar».
+                    </li>
+                    <li>Colócalo donde quieras y etiqueta a tu entrenador.</li>
+                  </ol>
+                ) : (
+                  <p className="text-center text-xs text-default-500">
+                    {copy === "failed"
+                      ? "No se pudo copiar. Guarda la imagen y añádela como sticker desde tu galería."
+                      : "Copia el sticker y pégalo en tu historia de Instagram, encima de tu foto."}
+                  </p>
+                )}
               </>
             )}
           </ModalBody>
           <ModalFooter className="flex-col gap-2 sm:flex-row">
-            {canShareFile && !shareFailed ? (
+            {canCopyImage ? (
               <Button
                 fullWidth
                 color="primary"
-                startContent={<Icon icon="solar:share-bold" width={18} />}
+                isDisabled={card.status !== "ready"}
+                startContent={<Icon icon="mdi:instagram" width={18} />}
+                onPress={copyForInstagram}
+              >
+                {copy === "copied"
+                  ? "Copiado · Abrir Instagram"
+                  : "Copiar sticker para Instagram"}
+              </Button>
+            ) : null}
+            {canShareFile && !shareFailed ? (
+              <Button
+                fullWidth
+                startContent={<Icon icon="solar:share-linear" width={18} />}
+                variant="flat"
                 onPress={share}
               >
-                Compartir
+                Otras apps
               </Button>
             ) : null}
             <Button
               fullWidth
               isDisabled={card.status !== "ready"}
               startContent={<Icon icon="solar:download-linear" width={18} />}
-              variant={canShareFile && !shareFailed ? "flat" : "solid"}
+              variant="flat"
               onPress={download}
             >
               Guardar imagen
