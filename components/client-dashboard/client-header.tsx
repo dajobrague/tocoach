@@ -21,9 +21,10 @@ interface ClientHeaderProps {
 
 /**
  * Marco superior del portal de cliente. Dos formas, una sola pieza:
- * - Inicio (sin `title`): banda sólida con el color del entrenador — el
- *   único sitio donde la marca llena una región. Saludo + fecha de hoy.
- * - Resto de pestañas: barra compacta y fija con logo, título y acciones.
+ * - Inicio (sin `title`): la misma barra de una fila, rellena con el color
+ *   del entrenador — el único sitio donde la marca llena una región.
+ *   Saludo + fecha de hoy junto al logo.
+ * - Resto de pestañas: barra neutra con logo, título y acciones.
  * El foreground sobre la marca es `primary-foreground` (calculado por
  * contraste en render-css), nunca blanco fijo.
  */
@@ -109,7 +110,7 @@ export function ClientHeader({
     <div
       className={
         isHero
-          ? "flex h-11 min-w-11 items-center justify-center rounded-large bg-content1 px-1.5 shadow-small"
+          ? "flex h-10 min-w-10 shrink-0 items-center justify-center rounded-medium bg-content1 px-1"
           : "flex h-9 min-w-9 shrink-0 items-center justify-center"
       }
     >
@@ -164,17 +165,19 @@ export function ClientHeader({
   return (
     <>
       {isHero ? (
-        <header className="mb-5 rounded-b-[2rem] bg-primary px-5 pb-7 pt-[max(1rem,env(safe-area-inset-top))] text-primary-foreground">
-          <div className="flex items-center justify-between">
+        <header className="sticky top-0 z-30 mb-4 bg-primary pt-[env(safe-area-inset-top)] text-primary-foreground">
+          <div className="flex h-16 items-center gap-3 px-4">
             {logo}
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-heading text-lg leading-tight text-primary-foreground">
+                Hola, {firstName}
+              </h1>
+              <p className="truncate text-xs text-primary-foreground/80">
+                {todayLabel()}
+              </p>
+            </div>
             {actions}
           </div>
-          <p className="mt-6 text-sm font-medium text-primary-foreground/80">
-            {todayLabel()}
-          </p>
-          <h1 className="mt-0.5 font-heading text-3xl leading-tight text-primary-foreground">
-            Hola, {firstName}
-          </h1>
         </header>
       ) : (
         <header className="sticky top-0 z-30 border-b border-default-200 bg-background pt-[env(safe-area-inset-top)]">
@@ -204,7 +207,7 @@ function todayLabel(): string {
   const label = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
     day: "numeric",
-    month: "long",
+    month: "short",
   });
 
   return label.charAt(0).toUpperCase() + label.slice(1);

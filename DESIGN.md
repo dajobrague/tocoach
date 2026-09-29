@@ -66,10 +66,12 @@ Toda pestaña se envuelve en `ClientPage`:
   bloques.
 - La cabecera (`ClientHeader`) lee sus datos de `useClientData()`; las
   páginas solo pasan `title`.
-- Banda de Inicio: `bg-primary`, esquinas inferiores redondeadas, logo
-  sobre chip `bg-content1` (el logo nunca va directo sobre la marca),
-  fecha de hoy + "Hola, {nombre}", chat y campana en `primary-foreground`.
-- Barra: logo, título de la pestaña, chat y campana; `sticky`, borde
+- Barra de Inicio: misma barra de una fila (`h-16`), rellena con
+  `bg-primary`; logo sobre chip `bg-content1` (el logo nunca va directo
+  sobre la marca), "Hola, {nombre}" + fecha corta al lado, chat y campana
+  en `primary-foreground`. Sin banda alta: la marca saluda sin robar
+  pantalla.
+- Barra del resto: logo, título de la pestaña, chat y campana; `sticky`, borde
   inferior `default-200`, respeta `safe-area-inset-top`.
 - Carga: `ClientPageSkeleton` (misma anatomía que el marco).
 
