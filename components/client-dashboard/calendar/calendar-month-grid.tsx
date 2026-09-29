@@ -64,7 +64,7 @@ export function CalendarMonthGrid({
               }
             >
               <span
-                className={`text-sm ${isToday ? "font-bold text-white" : ""}`}
+                className={`text-sm ${isToday ? "font-bold text-primary-foreground" : ""}`}
               >
                 {cell.day}
               </span>

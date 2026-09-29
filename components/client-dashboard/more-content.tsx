@@ -71,7 +71,7 @@ export function MoreContent() {
               <div className="flex items-center gap-4">
                 <div className="flex-shrink-0 bg-primary rounded-2xl p-4">
                   <Icon
-                    className="text-white text-3xl"
+                    className="text-primary-foreground text-3xl"
                     icon="solar:settings-bold"
                   />
                 </div>

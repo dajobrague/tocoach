@@ -725,7 +725,7 @@ export function ExerciseLogModal({
               Cerrar
             </Button>
             <Button
-              className="flex-1 text-white font-semibold"
+              className="flex-1 font-semibold"
               color="primary"
               isDisabled={
                 isSaving ||

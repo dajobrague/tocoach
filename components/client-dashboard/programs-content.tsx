@@ -110,7 +110,7 @@ export function ProgramsContent() {
                   </p>
                   <Button
                     as={Link}
-                    className="mt-3 text-white font-semibold"
+                    className="mt-3 font-semibold"
                     color="primary"
                     href={`/${slug}/ejercicio`}
                     size="sm"

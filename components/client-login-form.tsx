@@ -427,10 +427,10 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
           </div>
 
           <div className="bg-primary border border-primary rounded-lg p-3">
-            <p className="text-xs text-white font-body">
+            <p className="text-xs text-primary-foreground font-body">
               <strong>Requisitos de Contraseña:</strong>
             </p>
-            <ul className="text-xs text-white font-body mt-2 space-y-1 ml-4 list-disc">
+            <ul className="text-xs text-primary-foreground font-body mt-2 space-y-1 ml-4 list-disc">
               <li>Mínimo 8 caracteres</li>
               <li>Al menos una letra mayúscula</li>
               <li>Al menos un número</li>

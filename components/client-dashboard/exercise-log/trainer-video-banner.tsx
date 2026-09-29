@@ -28,7 +28,7 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-foreground/90 relative">
           <Icon
             aria-hidden="true"
-            className="text-white"
+            className="text-background"
             icon="solar:play-bold"
             width={22}
           />

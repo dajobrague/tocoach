@@ -49,12 +49,12 @@ export function CalendarFortnightGrid({
             }
           >
             <span
-              className={`text-[10px] font-semibold ${isToday ? "text-white" : "text-default-500"}`}
+              className={`text-[10px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
             >
               {DAY_NAMES_SHORT[dow]}
             </span>
             <span
-              className={`text-base ${isToday ? "font-bold text-white" : "text-foreground"}`}
+              className={`text-base ${isToday ? "font-bold text-primary-foreground" : "text-foreground"}`}
             >
               {cell.day}
             </span>

@@ -947,7 +947,7 @@ export function DynamicFormModal({
             <Button
               className={`flex-1 h-16 ${
                 value === true
-                  ? "bg-success text-white"
+                  ? "bg-success text-success-foreground"
                   : "bg-default-100 text-foreground"
               }`}
               isDisabled={isViewMode}
@@ -962,7 +962,7 @@ export function DynamicFormModal({
             <Button
               className={`flex-1 h-16 ${
                 value === false
-                  ? "bg-danger text-white"
+                  ? "bg-danger text-danger-foreground"
                   : "bg-default-100 text-foreground"
               }`}
               isDisabled={isViewMode}
@@ -1172,7 +1172,7 @@ export function DynamicFormModal({
                         <Button
                           className={`flex-1 ${
                             subValue === true
-                              ? "bg-success text-white"
+                              ? "bg-success text-success-foreground"
                               : "bg-default-100 text-foreground"
                           }`}
                           isDisabled={isViewMode}
@@ -1184,7 +1184,7 @@ export function DynamicFormModal({
                         <Button
                           className={`flex-1 ${
                             subValue === false
-                              ? "bg-danger text-white"
+                              ? "bg-danger text-danger-foreground"
                               : "bg-default-100 text-foreground"
                           }`}
                           isDisabled={isViewMode}
@@ -1237,7 +1237,7 @@ export function DynamicFormModal({
                                     key={choice.id}
                                     className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body ${
                                       isSelected
-                                        ? "border-primary bg-primary text-white"
+                                        ? "border-primary bg-primary text-primary-foreground"
                                         : "border-default-200 bg-background text-foreground hover:border-primary/50"
                                     } ${isViewMode ? "cursor-default" : ""}`}
                                     disabled={isViewMode}
@@ -1250,7 +1250,7 @@ export function DynamicFormModal({
                                       <Icon
                                         className={`text-lg ${
                                           isSelected
-                                            ? "text-white"
+                                            ? "text-primary-foreground"
                                             : "text-primary"
                                         }`}
                                         icon={choice.icon}
@@ -1301,7 +1301,7 @@ export function DynamicFormModal({
                                     key={choice.id}
                                     className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body relative ${
                                       isSelected
-                                        ? "border-primary bg-primary text-white"
+                                        ? "border-primary bg-primary text-primary-foreground"
                                         : "border-default-200 bg-background text-foreground hover:border-primary/50"
                                     } ${isViewMode ? "cursor-default" : ""}`}
                                     disabled={isViewMode}
@@ -1319,7 +1319,7 @@ export function DynamicFormModal({
                                   >
                                     {isSelected && (
                                       <Icon
-                                        className="absolute top-0.5 right-0.5 text-white"
+                                        className="absolute top-0.5 right-0.5 text-primary-foreground"
                                         icon="solar:check-circle-bold"
                                         width={12}
                                       />
@@ -1328,7 +1328,7 @@ export function DynamicFormModal({
                                       <Icon
                                         className={`text-lg ${
                                           isSelected
-                                            ? "text-white"
+                                            ? "text-primary-foreground"
                                             : "text-primary"
                                         }`}
                                         icon={choice.icon}
@@ -1467,7 +1467,7 @@ export function DynamicFormModal({
                     key={choice.id}
                     className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body ${
                       isSelected
-                        ? "border-primary bg-primary text-white"
+                        ? "border-primary bg-primary text-primary-foreground"
                         : "border-default-200 bg-background text-foreground hover:border-primary/50"
                     } ${isViewMode ? "cursor-default" : ""}`}
                     disabled={isViewMode}
@@ -1477,7 +1477,9 @@ export function DynamicFormModal({
                     {choice.icon && (
                       <Icon
                         className={`text-xl ${
-                          isSelected ? "text-white" : "text-primary"
+                          isSelected
+                            ? "text-primary-foreground"
+                            : "text-primary"
                         }`}
                         icon={choice.icon}
                       />
@@ -1520,7 +1522,7 @@ export function DynamicFormModal({
                     key={choice.id}
                     className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body relative ${
                       isSelected
-                        ? "border-primary bg-primary text-white"
+                        ? "border-primary bg-primary text-primary-foreground"
                         : "border-default-200 bg-background text-foreground hover:border-primary/50"
                     } ${isViewMode ? "cursor-default" : ""}`}
                     disabled={isViewMode}
@@ -1536,7 +1538,7 @@ export function DynamicFormModal({
                   >
                     {isSelected && (
                       <Icon
-                        className="absolute top-1 right-1 text-white"
+                        className="absolute top-1 right-1 text-primary-foreground"
                         icon="solar:check-circle-bold"
                         width={14}
                       />
@@ -1544,7 +1546,9 @@ export function DynamicFormModal({
                     {choice.icon && (
                       <Icon
                         className={`text-xl ${
-                          isSelected ? "text-white" : "text-primary"
+                          isSelected
+                            ? "text-primary-foreground"
+                            : "text-primary"
                         }`}
                         icon={choice.icon}
                       />
@@ -1601,7 +1605,7 @@ export function DynamicFormModal({
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-primary">
                   <Icon
-                    className="text-white text-2xl"
+                    className="text-primary-foreground text-2xl"
                     icon={
                       currentSection.icon ||
                       (formType === "checkins"
@@ -1685,7 +1689,7 @@ export function DynamicFormModal({
                           <div className="flex items-start gap-4 mb-4">
                             <div className="bg-primary p-3 rounded-xl flex-shrink-0">
                               <Icon
-                                className="text-white text-2xl"
+                                className="text-primary-foreground text-2xl"
                                 icon={question.icon}
                               />
                             </div>
@@ -1833,7 +1837,7 @@ export function DynamicFormModal({
                     </Button>
                   ) : (
                     <Button
-                      className="flex-1 text-white"
+                      className="flex-1"
                       color="success"
                       endContent={
                         !isSubmitting &&

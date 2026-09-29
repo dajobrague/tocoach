@@ -956,7 +956,7 @@ export function NutritionContent() {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {entry.isToday ? (
-                            <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full font-body uppercase flex-shrink-0 tracking-widest">
+                            <span className="bg-primary-foreground/20 text-primary-foreground text-xs font-black px-2.5 py-1 rounded-full font-body uppercase flex-shrink-0 tracking-widest">
                               Hoy
                             </span>
                           ) : (
@@ -966,19 +966,19 @@ export function NutritionContent() {
                             />
                           )}
                           <h2
-                            className={`text-base font-bold font-heading truncate ${entry.isToday ? "text-white" : "text-foreground"}`}
+                            className={`text-base font-bold font-heading truncate ${entry.isToday ? "text-primary-foreground" : "text-foreground"}`}
                           >
                             {entry.title}
                           </h2>
                           <span
-                            className={`text-xs font-body flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/50"}`}
+                            className={`text-xs font-body flex-shrink-0 ${entry.isToday ? "text-primary-foreground/70" : "text-foreground/50"}`}
                           >
                             · {day.meals.length} comida
                             {day.meals.length !== 1 ? "s" : ""}
                           </span>
                         </div>
                         <Icon
-                          className={`text-lg transition-transform flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/40 group-hover:text-foreground/60"}`}
+                          className={`text-lg transition-transform flex-shrink-0 ${entry.isToday ? "text-primary-foreground/70" : "text-foreground/40 group-hover:text-foreground/60"}`}
                           icon={
                             isDayExpanded
                               ? "solar:alt-arrow-up-linear"

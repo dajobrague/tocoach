@@ -1,32 +1,81 @@
 import { describe, expect, it } from "vitest";
 
 import { TRAINER_FALLBACK_CSS, generateThemeCSS } from "../render-css";
+import { getContrastRatio } from "../contrast";
 import { defaultTheme } from "../schema";
 
-// Contrato del generador tras retirar los "bludgeons" del modo scoped:
-// - Sin scope (portal de clientes): salida byte-idéntica a la histórica —
-//   los overrides por substring, el :root global y el bloque de fuentes por
-//   control siguen ahí. Ese path no cambia en esta rama.
-// - Con scope (.trainer-app): las variables HeroUI hacen todo el trabajo;
-//   nada de overrides de clase, y los portals (modal/dropdown renderizan en
-//   document.body, fuera del wrapper) se alcanzan vía body:has(.trainer-app).
+// Contrato del generador:
+// - Sin scope (portal de clientes) y con scope (.trainer-app): las variables
+//   HeroUI hacen todo el trabajo. Nada de overrides de clase por substring
+//   (*[class*="bg-primary"] aplanaba cada tint/hover a un sólido) ni bloque
+//   de fuentes por control (forzaba el peso de cuerpo en botones y chips).
+// - Con scope, los portals (modal/dropdown renderizan en document.body,
+//   fuera del wrapper) se alcanzan vía body:has(.trainer-app).
 
-describe("generateThemeCSS sin scope (invariancia del path cliente)", () => {
+describe("generateThemeCSS sin scope (portal de cliente)", () => {
   const css = generateThemeCSS(defaultTheme);
 
-  it("conserva los overrides por substring", () => {
-    expect(css).toContain('html body *[class*="bg-primary"]');
-    expect(css).toContain('*[class*="bg-secondary"]');
-    expect(css).toContain('*[class*="bg-default"]');
+  it("no emite overrides de clase por substring", () => {
+    expect(css).not.toContain("[class*=");
+    expect(css).not.toContain('[data-color="primary"]');
   });
 
   it("conserva el bloque :root global", () => {
     expect(css).toMatch(/^:root \{/m);
   });
 
-  it("conserva el bloque de fuentes por control", () => {
-    expect(css).toContain("html body button,");
-    expect(css).toContain('html body [data-slot="base"],');
+  it("la fuente de cuerpo va en el body, no forzada por control", () => {
+    expect(css).not.toContain("html body button,");
+    expect(css).toMatch(/html body \{\s*font-family:/);
+  });
+
+  it(".font-body no fuerza peso (font-semibold sobrevive)", () => {
+    const rule = css.match(/\.font-body \{[^}]*\}/)?.[0] ?? "";
+
+    expect(rule).toContain("font-family");
+    expect(rule).not.toContain("font-weight");
+  });
+
+  it("marca legible: sin regla de tinta para .text-primary", () => {
+    const blue = structuredClone(defaultTheme);
+
+    blue.colors.brand = "#0070f3";
+
+    expect(generateThemeCSS(blue)).not.toContain(".text-primary {");
+  });
+
+  it("marca pálida: .text-primary usa una tinta oscurecida, el relleno la marca cruda", () => {
+    const lime = structuredClone(defaultTheme);
+
+    lime.colors.brand = "#acd933";
+
+    const out = generateThemeCSS(lime);
+    const ink = out.match(
+      /html \.text-primary \{\s*color: (#[0-9a-f]{6});/i
+    )?.[1];
+
+    expect(ink).toBeDefined();
+    expect(getContrastRatio(ink!, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(out).toContain(".bg-brand { background-color: #acd933");
+  });
+
+  it("los foregrounds semánticos se calculan, no son blanco fijo", () => {
+    const pale = structuredClone(defaultTheme);
+
+    pale.semantic = {
+      success: "#86efac",
+      warning: "#fde047",
+      error: "#fca5a5",
+    };
+
+    const out = generateThemeCSS(pale);
+
+    expect(out).toContain(
+      "--heroui-success-foreground: 222 47% 11% !important"
+    );
+    expect(out).toContain(
+      "--heroui-warning-foreground: 222 47% 11% !important"
+    );
   });
 });
 
