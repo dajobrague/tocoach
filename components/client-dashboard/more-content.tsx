@@ -6,19 +6,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
+import {
+  ClientPage,
+  SectionHeader,
+} from "@/components/client-dashboard/client-page";
 import { LogoutButton } from "@/components/client-dashboard/logout-button";
 
 export function MoreContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
   const pathname = usePathname();
 
   // Extract slug from pathname (e.g., /ironfit/mas -> ironfit)
@@ -53,18 +47,8 @@ export function MoreContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-20">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tagline="Configuración y opciones"
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
-
-        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <ClientPage title="Más">
+        <div className="px-4 py-6 space-y-6">
           {/* Quick Stats Card */}
           <Card className="border border-default-200 bg-gradient-to-br from-primary/5 to-background">
             <CardBody className="p-5">
@@ -89,9 +73,7 @@ export function MoreContent() {
 
           {/* Herramientas Section */}
           <div>
-            <h3 className="text-sm font-heading font-bold text-default-500 uppercase tracking-wider mb-3 px-1">
-              Herramientas
-            </h3>
+            <SectionHeader title="Herramientas" />
             <Card className="border border-default-200">
               <CardBody className="p-0">
                 {menuItems.map((item, index) => (
@@ -131,9 +113,7 @@ export function MoreContent() {
 
           {/* Cuenta Section */}
           <div>
-            <h3 className="text-sm font-heading font-bold text-default-500 uppercase tracking-wider mb-3 px-1">
-              Cuenta
-            </h3>
+            <SectionHeader title="Cuenta" />
             <Card className="border border-default-200">
               <CardBody className="p-4">
                 <LogoutButton />
@@ -153,7 +133,7 @@ export function MoreContent() {
             </div>
           </div>
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
     </>
   );

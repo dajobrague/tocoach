@@ -9,30 +9,14 @@ import { useClientData } from "./client-data-provider";
 import { ClientHeader } from "./client-header";
 
 export function CommunityContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-    communityUrl,
-  } = useClientData();
+  const { communityUrl } = useClientData();
 
   // Empty state if no community URL configured
   if (!communityUrl) {
     return (
       <>
         <div className="min-h-screen bg-background pb-20">
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tagline="Conecta con la comunidad"
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-          />
+          <ClientHeader title="Comunidad" />
 
           <div className="max-w-lg mx-auto p-4">
             <Card className="bg-background border border-default-200">
@@ -60,17 +44,7 @@ export function CommunityContent() {
     );
   }
 
-  return (
-    <CommunityIframeView
-      clientId={clientId}
-      clientProfilePicture={clientProfilePicture}
-      communityUrl={communityUrl}
-      firstName={firstName}
-      logoUrl={logoUrl}
-      tenantSlug={tenantSlug}
-      trainerName={trainerName}
-    />
-  );
+  return <CommunityIframeView communityUrl={communityUrl} />;
 }
 
 /**
@@ -85,23 +59,7 @@ export function CommunityContent() {
  * (There is deliberately NO standing open-in-new-tab button when the iframe
  * works — removed at José Carlos's request, Jul 13 2026.)
  */
-function CommunityIframeView({
-  clientId,
-  clientProfilePicture,
-  communityUrl,
-  firstName,
-  logoUrl,
-  tenantSlug,
-  trainerName,
-}: {
-  clientId: string;
-  clientProfilePicture: string;
-  communityUrl: string;
-  firstName: string;
-  logoUrl: string;
-  tenantSlug: string;
-  trainerName: string;
-}) {
+function CommunityIframeView({ communityUrl }: { communityUrl: string }) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,15 +92,7 @@ function CommunityIframeView({
   return (
     <>
       <div className="min-h-screen bg-background flex flex-col">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tagline="Conecta con la comunidad"
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
+        <ClientHeader title="Comunidad" />
 
         {/* Embedded Community iframe. No standing external-open button (per
             José Carlos, Jul 13) — the fallback card below keeps one as the

@@ -8,7 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
+import {
+  ClientPage,
+  SectionHeader,
+} from "@/components/client-dashboard/client-page";
 import { SegmentedControl } from "@/components/shared/segmented-control";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { daysToFetchForChartRange } from "@/lib/forms/chart-helpers";
@@ -92,14 +95,7 @@ const PERIOD_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
 ];
 
 export function DashboardContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
+  const { clientId } = useClientData();
 
   const queryClient = useQueryClient();
 
@@ -313,93 +309,83 @@ export function DashboardContent() {
       {/* pb-28 da clearance para iPhone con safe-area-inset (~34px) +
           bottom-nav (~60px) + un buffer. Antes pb-20 dejaba la última
           card del scroll tapada por unos 30px. */}
-      <div className="min-h-screen bg-background pb-28">
-        <div className="max-w-lg mx-auto">
-          {/* Top Header */}
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-            onOpenDailyForm={() => setSelectedDayForForm(getLocalTodayYmd())}
-            onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
-          />
-
-          {/* Banner de error cuando falla la carga de respuestas. No
+      <ClientPage
+        onOpenDailyForm={() => setSelectedDayForForm(getLocalTodayYmd())}
+        onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
+      >
+        {/* Banner de error cuando falla la carga de respuestas. No
               tumba la página — sigue mostrando el resto de secciones,
               pero avisa al cliente que algo se cargó incompleto. */}
-          {isErrorForms && (
-            <div className="mb-4 px-4" role="alert">
-              <div className="rounded-large border border-danger/20 bg-danger/5 p-3 flex items-start gap-3">
-                <Icon
-                  aria-hidden
-                  className="text-danger flex-shrink-0 mt-0.5"
-                  icon="solar:danger-triangle-bold"
-                  width={20}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-danger">
-                    No pudimos cargar tus registros
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-0.5">
-                    Recarga la página o vuelve a intentarlo en un momento.
-                  </p>
-                </div>
+        {isErrorForms && (
+          <div className="mb-4 px-4" role="alert">
+            <div className="rounded-large border border-danger/20 bg-danger/5 p-3 flex items-start gap-3">
+              <Icon
+                aria-hidden
+                className="text-danger flex-shrink-0 mt-0.5"
+                icon="solar:danger-triangle-bold"
+                width={20}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-danger">
+                  No pudimos cargar tus registros
+                </p>
+                <p className="text-[11px] text-foreground/60 mt-0.5">
+                  Recarga la página o vuelve a intentarlo en un momento.
+                </p>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Check-in banner cuando el schedule está activo y la
+        {/* Check-in banner cuando el schedule está activo y la
               ventana actual está vencida. Mismo recipe que el error
               banner de arriba (border-warning/20 + bg-warning/5 +
               icon chip) para visual parity con el resto del
               dashboard, en lugar del bloque amarillo full-bleed
               legacy. El título original (custom_name del trainer)
               vive ahora dentro de la card. */}
-          {showWeeklyBanner && (
-            <div className="mb-4 px-4">
-              <div className="rounded-large border border-warning/20 bg-warning/5 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 bg-warning/10 p-2 rounded-full">
-                    <Icon
-                      aria-hidden
-                      className="text-warning-600"
-                      icon="solar:clipboard-list-bold"
-                      width={24}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-foreground">
-                      {`Tu ${checkinSchedule.custom_name} te espera`}
-                    </p>
-                    <p className="text-sm text-foreground/70 mt-0.5">
-                      Completa tu seguimiento para que tu entrenador vea cómo va
-                      la semana.
-                    </p>
-                    <p className="text-xs text-foreground/50 mt-1">
-                      {formatScheduleDescription(checkinSchedule)}
-                    </p>
-                  </div>
+        {showWeeklyBanner && (
+          <div className="mb-4 px-4">
+            <div className="rounded-large border border-warning/20 bg-warning/5 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 bg-warning/10 p-2 rounded-full">
+                  <Icon
+                    aria-hidden
+                    className="text-warning-600"
+                    icon="solar:clipboard-list-bold"
+                    width={24}
+                  />
                 </div>
-                <Button
-                  aria-label={`Completar ${checkinSchedule.custom_name}`}
-                  className="mt-3 w-full font-semibold"
-                  color="warning"
-                  endContent={
-                    <Icon icon="solar:alt-arrow-right-bold" width={18} />
-                  }
-                  variant="solid"
-                  onPress={() => setShowWeeklyFormModal(true)}
-                >
-                  Empezar Check-in
-                </Button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-semibold text-foreground">
+                    {`Tu ${checkinSchedule.custom_name} te espera`}
+                  </p>
+                  <p className="text-sm text-foreground/70 mt-0.5">
+                    Completa tu seguimiento para que tu entrenador vea cómo va
+                    la semana.
+                  </p>
+                  <p className="text-xs text-foreground/50 mt-1">
+                    {formatScheduleDescription(checkinSchedule)}
+                  </p>
+                </div>
               </div>
+              <Button
+                aria-label={`Completar ${checkinSchedule.custom_name}`}
+                className="mt-3 w-full font-semibold"
+                color="warning"
+                endContent={
+                  <Icon icon="solar:alt-arrow-right-bold" width={18} />
+                }
+                variant="solid"
+                onPress={() => setShowWeeklyFormModal(true)}
+              >
+                Empezar Check-in
+              </Button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Registro Diario — 3 cards (hoy + 2 anteriores). Reservamos
+        {/* Registro Diario — 3 cards (hoy + 2 anteriores). Reservamos
               el alto durante el loading con skeleton para evitar CLS;
               antes la sección entera aparecía de golpe.
 
@@ -422,84 +408,80 @@ export function DashboardContent() {
               negro encima quedaba ilegible y la pildora warning encima
               se enturbiaba. Ahora todo el contenido interno vive sobre
               fondo neutro y conserva su contraste natural. */}
-          {isLoadingForms ? (
-            <div className="mb-4 px-4">
-              <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
-                Registro Diario
-              </h2>
-              <div className="grid grid-cols-3 gap-2">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    aria-hidden
-                    className="rounded-xl bg-default-50 border-[1.5px] border-default-200 h-[100px] animate-pulse"
-                  />
-                ))}
-              </div>
+        {isLoadingForms ? (
+          <div className="mb-4 px-4">
+            <SectionHeader title="Registro Diario" />
+            <div className="grid grid-cols-3 gap-2">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  aria-hidden
+                  className="rounded-xl bg-default-50 border-[1.5px] border-default-200 h-[100px] animate-pulse"
+                />
+              ))}
             </div>
-          ) : (
-            <div className="mb-4 px-4">
-              <h2 className="text-lg font-semibold font-heading mb-3 text-foreground">
-                Registro Diario
-              </h2>
-              <div className="grid grid-cols-3 gap-2">
-                {dailyFormDays.map((day) => (
-                  <button
-                    key={day.date}
-                    aria-label={`Abrir registro de ${day.dayName} ${day.label}${
-                      day.isToday ? ", hoy" : ""
-                    }, ${day.isSubmitted ? "enviado" : "pendiente"}`}
-                    className={`flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer shadow-sm border-2 bg-content1 ${
-                      day.isToday ? "border-primary" : "border-default-200"
-                    }`}
-                    type="button"
-                    onClick={() => setSelectedDayForForm(day.date)}
-                  >
-                    <span className="text-sm font-bold capitalize mt-1 text-foreground">
-                      {day.label}
+          </div>
+        ) : (
+          <div className="mb-4 px-4">
+            <SectionHeader title="Registro Diario" />
+            <div className="grid grid-cols-3 gap-2">
+              {dailyFormDays.map((day) => (
+                <button
+                  key={day.date}
+                  aria-label={`Abrir registro de ${day.dayName} ${day.label}${
+                    day.isToday ? ", hoy" : ""
+                  }, ${day.isSubmitted ? "enviado" : "pendiente"}`}
+                  className={`flex flex-col items-center rounded-xl p-3 transition-all active:scale-[0.97] cursor-pointer shadow-sm border-2 bg-content1 ${
+                    day.isToday ? "border-primary" : "border-default-200"
+                  }`}
+                  type="button"
+                  onClick={() => setSelectedDayForForm(day.date)}
+                >
+                  <span className="text-sm font-bold capitalize mt-1 text-foreground">
+                    {day.label}
+                  </span>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="text-xs capitalize text-foreground/60">
+                      {day.dayName}
                     </span>
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <span className="text-xs capitalize text-foreground/60">
-                        {day.dayName}
+                    {day.isToday ? (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded leading-none">
+                        Hoy
                       </span>
-                      {day.isToday ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded leading-none">
-                          Hoy
-                        </span>
-                      ) : null}
+                    ) : null}
+                  </div>
+                  {day.isSubmitted ? (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10">
+                      <Icon
+                        aria-hidden
+                        className="text-success"
+                        icon="solar:check-circle-bold"
+                        width={14}
+                      />
+                      <span className="text-[11px] font-semibold text-success">
+                        Enviado
+                      </span>
                     </div>
-                    {day.isSubmitted ? (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10">
-                        <Icon
-                          aria-hidden
-                          className="text-success"
-                          icon="solar:check-circle-bold"
-                          width={14}
-                        />
-                        <span className="text-[11px] font-semibold text-success">
-                          Enviado
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10">
-                        <Icon
-                          aria-hidden
-                          className="text-warning-600"
-                          icon="solar:clock-circle-bold"
-                          width={14}
-                        />
-                        <span className="text-[11px] font-semibold text-warning-600">
-                          Pendiente
-                        </span>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                  ) : (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10">
+                      <Icon
+                        aria-hidden
+                        className="text-warning-600"
+                        icon="solar:clock-circle-bold"
+                        width={14}
+                      />
+                      <span className="text-[11px] font-semibold text-warning-600">
+                        Pendiente
+                      </span>
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Check-in modal. `onSuccess` invalida formResponses,
+        {/* Check-in modal. `onSuccess` invalida formResponses,
               formConfig (puede haber cambiado el shape del check-in si
               el trainer lo editó) Y `chartsSnapshot` con prefix-match
               que cubre TODOS los selectedPeriod cacheados (7d/30d/etc).
@@ -508,72 +490,66 @@ export function DashboardContent() {
               exitoso — era la queja #1 de los clientes. El modal
               espera el await antes de cerrar, así garantizamos que
               el refetch llegó antes de que el usuario navegue. */}
-          {showWeeklyFormModal && (
-            <DynamicFormModal
-              isOpen
-              clientId={clientId}
-              formType="checkins"
-              schedule={checkinSchedule}
-              onClose={() => setShowWeeklyFormModal(false)}
-              onSuccess={async () => {
-                await Promise.all([
-                  queryClient.invalidateQueries({
-                    queryKey: ["client", "formResponses", clientId, "checkins"],
-                  }),
-                  queryClient.invalidateQueries({
-                    queryKey: ["client", "formConfig", clientId, "checkins"],
-                  }),
-                  queryClient.invalidateQueries({
-                    queryKey: ["client", "chartsSnapshot", String(clientId)],
-                  }),
-                ]);
-              }}
-            />
-          )}
+        {showWeeklyFormModal && (
+          <DynamicFormModal
+            isOpen
+            clientId={clientId}
+            formType="checkins"
+            schedule={checkinSchedule}
+            onClose={() => setShowWeeklyFormModal(false)}
+            onSuccess={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formResponses", clientId, "checkins"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formConfig", clientId, "checkins"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "chartsSnapshot", String(clientId)],
+                }),
+              ]);
+            }}
+          />
+        )}
 
-          {/* Daily Habits Modal — mismo patrón que el check-in. Montado solo
+        {/* Daily Habits Modal — mismo patrón que el check-in. Montado solo
               al abrir: así el chunk del modal no se descarga hasta que hace
               falta. */}
-          {selectedDayForForm !== null && (
-            <DynamicFormModal
-              isOpen
-              clientId={clientId}
-              formType="habits"
-              targetDate={selectedDayForForm}
-              onClose={() => setSelectedDayForForm(null)}
-              onSuccess={async () => {
-                await Promise.all([
-                  queryClient.invalidateQueries({
-                    queryKey: ["client", "formResponses", clientId, "habits"],
-                  }),
-                  queryClient.invalidateQueries({
-                    queryKey: ["client", "chartsSnapshot", String(clientId)],
-                  }),
-                ]);
-              }}
-            />
-          )}
+        {selectedDayForForm !== null && (
+          <DynamicFormModal
+            isOpen
+            clientId={clientId}
+            formType="habits"
+            targetDate={selectedDayForForm}
+            onClose={() => setSelectedDayForForm(null)}
+            onSuccess={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "formResponses", clientId, "habits"],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["client", "chartsSnapshot", String(clientId)],
+                }),
+              ]);
+            }}
+          />
+        )}
 
-          {/* Progress Section */}
-          <div className="px-4 space-y-4">
-            <h2 className="text-lg font-semibold font-heading text-foreground">
-              Progreso
-            </h2>
+        {/* Progress Section */}
+        <div className="px-4 space-y-4">
+          <SectionHeader className="mb-0" title="Progreso" />
 
-            <SegmentedControl
-              ariaLabel="Seleccionar período de progreso"
-              options={PERIOD_OPTIONS}
-              value={selectedPeriod}
-              onChange={setSelectedPeriod}
-            />
+          <SegmentedControl
+            ariaLabel="Seleccionar período de progreso"
+            options={PERIOD_OPTIONS}
+            value={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
 
-            <ChartsSection
-              clientId={clientId}
-              selectedPeriod={selectedPeriod}
-            />
-          </div>
+          <ChartsSection clientId={clientId} selectedPeriod={selectedPeriod} />
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
     </>
   );

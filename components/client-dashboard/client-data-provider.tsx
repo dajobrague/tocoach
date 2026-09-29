@@ -3,6 +3,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo } from "react";
 
+import { ClientPageSkeleton } from "./client-page-skeleton";
+
 import { useClientBootstrap } from "@/lib/hooks/use-client-queries";
 
 export interface ClientData {
@@ -102,37 +104,5 @@ export function useClientData(): ClientData {
 // ─── Minimal skeleton shown only on the very first load ─────────────────────
 
 function BootstrapSkeleton() {
-  return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-lg mx-auto">
-        {/* Header */}
-        <div className="px-4 pt-6 pb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-default-200 animate-pulse" />
-              <div className="space-y-2">
-                <div className="h-4 w-24 bg-default-200 rounded animate-pulse" />
-                <div className="h-3 w-16 bg-default-100 rounded animate-pulse" />
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-default-200 animate-pulse" />
-          </div>
-        </div>
-
-        {/* Content cards */}
-        <div className="px-4 space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="bg-default-100 rounded-xl p-5 animate-pulse"
-            >
-              <div className="h-5 w-32 bg-default-200 rounded mb-3" />
-              <div className="h-4 w-full bg-default-200 rounded mb-2" />
-              <div className="h-4 w-3/4 bg-default-200 rounded" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  return <ClientPageSkeleton />;
 }

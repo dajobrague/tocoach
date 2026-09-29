@@ -28,7 +28,6 @@ import {
 } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { useNutritionPlan } from "@/lib/hooks/use-client-queries";
@@ -615,15 +614,6 @@ function NutritionPdfClientSection({ plan }: { plan: NutritionPlanWithDays }) {
 // ─── Main component ────────────────────────────────────────────────────────
 
 export function NutritionContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
-
   const { data: nutritionPlans, isLoading } = useNutritionPlan();
 
   const nutritionPlan = useMemo<NutritionPlanWithDays | null>(() => {
@@ -803,15 +793,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="flex items-center justify-center py-20">
               <Spinner size="lg" />
             </div>
@@ -829,15 +811,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="px-4 py-20 text-center">
               <Icon
                 className="text-6xl text-default-300 mx-auto mb-4"
@@ -865,15 +839,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="px-4 py-20 text-center">
               <Icon
                 className="text-6xl text-default-300 mx-auto mb-4"
@@ -899,15 +865,7 @@ export function NutritionContent() {
     <>
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-lg mx-auto">
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tagline="¡A alimentarte bien!"
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-          />
+          <ClientHeader title="Nutrición" />
 
           <div className="px-4 space-y-5">
             {(effectivePlanMode === "pdf" ||

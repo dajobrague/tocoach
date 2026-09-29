@@ -78,6 +78,8 @@ interface NotificationsDropdownProps {
   onOpenChat?: () => void;
   /** Cuando el chat ya está abierto se omite el toast de mensajes nuevos. */
   isChatOpen?: boolean;
+  /** Color del icono del trigger (sobre la banda de marca va primary-foreground). */
+  triggerClassName?: string;
 }
 
 export function NotificationsDropdown({
@@ -87,6 +89,7 @@ export function NotificationsDropdown({
   onOpenDailyForm,
   onOpenChat,
   isChatOpen,
+  triggerClassName = "text-default-600",
 }: NotificationsDropdownProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -355,8 +358,12 @@ export function NotificationsDropdown({
         <DropdownTrigger>
           <Button
             isIconOnly
-            className="text-foreground/70 relative"
-            size="sm"
+            aria-label={
+              unreadCount > 0
+                ? `Notificaciones (${unreadCount} sin leer)`
+                : "Notificaciones"
+            }
+            className={`relative ${triggerClassName}`}
             variant="light"
           >
             <RealtimeStatusIndicator

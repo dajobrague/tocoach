@@ -5,8 +5,7 @@ import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
 import { ClientBottomNav } from "./bottom-nav";
-import { useClientData } from "./client-data-provider";
-import { ClientHeader } from "./client-header";
+import { ClientPage } from "./client-page";
 
 import { useSupplements } from "@/lib/hooks/use-client-queries";
 import { normalizeProductUrl } from "@/lib/supplements/product-url";
@@ -25,15 +24,6 @@ function getTimingIcon(timing: string): string {
 }
 
 export function SupplementsContent() {
-  const {
-    clientId,
-    clientProfilePicture,
-    firstName,
-    logoUrl,
-    tenantSlug,
-    trainerName,
-  } = useClientData();
-
   const { data: allAssignments = [], isLoading } = useSupplements();
 
   const assignments = useMemo(
@@ -46,36 +36,8 @@ export function SupplementsContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-32">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tagline="¡Listo para energizarte!"
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
-
-        <div className="mx-auto max-w-lg p-4">
-          <div className="mb-4 flex items-baseline justify-between border-b border-default-200 pb-3">
-            <h1
-              className="text-2xl text-foreground"
-              style={{ fontFamily: "var(--font-heading)", fontWeight: 800 }}
-            >
-              Suplementos
-            </h1>
-            {!isLoading && assignments.length > 0 && (
-              <span
-                className="text-sm text-default-500"
-                style={{ fontFamily: "var(--font-body)" }}
-              >
-                {assignments.length}{" "}
-                {assignments.length === 1 ? "activo" : "activos"}
-              </span>
-            )}
-          </div>
-
+      <ClientPage title="Suplementos">
+        <div className="px-4 pt-4">
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <Spinner size="lg" />
@@ -92,7 +54,7 @@ export function SupplementsContent() {
 
           {!isLoading && assignments.length === 0 && <EmptyState />}
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
     </>
   );

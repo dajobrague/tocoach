@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
+import { ClientPage } from "@/components/client-dashboard/client-page";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import { buildInitials, thumbnailUrl } from "@/lib/utils/avatar";
 
@@ -320,11 +321,11 @@ export function ProfileContent() {
   if (isLoading) {
     return (
       <>
-        <div className="min-h-screen bg-background pb-32">
-          <div className="mx-auto flex max-w-lg items-center justify-center py-20">
+        <ClientPage title="Mi perfil">
+          <div className="flex items-center justify-center py-20">
             <Spinner size="lg" />
           </div>
-        </div>
+        </ClientPage>
         <ClientBottomNav />
       </>
     );
@@ -341,15 +342,8 @@ export function ProfileContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-32">
-        <div className="mx-auto max-w-lg space-y-4 px-4 pt-8">
-          <h1
-            className="text-2xl text-foreground"
-            style={{ fontFamily: "var(--font-heading)", fontWeight: 800 }}
-          >
-            Mi perfil
-          </h1>
-
+      <ClientPage title="Mi perfil">
+        <div className="space-y-4 px-4 pt-4">
           <section className="rounded-2xl border border-default-200 bg-content1 p-5 shadow-sm">
             <div className="flex items-center gap-5">
               <button
@@ -646,7 +640,7 @@ export function ProfileContent() {
             </span>
           </button>
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
 
       <Modal

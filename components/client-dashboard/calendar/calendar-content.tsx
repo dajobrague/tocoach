@@ -19,20 +19,10 @@ import { CalendarWeekGrid } from "./calendar-week-grid";
 import { useCalendarEntries } from "./hooks/use-calendar-entries";
 
 import { getLocalTodayYmd, getLocalYmd } from "@/lib/forms/client-helpers";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
+import { ClientPage } from "@/components/client-dashboard/client-page";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 
 export function CalendarContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
-
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -61,27 +51,9 @@ export function CalendarContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-lg mx-auto">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
-
-        <div className="px-4 pb-2 pt-2">
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-1">
-            Calendario
-          </h1>
-          <p className="text-default-500 font-body text-sm">
-            Tus entrenamientos completados
-          </p>
-        </div>
-
-        <div className="px-4 space-y-4">
+    <>
+      <ClientPage title="Calendario">
+        <div className="px-4 pt-4 space-y-4">
           <Card>
             <CardBody className="p-3 space-y-4">
               <CalendarHeader
@@ -141,9 +113,9 @@ export function CalendarContent() {
             <EmptyHint hasAny={(data?.totalSessions ?? 0) > 0} />
           )}
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
-    </div>
+    </>
   );
 }
 
