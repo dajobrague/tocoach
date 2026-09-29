@@ -29,16 +29,16 @@ export function ExerciseTargetSection({ exercise, isCardio }: Props) {
 
   return (
     <div>
-      <p className="text-[11px] uppercase font-semibold text-foreground/50 font-body mb-2">
+      <p className="mb-2 text-sm font-semibold text-foreground">
         Datos del programa
       </p>
       <div className="flex flex-wrap gap-1.5">
         {chips.map((c) => (
           <span
             key={c.label}
-            className="inline-flex items-center gap-1 rounded-md bg-default-100 px-2 py-1 text-xs font-body"
+            className="inline-flex items-center gap-1 rounded-md bg-default-100 px-2 py-1 text-xs"
           >
-            <span className="text-foreground/60">{c.label}</span>
+            <span className="text-default-500">{c.label}</span>
             <span className="font-semibold text-foreground">{c.value}</span>
           </span>
         ))}

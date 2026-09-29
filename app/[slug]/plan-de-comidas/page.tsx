@@ -1,11 +1,13 @@
-import { MealCycleContent } from "@/components/client-dashboard/meal-cycle/meal-cycle-content";
+import { redirect } from "next/navigation";
 
-// Client "today" view of their assigned meal cycle (nutrition-v2, P4-T2).
-//
-// Session, tenant and client profile come from the parent layout's
-// ClientDataProvider; MealCycleContent fetches the cycle itself via
-// /api/client/meal-cycle, which is gated by the nutrition_v2 flag (404 when
-// off → rendered as an empty state).
-export default function PlanDeComidasPage() {
-  return <MealCycleContent />;
+// Legacy duplicate of /nutricion (rendered the v2 view without the flag
+// check); nothing links here anymore. Kept as a redirect for old bookmarks.
+export default async function PlanDeComidasPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  redirect(`/${slug}/nutricion`);
 }

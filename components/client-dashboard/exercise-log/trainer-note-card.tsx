@@ -21,12 +21,12 @@ export function TrainerNoteCard({ note }: Props) {
   const isLong = note.length > LONG_NOTE_THRESHOLD;
 
   return (
-    <div className="rounded-lg border border-default-200 bg-content1 px-3 py-2.5">
-      <p className="text-[11px] uppercase font-semibold text-foreground/50 font-body mb-1.5">
+    <div className="rounded-large bg-content1 px-3 py-2.5 shadow-small">
+      <p className="mb-1.5 text-sm font-semibold text-foreground">
         Nota del entrenador
       </p>
       <p
-        className={`text-sm font-body text-foreground/80 whitespace-pre-line break-words ${
+        className={`text-sm text-default-700 whitespace-pre-line break-words ${
           !expanded && isLong ? "line-clamp-3" : ""
         }`}
       >
@@ -34,7 +34,7 @@ export function TrainerNoteCard({ note }: Props) {
       </p>
       {isLong ? (
         <button
-          className="mt-1.5 text-xs font-body font-medium text-primary hover:underline"
+          className="mt-1.5 text-xs font-medium text-primary hover:underline"
           type="button"
           onClick={() => setExpanded((v) => !v)}
         >

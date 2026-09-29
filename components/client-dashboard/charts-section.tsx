@@ -105,7 +105,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     return (
       <div className="space-y-4">
         {[0, 1, 2, 3].map((i) => (
-          <Card key={i}>
+          <Card key={i} shadow="sm">
             <CardBody className="p-4">
               <div className="h-3 w-1/2 bg-default-100 rounded animate-pulse mb-2" />
               <div className="h-8 w-1/3 bg-default-100 rounded animate-pulse mb-3" />
@@ -119,9 +119,9 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
 
   if (query.isError || !query.data) {
     return (
-      <Card>
+      <Card shadow="sm">
         <CardBody className="p-4 text-center">
-          <p className="text-xs text-foreground/50">
+          <p className="text-sm text-default-500">
             No se pudieron cargar las gráficas. Inténtalo más tarde.
           </p>
         </CardBody>
@@ -224,15 +224,13 @@ interface PendingChartsCardProps {
  */
 function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
   return (
-    <Card radius="lg" shadow="sm">
+    <Card shadow="sm">
       <CardBody>
-        <p className="text-xs font-semibold text-foreground/55 tracking-wide">
-          Aún sin registrar
-        </p>
-        <p className="text-[11px] text-foreground/40 mt-0.5">
+        <p className="text-sm font-medium text-foreground">Aún sin registrar</p>
+        <p className="text-xs text-default-500 mt-0.5">
           Registra para ver tu progreso aquí
         </p>
-        <ul className="mt-3 divide-y divide-default-100/60">
+        <ul className="mt-3 divide-y divide-default-100">
           {charts.map(({ chart, adapter }) => {
             const colorToken = Array.isArray(chart.color)
               ? (chart.color[0] ?? "neutral-slate")
@@ -259,10 +257,10 @@ function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
                     width={16}
                   />
                 </div>
-                <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate flex-1">
+                <p className="text-sm font-medium text-foreground truncate flex-1">
                   {chart.label}
                 </p>
-                <p className="text-[10px] text-foreground/40 tabular-nums flex-shrink-0">
+                <p className="text-[11px] text-default-500 tabular-nums flex-shrink-0">
                   Sin datos · {period}
                 </p>
               </li>

@@ -77,7 +77,7 @@ export function ExerciseVideoUpload({
             {isUploading ? "Procesando video..." : "Subir video"}
           </Button>
           {isUploading ? (
-            <p className="text-xs text-foreground/60">
+            <p className="text-xs text-default-500">
               Esto puede tardar un momento. Estamos optimizando el video para
               que se vea bien y cargue rápido.
             </p>

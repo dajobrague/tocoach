@@ -1,8 +1,12 @@
-import { MoreContent } from "@/components/client-dashboard/more-content";
+import { redirect } from "next/navigation";
 
-export default function MasPage() {
-  // Shared data (session, tenant, client profile) is fetched once in the
-  // parent layout and provided via ClientDataProvider context.
-  // MoreContent reads it with useClientData().
-  return <MoreContent />;
+/** `/mas` quedó huérfana (el menú vive en el avatar); enlaces viejos → perfil. */
+export default async function MasPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  redirect(`/${slug}/profile`);
 }

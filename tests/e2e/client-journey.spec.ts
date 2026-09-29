@@ -29,7 +29,7 @@ const RECIPE_STEPS = "Mezclar la avena con la leche y servir.";
 const INGREDIENT_NAME = "Avena";
 const CYCLE_NAME = "E2E Plan del cliente";
 const SLOT_LABEL = "Desayuno";
-const PLAN_PATH = `/${TEST_TENANT_SLUG}/plan-de-comidas`;
+const PLAN_PATH = `/${TEST_TENANT_SLUG}/nutricion`;
 
 test.beforeAll(async () => {
   await ensureTestTenant(db);

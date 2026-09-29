@@ -6,7 +6,12 @@ import type { CalendarEntrySession } from "./hooks/use-calendar-entries";
 
 import { Icon } from "@iconify/react";
 
-import { DAY_NAMES_SHORT, dotColor, isFullyCompleted } from "./calendar-shared";
+import {
+  DAY_NAMES_SHORT,
+  dotColor,
+  isFullyCompleted,
+  mondayFirstIndex,
+} from "./calendar-shared";
 
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 
@@ -35,7 +40,9 @@ export function CalendarFortnightGrid({
         const isToday = cell.date === todayYmd;
         const isSelected = cell.date === selectedDate;
         const allDone = hasSessions && sessions.every(isFullyCompleted);
-        const dow = new Date(`${cell.date}T12:00:00Z`).getDay();
+        const dow = mondayFirstIndex(
+          new Date(`${cell.date}T12:00:00Z`).getDay()
+        );
 
         return (
           <button
@@ -49,7 +56,7 @@ export function CalendarFortnightGrid({
             }
           >
             <span
-              className={`text-[10px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
+              className={`text-[11px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
             >
               {DAY_NAMES_SHORT[dow]}
             </span>
@@ -117,7 +124,7 @@ function cellClass({
   hasSessions: boolean;
 }): string {
   const base =
-    "h-20 rounded-lg p-1 flex flex-col items-center justify-start gap-0.5 transition-all relative";
+    "h-20 rounded-medium p-1 flex flex-col items-center justify-start gap-0.5 transition-all relative";
   const bg = isToday
     ? "bg-primary"
     : isSelected

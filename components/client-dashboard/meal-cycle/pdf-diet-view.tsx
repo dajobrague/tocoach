@@ -3,6 +3,8 @@
 import { Button, Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { IconTile } from "@/components/shared/icon-tile";
+
 interface PdfDietViewProps {
   url: string;
   name: string;
@@ -18,12 +20,10 @@ interface PdfDietViewProps {
 export function PdfDietView({ url, name }: PdfDietViewProps) {
   return (
     <div className="flex flex-col gap-4">
-      <Card>
+      <Card shadow="sm">
         <CardBody className="flex flex-col gap-4 p-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-danger-50 text-danger">
-              <Icon icon="solar:document-text-bold" width={24} />
-            </span>
+            <IconTile icon="solar:document-text-bold" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-foreground">
                 {name}
@@ -66,7 +66,7 @@ export function PdfDietView({ url, name }: PdfDietViewProps) {
 
       {/* Inline preview — best-effort; some mobile browsers show only the
           first page (or nothing), hence the buttons above. */}
-      <div className="overflow-hidden rounded-2xl border border-default-200">
+      <div className="overflow-hidden rounded-large shadow-small">
         <iframe
           className="h-[70vh] w-full bg-content2"
           src={`${url}#toolbar=1`}

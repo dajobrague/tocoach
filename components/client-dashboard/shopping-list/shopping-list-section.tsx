@@ -2,7 +2,6 @@
 
 import {
   Button,
-  Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
@@ -12,11 +11,13 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { ClientSheet } from "@/components/client-dashboard/client-sheet";
 import {
   checkedStorageKey,
   dedupeProducts,
   type ShoppingProduct,
 } from "@/components/client-dashboard/shopping-list/shopping-list-helpers";
+import { IconTile } from "@/components/shared/icon-tile";
 import { useClientShoppingList } from "@/lib/hooks/use-client-queries";
 
 /** Days covered by the list: today plus the coming week. */
@@ -80,7 +81,7 @@ function saveChecked(key: string, set: Set<string>): void {
 
 /**
  * Shopping list entry point (Jul 28 call): a quiet card-button at the bottom
- * of the meal-cycle view that opens the list in a modal. PRODUCTS ONLY — no
+ * of the meal-cycle view that opens the list in a sheet. PRODUCTS ONLY — no
  * quantities, units or ranges: one deduped list covering the coming week,
  * with the product photo when the ingredients cache knows it. Check state is
  * local (localStorage, keyed per range) — no backend.
@@ -91,28 +92,17 @@ export function ShoppingListSection() {
   return (
     <>
       <button
-        className="flex w-full items-center gap-3 rounded-2xl border border-default-200 bg-content1 p-4 text-left shadow-sm transition-colors active:scale-[0.995] hover:bg-default-50"
+        className="flex w-full items-center gap-3 rounded-large bg-content1 p-4 text-left shadow-small transition-colors active:scale-[0.995] hover:bg-default-50"
         data-testid="shopping-list-trigger"
         type="button"
         onClick={() => setOpen(true)}
       >
-        {/* Solid primary + primary-foreground: tenant themes only guarantee
-            contrast for that pairing — a primary/10 tint can render solid
-            under some theme_json shapes and swallow the glyph. */}
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <Icon icon="solar:cart-large-2-bold" width={22} />
-        </span>
+        <IconTile icon="solar:cart-large-2-bold" />
         <span className="min-w-0 flex-1">
-          <span
-            className="block text-base text-foreground"
-            style={{ fontFamily: "var(--font-heading)", fontWeight: 700 }}
-          >
+          <span className="block font-heading text-base text-foreground">
             Lista de la compra
           </span>
-          <span
-            className="block text-xs text-default-500"
-            style={{ fontFamily: "var(--font-body)" }}
-          >
+          <span className="block text-xs text-default-500">
             Los productos de tu plan de los próximos días
           </span>
         </span>
@@ -139,7 +129,7 @@ function ShoppingListModal({
   const [today] = useState(browserTodayYmd);
   const from = today;
   const to = useMemo(() => addDays(today, RANGE_DAYS - 1), [today]);
-  const { data, isPending, isError } = useClientShoppingList(from, to);
+  const { data, isPending, isError, refetch } = useClientShoppingList(from, to);
 
   const products = useMemo(
     () => dedupeProducts(data?.items ?? []),
@@ -184,29 +174,15 @@ function ShoppingListModal({
   ).length;
 
   return (
-    <Modal
-      isOpen={isOpen}
-      placement="center"
-      scrollBehavior="inside"
-      size="md"
-      onClose={onClose}
-    >
+    <ClientSheet isOpen={isOpen} size="md" onClose={onClose}>
       <ModalContent>
         <ModalHeader className="flex items-center gap-3 pb-2 pr-10">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Icon icon="solar:cart-large-2-bold" width={20} />
-          </span>
+          <IconTile icon="solar:cart-large-2-bold" />
           <span className="min-w-0 flex-1">
-            <span
-              className="block text-base text-foreground"
-              style={{ fontFamily: "var(--font-heading)", fontWeight: 700 }}
-            >
+            <span className="block font-heading text-base text-foreground">
               Lista de la compra
             </span>
-            <span
-              className="block text-xs font-normal text-default-500"
-              style={{ fontFamily: "var(--font-body)" }}
-            >
+            <span className="block text-xs font-normal text-default-500">
               {products.length > 0
                 ? `${checkedCount} de ${products.length} en el carro`
                 : "Próximos 7 días"}
@@ -219,9 +195,19 @@ function ShoppingListModal({
               <Spinner color="primary" size="sm" />
             </div>
           ) : isError ? (
-            <p className="py-8 text-center text-sm text-default-500">
-              No pudimos cargar tu lista. Vuelve a intentarlo en un momento.
-            </p>
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <p className="text-sm text-default-500">
+                No pudimos cargar tu lista. Vuelve a intentarlo en un momento.
+              </p>
+              <Button
+                color="primary"
+                size="sm"
+                variant="flat"
+                onPress={() => void refetch()}
+              >
+                Reintentar
+              </Button>
+            </div>
           ) : products.length === 0 ? (
             <div
               className="flex flex-col items-center gap-2 py-10 text-center"
@@ -255,16 +241,12 @@ function ShoppingListModal({
           ) : (
             <span />
           )}
-          <Button
-            className="bg-primary text-primary-foreground"
-            size="sm"
-            onPress={onClose}
-          >
+          <Button color="primary" size="sm" onPress={onClose}>
             Listo
           </Button>
         </ModalFooter>
       </ModalContent>
-    </Modal>
+    </ClientSheet>
   );
 }
 
@@ -311,7 +293,6 @@ function ProductRow({
           className={`block truncate text-sm font-medium ${
             checked ? "text-default-400 line-through" : "text-foreground"
           }`}
-          style={{ fontFamily: "var(--font-body)" }}
         >
           {product.name}
         </span>

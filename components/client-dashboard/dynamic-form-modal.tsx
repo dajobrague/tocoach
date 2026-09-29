@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   CardBody,
-  Chip,
   Input,
   Modal,
   ModalBody,
@@ -18,6 +17,7 @@ import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { IconTile } from "@/components/shared/icon-tile";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import {
   clearFormResponseDraft,
@@ -1603,17 +1603,15 @@ export function DynamicFormModal({
           <>
             <ModalHeader className="flex flex-col gap-1 border-b border-default-200">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary">
-                  <Icon
-                    className="text-primary-foreground text-2xl"
-                    icon={
-                      currentSection.icon ||
-                      (formType === "checkins"
-                        ? "solar:clipboard-check-bold"
-                        : "solar:calendar-mark-bold")
-                    }
-                  />
-                </div>
+                <IconTile
+                  icon={
+                    currentSection.icon ||
+                    (formType === "checkins"
+                      ? "solar:clipboard-check-bold"
+                      : "solar:calendar-mark-bold")
+                  }
+                  size="lg"
+                />
                 <div className="flex-1">
                   <h2 className="text-xl font-bold font-heading text-foreground">
                     {isViewMode
@@ -1681,18 +1679,10 @@ export function DynamicFormModal({
                     if (!shouldShowQuestion(question)) return null;
 
                     return (
-                      <Card
-                        key={question.id}
-                        className="border-2 border-default-200 hover:border-primary/50 transition-colors"
-                      >
+                      <Card key={question.id} shadow="sm">
                         <CardBody className="p-6">
                           <div className="flex items-start gap-4 mb-4">
-                            <div className="bg-primary p-3 rounded-xl flex-shrink-0">
-                              <Icon
-                                className="text-primary-foreground text-2xl"
-                                icon={question.icon}
-                              />
-                            </div>
+                            <IconTile icon={question.icon} size="lg" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start gap-2 mb-1">
                                 <div className="flex-1 min-w-0">
@@ -1712,16 +1702,6 @@ export function DynamicFormModal({
                                       </p>
                                     )}
                                 </div>
-                                {question.required && !isViewMode && (
-                                  <Chip
-                                    className="h-5 flex-shrink-0"
-                                    color="danger"
-                                    size="sm"
-                                    variant="flat"
-                                  >
-                                    Obligatorio
-                                  </Chip>
-                                )}
                               </div>
                               {!isViewMode &&
                                 question.type !== "group" &&
@@ -1751,15 +1731,19 @@ export function DynamicFormModal({
                           <div className="space-y-2">
                             {renderQuestionInput(question)}
 
-                            {errors[question.id] && (
-                              <p className="text-sm text-danger flex items-center gap-1 mt-1">
-                                <Icon
-                                  className="text-base"
-                                  icon="solar:info-circle-bold"
-                                />
-                                {errors[question.id]}
-                              </p>
-                            )}
+                            {/* number/text ya pintan el error como
+                                errorMessage del propio input. */}
+                            {errors[question.id] &&
+                              question.type !== "number" &&
+                              question.type !== "text" && (
+                                <p className="text-sm text-danger flex items-center gap-1 mt-1">
+                                  <Icon
+                                    className="text-base"
+                                    icon="solar:info-circle-bold"
+                                  />
+                                  {errors[question.id]}
+                                </p>
+                              )}
                           </div>
                         </CardBody>
                       </Card>
@@ -1838,7 +1822,7 @@ export function DynamicFormModal({
                   ) : (
                     <Button
                       className="flex-1"
-                      color="success"
+                      color="primary"
                       endContent={
                         !isSubmitting &&
                         uploadingPhotos.size === 0 && (

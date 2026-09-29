@@ -36,6 +36,8 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientPage } from "@/components/client-dashboard/client-page";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log/exercise-log-modal";
+import { CenteredState } from "@/components/shared/centered-state";
+import { IconTile } from "@/components/shared/icon-tile";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import {
   useDeleteExerciseLogs,
@@ -339,18 +341,8 @@ export function WorkoutsContent() {
           ) : null}
 
           {error && !isLoading ? (
-            <Card className="bg-content1 border border-danger-200">
-              <CardBody className="p-12 text-center">
-                <Icon
-                  className="text-danger text-6xl mx-auto mb-4"
-                  icon="solar:danger-circle-bold"
-                />
-                <h3 className="text-lg font-heading font-semibold text-foreground mb-2">
-                  Error al cargar entrenamientos
-                </h3>
-                <p className="text-foreground/60 font-body text-sm mb-4">
-                  {error}
-                </p>
+            <CenteredState
+              action={
                 <Button
                   color="primary"
                   startContent={<Icon icon="solar:refresh-linear" width={18} />}
@@ -358,31 +350,23 @@ export function WorkoutsContent() {
                 >
                   Reintentar
                 </Button>
-              </CardBody>
-            </Card>
+              }
+              icon="solar:danger-circle-linear"
+              subtitle={error}
+              title="Error al cargar entrenamientos"
+            />
           ) : null}
 
           {!isLoading && !error && showNoProgramEmptyState ? (
-            <Card className="bg-content1 border border-default-200 shadow-sm">
-              <CardBody className="p-12">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="bg-default-100 p-4 rounded-full mb-4">
-                    <Icon
-                      className="text-foreground/40 text-5xl"
-                      icon="solar:dumbbell-linear"
-                    />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground font-heading mb-2">
-                    No tienes un programa activo
-                  </h3>
-                  <p className="text-foreground/60 text-sm font-body">
-                    {hasPausedPrograms
-                      ? "Tienes programas en pausa — actívalos desde Más → Programas"
-                      : "Tu entrenador asignará un programa pronto"}
-                  </p>
-                </div>
-              </CardBody>
-            </Card>
+            <CenteredState
+              icon="solar:dumbbell-linear"
+              subtitle={
+                hasPausedPrograms
+                  ? "Tienes programas en pausa — actívalos desde Más → Programas"
+                  : "Tu entrenador asignará un programa pronto"
+              }
+              title="No tienes un programa activo"
+            />
           ) : null}
 
           {!isLoading && !error && (hasActiveProgram || hasHistory) ? (
@@ -440,20 +424,18 @@ export function WorkoutsContent() {
                   onActivate={handleActivateSession}
                 />
               ) : (
-                <Card className="bg-content1 border border-default-200 shadow-sm">
-                  <CardBody className="p-6">
+                <Card shadow="sm">
+                  <CardBody className="p-4">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-default-100">
-                        <Icon
-                          className="text-foreground/40 text-xl"
-                          icon="solar:pause-circle-linear"
-                        />
-                      </span>
+                      <IconTile
+                        icon="solar:pause-circle-linear"
+                        tone="default"
+                      />
                       <div className="min-w-0">
                         <p className="text-sm font-heading font-semibold text-foreground">
                           No tienes un programa activo ahora mismo
                         </p>
-                        <p className="text-xs font-body text-foreground/60">
+                        <p className="text-xs text-default-500">
                           Tu historial de entrenamientos sigue disponible aquí.
                         </p>
                       </div>
@@ -465,7 +447,6 @@ export function WorkoutsContent() {
               {hasActiveProgram && microcycle ? (
                 <div className="flex justify-center">
                   <Button
-                    className="text-foreground/70"
                     endContent={
                       <Icon icon="solar:alt-arrow-right-linear" width={16} />
                     }

@@ -123,7 +123,7 @@ function CardioFields({
           label="Duración (min)"
           startContent={
             <Icon
-              className="text-foreground/40"
+              className="text-default-400"
               icon="solar:clock-circle-bold"
               width={18}
             />
@@ -140,7 +140,7 @@ function CardioFields({
           label="Distancia (km)"
           startContent={
             <Icon
-              className="text-foreground/40"
+              className="text-default-400"
               icon="solar:route-bold"
               width={18}
             />
@@ -163,7 +163,7 @@ function CardioFields({
           }
           startContent={
             <Icon
-              className="text-foreground/40"
+              className="text-default-400"
               icon="solar:fire-bold"
               width={18}
             />
@@ -186,7 +186,7 @@ function CardioFields({
           label="FC promedio (bpm)"
           startContent={
             <Icon
-              className="text-foreground/40"
+              className="text-default-400"
               icon="solar:heart-pulse-bold"
               width={18}
             />
@@ -228,7 +228,7 @@ function StrengthFields({
             y no haya doble texto (label flotante + placeholder) en la
             primera. Los anchos son los mismos que los de la fila para
             que se alineen visualmente. */}
-        <div className="flex items-center gap-1.5 sm:gap-2 px-0.5 text-[11px] font-body uppercase tracking-wide text-foreground/50">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-0.5 text-[11px] text-default-500">
           <span className="w-10 shrink-0 text-center">Serie</span>
           <span className="flex-1">Peso (kg)</span>
           <span className="flex-1">Reps</span>
@@ -278,7 +278,7 @@ function InlineSaveStatus({
   if (state === "idle") return null;
   if (state === "saving") {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-body text-foreground/50">
+      <span className="inline-flex items-center gap-1 text-[11px] text-default-500">
         <Icon className="animate-spin" icon="solar:refresh-linear" width={11} />
         Guardando
       </span>
@@ -286,7 +286,7 @@ function InlineSaveStatus({
   }
   if (state === "saved") {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-body text-success">
+      <span className="inline-flex items-center gap-1 text-[11px] text-success">
         <Icon icon="solar:check-circle-bold" width={11} />
         Guardado
       </span>
@@ -294,7 +294,7 @@ function InlineSaveStatus({
   }
 
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-body text-danger">
+    <span className="inline-flex items-center gap-1 text-[11px] text-danger">
       <Icon icon="solar:danger-circle-linear" width={11} />
       Error
     </span>
@@ -314,11 +314,7 @@ function NotesField({
       minRows={2}
       placeholder="Notas"
       startContent={
-        <Icon
-          className="text-foreground/40"
-          icon="solar:notes-bold"
-          width={18}
-        />
+        <Icon className="text-default-400" icon="solar:notes-bold" width={18} />
       }
       value={formData.notes}
       onValueChange={(value) => onChange({ ...formData, notes: value })}

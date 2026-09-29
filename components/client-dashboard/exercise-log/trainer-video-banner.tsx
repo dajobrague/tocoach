@@ -11,6 +11,8 @@ import { useState } from "react";
 
 import { TrainerVideoPlayer } from "./trainer-video-player";
 
+import { IconTile } from "@/components/shared/icon-tile";
+
 interface Props {
   videoUrl: string;
 }
@@ -21,20 +23,13 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
   return (
     <>
       <button
-        className="w-full flex items-center gap-3 rounded-xl border border-default-200 bg-content1 px-3 py-3 text-left hover:bg-default-50 transition-colors"
+        className="flex w-full items-center gap-3 rounded-large bg-content1 px-3 py-3 text-left shadow-small transition-colors hover:bg-default-50"
         type="button"
         onClick={() => setIsOpen(true)}
       >
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-foreground/90 relative">
-          <Icon
-            aria-hidden="true"
-            className="text-background"
-            icon="solar:play-bold"
-            width={22}
-          />
-        </div>
+        <IconTile icon="solar:play-bold" size="lg" />
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-body uppercase tracking-wide text-foreground/50">
+          <p className="text-xs text-default-500">
             Demostración del entrenador
           </p>
           <p className="text-sm font-heading font-semibold text-foreground">
@@ -42,7 +37,7 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
           </p>
         </div>
         <Icon
-          className="text-foreground/40 shrink-0"
+          className="shrink-0 text-default-400"
           icon="solar:alt-arrow-right-linear"
           width={18}
         />

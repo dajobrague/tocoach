@@ -5,15 +5,21 @@
 
 import type { CalendarEntrySession } from "./hooks/use-calendar-entries";
 
+/** Semana lunes-first, igual que la tira de semana de Entrenamiento. */
 export const DAY_NAMES_SHORT = [
-  "Dom",
   "Lun",
   "Mar",
   "Mié",
   "Jue",
   "Vie",
   "Sáb",
+  "Dom",
 ] as const;
+
+/** Índice lunes-first (0 = lunes … 6 = domingo) de un `Date#getDay()`. */
+export function mondayFirstIndex(jsDay: number): number {
+  return (jsDay + 6) % 7;
+}
 
 export function isFullyCompleted(s: CalendarEntrySession): boolean {
   return s.exercises_total > 0 && s.exercises_completed >= s.exercises_total;

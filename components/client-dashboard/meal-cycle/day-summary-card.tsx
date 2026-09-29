@@ -12,6 +12,7 @@ import {
   MacroProgressBar,
 } from "@/components/client-dashboard/meal-cycle/macro-ui";
 import { pctOf } from "@/components/client-dashboard/meal-cycle/slot-grouping";
+import { OutlineChip } from "@/components/shared/outline-chip";
 
 /**
  * "Nutrición del día" — the day's planned totals, against the goals the
@@ -29,7 +30,7 @@ export function DaySummaryCard({
   goalName?: string | null;
 }) {
   return (
-    <Card data-testid="day-summary">
+    <Card data-testid="day-summary" shadow="sm">
       <CardBody className="gap-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Icon
@@ -37,13 +38,11 @@ export function DaySummaryCard({
             icon="solar:pie-chart-2-linear"
             width={18}
           />
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="font-heading text-lg text-foreground">
             Nutrición del día
           </h2>
           {goalName !== null && (
-            <span className="ml-auto rounded-full border border-primary/50 px-2 py-0.5 text-[11px] font-medium text-primary">
-              {goalName}
-            </span>
+            <OutlineChip className="ml-auto">{goalName}</OutlineChip>
           )}
         </div>
 
@@ -60,22 +59,26 @@ export function DaySummaryCard({
 /** No goals saved: the planned totals as a simple 4-stat strip. */
 function TotalsRow({ totals }: { totals: PlannedTotals }) {
   const stats = [
-    { label: "Calorías", value: `${Math.round(totals.kcal)}`, unit: "kcal" },
+    {
+      label: "Calorías",
+      value: Math.round(totals.kcal).toLocaleString("es"),
+      unit: "kcal",
+    },
     { label: "Proteína", value: `${Math.round(totals.protein_g)}`, unit: "g" },
     { label: "Carbos", value: `${Math.round(totals.carbs_g)}`, unit: "g" },
     { label: "Grasa", value: `${Math.round(totals.fat_g)}`, unit: "g" },
   ];
 
   return (
-    <div className="grid grid-cols-4 overflow-hidden rounded-xl border border-default-200 bg-content2">
+    <div className="grid grid-cols-4 overflow-hidden rounded-medium bg-content2">
       {stats.map((stat) => (
         <div
           key={stat.label}
           className="flex flex-col items-center gap-0.5 border-l border-default-200 py-3 first:border-l-0"
         >
           <span className="text-sm font-bold text-foreground tabular-nums">
-            {stat.value}
-            <span className="ml-0.5 text-[10px] font-medium text-default-400">
+            {stat.value}{" "}
+            <span className="text-[11px] font-medium text-default-400">
               {stat.unit}
             </span>
           </span>
@@ -151,7 +154,7 @@ function GoalsProgress({
               value={pctOf(macro.value, macro.target)}
             />
             <span className="w-16 shrink-0 text-right text-xs font-medium text-default-500 tabular-nums">
-              {Math.round(macro.value)}/{macro.target}g
+              {Math.round(macro.value)}/{macro.target} g
             </span>
           </div>
         ))}

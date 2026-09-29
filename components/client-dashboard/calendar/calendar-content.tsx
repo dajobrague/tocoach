@@ -54,7 +54,7 @@ export function CalendarContent() {
     <>
       <ClientPage title="Calendario">
         <div className="px-4 pt-4 space-y-4">
-          <Card>
+          <Card shadow="sm">
             <CardBody className="p-3 space-y-4">
               <CalendarHeader
                 title={formatTitle(view, range)}
@@ -70,7 +70,7 @@ export function CalendarContent() {
                   <Spinner size="md" />
                 </div>
               ) : error ? (
-                <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
+                <div className="rounded-medium bg-danger/10 p-3 text-sm text-danger">
                   {error instanceof Error
                     ? error.message
                     : "Error al cargar el calendario"}
@@ -121,7 +121,7 @@ export function CalendarContent() {
 
 function EmptyHint({ hasAny }: { hasAny: boolean }) {
   return (
-    <Card className="bg-content1 border border-default-200" shadow="none">
+    <Card shadow="sm">
       <CardBody className="p-4 flex flex-row items-center gap-3">
         <Icon
           className="text-default-400 shrink-0"
@@ -132,7 +132,7 @@ function EmptyHint({ hasAny }: { hasAny: boolean }) {
           }
           width={28}
         />
-        <p className="text-sm text-default-500 font-body">
+        <p className="text-sm text-default-500">
           {hasAny
             ? "Toca un día con entrenamiento para ver el detalle."
             : "Todavía no hay entrenamientos completados en este rango."}

@@ -14,6 +14,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { ExerciseLogFormDraft } from "@/lib/client/exercise-log-draft";
 
 import { useCallback, useState } from "react";
+import { addToast } from "@heroui/react";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
@@ -46,7 +47,11 @@ export function useSetVideos({ clientId, setFormData }: Args): Return {
         const data = await response.json();
 
         if (!data.success) {
-          alert("Error al subir video: " + (data.error || "Error desconocido"));
+          addToast({
+            title: "No se pudo subir el vídeo",
+            description: data.error || "Inténtalo de nuevo.",
+            color: "danger",
+          });
 
           return;
         }
@@ -65,7 +70,11 @@ export function useSetVideos({ clientId, setFormData }: Args): Return {
         });
       } catch (err) {
         console.error("[useSetVideos] upload error:", err);
-        alert("Error al subir video");
+        addToast({
+          title: "No se pudo subir el vídeo",
+          description: "Revisa tu conexión e inténtalo de nuevo.",
+          color: "danger",
+        });
       } finally {
         setUploadingIndex(null);
       }

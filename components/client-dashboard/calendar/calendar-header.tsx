@@ -1,9 +1,11 @@
-// Toolbar del calendario: navegación previa/hoy/siguiente + selector de
-// vista en pestañas (Mes / Quincena / Semana). El título cambia según
-// la vista activa.
+// Toolbar del calendario: selector de vista (Mes / Quincena / Semana) y
+// fila de título con navegación previa/siguiente + "Hoy" al final. El
+// título cambia según la vista activa.
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
+
+import { SegmentedControl } from "@/components/shared/segmented-control";
 
 export type CalendarView = "month" | "fortnight" | "week";
 
@@ -16,11 +18,11 @@ interface Props {
   onToday: () => void;
 }
 
-const VIEW_LABEL: Record<CalendarView, string> = {
-  month: "Mes",
-  fortnight: "Quincena",
-  week: "Semana",
-};
+const VIEW_OPTIONS: readonly { key: CalendarView; label: string }[] = [
+  { key: "month", label: "Mes" },
+  { key: "fortnight", label: "Quincena" },
+  { key: "week", label: "Semana" },
+];
 
 export function CalendarHeader({
   view,
@@ -32,45 +34,26 @@ export function CalendarHeader({
 }: Props) {
   return (
     <div className="space-y-3">
-      <div
-        aria-label="Vista del calendario"
-        className="flex rounded-lg bg-default-100 p-1"
-        role="tablist"
-      >
-        {(Object.keys(VIEW_LABEL) as CalendarView[]).map((v) => {
-          const isActive = v === view;
+      <SegmentedControl
+        ariaLabel="Vista del calendario"
+        options={VIEW_OPTIONS}
+        size="md"
+        value={view}
+        onChange={onChangeView}
+      />
 
-          return (
-            <button
-              key={v}
-              aria-selected={isActive}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                isActive
-                  ? "bg-content2 text-foreground shadow-sm"
-                  : "text-default-500 hover:text-default-700"
-              }`}
-              role="tab"
-              type="button"
-              onClick={() => onChangeView(v)}
-            >
-              {VIEW_LABEL[v]}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-1">
         <Button
           isIconOnly
           aria-label="Anterior"
           size="sm"
-          variant="flat"
+          variant="light"
           onPress={onPrev}
         >
-          <Icon className="text-lg" icon="solar:alt-arrow-left-bold" />
+          <Icon icon="solar:alt-arrow-left-linear" width={18} />
         </Button>
 
-        <h2 className="font-heading font-bold text-base text-foreground text-center flex-1">
+        <h2 className="flex-1 text-center font-heading text-base font-bold text-foreground first-letter:uppercase">
           {title}
         </h2>
 
@@ -78,15 +61,13 @@ export function CalendarHeader({
           isIconOnly
           aria-label="Siguiente"
           size="sm"
-          variant="flat"
+          variant="light"
           onPress={onNext}
         >
-          <Icon className="text-lg" icon="solar:alt-arrow-right-bold" />
+          <Icon icon="solar:alt-arrow-right-linear" width={18} />
         </Button>
-      </div>
 
-      <div className="flex justify-center">
-        <Button color="primary" size="sm" variant="flat" onPress={onToday}>
+        <Button size="sm" variant="light" onPress={onToday}>
           Hoy
         </Button>
       </div>

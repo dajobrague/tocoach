@@ -2,8 +2,7 @@
 // ejercicio. Por defecto mostramos 10 sesiones; "Ver más" amplía a 30.
 //
 // Diseño:
-// - PR como card neutra con medalla amber (ya no usa la paleta warning
-//   del theme — esa pelea visualmente con el primario del trainer).
+// - PR como card neutra con medalla en tinte warning (logro).
 // - Cada fila: chip de fecha + pills de peso × reps agrupadas por peso
 //   + indicador de tendencia vs sesión anterior + borde izquierdo por
 //   tendencia.
@@ -20,6 +19,7 @@ import { useState } from "react";
 import { formatKg } from "./helpers";
 import { useExerciseHistory } from "./hooks/use-exercise-history";
 
+import { IconTile } from "@/components/shared/icon-tile";
 import {
   VideoFeedbackStoryViewer,
   type StoryItem,
@@ -53,8 +53,8 @@ export function ExerciseHistorySection({
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <Skeleton className="h-12 w-full rounded-lg" />
-        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-16 w-full rounded-large" />
+        <Skeleton className="h-32 w-full rounded-large" />
       </div>
     );
   }
@@ -100,22 +100,14 @@ function PrBanner({
   const ago = pr.achieved_at ? formatRelative(pr.achieved_at) : "";
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-default-200 bg-content1 px-4 py-3">
-      <div className="bg-amber-100 p-2 rounded-md">
-        <Icon
-          className="text-amber-600"
-          icon="solar:medal-star-bold"
-          width={20}
-        />
-      </div>
+    <div className="flex items-center gap-3 rounded-large bg-content1 px-4 py-3 shadow-small">
+      <IconTile icon="solar:medal-star-bold" tone="warning" />
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase font-semibold text-foreground/50 font-body">
-          Tu mejor marca
-        </p>
+        <p className="text-xs text-default-500">Tu mejor marca</p>
         <p className="text-sm font-semibold text-foreground font-heading">
           {formatKg(pr.weight_kg)} kg{reps}
           {ago ? (
-            <span className="ml-1 text-foreground/50 font-normal">({ago})</span>
+            <span className="ml-1 font-normal text-default-500">({ago})</span>
           ) : null}
         </p>
       </div>
@@ -137,14 +129,14 @@ function RecentList({
   onOpenStory: (item: StoryItem) => void;
 }) {
   return (
-    <div className="rounded-lg border border-default-200 bg-content1 overflow-hidden">
-      <p className="px-3 py-2 text-[11px] uppercase font-semibold text-default-500 border-b border-default-100 font-body">
+    <div className="overflow-hidden rounded-large bg-content1 shadow-small">
+      <p className="border-b border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
         Últimas sesiones
       </p>
 
       {/* Header de la mini-tabla. Mismas anchos que las filas para que
           alineen sin gap shifts. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-body uppercase tracking-wide text-foreground/50 border-b border-default-100">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-default-100 text-[11px] text-default-500">
         <span className="w-14 shrink-0">Fecha</span>
         <span className="flex-1">Mejor</span>
         <span className="w-10 shrink-0 text-center">Series</span>
@@ -209,17 +201,14 @@ function HistoryRow({
   );
 
   return (
-    <li
-      className={`relative ${trendBorderClass(trend)}`}
-      style={{ borderLeftWidth: 3 }}
-    >
+    <li className={`relative border-l-[3px] ${trendBorderClass(trend)}`}>
       <button
         aria-expanded={expanded}
         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-default-50 transition-colors"
         type="button"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className="w-14 shrink-0 text-[11px] font-body text-foreground/70">
+        <span className="w-14 shrink-0 text-[11px] text-default-600">
           {formatShortDate(entry.scheduled_date)}
         </span>
         <span className="flex-1 text-xs font-semibold text-foreground truncate">
@@ -227,7 +216,7 @@ function HistoryRow({
           {entry.notes != null ? (
             <Icon
               aria-label="Tiene comentario"
-              className="ml-1.5 inline-block align-[-2px] text-foreground/40"
+              className="ml-1.5 inline-block align-[-2px] text-default-400"
               icon="solar:chat-round-line-linear"
               width={12}
             />
@@ -235,19 +224,19 @@ function HistoryRow({
           {hasCoachFeedback ? (
             <Icon
               aria-label="Tu coach comentó tu video"
-              className="ml-1.5 inline-block align-[-2px] text-emerald-600"
+              className="ml-1.5 inline-block align-[-2px] text-primary"
               icon="solar:videocamera-record-broken"
               width={12}
             />
           ) : null}
         </span>
-        <span className="w-10 shrink-0 text-xs text-center font-body text-foreground/70">
+        <span className="w-10 shrink-0 text-xs text-center text-default-600">
           {entry.sets.length}
         </span>
         <span className="w-8 shrink-0 flex justify-center">
           <TrendIcon trend={trend} />
         </span>
-        <span className="w-4 shrink-0 flex justify-center text-foreground/40">
+        <span className="w-4 shrink-0 flex justify-center text-default-400">
           <Icon
             icon={
               expanded
@@ -260,9 +249,9 @@ function HistoryRow({
       </button>
 
       {expanded ? (
-        <div className="bg-default-50/60 border-t border-default-100 px-3 py-2">
+        <div className="bg-default-50 border-t border-default-100 px-3 py-2">
           {entry.sets.length === 0 ? (
-            <p className="text-xs text-default-500 font-body">Sin sets</p>
+            <p className="text-xs text-default-500">Sin sets</p>
           ) : (
             <ul className="space-y-1">
               {entry.sets.map((s) => (
@@ -277,9 +266,9 @@ function HistoryRow({
             </ul>
           )}
           {entry.notes != null ? (
-            <p className="mt-2 flex items-start gap-1.5 border-t border-default-100 pt-2 text-xs font-body text-foreground/70">
+            <p className="mt-2 flex items-start gap-1.5 border-t border-default-100 pt-2 text-xs text-default-600">
               <Icon
-                className="mt-0.5 shrink-0 text-foreground/40"
+                className="mt-0.5 shrink-0 text-default-400"
                 icon="solar:chat-round-line-linear"
                 width={13}
               />
@@ -346,9 +335,9 @@ function SetLine({
   const videoUrl = set.video_url ?? "";
 
   return (
-    <li className="text-xs font-body">
+    <li className="text-xs">
       <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-foreground/70">
+        <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-default-600">
           S{set.set_number}
         </span>
         <span className="text-foreground">
@@ -390,10 +379,10 @@ function CoachComment({
 }) {
   const body = (
     <span className="min-w-0 flex-1">
-      <span className="block text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+      <span className="block text-[11px] font-semibold text-primary">
         Comentario del coach
       </span>
-      <span className="block whitespace-pre-line text-foreground/70">
+      <span className="block whitespace-pre-line text-default-600">
         {comment}
       </span>
     </span>
@@ -401,7 +390,7 @@ function CoachComment({
 
   if (!videoUrl) {
     return (
-      <div className="mt-1 ml-9 border-l-2 border-emerald-500 pl-2 text-xs">
+      <div className="mt-1 ml-9 border-l-2 border-primary pl-2 text-xs">
         {body}
       </div>
     );
@@ -409,13 +398,13 @@ function CoachComment({
 
   return (
     <button
-      className="mt-1 ml-9 flex w-full items-start gap-1.5 border-l-2 border-emerald-500 pl-2 text-left text-xs"
+      className="mt-1 ml-9 flex w-full items-start gap-1.5 border-l-2 border-primary pl-2 text-left text-xs"
       type="button"
       onClick={onOpen}
     >
       <Icon
         aria-label="Ver video con el comentario"
-        className="mt-0.5 shrink-0 text-emerald-600"
+        className="mt-0.5 shrink-0 text-primary"
         icon="solar:play-circle-bold"
         width={14}
       />

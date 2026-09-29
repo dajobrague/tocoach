@@ -2,7 +2,7 @@
 
 import type { WorkoutProgram } from "@/types/training";
 
-import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
+import { Button, Card, CardBody, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,8 @@ import {
   ClientPage,
   SectionHeader,
 } from "@/components/client-dashboard/client-page";
+import { CenteredState } from "@/components/shared/centered-state";
+import { OutlineChip } from "@/components/shared/outline-chip";
 import { usePrograms } from "@/lib/hooks/use-client-queries";
 
 export function ProgramsContent() {
@@ -43,80 +45,71 @@ export function ProgramsContent() {
           )}
 
           {isError && !isLoading && (
-            <Card className="border border-danger-200">
-              <CardBody className="p-6 text-center">
-                <p className="text-danger text-sm font-body mb-3">
-                  {(error as Error)?.message ||
-                    "No se pudieron cargar los programas."}
-                </p>
+            <CenteredState
+              action={
                 <Button color="primary" size="sm" onPress={() => refetch()}>
                   Reintentar
                 </Button>
-              </CardBody>
-            </Card>
+              }
+              icon="solar:danger-circle-linear"
+              subtitle={
+                (error as Error)?.message ||
+                "No se pudieron cargar los programas."
+              }
+              title="Error al cargar programas"
+            />
           )}
 
           {!isLoading && !isError && programs.length === 0 && (
-            <Card>
-              <CardBody className="py-12">
-                <div className="text-center">
-                  <Icon
-                    className="text-default-300 text-6xl mx-auto mb-4"
-                    icon="solar:dumbbell-line-duotone"
-                  />
-                  <h3 className="text-lg font-heading font-semibold mb-2">
-                    Sin programas aún
-                  </h3>
-                  <p className="text-default-500 font-body text-sm">
-                    Tu entrenador te asignará programas pronto
-                  </p>
-                </div>
-              </CardBody>
-            </Card>
+            <CenteredState
+              icon="solar:dumbbell-linear"
+              subtitle="Tu entrenador te asignará programas pronto"
+              title="Sin programas aún"
+            />
           )}
 
           {!isLoading && !isError && programs.length > 0 && (
             <>
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <p className="text-sm text-foreground font-body">
-                  Para ver el calendario de entrenos y registrar series, usa{" "}
-                  <strong>Entrenamiento</strong> en la barra inferior.
-                </p>
-                <Button
-                  as={Link}
-                  className="mt-3 font-semibold"
-                  color="primary"
-                  href={`/${slug}/ejercicio`}
-                  size="sm"
-                >
-                  Ir a Entrenamiento
-                </Button>
-              </div>
-
               {active.length > 0 && (
                 <div className="space-y-3">
                   <SectionHeader className="mb-0" title="Activos" />
                   {active.map((p: WorkoutProgram) => (
-                    <Card key={p.clientProgramId} className="shadow-sm">
-                      <CardBody className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-heading font-bold text-foreground truncate">
-                              {p.name}
-                            </p>
-                            <p className="text-xs text-default-500 mt-1">
-                              {p.type} · {p.division} · {p.currentWeek}
-                            </p>
-                            <p className="text-xs text-default-500">
-                              {p.sessions?.length ?? 0} sesiones en plantilla
-                            </p>
+                    // Toda la card lleva a Entrenamiento (calendario + registro).
+                    <Link
+                      key={p.clientProgramId}
+                      aria-label={`${p.name}: ir a Entrenamiento`}
+                      className="block rounded-large"
+                      href={`/${slug}/ejercicio`}
+                    >
+                      <Card
+                        className="transition-colors hover:bg-default-50"
+                        shadow="sm"
+                      >
+                        <CardBody className="p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-heading font-bold text-foreground truncate">
+                                {p.name}
+                              </p>
+                              <p className="text-xs text-default-500 mt-1">
+                                {p.type} · {p.division} · {p.currentWeek}
+                              </p>
+                              <p className="text-xs text-default-500">
+                                {p.sessions?.length ?? 0} sesiones en plantilla
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <OutlineChip tone="success">Activo</OutlineChip>
+                              <Icon
+                                className="text-default-400"
+                                icon="solar:alt-arrow-right-linear"
+                                width={18}
+                              />
+                            </div>
                           </div>
-                          <Chip color="success" size="sm" variant="flat">
-                            Activo
-                          </Chip>
-                        </div>
-                      </CardBody>
-                    </Card>
+                        </CardBody>
+                      </Card>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -124,14 +117,15 @@ export function ProgramsContent() {
               {paused.length > 0 && (
                 <div className="space-y-3">
                   <SectionHeader className="mb-0" title="Pausados" />
-                  <p className="text-xs text-default-500 font-body">
+                  <p className="text-xs text-default-500">
                     Tu entrenador pausó estos programas. Si quieres retomar
                     alguno, pídeselo y él lo reactivará.
                   </p>
                   {paused.map((p: WorkoutProgram) => (
                     <Card
                       key={p.clientProgramId}
-                      className="shadow-sm opacity-80"
+                      className="opacity-80"
+                      shadow="sm"
                     >
                       <CardBody className="p-4">
                         <div className="flex items-start justify-between gap-2">
@@ -146,9 +140,7 @@ export function ProgramsContent() {
                               {p.sessions?.length ?? 0} sesiones en plantilla
                             </p>
                           </div>
-                          <Chip color="warning" size="sm" variant="flat">
-                            Pausado
-                          </Chip>
+                          <OutlineChip tone="warning">Pausado</OutlineChip>
                         </div>
                       </CardBody>
                     </Card>
@@ -162,7 +154,8 @@ export function ProgramsContent() {
                   {completed.map((p: WorkoutProgram) => (
                     <Card
                       key={p.clientProgramId}
-                      className="shadow-sm opacity-80"
+                      className="opacity-80"
+                      shadow="sm"
                     >
                       <CardBody className="p-4">
                         <div className="flex items-start justify-between gap-2">
@@ -174,9 +167,7 @@ export function ProgramsContent() {
                               {p.type} · {p.division}
                             </p>
                           </div>
-                          <Chip size="sm" variant="bordered">
-                            Completado
-                          </Chip>
+                          <OutlineChip tone="muted">Completado</OutlineChip>
                         </div>
                       </CardBody>
                     </Card>

@@ -132,7 +132,7 @@ function UnsupportedVideoFallback({ originalUrl }: { originalUrl: string }) {
         <h3 className="text-lg font-heading font-semibold">
           Este video no se puede reproducir aquí
         </h3>
-        <p className="text-sm text-white/70 font-body">
+        <p className="text-sm text-white/70">
           Solo podemos incrustar videos de YouTube y Vimeo. Si tu entrenador usó
           un enlace de Instagram Reels, TikTok u otra plataforma, pídele que
           suba el archivo directamente.

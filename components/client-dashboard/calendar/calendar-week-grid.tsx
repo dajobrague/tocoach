@@ -9,6 +9,7 @@ import { Icon } from "@iconify/react";
 
 import {
   DAY_NAMES_SHORT,
+  mondayFirstIndex,
   chipColor,
   isFullyCompleted,
   typeLabel,
@@ -55,9 +56,13 @@ export function CalendarWeekGrid({
             }
           >
             <span
-              className={`text-[10px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
+              className={`text-[11px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
             >
-              {DAY_NAMES_SHORT[new Date(`${cell.date}T12:00:00Z`).getDay()]}
+              {
+                DAY_NAMES_SHORT[
+                  mondayFirstIndex(new Date(`${cell.date}T12:00:00Z`).getDay())
+                ]
+              }
             </span>
             <span
               className={`text-lg leading-none ${isToday ? "font-bold text-primary-foreground" : "text-foreground"}`}
@@ -101,7 +106,7 @@ function SessionPreview({
         {typeLabel(session.session_type)}
       </span>
       <span
-        className={`text-[9px] truncate max-w-full ${isToday ? "text-primary-foreground/80" : "text-foreground/70"}`}
+        className={`text-[9px] truncate max-w-full ${isToday ? "text-primary-foreground/80" : "text-default-600"}`}
       >
         {session.name}
       </span>
@@ -142,7 +147,7 @@ function chipBgClass(
     case "success":
       return "bg-success/15 text-success-700";
     default:
-      return "bg-default-200 text-foreground/70";
+      return "bg-default-200 text-default-600";
   }
 }
 
@@ -176,7 +181,7 @@ function cellClass({
   hasSessions: boolean;
 }): string {
   const base =
-    "min-h-[6rem] rounded-lg p-1.5 flex flex-col items-center justify-start transition-all";
+    "min-h-[6rem] rounded-medium p-1.5 flex flex-col items-center justify-start transition-all";
   const bg = isToday
     ? "bg-primary"
     : isSelected

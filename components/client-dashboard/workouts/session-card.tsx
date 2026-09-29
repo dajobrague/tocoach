@@ -44,16 +44,13 @@ export function SessionCard({
 
   return (
     <Card
-      className={
-        isRecommended
-          ? "bg-content1 border border-primary w-full"
-          : "bg-content1 border border-default-200 w-full"
-      }
+      className={isRecommended ? "w-full ring-1 ring-primary" : "w-full"}
+      shadow="sm"
     >
       <CardBody className="p-4">
         {isRecommended ? (
           <div className="mb-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1">
               <Icon
                 aria-hidden="true"
                 className="text-primary-foreground"
@@ -89,12 +86,12 @@ export function SessionCard({
               {name}
             </h3>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-foreground/60 font-body">
+              <span className="text-xs text-default-500">
                 {exerciseCount}{" "}
                 {exerciseCount === 1 ? "ejercicio" : "ejercicios"}
               </span>
               {programName != null && programName.length > 0 ? (
-                <span className="max-w-full truncate text-xs text-foreground/45 font-body">
+                <span className="max-w-full truncate text-xs text-default-400">
                   · {programName}
                 </span>
               ) : null}
@@ -107,7 +104,7 @@ export function SessionCard({
         </div>
 
         {isExpanded && expandedContent ? (
-          <div className="mt-4 pt-4 border-t border-default-200">
+          <div className="mt-4 pt-4 border-t border-default-100">
             {expandedContent}
           </div>
         ) : null}

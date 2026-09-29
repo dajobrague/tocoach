@@ -43,7 +43,7 @@ export function MacroDotsLine({
           <span className="text-default-500">
             {part.key}{" "}
             <span className="font-medium text-default-600 tabular-nums">
-              {Math.round(part.value)}g
+              {Math.round(part.value)} g
             </span>
           </span>
         </span>

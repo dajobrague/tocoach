@@ -25,7 +25,7 @@ const cycles = new MealCycleService(db);
 const options = new MealSlotOptionService(db);
 
 const CYCLE_NAME = "E2E Lista de compras";
-const PLAN_PATH = `/${TEST_TENANT_SLUG}/plan-de-comidas`;
+const PLAN_PATH = `/${TEST_TENANT_SLUG}/nutricion`;
 
 // Per-day ingredient lines. The same name appears in BOTH g and ml — those must
 // stay separate after merging. A 1-day cycle means every date in the week lands

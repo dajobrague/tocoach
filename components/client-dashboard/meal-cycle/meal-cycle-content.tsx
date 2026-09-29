@@ -2,7 +2,7 @@
 
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
-import { Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -77,7 +77,7 @@ export function MealCycleContent() {
   const [chooserFor, setChooserFor] = useState<string | null>(null);
 
   const weekStart = mondayOf(selectedDate);
-  const { data, isPending, isError } = useClientMealCycleWeek(
+  const { data, isPending, isError, refetch } = useClientMealCycleWeek(
     weekStart,
     timeZone
   );
@@ -103,6 +103,15 @@ export function MealCycleContent() {
     return (
       <MealCycleShell>
         <CenteredState
+          action={
+            <Button
+              color="primary"
+              variant="flat"
+              onPress={() => void refetch()}
+            >
+              Reintentar
+            </Button>
+          }
           icon="solar:danger-triangle-linear"
           subtitle="Vuelve a intentarlo en un momento."
           title="No pudimos cargar tu plan"

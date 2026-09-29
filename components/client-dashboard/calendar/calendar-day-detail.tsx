@@ -17,14 +17,14 @@ interface Props {
 
 export function CalendarDayDetail({ date, sessions, onClose }: Props) {
   return (
-    <Card>
+    <Card shadow="sm">
       <CardBody className="p-3">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <h3 className="text-base font-heading font-bold text-foreground">
               {formatLong(date)}
             </h3>
-            <p className="text-xs text-default-500 font-body">
+            <p className="text-xs text-default-500">
               {sessions.length}{" "}
               {sessions.length === 1
                 ? "entrenamiento completado"
@@ -42,16 +42,13 @@ export function CalendarDayDetail({ date, sessions, onClose }: Props) {
         </div>
 
         {sessions.length === 0 ? (
-          <p className="text-sm text-default-500 font-body">
+          <p className="text-sm text-default-500">
             No hay entrenamientos registrados.
           </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="divide-y divide-default-100">
             {sessions.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center gap-3 rounded-md bg-default-50 p-3"
-              >
+              <li key={s.id} className="flex items-center gap-3 py-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">
                     {s.name}
@@ -64,7 +61,7 @@ export function CalendarDayDetail({ date, sessions, onClose }: Props) {
                     >
                       {typeLabel(s.session_type)}
                     </Chip>
-                    <span className="text-xs text-default-500 font-body">
+                    <span className="text-xs text-default-500">
                       {s.exercises_completed}/{s.exercises_total} ejercicios
                     </span>
                   </div>

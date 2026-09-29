@@ -6,7 +6,7 @@ import { loadTenantContext } from "@/lib/tenant/loader";
 
 // The client's "Nutrición" destination (the bottom-nav points here). Behind the
 // nutrition_v2 flag: when enabled it renders the new meal-cycle plan view (same
-// content as /plan-de-comidas), otherwise the unchanged legacy NutritionContent.
+// meal-cycle plan view), otherwise the unchanged legacy NutritionContent.
 // The flag is resolved server-side from the tenant host (per-tenant gate),
 // mirroring the rest of the nutrition-v2 server gating.
 //

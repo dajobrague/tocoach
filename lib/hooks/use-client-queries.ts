@@ -3,6 +3,7 @@ import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-
 import type { ClientWeek } from "@/lib/nutrition/cycles/client-week";
 import type { ShoppingListItem } from "@/lib/nutrition/shopping/shopping-list";
 
+import { addToast } from "@heroui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { withSelection } from "@/components/client-dashboard/meal-cycle/slot-grouping";
@@ -413,6 +414,12 @@ export function useSetMealCycleSelection() {
       for (const [key, week] of context?.previousWeeks ?? []) {
         queryClient.setQueryData(key, week);
       }
+
+      addToast({
+        color: "danger",
+        description: "No se guardó tu elección. Inténtalo de nuevo.",
+        title: "Algo salió mal",
+      });
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });
@@ -460,6 +467,13 @@ export function useSetMenuChoice() {
 
   return useMutation({
     mutationFn: putMenuChoice,
+    onError: () => {
+      addToast({
+        color: "danger",
+        description: "No se guardó el menú elegido. Inténtalo de nuevo.",
+        title: "Algo salió mal",
+      });
+    },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_WEEK_KEY });
       void queryClient.invalidateQueries({ queryKey: MEAL_CYCLE_KEY });

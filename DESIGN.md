@@ -79,6 +79,15 @@ Toda pestaña se envuelve en `ClientPage`:
 
 - **Card**: elevación suave. HeroUI `Card` con `shadow="sm"` (sombra e1
   del entrenador), sin borde, radio `large` del tema. Sin cards anidadas.
+- **Superficie sin Card** (div, section, article): `rounded-large
+bg-content1 shadow-small`. Filas dentro de una card: separadas por
+  `divide-y divide-default-100`, no por cards anidadas.
+- **Overlays**: `ClientSheet` (`client-sheet.tsx`) para todo diálogo —
+  hoja inferior en móvil, centrado desde `sm`. Nunca `placement="center"`
+  en el portal. Visores de foto/vídeo a pantalla completa aparte.
+- **Estados**: carga con `Spinner` centrado (o el skeleton de página);
+  vacío con `CenteredState` (`components/shared/`); error con mensaje +
+  botón "Reintentar". Nunca `alert()`/`confirm()` nativos.
 - **SectionHeader** (`client-page.tsx`): título de sección + acción
   opcional a la derecha.
 - **IconTile** (`components/shared/icon-tile.tsx`): `bg-primary/10
@@ -92,9 +101,9 @@ text-primary`. Sin paletas arcoíris por categoría.
 
 ## Pendiente (fases siguientes)
 
-- Fase 2: aplicar Card/SectionHeader/IconTile página a página; hoja
-  inferior (bottom sheet) única para overlays; borrar `/mas`,
-  `/plan-de-comidas` y modales muertos.
-- Fase 3: registro de series y cierre de sesión.
-- Fase 4: semántica de color (gráficas, tipos de sesión, macros).
-- Fase 5: accesibilidad (zoom, focus), iconos del nav, retirar nutrición v1.
+- Fase 3: registro de series (inputs primero, check por serie, descanso)
+  y cierre de sesión (resumen + compartir como acción principal).
+- Fase 4: semántica de color — gráficas (paleta desde la marca), tipos de
+  sesión (un solo mapa), macros vs tipos de comida.
+- Fase 5: accesibilidad (zoom, focus), iconos del nav, retirar nutrición
+  v1, mismatch de hidratación del skeleton, `/mas` en middleware.

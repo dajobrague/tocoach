@@ -9,12 +9,15 @@ import { Button, Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
+import { SectionHeader } from "@/components/client-dashboard/client-page";
+import { IconTile } from "@/components/shared/icon-tile";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import { thumbnailUrl } from "@/lib/utils/avatar";
 
-/** "Día de entreno" when named, "Día N" otherwise. */
+/** "Día de entreno" when named, "Menú N" otherwise ("Día N" would collide
+ *  with the date strip). */
 export function menuLabel(menu: ClientWeekMenu): string {
-  return menu.name ?? `Día ${menu.dayIndex + 1}`;
+  return menu.name ?? `Menú ${menu.dayIndex + 1}`;
 }
 
 /**
@@ -75,7 +78,7 @@ function MenuImageSlide({
               src={image.url}
             />
             {active && image.name.length > 0 ? (
-              <span className="absolute inset-x-0 bottom-0 bg-black/65 px-1.5 py-1 text-left text-[10px] font-medium leading-tight text-white">
+              <span className="absolute inset-x-0 bottom-0 bg-black/65 px-1.5 py-1 text-left text-[11px] font-medium leading-tight text-white">
                 {image.name}
               </span>
             ) : null}
@@ -113,8 +116,8 @@ function MenuCard({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-content1 transition-colors ${
-        expanded ? "border-primary ring-1 ring-primary" : "border-default-200"
+      className={`overflow-hidden rounded-large bg-content1 shadow-small transition-shadow ${
+        expanded ? "ring-2 ring-primary" : ""
       }`}
       data-expanded={expanded}
       data-testid="menu-card"
@@ -139,9 +142,7 @@ function MenuCard({
               ))}
             </span>
           ) : (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-content2 text-default-400">
-              <Icon icon="solar:notes-linear" width={20} />
-            </span>
+            <IconTile icon="solar:notes-linear" tone="default" />
           )
         ) : null}
         <div className="min-w-0 flex-1">
@@ -149,9 +150,11 @@ function MenuCard({
             <p className="truncate text-sm font-semibold text-foreground">
               {menuLabel(menu)}
             </p>
-            {isRecommended ? (
-              <OutlineChip className="!px-1.5 !text-[10px]" tone="primary">
-                Recomendado
+            {/* One status per card: the current menu wins over the
+                recommendation (usually the same menu). */}
+            {isCurrent || isRecommended ? (
+              <OutlineChip tone="primary">
+                {isCurrent ? "Menú actual" : "Recomendado"}
               </OutlineChip>
             ) : null}
           </div>
@@ -160,7 +163,6 @@ function MenuCard({
             {showMacros && menu.kcal > 0
               ? ` · ${menu.kcal.toLocaleString("es")} kcal`
               : ""}
-            {isCurrent ? " · Menú actual" : ""}
           </p>
         </div>
         <Icon
@@ -253,15 +255,12 @@ export function MenuChooser({
 
   return (
     <div className="flex flex-col gap-2" data-testid="menu-chooser">
-      <div className="flex items-center gap-2">
-        <Icon className="text-primary" icon="solar:notes-bold" width={18} />
-        <h2 className="text-sm font-semibold text-foreground">
-          ¿Qué menú vas a seguir?
-        </h2>
+      <div>
+        <SectionHeader className="!mb-1" title="¿Qué menú vas a seguir?" />
+        <p className="text-sm text-default-500">
+          Revisa lo que incluye cada menú y elige el tuyo para este día.
+        </p>
       </div>
-      <p className="text-xs text-default-500">
-        Revisa lo que incluye cada menú y elige el tuyo para este día.
-      </p>
 
       {ordered.map((menu) => (
         <MenuCard
@@ -307,39 +306,33 @@ export function MenuBar({
   const confirmed = day.hasMenuChoice === true;
 
   return (
-    <Card data-testid="menu-bar">
+    <Card data-testid="menu-bar" shadow="sm">
       <CardBody className="flex-row items-center gap-3 p-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-content2 text-default-500">
-          <Icon icon="solar:notes-linear" width={18} />
-        </span>
+        <IconTile icon="solar:notes-linear" size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-default-400">
-            Menú del día
-          </p>
+          <p className="text-xs text-default-500">Menú del día</p>
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="truncate text-sm font-semibold text-foreground">
               {effective !== undefined
                 ? menuLabel(effective)
-                : `Día ${day.dayIndex + 1}`}
+                : `Menú ${day.dayIndex + 1}`}
             </p>
-            <OutlineChip
-              className="!px-1.5 !text-[10px]"
-              tone={confirmed ? "primary" : "muted"}
-            >
+            <OutlineChip tone="primary">
               {confirmed ? "Elegido por ti" : "Recomendado"}
             </OutlineChip>
           </div>
         </div>
         {onChange !== undefined ? (
-          <button
-            className="flex shrink-0 items-center gap-1 rounded-large border border-default-200 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-default-300"
+          <Button
+            className="shrink-0"
             data-testid="menu-bar-change"
-            type="button"
-            onClick={onChange}
+            size="sm"
+            startContent={<Icon icon="solar:refresh-linear" width={14} />}
+            variant="flat"
+            onPress={onChange}
           >
-            <Icon icon="solar:refresh-linear" width={14} />
             Cambiar
-          </button>
+          </Button>
         ) : null}
       </CardBody>
     </Card>
