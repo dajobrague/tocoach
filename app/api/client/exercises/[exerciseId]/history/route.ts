@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { data: logs, error: logsError } = await supabase
       .from("exercise_logs")
       .select(
-        "id, completed_at, notes, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg, video_url)"
+        "id, completed_at, notes, scheduled_sessions!inner(scheduled_date), exercise_log_sets(set_number, reps, weight_kg, video_url, metadata)"
       )
       .eq("client_id", session.client_id)
       .eq("exercise_id", exerciseId)
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         reps: number | null;
         weight_kg: number | null;
         video_url: string | null;
+        metadata: { note?: unknown } | null;
       }>;
 
       const sets = setsRaw
@@ -86,12 +87,18 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         .sort((a, b) => a.set_number - b.set_number)
         .map((s) => {
           const videoUrl = s.video_url ?? null;
+          const noteRaw = s.metadata?.note;
+          const note =
+            typeof noteRaw === "string" && noteRaw.trim().length > 0
+              ? noteRaw.trim()
+              : null;
 
           return {
             set_number: s.set_number,
             reps: s.reps as number,
             weight_kg: s.weight_kg ?? null,
             video_url: videoUrl,
+            note,
             coach_comment:
               videoUrl === null ? null : (coachComments[videoUrl] ?? null),
           };

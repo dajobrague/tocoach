@@ -72,7 +72,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        "*, exercises(id, name, category), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)"
+        "*, exercises(id, name, category), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url, metadata)"
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: false });
@@ -450,6 +450,12 @@ export async function POST(
         set_number: i + 1,
         reps: s.reps != null ? parseInt(s.reps) : null,
         weight_kg: parseWeightKg(String(s.weight ?? "")),
+        // Nota corta de la serie ("8 izq / 10 der") — el input de reps es
+        // numérico, así que las asimetrías por lado viajan en metadata.
+        metadata:
+          typeof s.note === "string" && s.note.trim().length > 0
+            ? { note: s.note.trim() }
+            : {},
         video_url:
           typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0
             ? s.videoUrl
@@ -459,7 +465,7 @@ export async function POST(
       const { data: insertedSets, error: setsError } = await supabase
         .from("exercise_log_sets")
         .insert(setRows)
-        .select("id, set_number, reps, weight_kg, video_url");
+        .select("id, set_number, reps, weight_kg, video_url, metadata");
 
       if (setsError) {
         console.error("[Exercise Logs API] Error saving sets:", setsError);

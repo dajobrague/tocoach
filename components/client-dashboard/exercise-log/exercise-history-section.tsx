@@ -358,6 +358,11 @@ function SetLine({
         </span>
       </div>
 
+      {set.note ? (
+        // Nota que el cliente dejó en esa serie ("8 izq / 10 der").
+        <p className="ml-9 mt-0.5 text-[11px] text-foreground/60">{set.note}</p>
+      ) : null}
+
       {comment ? (
         <CoachComment
           comment={comment}

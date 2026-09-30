@@ -126,7 +126,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)`
+        `*, exercises(id, name, category, muscle_groups), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url, metadata)`
       )
       .eq("client_id", clientId)
       // DESC + cap: si un cliente veterano supera el tope, se pierde la cola

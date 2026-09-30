@@ -61,6 +61,7 @@ export function hasMeaningfulFormData(
     (s) =>
       (s.reps && s.reps.trim().length > 0) ||
       (s.weight && s.weight.trim().length > 0) ||
+      (s.note && s.note.trim().length > 0) ||
       Boolean(s.videoUrl)
   );
 }
@@ -110,6 +111,21 @@ export function parsePipeReps(reps: string, count: number): string[] {
     .filter((_, i) => i < safeCount);
 
   return Array.from({ length: safeCount }, (_, i) => parts[i] ?? "");
+}
+
+/**
+ * Nota por serie de un set del server (exercise_log_sets.metadata.note).
+ * Devuelve undefined si no hay nota o viene vacía/solo espacios.
+ */
+export function setNoteOf(set: {
+  metadata?: { note?: unknown } | null;
+}): string | undefined {
+  const raw = set.metadata?.note;
+
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export function defaultSet(): SetDraft {
@@ -172,18 +188,24 @@ export function buildBaseFormData(
         (s: any) =>
           (s.reps != null && String(s.reps).trim() !== "") ||
           (s.weight_kg != null && String(s.weight_kg).trim() !== "") ||
-          (typeof s.video_url === "string" && s.video_url.length > 0)
+          (typeof s.video_url === "string" && s.video_url.length > 0) ||
+          setNoteOf(s) !== undefined
       ));
 
   if (hasUsableExistingSets) {
-    sets = existingLog.sets.map((s: any) => ({
-      reps: s.reps != null ? String(s.reps) : "",
-      weight: s.weight_kg != null ? String(s.weight_kg) : "",
-      videoUrl:
-        typeof s.video_url === "string" && s.video_url.length > 0
-          ? s.video_url
-          : undefined,
-    }));
+    sets = existingLog.sets.map((s: any) => {
+      const note = setNoteOf(s);
+
+      return {
+        reps: s.reps != null ? String(s.reps) : "",
+        weight: s.weight_kg != null ? String(s.weight_kg) : "",
+        ...(note !== undefined ? { note } : {}),
+        videoUrl:
+          typeof s.video_url === "string" && s.video_url.length > 0
+            ? s.video_url
+            : undefined,
+      };
+    });
 
     // Compat con logs viejos que tenían un solo video por ejercicio
     // (exercise_logs.video_url). Si el log existente trae video legacy

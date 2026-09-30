@@ -5,6 +5,12 @@ export interface ExerciseLogSet {
   weight_kg: number | null;
   /** Per-set video uploaded by the client (added in migration 091). */
   video_url?: string | null;
+  /**
+   * exercise_log_sets.metadata (JSONB). Interesa note: la nota que el
+   * cliente dejó en esa serie ("8 izq / 10 der"). Opcional: no todas
+   * las rutas lo seleccionan.
+   */
+  metadata?: { note?: string; [key: string]: unknown } | null;
 }
 
 export interface ExerciseLog {
