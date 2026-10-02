@@ -109,7 +109,14 @@ function CommunityIframeView({ communityUrl }: { communityUrl: string }) {
             />
           </div>
         ) : (
-          <div className="relative h-[calc(100dvh-3.5rem-1px-env(safe-area-inset-top)-6rem)] w-full">
+          <div
+            className="relative w-full"
+            style={{
+              // viewport − barra (h-14 + borde + safe area) − hueco del nav
+              height:
+                "calc(100dvh - 3.5rem - 1px - env(safe-area-inset-top) - 6rem)",
+            }}
+          >
             {!iframeLoaded && (
               <div
                 aria-hidden
