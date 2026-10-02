@@ -264,6 +264,7 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
           day={selectedDay}
           getLogsForExercise={getLogsForExercise}
           orphanLogs={[]}
+          onChanged={activeRefetch}
           onPlayVideo={openVideo}
         />
       ) : null}

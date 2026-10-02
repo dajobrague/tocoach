@@ -11,6 +11,7 @@ import type {
   WorkoutSession,
 } from "@/types/training";
 
+import { INCREASE_WEIGHT_KEY } from "@/lib/training/increase-weight";
 import { formatRestTime } from "@/lib/utils/exercise-utils";
 
 type WeekdayAbbr = WorkoutSession["dayOfWeek"][number];
@@ -350,6 +351,9 @@ export function transformToWorkoutProgram(
             tempo: coaching.tempo,
             rest: coaching.rest,
             rir: coaching.rir,
+            ...(typeof se.metadata?.[INCREASE_WEIGHT_KEY] === "string"
+              ? { increaseWeightAfter: se.metadata[INCREASE_WEIGHT_KEY] }
+              : {}),
             trainingSystem: coaching.trainingSystem,
             description: se.exercise?.description || undefined,
             notes: coaching.notes,

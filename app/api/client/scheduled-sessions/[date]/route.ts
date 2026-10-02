@@ -14,6 +14,7 @@ import {
   loadMicrocyclesWithSlots,
 } from "@/lib/microcycles/db";
 import { filterToActiveProgramSessions } from "@/lib/microcycles/visible-sessions";
+import { INCREASE_WEIGHT_KEY } from "@/lib/training/increase-weight";
 
 const LOG_PREFIX = "[Client Scheduled Session API]";
 
@@ -62,6 +63,8 @@ interface ResolvedExercise {
   tempo: string | null;
   training_system: string | null;
   rir: string | null;
+  /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
+  increase_weight_after: string | null;
   /**
    * Pesos del último log finalizado del mismo cliente+ejercicio, indexados
    * por posición de set (0..N-1). El form usa estos valores para prellenar
@@ -532,6 +535,7 @@ function makeResolvedDay(
         tempo: readStr("tempo"),
         training_system: readStr("training_system"),
         rir: readStr("rir"),
+        increase_weight_after: readStr(INCREASE_WEIGHT_KEY),
         // Se completa después con enrichWithLastUsedWeights — la query
         // necesita el supabase client y el clientId, que viven en el GET
         // handler, así que makeResolvedDay deja el array vacío como

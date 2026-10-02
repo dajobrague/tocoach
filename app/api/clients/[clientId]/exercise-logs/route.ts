@@ -3,6 +3,10 @@ import type { NewRecord, SetInput } from "@/lib/training/e1rm";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
+import {
+  INCREASE_WEIGHT_KEY,
+  isIncreaseWeightPending,
+} from "@/lib/training/increase-weight";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { computeRepMaxes, diffRecords } from "@/lib/training/e1rm";
@@ -494,6 +498,39 @@ export async function POST(
           savedSets
         )
       : { newRecords: null, firstTime: false };
+
+    // "Subir peso": el aviso se cumple cuando el cliente FINALIZA el
+    // ejercicio en una sesión posterior al día que revisó el entrenador.
+    // Best-effort — un fallo aquí no debe tumbar el guardado del log.
+    if (
+      finalize === true &&
+      typeof sessionExerciseId === "string" &&
+      sessionExerciseId.length > 0
+    ) {
+      const { data: slot } = await supabase
+        .from("session_exercises")
+        .select("metadata")
+        .eq("id", sessionExerciseId)
+        .eq("session_id", sessionId)
+        .maybeSingle();
+      const meta = (slot?.metadata ?? {}) as Record<string, unknown>;
+
+      if (isIncreaseWeightPending(meta[INCREASE_WEIGHT_KEY], scheduledDate)) {
+        const { [INCREASE_WEIGHT_KEY]: _done, ...rest } = meta;
+        const { error: clearError } = await supabase
+          .from("session_exercises")
+          .update({ metadata: rest })
+          .eq("id", sessionExerciseId)
+          .eq("session_id", sessionId);
+
+        if (clearError) {
+          console.warn(
+            "[Exercise Logs API] Could not clear increase-weight flag:",
+            clearError
+          );
+        }
+      }
+    }
 
     const flattenedLog: any = {
       ...exerciseLog,

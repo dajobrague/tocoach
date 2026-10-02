@@ -28,6 +28,7 @@ import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
+import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
 import { logMatchesSlot } from "@/lib/training/log-attribution";
 
 export interface ExerciseLike {
@@ -45,6 +46,8 @@ export interface ExerciseLike {
   rest?: string;
   /** RIR (reps in reserve) prescrito — texto libre. */
   rir?: string;
+  /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
+  increaseWeightAfter?: string;
   tempo?: string;
   trainingSystem?: string;
   /** Uniform prescribed weight in kg (from the session template). */
@@ -438,6 +441,13 @@ export function ActiveSessionView({
               >
                 <ExerciseRow
                   exercise={exercise}
+                  increaseWeight={
+                    status !== "completed" &&
+                    isIncreaseWeightPending(
+                      exercise.increaseWeightAfter,
+                      scheduledDate
+                    )
+                  }
                   status={status}
                   onClick={() =>
                     onLogExercise({
@@ -487,6 +497,8 @@ export function ActiveSessionView({
 
 interface RowProps {
   exercise: ExerciseLike & Record<string, unknown>;
+  /** El entrenador pidió subir peso en esta sesión. */
+  increaseWeight: boolean;
   status: ExerciseStatus;
   onClick: () => void;
 }
@@ -524,7 +536,7 @@ const STATUS_STYLE: Record<
   },
 };
 
-function ExerciseRow({ exercise, status, onClick }: RowProps) {
+function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
   const isCardio = isExerciseCardio(exercise);
   const stats = formatExerciseStats(exercise, isCardio);
   const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
@@ -563,6 +575,12 @@ function ExerciseRow({ exercise, status, onClick }: RowProps) {
           <p className="truncate text-xs font-body text-foreground/60">
             {stats}
           </p>
+        ) : null}
+        {increaseWeight ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-1.5 py-px text-[11px] font-body font-semibold text-success-700">
+            <Icon icon="solar:arrow-up-linear" width={12} />
+            Sube peso
+          </span>
         ) : null}
         {borrowedFrom ? (
           <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-default-300 px-1.5 py-px text-[10px] font-body text-foreground/60">
