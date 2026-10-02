@@ -21,7 +21,7 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
   return (
     <>
       <button
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
         type="button"
         onClick={() => setIsOpen(true)}
       >

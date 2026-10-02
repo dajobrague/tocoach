@@ -9,7 +9,7 @@ import { Icon } from "@iconify/react";
 import { formatCountdown, type RestTimer } from "./hooks/use-rest-timer";
 
 const PILL_BUTTON =
-  "min-h-11 rounded-full bg-primary-foreground/15 px-3 text-sm font-medium transition-colors hover:bg-primary-foreground/25";
+  "min-h-11 whitespace-nowrap rounded-full bg-primary-foreground/15 px-3 text-sm font-medium transition-colors hover:bg-primary-foreground/25";
 
 export function RestTimerPill({ timer }: { timer: RestTimer }) {
   const visible = timer.isRunning || timer.isFinished;
