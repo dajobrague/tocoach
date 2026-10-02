@@ -11,13 +11,55 @@ import { useState } from "react";
 
 import { TrainerVideoPlayer } from "./trainer-video-player";
 
-import { IconTile } from "@/components/shared/icon-tile";
+import { getVideoEmbed } from "@/lib/utils/video-url";
 
 interface Props {
   videoUrl: string;
+  exerciseName?: string;
 }
 
-export function TrainerVideoBanner({ videoUrl }: Props) {
+/**
+ * Miniatura del vídeo: primer fotograma si es un archivo subido, la de
+ * YouTube si es YouTube; para el resto (Vimeo, enlaces no soportados) un
+ * icono de play.
+ */
+function VideoThumb({ videoUrl }: { videoUrl: string }) {
+  const embed = getVideoEmbed(videoUrl);
+  const youtubeId =
+    embed.type === "youtube"
+      ? (/\/embed\/([\w-]{6,})/.exec(embed.embedUrl)?.[1] ?? null)
+      : null;
+
+  return (
+    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-medium bg-default-100">
+      {embed.type === "direct" ? (
+        // #t=0.1 fuerza a iOS a pintar el primer fotograma como póster.
+        <video
+          muted
+          playsInline
+          aria-hidden="true"
+          className="h-full w-full object-cover"
+          preload="metadata"
+          src={`${embed.embedUrl}#t=0.1`}
+        />
+      ) : youtubeId ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className="h-full w-full object-cover"
+          src={`https://i.ytimg.com/vi/${youtubeId}/mqdefault.jpg`}
+        />
+      ) : null}
+      <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-black shadow-small">
+          <Icon icon="solar:play-bold" width={16} />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+export function TrainerVideoBanner({ videoUrl, exerciseName }: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -27,7 +69,7 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
         type="button"
         onClick={() => setIsOpen(true)}
       >
-        <IconTile icon="solar:play-bold" size="lg" />
+        <VideoThumb videoUrl={videoUrl} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-default-500">
             Demostración del entrenador
@@ -45,6 +87,7 @@ export function TrainerVideoBanner({ videoUrl }: Props) {
 
       {isOpen ? (
         <TrainerVideoPlayer
+          title={exerciseName}
           videoUrl={videoUrl}
           onClose={() => setIsOpen(false)}
         />

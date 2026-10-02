@@ -28,10 +28,12 @@ import { getVideoEmbed } from "@/lib/utils/video-url";
 
 interface Props {
   videoUrl: string;
+  /** Nombre del ejercicio, para la barra superior. */
+  title?: string | undefined;
   onClose: () => void;
 }
 
-export function TrainerVideoPlayer({ videoUrl, onClose }: Props) {
+export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
   // Cerrar con Esc + lock del scroll del body. Capture phase +
   // stopImmediatePropagation para que el handler global de HeroUI no
   // dispare un close del modal padre cuando el player está arriba.
@@ -66,21 +68,35 @@ export function TrainerVideoPlayer({ videoUrl, onClose }: Props) {
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <button
-        aria-label="Cerrar video"
-        className="absolute z-10 inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/90 text-foreground shadow-md"
-        style={{
-          top: "max(0.75rem, env(safe-area-inset-top))",
-          right: "max(0.75rem, env(safe-area-inset-right))",
-        }}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
+      {/* Barra superior: qué ejercicio es + cerrar. Degradado para que se
+          lea sobre cualquier fotograma; no tapa los controles nativos, que
+          van abajo. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-3 bg-gradient-to-b from-black/70 to-transparent px-4 pb-10"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        <Icon icon="solar:close-circle-linear" width={22} />
-      </button>
+        <div className="min-w-0 flex-1 pt-1.5">
+          <p className="text-xs font-medium text-white/70">
+            Demostración del entrenador
+          </p>
+          {title ? (
+            <p className="truncate font-heading text-base font-semibold text-white">
+              {title}
+            </p>
+          ) : null}
+        </div>
+        <button
+          aria-label="Cerrar video"
+          className="pointer-events-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition-colors hover:bg-black/70"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+        >
+          <Icon icon="solar:close-linear" width={22} />
+        </button>
+      </div>
 
       {embed.type === "direct" ? (
         // PATH ORIGINAL — no tocar. Cualquier archivo subido (Supabase
@@ -89,8 +105,9 @@ export function TrainerVideoPlayer({ videoUrl, onClose }: Props) {
         <video
           autoPlay
           controls
+          loop
           playsInline
-          className="max-w-full max-h-full"
+          className="max-h-full max-w-full object-contain"
           src={embed.embedUrl}
         />
       ) : embed.type === "youtube" || embed.type === "vimeo" ? (

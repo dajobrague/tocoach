@@ -210,6 +210,12 @@ export function ExerciseLogModal({
   const [isSaving, setIsSaving] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // Historial y récords plegados por defecto; se vuelven a plegar al cerrar.
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) setHistoryOpen(false);
+  }, [isOpen]);
   const deleteLog = useDeleteExerciseLogs(clientId);
 
   const isCardio = exercise ? isExerciseCardio(exercise) : false;
@@ -672,24 +678,57 @@ export function ExerciseLogModal({
             <ExerciseLogIdentity name={exercise.name} />
 
             {trainerVideoUrl ? (
-              <TrainerVideoBanner videoUrl={trainerVideoUrl} />
+              <TrainerVideoBanner
+                exerciseName={exercise.name}
+                videoUrl={trainerVideoUrl}
+              />
             ) : null}
 
             <ExerciseTargetSection exercise={exercise} isCardio={isCardio} />
 
             {trainerNote ? <TrainerNoteCard note={trainerNote} /> : null}
 
-            <ExerciseHistorySection
-              exerciseId={exerciseId || null}
-              exerciseName={exercise.name}
-              isOpen={isOpen}
-            />
-
-            <ExerciseProgressionSection
-              exerciseId={exerciseId || null}
-              exerciseName={exercise.name}
-              isOpen={isOpen}
-            />
+            {/* Historial, progreso y récords plegados (mismo sitio): así
+                las series quedan casi en la primera pantalla. Sus queries
+                solo corren al abrir. */}
+            <div>
+              <button
+                aria-expanded={historyOpen}
+                className="flex w-full items-center gap-3 rounded-large bg-content1 px-4 py-3 text-left shadow-small"
+                type="button"
+                onClick={() => setHistoryOpen((v) => !v)}
+              >
+                <Icon
+                  aria-hidden
+                  className="shrink-0 text-primary"
+                  icon="solar:history-linear"
+                  width={20}
+                />
+                <span className="flex-1 font-heading text-base text-foreground">
+                  Tu historial y récords
+                </span>
+                <Icon
+                  aria-hidden
+                  className={`shrink-0 text-default-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+                  icon="solar:alt-arrow-down-linear"
+                  width={18}
+                />
+              </button>
+              {historyOpen ? (
+                <div className="mt-4 flex flex-col gap-6">
+                  <ExerciseHistorySection
+                    exerciseId={exerciseId || null}
+                    exerciseName={exercise.name}
+                    isOpen={isOpen}
+                  />
+                  <ExerciseProgressionSection
+                    exerciseId={exerciseId || null}
+                    exerciseName={exercise.name}
+                    isOpen={isOpen}
+                  />
+                </div>
+              ) : null}
+            </div>
 
             <ExerciseLogForm
               autoSaveState={autoSaveState}
