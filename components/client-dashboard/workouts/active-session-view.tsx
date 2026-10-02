@@ -259,29 +259,71 @@ export function ActiveSessionView({
         Cambiar entrenamiento
       </Button>
 
-      <div className="flex items-start gap-3 rounded-large bg-primary px-4 py-5 shadow-small">
-        <div
-          aria-label={`Sesión de ${typeStyle.label.toLowerCase()}`}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15"
-          role="img"
-        >
-          <Icon
-            aria-hidden="true"
-            className="text-primary-foreground"
-            icon={typeStyle.icon}
-            width={22}
-          />
+      {/* Card de la sesión. Al completarla se convierte en el momento de
+          cierre (mismo patrón que el check-in en Inicio): insignia, mensaje y
+          Compartir dentro de la superficie de marca que ya existía, sin
+          añadir otro bloque de color. */}
+      <div className="rounded-large bg-primary px-4 py-5 text-primary-foreground shadow-small">
+        <div className="flex items-start gap-3">
+          <div
+            aria-label={`Sesión de ${typeStyle.label.toLowerCase()}`}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15"
+            role="img"
+          >
+            <Icon
+              aria-hidden="true"
+              className="text-primary-foreground"
+              icon={typeStyle.icon}
+              width={22}
+            />
+          </div>
+          <div className="flex-1 min-w-0 space-y-1">
+            <h2 className="text-2xl font-heading font-bold text-primary-foreground leading-tight">
+              {session.name}
+            </h2>
+            <p className="text-xs text-primary-foreground/80">
+              {displayExerciseCount}{" "}
+              {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
+              {total > 0 && completed > 0 ? ` · ${completed} hechos` : null}
+            </p>
+          </div>
+          {sessionCompleted ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+              <Icon aria-hidden icon="solar:check-circle-bold" width={14} />
+              Completado
+            </span>
+          ) : null}
         </div>
-        <div className="flex-1 min-w-0 space-y-1">
-          <h2 className="text-2xl font-heading font-bold text-primary-foreground leading-tight">
-            {session.name}
-          </h2>
-          <p className="text-xs text-primary-foreground/80">
-            {displayExerciseCount}{" "}
-            {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
-            {total > 0 && completed > 0 ? ` · ${completed} hechos` : null}
-          </p>
-        </div>
+
+        {sessionCompleted ? (
+          <div className="mt-4 border-t border-primary-foreground/15 pt-4">
+            <p className="font-heading text-lg leading-snug text-primary-foreground">
+              ¡Entrenamiento completado!
+            </p>
+            <p className="mt-0.5 text-sm text-primary-foreground/85">
+              Buen trabajo. Compártelo con tu gente.
+            </p>
+            <div className="mt-4">
+              <ShareSessionButton
+                inverted
+                scheduledDate={scheduledDate}
+                sessionId={session.id}
+                sessionName={session.name}
+              />
+            </div>
+            {schedState.data?.completedManually === true ? (
+              <Button
+                className="mt-1 w-full text-primary-foreground/80"
+                isLoading={markCompleted.isPending}
+                size="sm"
+                variant="light"
+                onPress={() => markCompleted.mutate({ undo: true })}
+              >
+                Deshacer
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {total > 0 ? (
@@ -351,34 +393,7 @@ export function ActiveSessionView({
 
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
           cubre también el completado automático (cobertura total). */}
-      {sessionCompleted ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-large bg-content1 px-3 py-2.5 shadow-small">
-          <Icon
-            className="shrink-0 text-success-600"
-            icon="solar:check-circle-bold"
-            width={18}
-          />
-          <span className="flex-1 text-sm font-semibold text-foreground">
-            Entrenamiento completado
-          </span>
-          <ShareSessionButton
-            scheduledDate={scheduledDate}
-            sessionId={session.id}
-            sessionName={session.name}
-          />
-          {schedState.data?.completedManually === true ? (
-            <Button
-              className="shrink-0"
-              isLoading={markCompleted.isPending}
-              size="sm"
-              variant="light"
-              onPress={() => markCompleted.mutate({ undo: true })}
-            >
-              Deshacer
-            </Button>
-          ) : null}
-        </div>
-      ) : total > 0 ? (
+      {!sessionCompleted && total > 0 ? (
         // También con todo hecho pero sin estado "completed" (p.ej. el
         // auto-completado por cobertura falló o va con retraso): sin el
         // botón el cliente quedaría sin forma de cerrar la sesión.

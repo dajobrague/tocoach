@@ -35,6 +35,8 @@ interface ShareSessionButtonProps {
   scheduledDate: string;
   sessionId: string;
   sessionName: string;
+  /** Sobre la superficie de marca (card de sesión): botón ancho invertido. */
+  inverted?: boolean;
 }
 
 type CardState =
@@ -57,6 +59,7 @@ export function ShareSessionButton({
   scheduledDate,
   sessionId,
   sessionName,
+  inverted = false,
 }: ShareSessionButtonProps) {
   // El entrenador puede desactivarla (Ajustes → Marca → Tarjeta de sesión).
   const enabled = shareCardSettingsFromFeatures(useTenant()?.features).enabled;
@@ -157,11 +160,19 @@ export function ShareSessionButton({
   return (
     <>
       <Button
-        className="shrink-0"
-        color="primary"
-        size="sm"
-        startContent={<Icon icon="solar:share-linear" width={16} />}
-        variant="flat"
+        // Invertido: texto con la marca cruda (no .text-primary, que con
+        // marcas pálidas es una tinta oscurecida para el lienzo claro).
+        className={
+          inverted
+            ? "w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+            : "shrink-0"
+        }
+        color={inverted ? "default" : "primary"}
+        size={inverted ? "md" : "sm"}
+        startContent={
+          <Icon icon="solar:share-linear" width={inverted ? 18 : 16} />
+        }
+        variant={inverted ? "solid" : "flat"}
         onPress={() => setIsOpen(true)}
       >
         Compartir
