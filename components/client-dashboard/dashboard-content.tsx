@@ -139,6 +139,8 @@ export function DashboardContent() {
     null
   );
   const [showWeeklyFormModal, setShowWeeklyFormModal] = useState(false);
+  // Fecha del check-in a editar; undefined = el check-in de hoy.
+  const [weeklyFormDate, setWeeklyFormDate] = useState<string | undefined>();
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
 
   // Ventana de fetch de check-ins, DESACOPLADA del selector de período
@@ -274,6 +276,19 @@ export function DashboardContent() {
     checkinSchedule,
     weeklyResponses,
   ]);
+  // Último check-in enviado y aún sin revisar: el cliente puede editarlo
+  // hasta que el entrenador lo marque como revisado (mismo flujo que los
+  // vídeos de técnica). Solo cuando no toca uno nuevo, para no competir
+  // con el banner de "te espera".
+  const pendingReviewCheckin = useMemo(() => {
+    if (showWeeklyBanner || !checkinSchedule.enabled) return null;
+    const latest = [...weeklyResponses].sort((a, b) =>
+      b.response_date.localeCompare(a.response_date)
+    )[0];
+
+    return latest && !latest.reviewed_at ? latest : null;
+  }, [showWeeklyBanner, checkinSchedule.enabled, weeklyResponses]);
+
   // Anclamos los memos del "calendario local" a `todayYmd` (estado
   // refrescado por el effect de medianoche). Construir el Date desde
   // `${ymd}T00:00:00` lo deja en huso local, igual que getLocalYmd.
@@ -324,7 +339,10 @@ export function DashboardContent() {
             tenantSlug={tenantSlug}
             trainerName={trainerName}
             onOpenDailyForm={() => setSelectedDayForForm(getLocalTodayYmd())}
-            onOpenWeeklyForm={() => setShowWeeklyFormModal(true)}
+            onOpenWeeklyForm={() => {
+              setWeeklyFormDate(undefined);
+              setShowWeeklyFormModal(true);
+            }}
           />
 
           {/* Banner de error cuando falla la carga de respuestas. No
@@ -391,9 +409,50 @@ export function DashboardContent() {
                     <Icon icon="solar:alt-arrow-right-bold" width={18} />
                   }
                   variant="solid"
-                  onPress={() => setShowWeeklyFormModal(true)}
+                  onPress={() => {
+                    setWeeklyFormDate(undefined);
+                    setShowWeeklyFormModal(true);
+                  }}
                 >
                   Empezar Check-in
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {pendingReviewCheckin && (
+            <div className="mb-4 px-4">
+              <div className="rounded-large border border-default-200 bg-content1 p-3 flex items-center gap-3">
+                <div className="flex-shrink-0 bg-default-100 p-2 rounded-full">
+                  <Icon
+                    aria-hidden
+                    className="text-foreground/60"
+                    icon="solar:clipboard-check-linear"
+                    width={20}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {`${checkinSchedule.custom_name} enviado`}
+                  </p>
+                  <p className="text-xs text-foreground/60 mt-0.5">
+                    {`${new Date(
+                      pendingReviewCheckin.response_date + "T12:00:00"
+                    ).toLocaleDateString("es-ES", {
+                      day: "numeric",
+                      month: "long",
+                    })} · Puedes editarlo hasta que tu entrenador lo revise`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="flat"
+                  onPress={() => {
+                    setWeeklyFormDate(pendingReviewCheckin.response_date);
+                    setShowWeeklyFormModal(true);
+                  }}
+                >
+                  Editar
                 </Button>
               </div>
             </div>
@@ -514,6 +573,7 @@ export function DashboardContent() {
               clientId={clientId}
               formType="checkins"
               schedule={checkinSchedule}
+              targetDate={weeklyFormDate}
               onClose={() => setShowWeeklyFormModal(false)}
               onSuccess={async () => {
                 await Promise.all([

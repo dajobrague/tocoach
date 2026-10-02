@@ -372,7 +372,10 @@ export function DynamicFormModal({
           formType === "checkins"
             ? dropPagesNotDue(
                 normalizedConfig,
-                scheduleProp ?? data.schedule ?? null
+                scheduleProp ?? data.schedule ?? null,
+                // Pages of the period of the date being filled — same
+                // instant (UTC noon) the server validates against.
+                new Date(`${targetDate || getLocalTodayYmd()}T12:00:00Z`)
               )
             : normalizedConfig;
 
@@ -1617,7 +1620,7 @@ export function DynamicFormModal({
                         ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
                         : "Registro Diario"
                       : targetDate
-                        ? `Registro del ${new Date(targetDate + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`
+                        ? `${formType === "checkins" ? (effectiveCheckinSchedule?.custom_name ?? "Check-in") : "Registro"} del ${new Date(targetDate + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`
                         : currentSection.title || "Formulario"}
                     {isViewMode && <span className="text-success"> ✓</span>}
                   </h2>

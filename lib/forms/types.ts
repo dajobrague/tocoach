@@ -289,6 +289,8 @@ export interface FormResponse {
   submitted_at: string;
   created_at: string;
   updated_at: string;
+  /** Check-ins: set when the trainer marks it reviewed; locks client edits. */
+  reviewed_at?: string | null;
 }
 
 export interface FormResponseSubmission {

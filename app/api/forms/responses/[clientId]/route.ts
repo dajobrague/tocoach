@@ -414,7 +414,9 @@ export async function POST(
             (configRow as { schedule?: unknown }).schedule as
               | CheckInSchedule
               | null
-              | undefined
+              | undefined,
+            // Same period as the client modal: the one of the edited date.
+            new Date(`${resolvedDate}T12:00:00Z`)
           )
         : configRow.questions_config;
     const questionsArray = isStructuredConfig(questionsConfig)
@@ -500,14 +502,29 @@ export async function POST(
     // client re-editing an old record would wipe keys no longer present in
     // the current config. We only merge keys NOT in validQuestionIds — the
     // current-config keys are fully overwritten by the new submission.
+    // `*` instead of naming `reviewed_at`: if the column isn't migrated yet the
+    // select still succeeds, so orphan answers are never dropped.
     const { data: existingRow } = await supabase
       .from("form_responses")
-      .select("answers")
+      .select("*")
       .eq("tenant_host", tenantHost)
       .eq("client_id", clientId)
       .eq("form_type", form_type)
       .eq("response_date", resolvedDate)
       .maybeSingle();
+
+    // Once the trainer reviewed a check-in it's locked for the client — the
+    // trainer already gave feedback on that version.
+    if (!trainerSession && existingRow?.reviewed_at) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Tu entrenador ya revisó este check-in, así que no se puede editar.",
+        },
+        { status: 409 }
+      );
+    }
 
     const existingAnswers = existingRow
       ? normalizeFormAnswers(existingRow.answers)

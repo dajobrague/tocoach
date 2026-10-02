@@ -73,7 +73,9 @@ export default function FormsTab({
     id: string;
     date: string;
     answers: Record<string, any>;
+    reviewedAt: string | null;
   } | null>(null);
+  const [isTogglingReviewed, setIsTogglingReviewed] = useState(false);
 
   // Dirty tracking for the config editor
   const [isConfigDirty, setIsConfigDirty] = useState(false);
@@ -423,6 +425,44 @@ export default function FormsTab({
     }
   }, [clientId, selectedFormType, selectedView]);
 
+  // Revisar un check-in lo bloquea para el cliente; quitar la revisión se
+  // lo vuelve a abrir.
+  const toggleReviewed = async (responseId: string, reviewed: boolean) => {
+    setIsTogglingReviewed(true);
+    try {
+      const res = await fetch(
+        `/api/forms/responses/${clientId}/${responseId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewed }),
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al actualizar");
+      }
+
+      const reviewedAt: string | null = data.response.reviewed_at ?? null;
+
+      setResponses((prev) =>
+        prev.map((r) =>
+          r.id === responseId ? { ...r, reviewed_at: reviewedAt } : r
+        )
+      );
+      setViewingResponse((prev) => (prev ? { ...prev, reviewedAt } : prev));
+    } catch (error) {
+      addToast({
+        title: "No se pudo actualizar la revisión",
+        description: error instanceof Error ? error.message : undefined,
+        color: "danger",
+      });
+    } finally {
+      setIsTogglingReviewed(false);
+    }
+  };
+
   const handleCheckinScheduleDraftChange = useCallback((s: CheckInSchedule) => {
     setCheckinScheduleDraft(s);
   }, []);
@@ -756,6 +796,7 @@ export default function FormsTab({
       date: r.response_date,
       type: r.form_type,
       answers: normalizeFormAnswers(r.answers) as Record<string, unknown>,
+      reviewedAt: r.reviewed_at ?? null,
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -996,9 +1037,19 @@ export default function FormsTab({
                           {answeredCount} respuesta
                           {answeredCount !== 1 ? "s" : ""}
                         </span>
-                        <Chip color="success" size="sm" variant="flat">
-                          Completado
-                        </Chip>
+                        {selectedFormType === "checkins" ? (
+                          <Chip
+                            color={response.reviewedAt ? "success" : "warning"}
+                            size="sm"
+                            variant="flat"
+                          >
+                            {response.reviewedAt ? "Revisado" : "Pendiente"}
+                          </Chip>
+                        ) : (
+                          <Chip color="success" size="sm" variant="flat">
+                            Completado
+                          </Chip>
+                        )}
                         <Icon
                           className="text-gray-300"
                           icon="solar:alt-arrow-right-linear"
@@ -2088,6 +2139,35 @@ export default function FormsTab({
                   >
                     Cerrar
                   </Button>
+                  {selectedFormType === "checkins" && (
+                    <Button
+                      color={viewingResponse.reviewedAt ? "default" : "primary"}
+                      isLoading={isTogglingReviewed}
+                      startContent={
+                        isTogglingReviewed ? null : (
+                          <Icon
+                            icon={
+                              viewingResponse.reviewedAt
+                                ? "solar:undo-left-linear"
+                                : "solar:check-circle-linear"
+                            }
+                            width={18}
+                          />
+                        )
+                      }
+                      variant={viewingResponse.reviewedAt ? "flat" : "solid"}
+                      onPress={() =>
+                        toggleReviewed(
+                          viewingResponse.id,
+                          !viewingResponse.reviewedAt
+                        )
+                      }
+                    >
+                      {viewingResponse.reviewedAt
+                        ? "Quitar revisado"
+                        : "Marcar revisado"}
+                    </Button>
+                  )}
                 </ModalFooter>
               </>
             );

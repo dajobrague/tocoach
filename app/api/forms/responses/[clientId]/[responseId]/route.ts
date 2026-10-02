@@ -70,22 +70,25 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { answers, metadata } = body;
+    const { answers, metadata, reviewed } = body;
 
-    if (!answers) {
+    // `reviewed` alone toggles the check-in review state (locks/unlocks
+    // client edits); otherwise this is a full answers update.
+    if (!answers && typeof reviewed !== "boolean") {
       return NextResponse.json(
         { success: false, error: "Respuestas requeridas" },
         { status: 400 }
       );
     }
 
+    const update = answers
+      ? { answers, metadata: metadata || {} }
+      : { reviewed_at: reviewed ? new Date().toISOString() : null };
+
     // Update response
     const { data: response, error } = await supabase
       .from("form_responses")
-      .update({
-        answers,
-        metadata: metadata || {},
-      })
+      .update(update)
       .eq("id", responseId)
       .eq("client_id", clientId)
       .eq("tenant_host", tenantHost)
