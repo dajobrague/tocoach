@@ -7,6 +7,8 @@ import { ClientHeader } from "./client-header";
 interface ClientPageProps {
   /** Título de la pestaña. Omitirlo solo en Inicio (banda de marca). */
   title?: string;
+  /** Solo Inicio: contenido que prolonga la banda de marca (ver ClientHeader). */
+  heroExtension?: ReactNode;
   children: ReactNode;
   onOpenWeeklyForm?: () => void;
   onOpenDailyForm?: () => void;
@@ -19,6 +21,7 @@ interface ClientPageProps {
  */
 export function ClientPage({
   title,
+  heroExtension,
   children,
   onOpenWeeklyForm,
   onOpenDailyForm,
@@ -27,6 +30,7 @@ export function ClientPage({
     <div className="min-h-screen bg-background pb-28">
       <div className="mx-auto max-w-lg">
         <ClientHeader
+          heroExtension={heroExtension}
           title={title}
           {...(onOpenWeeklyForm ? { onOpenWeeklyForm } : {})}
           {...(onOpenDailyForm ? { onOpenDailyForm } : {})}
