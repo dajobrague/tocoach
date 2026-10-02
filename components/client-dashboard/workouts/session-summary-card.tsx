@@ -68,8 +68,8 @@ export function SessionSummaryCard({
   }
   if (summary.volumeKg > 0) {
     tiles.push({
-      value: `${summary.volumeKg.toLocaleString("es")} kg`,
-      label: "Volumen",
+      value: summary.volumeKg.toLocaleString("es"),
+      label: "Volumen (kg)",
     });
   }
   if (summary.durationMinutes !== null) {
