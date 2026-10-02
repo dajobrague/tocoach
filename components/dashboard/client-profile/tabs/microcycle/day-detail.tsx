@@ -17,6 +17,7 @@
 import type { ExerciseLog, ExerciseLogSet } from "../progress/types";
 import type { DayMetrics, PrescribedExercise, SessionEntry } from "./types";
 
+import { Checkbox, addToast } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { Fragment, useState } from "react";
 
@@ -334,6 +335,70 @@ function rxLineFor(p: PrescribedExercise): string {
   return parts.join(" · ");
 }
 
+/** Lo que necesita el check de "subir peso" para guardar. */
+interface IncreaseWeightCtx {
+  clientId: string;
+  /** Día que se está revisando: el aviso aplica a las sesiones posteriores. */
+  date: string;
+  onChanged: (() => void) | undefined;
+}
+
+/**
+ * Check "Subir peso en la próxima sesión" (ticket Adrián, Oct 2): el cliente
+ * ve "Sube peso" en este ejercicio en su siguiente sesión y el aviso se borra
+ * solo cuando lo finaliza (lib/training/increase-weight).
+ */
+function IncreaseWeightToggle({
+  prescribed,
+  ctx,
+}: {
+  prescribed: PrescribedExercise;
+  ctx: IncreaseWeightCtx;
+}) {
+  const [after, setAfter] = useState(prescribed.increaseWeightAfter ?? null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async (checked: boolean) => {
+    const next = checked ? ctx.date : null;
+    const prev = after;
+
+    setAfter(next);
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/clients/${ctx.clientId}/session-exercises/${prescribed.slotId}/increase-weight`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ after: next }),
+        }
+      );
+
+      if (!res.ok) throw new Error();
+      ctx.onChanged?.();
+    } catch {
+      setAfter(prev);
+      addToast({ title: "No se pudo guardar el aviso", color: "danger" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Checkbox
+      className="mt-2"
+      isDisabled={saving}
+      isSelected={after !== null && after >= ctx.date}
+      size="sm"
+      onValueChange={save}
+    >
+      <span className="text-[12px] text-gray-700">
+        Subir peso en la próxima sesión
+      </span>
+    </Checkbox>
+  );
+}
+
 // ─── Fila en modo prescripción (sin logs de la sesión / día futuro) ─────────
 
 function PrescribedRow({
@@ -341,9 +406,11 @@ function PrescribedRow({
   logs,
   allTimeLogs,
   isFuture,
+  increaseWeightCtx,
   onPlayVideo,
 }: {
   prescribed: PrescribedExercise;
+  increaseWeightCtx: IncreaseWeightCtx;
   logs: ExerciseLog[];
   allTimeLogs: ExerciseLog[];
   isFuture: boolean;
@@ -428,6 +495,10 @@ function PrescribedRow({
       ) : null}
 
       {notes ? <NoteQuote notes={notes} /> : null}
+
+      {!isFuture && totalSets > 0 && prescribed.slotId ? (
+        <IncreaseWeightToggle ctx={increaseWeightCtx} prescribed={prescribed} />
+      ) : null}
     </li>
   );
 }
@@ -441,9 +512,11 @@ function LoggedExerciseRow({
   category,
   prescribedEntry,
   originNote,
+  increaseWeightCtx,
   onPlayVideo,
 }: {
   exerciseName: string;
+  increaseWeightCtx: IncreaseWeightCtx;
   logs: ExerciseLog[];
   allTimeLogs: ExerciseLog[];
   category: string | undefined;
@@ -522,6 +595,13 @@ function LoggedExerciseRow({
       ) : null}
 
       {notes ? <NoteQuote notes={notes} /> : null}
+
+      {prescribedEntry?.slotId ? (
+        <IncreaseWeightToggle
+          ctx={increaseWeightCtx}
+          prescribed={prescribedEntry}
+        />
+      ) : null}
     </li>
   );
 }
@@ -530,12 +610,14 @@ function LoggedExerciseRow({
 
 interface SessionCardProps {
   entry: SessionEntry;
+  increaseWeightCtx: IncreaseWeightCtx;
   getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo: ((url: string, name: string) => void) | undefined;
 }
 
 function SessionCard({
   entry,
+  increaseWeightCtx,
   getLogsForExercise,
   onPlayVideo,
 }: SessionCardProps) {
@@ -722,6 +804,7 @@ function SessionCard({
               allTimeLogs={getLogsForExercise(g.exerciseId)}
               category={g.logs[0]?.exercises?.category}
               exerciseName={g.name}
+              increaseWeightCtx={increaseWeightCtx}
               logs={g.logs}
               prescribedEntry={prescribedById.get(g.exerciseId) ?? null}
               onPlayVideo={onPlayVideo}
@@ -736,6 +819,7 @@ function SessionCard({
               <PrescribedRow
                 key={p.exerciseId}
                 allTimeLogs={getLogsForExercise(p.exerciseId)}
+                increaseWeightCtx={increaseWeightCtx}
                 isFuture={false}
                 logs={[]}
                 prescribed={p}
@@ -749,6 +833,7 @@ function SessionCard({
             <PrescribedRow
               key={p.exerciseId}
               allTimeLogs={getLogsForExercise(p.exerciseId)}
+              increaseWeightCtx={increaseWeightCtx}
               isFuture={showFuture}
               logs={entry.logs}
               prescribed={p}
@@ -773,6 +858,7 @@ function SessionCard({
                   allTimeLogs={getLogsForExercise(g.exerciseId)}
                   category={g.logs[0]?.exercises?.category}
                   exerciseName={g.name}
+                  increaseWeightCtx={increaseWeightCtx}
                   logs={g.logs}
                   originNote={
                     g.borrowedFrom ? `De la sesión «${g.borrowedFrom}»` : null
@@ -798,14 +884,17 @@ interface Props {
   /** Historial all-time por ejercicio (popover de métricas en cada fila). */
   getLogsForExercise: (exerciseId: string) => ExerciseLog[];
   onPlayVideo?: ((url: string, name: string) => void) | undefined;
+  /** Recarga la semana/mes tras marcar "subir peso". */
+  onChanged?: (() => void) | undefined;
 }
 
 export function DayDetail({
-  clientId: _clientId,
+  clientId,
   day,
   orphanLogs: _orphanLogs,
   getLogsForExercise,
   onPlayVideo,
+  onChanged,
 }: Props) {
   // Día de descanso: sin sesiones en ninguna dirección.
   if (day.sessions.length === 0) {
@@ -853,6 +942,7 @@ export function DayDetail({
           key={entry.scheduledSession.id}
           entry={entry}
           getLogsForExercise={getLogsForExercise}
+          increaseWeightCtx={{ clientId, date: day.date, onChanged }}
           onPlayVideo={onPlayVideo}
         />
       ))}

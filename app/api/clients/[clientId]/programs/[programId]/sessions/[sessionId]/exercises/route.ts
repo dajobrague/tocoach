@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { INCREASE_WEIGHT_KEY } from "@/lib/training/increase-weight";
 
 // PUT/DELETE mutan por el id del slot (query param), así que antes de tocar
 // la fila se verifica la cadena completa slot → sesión → programa →
@@ -14,10 +15,15 @@ async function findOwnedSessionExercise(
   trainerId: string,
   routeParams: { clientId: string; programId: string; sessionId: string },
   sessionExerciseRowId: string
-): Promise<{ id: string; exercise_id: string; session_id: string } | null> {
+): Promise<{
+  id: string;
+  exercise_id: string;
+  session_id: string;
+  metadata: Record<string, unknown> | null;
+} | null> {
   const { data: sessionExercise } = await supabase
     .from("session_exercises")
-    .select("id, exercise_id, session_id")
+    .select("id, exercise_id, session_id, metadata")
     .eq("id", sessionExerciseRowId)
     .eq("session_id", routeParams.sessionId)
     .maybeSingle();
@@ -429,11 +435,18 @@ export async function PUT(
       // Strength exercise fields
       updateData.sets = parseInt(sets);
       updateData.reps = reps;
+      // Editar el slot no debe borrar un "subir peso" pendiente; cambiar a
+      // otro ejercicio de la biblioteca sí (el aviso era para el anterior).
+      const pendingIncrease = nextExerciseId
+        ? undefined
+        : sessionExercise.metadata?.[INCREASE_WEIGHT_KEY];
+
       updateData.metadata = {
         tempo,
         training_system: trainingSystem,
         rest_description: rest,
         rir: rir || null,
+        ...(pendingIncrease ? { [INCREASE_WEIGHT_KEY]: pendingIncrease } : {}),
       };
     }
 

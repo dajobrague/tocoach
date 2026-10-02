@@ -48,6 +48,9 @@ export function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.tempo) out.tempo = r.tempo;
   if (r.training_system) out.trainingSystem = r.training_system;
   if (r.rir) out.rir = r.rir;
+  if (r.increase_weight_after) {
+    out.increaseWeightAfter = r.increase_weight_after;
+  }
   // Comentario del trainer — el modal de log lo muestra como nota del
   // entrenador (exercise.notes). Sin este mapeo, el comentario solo se
   // veía al abrir la sesión un día distinto al recomendado.

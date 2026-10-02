@@ -11,6 +11,14 @@ export interface PrescribedExercise {
   prescribedWeightKg: number | null;
   /** RIR prescrito (texto libre de metadata.rir). */
   prescribedRir: string | null;
+  /**
+   * session_exercises.id del slot (para el check de "subir peso"). Nombre
+   * distinto de PrescribedSlot.sessionExerciseId a propósito: ese activa la
+   * atribución por slot en adherence.ts, que este cambio no toca.
+   */
+  slotId?: string;
+  /** "Subir peso": día revisado por el entrenador, o null. */
+  increaseWeightAfter?: string | null;
 }
 
 /** A session as it travels back from the trainer endpoint (template or actual). */

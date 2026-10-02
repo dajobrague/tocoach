@@ -45,6 +45,8 @@ export interface ResolvedExercise {
   tempo: string | null;
   training_system: string | null;
   rir: string | null;
+  /** "Subir peso": día que revisó el entrenador (YYYY-MM-DD) o null. */
+  increase_weight_after?: string | null;
   /**
    * Pesos del último log finalizado del mismo ejercicio (indexados por
    * posición de set, 0..N-1). El form de log usa estos valores para

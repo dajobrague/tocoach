@@ -18,6 +18,7 @@ import {
 } from "./adherence";
 
 import { getLocalYmd } from "@/lib/forms/client-helpers";
+import { INCREASE_WEIGHT_KEY } from "@/lib/training/increase-weight";
 
 interface UseWeekMetrics {
   data: WeekMetrics | null;
@@ -51,6 +52,11 @@ function toPrescribed(row: ScheduledSessionRow): PrescribedExercise[] {
         prescribedWeightKg: se.weight_kg,
         prescribedRir:
           typeof rir === "string" && rir.trim() !== "" ? rir : null,
+        slotId: se.id,
+        increaseWeightAfter:
+          typeof se.metadata?.[INCREASE_WEIGHT_KEY] === "string"
+            ? (se.metadata[INCREASE_WEIGHT_KEY] as string)
+            : null,
       };
     });
 }
