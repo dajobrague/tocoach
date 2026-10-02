@@ -13,6 +13,7 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { useClientData } from "../client-data-provider";
 import { SectionHeader } from "../client-page";
 
 import { SessionCard } from "./session-card";
@@ -81,6 +82,9 @@ export function AvailableSessionsList({
   programNameById = null,
   loggedSessionIds,
 }: Props) {
+  const { firstName, lastName } = useClientData();
+  const clientFullName = `${firstName} ${lastName}`.trim();
+
   if (availableSessions.length === 0) return null;
 
   const buckets = groupByType(availableSessions);
@@ -101,11 +105,12 @@ export function AvailableSessionsList({
                   isRecommended={
                     recommendedSessionIds?.has(session.id) ?? false
                   }
-                  programName={
+                  programName={withoutClientName(
                     (session.program_id != null
                       ? programNameById?.get(session.program_id)
-                      : null) ?? null
-                  }
+                      : null) ?? null,
+                    clientFullName
+                  )}
                   session={session}
                   onActivate={onActivate}
                 />
@@ -124,11 +129,14 @@ function BucketHeader({ bucket }: { bucket: Bucket }) {
 
   return (
     <div className="flex items-center gap-2 px-1">
-      <Icon className={style.iconColorClass} icon={style.icon} width={16} />
+      <Icon className="text-primary" icon={style.icon} width={16} />
       <h3 className="text-sm font-heading font-semibold text-foreground">
         {style.label}
+        <span className="font-body font-normal text-default-500">
+          {" "}
+          · {count}
+        </span>
       </h3>
-      <span className="text-xs text-default-500">({count})</span>
     </div>
   );
 }
@@ -191,17 +199,37 @@ function SessionRow({
         name={session.name}
         programName={programName}
         rightContent={
+          // Toda la card ya es tocable; el botón queda como señal discreta
+          // (antes, cinco "Comenzar" sólidos iguales hacían una pared de
+          // color sin jerarquía).
           <Button
-            color="primary"
-            size="sm"
-            startContent={<Icon icon="solar:play-bold" width={16} />}
+            isIconOnly
+            aria-label={`Comenzar ${session.name}`}
+            className="h-11 w-11 min-w-11 rounded-full bg-primary/10 text-primary"
             onPress={() => onActivate(session.id)}
           >
-            Comenzar
+            <Icon icon="solar:play-bold" width={18} />
           </Button>
         }
         sessionType={session.session_type}
       />
     </div>
   );
+}
+
+/**
+ * Los entrenadores suelen nombrar el programa "Plantilla - Nombre Cliente";
+ * en el portal del propio cliente ese sufijo es ruido. Solo se quita cuando
+ * coincide exactamente con su nombre completo.
+ */
+export function withoutClientName(
+  programName: string | null,
+  clientFullName: string
+): string | null {
+  if (!programName || !clientFullName) return programName;
+  const suffix = ` - ${clientFullName}`.toLowerCase();
+
+  return programName.toLowerCase().endsWith(suffix)
+    ? programName.slice(0, -suffix.length).trim()
+    : programName;
 }

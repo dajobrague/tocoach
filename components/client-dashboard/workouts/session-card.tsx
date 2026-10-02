@@ -69,12 +69,12 @@ export function SessionCard({
           ) : (
             <div
               aria-label={`Sesión de ${style.label.toLowerCase()}`}
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.iconBgClass}`}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10"
               role="img"
             >
               <Icon
                 aria-hidden="true"
-                className={style.iconColorClass}
+                className="text-primary"
                 icon={style.icon}
                 width={22}
               />
@@ -85,17 +85,12 @@ export function SessionCard({
             <h3 className="text-base font-heading font-bold text-foreground mb-1 truncate">
               {name}
             </h3>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-default-500">
-                {exerciseCount}{" "}
-                {exerciseCount === 1 ? "ejercicio" : "ejercicios"}
-              </span>
-              {programName != null && programName.length > 0 ? (
-                <span className="max-w-full truncate text-xs text-default-400">
-                  · {programName}
-                </span>
-              ) : null}
-            </div>
+            <p className="truncate text-xs text-default-500">
+              {exerciseCount} {exerciseCount === 1 ? "ejercicio" : "ejercicios"}
+              {programName != null && programName.length > 0
+                ? ` · ${programName}`
+                : null}
+            </p>
           </div>
 
           {rightContent ? (
