@@ -9,6 +9,7 @@ import { Icon } from "@iconify/react";
 
 import {
   DAY_NAMES_SHORT,
+  mondayFirstIndex,
   chipColor,
   isFullyCompleted,
   typeLabel,
@@ -55,12 +56,16 @@ export function CalendarWeekGrid({
             }
           >
             <span
-              className={`text-[10px] font-semibold ${isToday ? "text-white" : "text-default-500"}`}
+              className={`text-[11px] font-semibold ${isToday ? "text-primary-foreground" : "text-default-500"}`}
             >
-              {DAY_NAMES_SHORT[new Date(`${cell.date}T12:00:00Z`).getDay()]}
+              {
+                DAY_NAMES_SHORT[
+                  mondayFirstIndex(new Date(`${cell.date}T12:00:00Z`).getDay())
+                ]
+              }
             </span>
             <span
-              className={`text-lg leading-none ${isToday ? "font-bold text-white" : "text-foreground"}`}
+              className={`text-lg leading-none ${isToday ? "font-bold text-primary-foreground" : "text-foreground"}`}
             >
               {cell.day}
             </span>
@@ -101,21 +106,21 @@ function SessionPreview({
         {typeLabel(session.session_type)}
       </span>
       <span
-        className={`text-[9px] truncate max-w-full ${isToday ? "text-white/80" : "text-foreground/70"}`}
+        className={`text-[9px] truncate max-w-full ${isToday ? "text-primary-foreground/80" : "text-default-600"}`}
       >
         {session.name}
       </span>
       <div className="flex items-center gap-0.5">
         {allDone ? (
           <Icon
-            className={isToday ? "text-white" : "text-success"}
+            className={isToday ? "text-primary-foreground" : "text-success"}
             icon="solar:check-circle-bold"
             width={10}
           />
         ) : null}
         {extra > 0 ? (
           <span
-            className={`text-[8px] ${isToday ? "text-white/80" : "text-default-500"}`}
+            className={`text-[8px] ${isToday ? "text-primary-foreground/80" : "text-default-500"}`}
           >
             +{extra}
           </span>
@@ -129,7 +134,7 @@ function chipBgClass(
   color: ReturnType<typeof chipColor>,
   isToday: boolean
 ): string {
-  if (isToday) return "bg-white/20 text-white";
+  if (isToday) return "bg-primary-foreground/20 text-primary-foreground";
   switch (color) {
     case "primary":
       return "bg-primary/15 text-primary";
@@ -142,7 +147,7 @@ function chipBgClass(
     case "success":
       return "bg-success/15 text-success-700";
     default:
-      return "bg-default-200 text-foreground/70";
+      return "bg-default-200 text-default-600";
   }
 }
 
@@ -176,7 +181,7 @@ function cellClass({
   hasSessions: boolean;
 }): string {
   const base =
-    "min-h-[6rem] rounded-lg p-1.5 flex flex-col items-center justify-start transition-all";
+    "min-h-[6rem] rounded-medium p-1.5 flex flex-col items-center justify-start transition-all";
   const bg = isToday
     ? "bg-primary"
     : isSelected

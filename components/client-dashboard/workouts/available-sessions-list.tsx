@@ -13,6 +13,8 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { SectionHeader } from "../client-page";
+
 import { SessionCard } from "./session-card";
 import { SESSION_TYPE_ORDER, getSessionTypeStyle } from "./session-type-style";
 
@@ -86,9 +88,7 @@ export function AvailableSessionsList({
 
   return (
     <section className="w-full">
-      <h2 className="text-xl font-heading font-semibold text-foreground mb-3">
-        {heading}
-      </h2>
+      <SectionHeader title={heading} />
       <div className="space-y-5 w-full">
         {buckets.map((bucket) => (
           <div key={bucket.type} className="space-y-2">
@@ -128,7 +128,7 @@ function BucketHeader({ bucket }: { bucket: Bucket }) {
       <h3 className="text-sm font-heading font-semibold text-foreground">
         {style.label}
       </h3>
-      <span className="text-xs font-body text-foreground/50">({count})</span>
+      <span className="text-xs text-default-500">({count})</span>
     </div>
   );
 }

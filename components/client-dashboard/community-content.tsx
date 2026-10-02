@@ -1,76 +1,38 @@
 "use client";
 
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { ClientBottomNav } from "./bottom-nav";
 import { useClientData } from "./client-data-provider";
 import { useCommunityFrame } from "./community-frame";
 import { ClientHeader } from "./client-header";
+import { ClientPage } from "./client-page";
+
+import { CenteredState } from "@/components/shared/centered-state";
 
 export function CommunityContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-    communityUrl,
-  } = useClientData();
+  const { communityUrl } = useClientData();
 
   // Empty state if no community URL configured
   if (!communityUrl) {
     return (
       <>
-        <div className="min-h-screen bg-background pb-20">
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tagline="Conecta con la comunidad"
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-          />
-
-          <div className="max-w-lg mx-auto p-4">
-            <Card className="bg-background border border-default-200">
-              <CardBody className="p-12">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="bg-default-100 p-4 rounded-full mb-4">
-                    <Icon
-                      className="text-default-400 text-5xl"
-                      icon="solar:users-group-rounded-linear"
-                    />
-                  </div>
-                  <h3 className="text-base font-semibold text-foreground mb-2">
-                    Comunidad no disponible
-                  </h3>
-                  <p className="text-sm text-default-500">
-                    Tu entrenador aún no ha configurado una comunidad.
-                  </p>
-                </div>
-              </CardBody>
-            </Card>
+        <ClientPage title="Comunidad">
+          <div className="px-4">
+            <CenteredState
+              icon="solar:users-group-rounded-linear"
+              subtitle="Tu entrenador aún no ha configurado una comunidad."
+              title="Comunidad no disponible"
+            />
           </div>
-        </div>
+        </ClientPage>
         <ClientBottomNav />
       </>
     );
   }
 
-  return (
-    <CommunityIframeView
-      clientId={clientId}
-      clientProfilePicture={clientProfilePicture}
-      communityUrl={communityUrl}
-      firstName={firstName}
-      logoUrl={logoUrl}
-      tenantSlug={tenantSlug}
-      trainerName={trainerName}
-    />
-  );
+  return <CommunityIframeView communityUrl={communityUrl} />;
 }
 
 /**
@@ -85,23 +47,7 @@ export function CommunityContent() {
  * (There is deliberately NO standing open-in-new-tab button when the iframe
  * works — removed at José Carlos's request, Jul 13 2026.)
  */
-function CommunityIframeView({
-  clientId,
-  clientProfilePicture,
-  communityUrl,
-  firstName,
-  logoUrl,
-  tenantSlug,
-  trainerName,
-}: {
-  clientId: string;
-  clientProfilePicture: string;
-  communityUrl: string;
-  firstName: string;
-  logoUrl: string;
-  tenantSlug: string;
-  trainerName: string;
-}) {
+function CommunityIframeView({ communityUrl }: { communityUrl: string }) {
   // The iframe itself lives in CommunityFrameHost (client layout) so the
   // community login survives tab switches; this page only provides the slot.
   const {
@@ -114,60 +60,48 @@ function CommunityIframeView({
 
   return (
     <>
-      <div className="min-h-screen bg-background flex flex-col">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tagline="Conecta con la comunidad"
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
+      <div className="mx-auto max-w-lg bg-background">
+        <ClientHeader title="Comunidad" />
 
-        {/* Embedded Community iframe. No standing external-open button (per
-            José Carlos, Jul 13) — the fallback card below keeps one as the
-            escape hatch for platforms that refuse to be embedded. */}
-        <div className="flex-1 w-full max-w-lg mx-auto pb-16 pt-3 px-4">
-          {showFallback ? (
-            <Card className="bg-background border border-default-200">
-              <CardBody className="p-8">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <div className="bg-default-100 p-4 rounded-full mb-4">
-                    <Icon
-                      className="text-default-400 text-5xl"
-                      icon="solar:users-group-rounded-linear"
-                    />
-                  </div>
-                  <h3 className="text-base font-semibold text-foreground mb-2">
-                    No se pudo mostrar la comunidad aquí
-                  </h3>
-                  <p className="text-sm text-default-500 mb-4">
-                    La plataforma de comunidad no permite mostrarse dentro de la
-                    app. Ábrela en una pestaña nueva para acceder.
-                  </p>
-                  <Button
-                    as="a"
-                    color="primary"
-                    href={communityUrl}
-                    rel="noopener noreferrer"
-                    startContent={
-                      <Icon icon="solar:square-top-down-linear" width={18} />
-                    }
-                    target="_blank"
-                  >
-                    Abrir comunidad
-                  </Button>
-                </div>
-              </CardBody>
-            </Card>
-          ) : (
-            <div
-              ref={setSlot}
-              className="w-full h-full min-h-[calc(100vh-170px)]"
+        {/* Iframe a sangre bajo la barra, con alto fijo = viewport − barra
+            (h-14 + borde + safe area) − hueco del nav inferior: solo el iframe
+            hace scroll. Sin botón fijo de abrir fuera (José Carlos, Jul
+            13); el fallback conserva "Abrir comunidad" como salida. */}
+        {showFallback ? (
+          <div className="px-4">
+            <CenteredState
+              action={
+                <Button
+                  as="a"
+                  color="primary"
+                  href={communityUrl}
+                  rel="noopener noreferrer"
+                  startContent={
+                    <Icon icon="solar:square-top-down-linear" width={18} />
+                  }
+                  target="_blank"
+                >
+                  Abrir comunidad
+                </Button>
+              }
+              icon="solar:users-group-rounded-linear"
+              subtitle="La plataforma de comunidad no permite mostrarse dentro de la app. Ábrela en una pestaña nueva para acceder."
+              title="No se pudo mostrar la comunidad aquí"
             />
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="relative h-[calc(100dvh-3.5rem-1px-env(safe-area-inset-top)-6rem)] w-full">
+            {!iframeLoaded && (
+              <div
+                aria-hidden
+                className="absolute inset-0 animate-pulse bg-default-100"
+              />
+            )}
+            {/* El iframe vive en CommunityFrameHost y se posiciona (fixed)
+                sobre este hueco; el placeholder queda debajo hasta cargar. */}
+            <div ref={setSlot} className="h-full w-full" />
+          </div>
+        )}
       </div>
       <ClientBottomNav />
     </>

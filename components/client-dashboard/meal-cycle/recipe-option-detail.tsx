@@ -131,7 +131,7 @@ export function RecipeOptionDetail({
                     </div>
                   )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-4 pb-3 pt-10">
-                    <span className="mb-1 inline-block rounded-full border border-white/40 px-2 py-0.5 text-[10px] font-medium text-white/90">
+                    <span className="mb-1 inline-block rounded-full border border-white/40 px-2 py-0.5 text-[11px] font-medium text-white/90">
                       {snapshot.sourceType === "recipe" ? "Receta" : "Alimento"}
                     </span>
                     <h2 className="text-lg font-bold leading-tight text-white">
@@ -190,7 +190,7 @@ export function RecipeOptionDetail({
 
                 <div className="flex flex-col gap-5 px-4 py-4">
                   {showMacros && totals !== undefined ? (
-                    <div className="grid grid-cols-4 overflow-hidden rounded-xl border border-default-200 bg-content2">
+                    <div className="grid grid-cols-4 overflow-hidden rounded-large bg-content2">
                       <div className="flex flex-col items-center gap-0.5 py-2.5">
                         <span className="flex items-center gap-1 text-sm font-bold text-foreground tabular-nums">
                           <Icon
@@ -198,9 +198,9 @@ export function RecipeOptionDetail({
                             icon="solar:fire-bold"
                             width={14}
                           />
-                          {Math.round(totals.kcal)}
+                          {Math.round(totals.kcal).toLocaleString("es")}
                         </span>
-                        <span className="text-[10px] uppercase tracking-wide text-default-400">
+                        <span className="text-[11px] text-default-500">
                           kcal
                         </span>
                       </div>
@@ -221,7 +221,7 @@ export function RecipeOptionDetail({
                             />
                             {Math.round(value)} g
                           </span>
-                          <span className="text-[10px] uppercase tracking-wide text-default-400">
+                          <span className="text-[11px] text-default-500">
                             {label}
                           </span>
                         </div>
@@ -236,7 +236,7 @@ export function RecipeOptionDetail({
                         icon="solar:chat-round-line-linear"
                         title="Comentarios"
                       />
-                      <p className="rounded-xl bg-content2 px-3.5 py-3 text-sm leading-relaxed text-default-600">
+                      <p className="rounded-large bg-content2 px-3.5 py-3 text-sm leading-relaxed text-default-600">
                         {trainerComment}
                       </p>
                     </div>

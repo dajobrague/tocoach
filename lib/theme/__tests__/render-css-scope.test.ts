@@ -45,17 +45,14 @@ describe("generateThemeCSS scope", () => {
     );
   });
 
-  it("el override .text-primary-foreground usa la variable calculada, no #ffffff fijo", () => {
+  it("ningún texto sobre marca queda en #ffffff fijo: solo la variable calculada", () => {
     const pastel = structuredClone(defaultTheme);
 
     pastel.colors.brand = "#fde047";
 
     const css = generateThemeCSS(pastel);
-    const rule = css.match(/\.text-primary-foreground,[\s\S]*?\{[\s\S]*?\}/);
 
-    expect(rule).not.toBeNull();
-    expect(rule?.[0]).not.toContain("#ffffff");
-    expect(rule?.[0]).toContain("var(--heroui-primary-foreground)");
+    expect(css).not.toMatch(/color:\s*#ffffff/i);
   });
 });
 

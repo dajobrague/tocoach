@@ -251,7 +251,6 @@ export function ActiveSessionView({
   return (
     <section className="w-full space-y-4">
       <Button
-        className="text-default-600"
         size="sm"
         startContent={<Icon icon="solar:alt-arrow-left-linear" width={18} />}
         variant="light"
@@ -260,15 +259,15 @@ export function ActiveSessionView({
         Cambiar entrenamiento
       </Button>
 
-      <div className="rounded-xl bg-primary px-4 py-5 flex items-start gap-3 shadow-sm">
+      <div className="flex items-start gap-3 rounded-large bg-primary px-4 py-5 shadow-small">
         <div
           aria-label={`Sesión de ${typeStyle.label.toLowerCase()}`}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15"
           role="img"
         >
           <Icon
             aria-hidden="true"
-            className={typeStyle.iconColorClass}
+            className="text-primary-foreground"
             icon={typeStyle.icon}
             width={22}
           />
@@ -277,7 +276,7 @@ export function ActiveSessionView({
           <h2 className="text-2xl font-heading font-bold text-primary-foreground leading-tight">
             {session.name}
           </h2>
-          <p className="text-xs text-primary-foreground/80 font-body">
+          <p className="text-xs text-primary-foreground/80">
             {displayExerciseCount}{" "}
             {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
             {total > 0 && completed > 0 ? ` · ${completed} hechos` : null}
@@ -287,7 +286,7 @@ export function ActiveSessionView({
 
       {total > 0 ? (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs font-body text-default-600">
+          <div className="flex items-center justify-between text-xs text-default-600">
             <span>
               {completed} de {total} hechos
             </span>
@@ -307,15 +306,13 @@ export function ActiveSessionView({
           sola al abrir la vista (llamada 29 Jul: el cliente puede entrar solo
           a revisar qué le toca). */}
       {schedState.data?.scheduled_time != null || timeDraft !== null ? (
-        <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-content1 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-large bg-content1 px-3 py-2 shadow-small">
           <Icon
             className="shrink-0 text-default-400"
             icon="solar:clock-circle-linear"
             width={16}
           />
-          <span className="text-xs font-body text-default-600">
-            Hora de inicio
-          </span>
+          <span className="text-xs text-default-600">Hora de inicio</span>
           <input
             aria-label="Hora de inicio del entrenamiento"
             className="ml-auto bg-transparent text-xs font-semibold text-foreground outline-none"
@@ -333,7 +330,7 @@ export function ActiveSessionView({
         // durante la carga aunque YA exista hora registrada, y un tap la
         // sobrescribiría con la hora actual.
         <button
-          className="flex w-full items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 disabled:opacity-60"
+          className="flex w-full items-center gap-2 rounded-large bg-primary/10 px-3 py-2.5 text-left transition-colors hover:bg-primary/15 disabled:opacity-60"
           disabled={setStartTime.isPending}
           type="button"
           onClick={() => setStartTime.mutate(nowHHMM())}
@@ -343,10 +340,10 @@ export function ActiveSessionView({
             icon="solar:play-circle-bold"
             width={18}
           />
-          <span className="flex-1 text-sm font-body font-medium text-foreground">
+          <span className="flex-1 text-sm font-medium text-foreground">
             Pulsa al iniciar tu entrenamiento
           </span>
-          <span className="shrink-0 text-[11px] font-body text-default-500">
+          <span className="shrink-0 text-[11px] text-default-500">
             {setStartTime.isPending ? "Guardando…" : "Registra tu hora"}
           </span>
         </button>
@@ -355,13 +352,13 @@ export function ActiveSessionView({
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
           cubre también el completado automático (cobertura total). */}
       {sessionCompleted ? (
-        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-large bg-success/10 px-3 py-2.5">
           <Icon
             className="shrink-0 text-success-600"
             icon="solar:check-circle-bold"
             width={18}
           />
-          <span className="flex-1 text-sm font-body font-medium text-success-700">
+          <span className="flex-1 text-sm font-medium text-success-700">
             Entrenamiento completado
           </span>
           <ShareSessionButton
@@ -409,12 +406,12 @@ export function ActiveSessionView({
           {Array.from({ length: 3 }, (_, i) => (
             <li
               key={i}
-              className="rounded-md border border-default-200 bg-default-100 h-14 animate-pulse"
+              className="h-20 animate-pulse rounded-large bg-content1 shadow-small"
             />
           ))}
         </ul>
       ) : allExercises.length === 0 ? (
-        <div className="rounded-md border border-default-200 bg-content1 p-3 text-sm text-default-500 font-body">
+        <div className="rounded-large bg-content1 p-3 text-sm text-default-500 shadow-small">
           Esta sesión no tiene ejercicios todavía.
         </div>
       ) : (
@@ -468,7 +465,7 @@ export function ActiveSessionView({
           sesiones ya completadas — el entrenamiento terminó. */}
       {!sessionCompleted ? (
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-default-300 bg-content1 px-3 py-2.5 text-sm text-default-500 transition-colors hover:border-default-400 hover:text-default-700 font-body"
+          className="flex w-full items-center justify-center gap-2 rounded-large border border-dashed border-default-300 px-3 py-2.5 text-sm text-default-500 transition-colors hover:border-default-400 hover:text-default-700"
           type="button"
           onClick={() => setIsBorrowOpen(true)}
         >
@@ -514,21 +511,21 @@ const STATUS_STYLE: Record<
   }
 > = {
   not_started: {
-    container: "border-default-200 bg-content1 hover:bg-default-50",
+    container: "hover:bg-default-50",
     icon: "solar:check-circle-linear",
     iconClass: "text-default-300",
     label: "Falta",
     labelClass: "text-default-400",
   },
   in_progress: {
-    container: "border-warning/40 bg-warning/5 hover:bg-warning/10",
+    container: "hover:bg-default-50",
     icon: "solar:clock-circle-bold",
     iconClass: "text-warning-600",
     label: "En curso",
     labelClass: "text-warning-700",
   },
   completed: {
-    container: "border-success/40 bg-success/5",
+    container: "",
     icon: "solar:check-circle-bold",
     iconClass: "text-success",
     label: "Hecho",
@@ -545,7 +542,7 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
 
   return (
     <button
-      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${style.container}`}
+      className={`flex w-full items-center gap-3 rounded-large bg-content1 p-3 text-left shadow-small transition-colors ${style.container}`}
       type="button"
       onClick={onClick}
     >
@@ -553,16 +550,16 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
-          className="h-14 w-14 rounded-md object-cover shrink-0"
+          className="h-14 w-14 shrink-0 rounded-medium bg-default-100 object-cover"
           decoding="async"
           loading="lazy"
           src={exercise.imageUrl}
         />
       ) : (
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-default-200">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-medium bg-default-100">
           <Icon
-            className="text-default-500"
-            icon="solar:dumbbell-bold"
+            className="text-default-400"
+            icon="solar:dumbbell-linear"
             width={22}
           />
         </div>
@@ -572,9 +569,7 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
           {exercise.name}
         </p>
         {stats ? (
-          <p className="truncate text-xs font-body text-foreground/60">
-            {stats}
-          </p>
+          <p className="truncate text-xs text-default-500">{stats}</p>
         ) : null}
         {increaseWeight ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-1.5 py-px text-[11px] font-body font-semibold text-success-700">
@@ -583,7 +578,7 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
           </span>
         ) : null}
         {borrowedFrom ? (
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-default-300 px-1.5 py-px text-[10px] font-body text-foreground/60">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-default-300 px-1.5 py-px text-[10px] text-default-500">
             <Icon
               className="shrink-0"
               icon="solar:transfer-horizontal-linear"
@@ -593,7 +588,7 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
           </span>
         ) : null}
         {hasVideo ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-body text-foreground/60">
+          <span className="inline-flex items-center gap-1 text-[11px] text-default-500">
             <Icon
               className="text-primary"
               icon="solar:videocamera-record-bold"
@@ -605,9 +600,7 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
       </div>
       <div className="shrink-0 flex flex-col items-center gap-0.5">
         <Icon className={style.iconClass} icon={style.icon} width={26} />
-        <span
-          className={`text-[10px] font-body font-medium ${style.labelClass}`}
-        >
+        <span className={`text-[10px] font-medium ${style.labelClass}`}>
           {style.label}
         </span>
       </div>

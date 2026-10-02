@@ -84,9 +84,7 @@ function NoDataOverlay() {
         icon="solar:chart-2-linear"
         width={26}
       />
-      <p className="text-[11px] font-medium text-foreground/45 tracking-wide">
-        Sin datos aún
-      </p>
+      <p className="text-[11px] font-medium text-default-500">Sin datos aún</p>
     </div>
   );
 }
@@ -280,7 +278,7 @@ export function ChartCard({
                 width={16}
               />
             </div>
-            <p className="text-xs font-semibold text-foreground/70 tracking-wide truncate">
+            <p className="text-sm font-medium text-foreground truncate">
               {config.label}
             </p>
             {config.visibility === "trainer_only" ? (

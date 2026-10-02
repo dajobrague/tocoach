@@ -12,9 +12,11 @@
 import type { ExerciseLike } from "./active-session-view";
 import type { WorkoutProgram, WorkoutSession } from "@/types/training";
 
-import { Modal, ModalBody, ModalContent, ModalHeader } from "@heroui/react";
+import { ModalBody, ModalContent, ModalHeader } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
+
+import { ClientSheet } from "../client-sheet";
 
 import { getSessionTypeStyle } from "./session-type-style";
 
@@ -107,25 +109,19 @@ export function BorrowExerciseModal({
   }, [programs, currentSessionId, excludedExerciseIds]);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      placement="center"
-      scrollBehavior="inside"
-      size="md"
-      onClose={onClose}
-    >
+    <ClientSheet isOpen={isOpen} size="md" onClose={onClose}>
       <ModalContent>
         <ModalHeader className="flex-col gap-0.5 pb-2">
           <span className="text-base font-heading">
             Agregar ejercicio de otro día
           </span>
-          <span className="text-xs font-normal text-foreground/60 font-body">
+          <span className="text-xs font-normal text-default-500">
             Se suma al entrenamiento de hoy; tu coach verá de qué sesión salió
           </span>
         </ModalHeader>
         <ModalBody className="pb-4">
           {groups.length === 0 ? (
-            <p className="py-6 text-center text-sm text-foreground/50 font-body">
+            <p className="py-6 text-center text-sm text-default-500">
               No hay ejercicios de otras sesiones para agregar
             </p>
           ) : (
@@ -137,15 +133,15 @@ export function BorrowExerciseModal({
 
                 return (
                   <div key={group.session.id}>
-                    <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/50 font-body">
+                    <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-default-500">
                       <Icon icon={typeStyle.icon} width={13} />
                       {group.session.name}
                     </p>
-                    <ul className="flex flex-col gap-1.5">
+                    <ul className="flex flex-col divide-y divide-default-100">
                       {group.exercises.map((exercise) => (
                         <li key={String(exercise.exercise_id)}>
                           <button
-                            className="flex w-full items-center gap-2.5 rounded-lg border border-default-200 bg-content1 px-3 py-2 text-left transition-colors hover:bg-default-50"
+                            className="flex w-full items-center gap-2.5 rounded-medium px-1 py-2 text-left transition-colors hover:bg-default-50"
                             type="button"
                             onClick={() => {
                               onPick(exercise);
@@ -172,15 +168,15 @@ export function BorrowExerciseModal({
                               </span>
                             )}
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium text-foreground font-body">
+                              <span className="block truncate text-sm font-medium text-foreground">
                                 {exercise.name}
                               </span>
-                              <span className="block text-[11px] text-foreground/50 font-body tabular-nums">
+                              <span className="block text-[11px] text-default-500 tabular-nums">
                                 {summaryOf(exercise)}
                               </span>
                             </span>
                             <Icon
-                              className="shrink-0 text-foreground/40"
+                              className="shrink-0 text-primary"
                               icon="solar:add-circle-linear"
                               width={18}
                             />
@@ -195,7 +191,7 @@ export function BorrowExerciseModal({
           )}
         </ModalBody>
       </ModalContent>
-    </Modal>
+    </ClientSheet>
   );
 }
 

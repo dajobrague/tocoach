@@ -8,10 +8,7 @@
 //   preserveAspectRatio="none" + vector-effect para que el trazo siga
 //   siendo de 2px reales; el punto final y su etiqueta son HTML absoluto
 //   (así no se deforman al escalar).
-// - Récords: chips por bucket de reps, medalla amber en el mejor. El
-//   amber es literal a propósito, igual que el PR de
-//   exercise-history-section: la paleta warning del theme pelea con el
-//   primario del entrenador.
+// - Récords: chips por bucket de reps; el mejor en tinte warning (logro).
 //
 // Si hay menos de 2 puntos no renderiza nada: un punto suelto no es una
 // progresión, es ruido.
@@ -57,8 +54,8 @@ export function ExerciseProgressionSection({
   const bestBucket = pickBestBucket(data.repMaxes);
 
   return (
-    <div className="rounded-lg border border-default-200 bg-content1 overflow-hidden">
-      <p className="px-3 py-2 text-[11px] uppercase font-semibold text-default-500 border-b border-default-100 font-body">
+    <div className="overflow-hidden rounded-large bg-content1 shadow-small">
+      <p className="border-b border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
         Tu progreso
       </p>
 
@@ -68,7 +65,7 @@ export function ExerciseProgressionSection({
 
       {repMaxes.length > 0 ? (
         <>
-          <p className="px-3 py-2 text-[11px] uppercase font-semibold text-default-500 border-y border-default-100 font-body">
+          <p className="border-y border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
             Tus récords
           </p>
           <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
@@ -165,8 +162,8 @@ function RecordChip({ repMax, isBest }: { repMax: RepMax; isBest: boolean }) {
     <span
       className={
         isBest
-          ? "inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-foreground font-body"
-          : "inline-flex items-center gap-1 rounded-md border border-default-200 px-2 py-1 text-xs font-medium text-foreground/80 font-body"
+          ? "inline-flex items-center gap-1 rounded-md border border-warning/50 bg-warning/10 px-2 py-1 text-xs font-semibold text-foreground"
+          : "inline-flex items-center gap-1 rounded-md border border-default-200 px-2 py-1 text-xs font-medium text-default-700"
       }
     >
       {isBest ? <span aria-label="Tu mejor marca">🏅</span> : null}

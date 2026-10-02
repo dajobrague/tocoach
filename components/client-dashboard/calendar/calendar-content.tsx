@@ -19,20 +19,10 @@ import { CalendarWeekGrid } from "./calendar-week-grid";
 import { useCalendarEntries } from "./hooks/use-calendar-entries";
 
 import { getLocalTodayYmd, getLocalYmd } from "@/lib/forms/client-helpers";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
+import { ClientPage } from "@/components/client-dashboard/client-page";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 
 export function CalendarContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
-
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -61,28 +51,10 @@ export function CalendarContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-lg mx-auto">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
-
-        <div className="px-4 pb-2 pt-2">
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-1">
-            Calendario
-          </h1>
-          <p className="text-default-500 font-body text-sm">
-            Tus entrenamientos completados
-          </p>
-        </div>
-
-        <div className="px-4 space-y-4">
-          <Card>
+    <>
+      <ClientPage title="Calendario">
+        <div className="px-4 pt-4 space-y-4">
+          <Card shadow="sm">
             <CardBody className="p-3 space-y-4">
               <CalendarHeader
                 title={formatTitle(view, range)}
@@ -98,7 +70,7 @@ export function CalendarContent() {
                   <Spinner size="md" />
                 </div>
               ) : error ? (
-                <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
+                <div className="rounded-medium bg-danger/10 p-3 text-sm text-danger">
                   {error instanceof Error
                     ? error.message
                     : "Error al cargar el calendario"}
@@ -141,15 +113,15 @@ export function CalendarContent() {
             <EmptyHint hasAny={(data?.totalSessions ?? 0) > 0} />
           )}
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
-    </div>
+    </>
   );
 }
 
 function EmptyHint({ hasAny }: { hasAny: boolean }) {
   return (
-    <Card className="bg-content1 border border-default-200" shadow="none">
+    <Card shadow="sm">
       <CardBody className="p-4 flex flex-row items-center gap-3">
         <Icon
           className="text-default-400 shrink-0"
@@ -160,7 +132,7 @@ function EmptyHint({ hasAny }: { hasAny: boolean }) {
           }
           width={28}
         />
-        <p className="text-sm text-default-500 font-body">
+        <p className="text-sm text-default-500">
           {hasAny
             ? "Toca un día con entrenamiento para ver el detalle."
             : "Todavía no hay entrenamientos completados en este rango."}

@@ -15,6 +15,8 @@ import {
   hexToHeroUIHSL,
   pickForegroundHSL,
 } from "@/lib/theme/color-utils";
+import { brandInk, resolveClientSurface } from "@/lib/theme/client-surface";
+import { healThemeJson } from "@/lib/theme/heal";
 import { defaultTheme, validateTheme } from "@/lib/theme/schema";
 
 /**
@@ -27,8 +29,11 @@ export function resolveTenantTheme(
 ): ThemeConfig {
   if (!tenantContext) return defaultTheme;
 
+  // Sanear ANTES de validar: un theme_json legacy (forma parcial) hacía
+  // fallar el schema y el tenant perdía su marca entera en silencio (caía al
+  // default azul). El healer conserva todo lo válido y solo rellena huecos.
   const validation = validateTheme(
-    tenantContext.theme_json,
+    healThemeJson(tenantContext.theme_json),
     tenantContext.theme_slug
   );
 
@@ -112,8 +117,10 @@ export function cssFontFamily(raw: string): string {
 // Generate complete CSS for a theme (same as file-based version)
 //
 // Dos modos:
-// - Sin scope (portal de clientes): salida histórica intacta — selectores
-//   html, :root global, overrides por substring y fuentes por control.
+// - Sin scope (portal de clientes): variables en html/:root global. Como el
+//   trainer, SIN overrides por substring (aplanaban cada tint/hover a un
+//   sólido — el origen de las "pastillas menta" y los bloques de marca). La
+//   escala neutra se deriva con contraste garantizado (client-surface.ts).
 // - Con scope (p. ej. ".trainer-app"): SOLO variables. Los overrides de
 //   clase por substring (*[class*="bg-primary"], etc.) aplanaban cada
 //   tint/hover/variant a un sólido — con la hoja de marca default fuera de
@@ -182,26 +189,13 @@ export function generateThemeCSS(
         c3: TRAINER_SURFACES.content3,
         c4: TRAINER_SURFACES.content4,
       }
-    : {
-        default: theme.colors.surface["2"],
-        d50: theme.colors.surface["2"],
-        d100: theme.colors.surface["2"],
-        d200: theme.colors.fill,
-        d300: theme.colors.border,
-        d400: theme.colors.border,
-        d500: theme.colors.text.secondary,
-        d600: theme.colors.text.secondary,
-        d700: theme.colors.text.primary,
-        d800: theme.colors.text.primary,
-        d900: theme.colors.text.primary,
-        dFg: theme.colors.text.primary,
-        background: theme.colors.surface["1"],
-        foreground: theme.colors.text.primary,
-        c1: theme.colors.surface["1"],
-        c2: theme.colors.surface["2"],
-        c3: theme.colors.fill,
-        c4: theme.colors.border,
-      };
+    : resolveClientSurface(theme.colors);
+  const ink = scope
+    ? theme.colors.brand
+    : brandInk(theme.colors.brand, surface.background, surface.foreground);
+  const successHex = theme.semantic?.success || "#22c55e";
+  const warningHex = theme.semantic?.warning || "#f59e0b";
+  const errorHex = theme.semantic?.error || "#ef4444";
 
   const customVars = `  /* Custom theme variables */
   --color-brand: ${theme.colors.brand};
@@ -212,9 +206,9 @@ export function generateThemeCSS(
   --color-surface-2: ${surface.c2};
   --color-border: ${surface.d300};
   --color-fill: ${surface.d200};
-  --color-success: ${theme.semantic?.success || "#22c55e"};
-  --color-warning: ${theme.semantic?.warning || "#f59e0b"};
-  --color-error: ${theme.semantic?.error || "#ef4444"};
+  --color-success: ${successHex};
+  --color-warning: ${warningHex};
+  --color-error: ${errorHex};
 
   /* Typography */
   --font-heading: ${headingFontCSS};
@@ -283,12 +277,12 @@ export function generateThemeCSS(
 ${surfaceVars}
 
   /* HeroUI Semantic Colors - HSL Format */
-  --heroui-success: ${hexToHeroUIHSL(theme.semantic?.success || "#22c55e")} !important;
-  --heroui-success-foreground: 0 0% 100% !important;
-  --heroui-warning: ${hexToHeroUIHSL(theme.semantic?.warning || "#f59e0b")} !important;
-  --heroui-warning-foreground: 0 0% 100% !important;
-  --heroui-danger: ${hexToHeroUIHSL(theme.semantic?.error || "#ef4444")} !important;
-  --heroui-danger-foreground: 0 0% 100% !important;
+  --heroui-success: ${hexToHeroUIHSL(successHex)} !important;
+  --heroui-success-foreground: ${pickForegroundHSL(successHex)} !important;
+  --heroui-warning: ${hexToHeroUIHSL(warningHex)} !important;
+  --heroui-warning-foreground: ${pickForegroundHSL(warningHex)} !important;
+  --heroui-danger: ${hexToHeroUIHSL(errorHex)} !important;
+  --heroui-danger-foreground: ${pickForegroundHSL(errorHex)} !important;
 
   /* HeroUI Focus */
   --heroui-focus: ${hexToHeroUIHSL(theme.colors.accent)} !important;
@@ -314,89 +308,24 @@ html:not(.dark) {
 ${herouiVars}
 }`;
 
-  // Overrides de clase por substring + flat-hex: SOLO en modo sin scope
-  // (portal de clientes, comportamiento histórico intacto).
-  const classOverrides = scope
-    ? ""
-    : `
-
-/* Ultra high specificity HeroUI component overrides */
-html body .bg-primary,
-html body [data-slot="base"].bg-primary,
-html body button.bg-primary,
-html body [data-color="primary"],
-html body .heroui-button[data-color="primary"],
-html body *[class*="bg-primary"] {
-  background-color: ${theme.colors.brand} !important;
-}
-
-html .text-primary-foreground,
-html [data-slot="base"].text-primary-foreground,
-html button.text-primary-foreground {
-  color: hsl(var(--heroui-primary-foreground)) !important;
-}
-
-html .bg-secondary,
-html [data-slot="base"].bg-secondary,
-html button.bg-secondary,
-html [data-color="secondary"],
-html .heroui-button[data-color="secondary"],
-html *[class*="bg-secondary"] {
-  background-color: ${theme.colors.accent} !important;
-}
-
-html .text-secondary-foreground,
-html [data-slot="base"].text-secondary-foreground,
-html button.text-secondary-foreground {
-  color: hsl(var(--heroui-secondary-foreground)) !important;
-}
-
-html .bg-default,
-html [data-slot="base"].bg-default,
-html button.bg-default,
-html [data-color="default"],
-html .heroui-button[data-color="default"],
-html *[class*="bg-default"] {
-  background-color: ${theme.colors.surface["2"]} !important;
-}
-
-html .text-default-foreground,
-html [data-slot="base"].text-default-foreground {
-  color: ${theme.colors.text.primary} !important;
-}
-
-html .bg-default-100 {
-  background-color: ${theme.colors.surface["2"]} !important;
-}
-
-html .bg-default-200 {
-  background-color: ${theme.colors.fill} !important;
-}
-
-html .text-default-600 {
-  color: ${theme.colors.text.secondary} !important;
-}
-
-html .border-default {
-  border-color: ${theme.colors.border} !important;
-}
-
-html .text-foreground {
-  color: ${theme.colors.text.primary} !important;
-}
+  // Texto de marca: solo cuando la marca cruda no llega a 4.5:1 sobre el
+  // lienzo (lima/amarillo/pastel). Selector exacto, sin !important: al no
+  // estar en @layer gana a la utilidad de Tailwind igualmente, y los
+  // rellenos (bg-primary) siguen con la marca cruda.
+  const inkRule =
+    !scope && ink !== theme.colors.brand
+      ? `
 
 html .text-primary {
-  color: ${theme.colors.brand} !important;
-}
+  color: ${ink};
+}`
+      : "";
 
-html .text-secondary {
-  color: ${theme.colors.text.secondary} !important;
-}`;
-
-  // Fuentes: sin scope, el bloque histórico por control (!important). Con
-  // scope, una sola regla ligera en la raíz del scope — el preflight de
-  // Tailwind da font-family: inherit a los form controls, así que buttons e
-  // inputs la heredan sin !important y font-medium/font-semibold sobreviven.
+  // Fuentes: una sola regla ligera en la raíz (body del portal, o el scope
+  // del trainer) — el preflight de Tailwind da font-family: inherit a los
+  // form controls, así que buttons e inputs la heredan sin !important y
+  // font-medium/font-semibold sobreviven. El bloque histórico por control
+  // forzaba el peso de cuerpo en botones/chips y obligó a ~35 estilos inline.
   const fontRules = scope
     ? `/* Fuente base del shell (los form controls heredan via preflight) */
 ${scope} {
@@ -406,21 +335,11 @@ ${scope} {
 body:has(${scope}) {
   font-family: ${bodyFontCSS};
 }`
-    : `/* HeroUI Component Font Overrides */
-html body button,
-html body .heroui-button,
-html body [data-slot="base"],
-html body input,
-html body textarea,
-html body .heroui-input input,
-html body .heroui-textarea textarea,
-html body .heroui-chip,
-html body .heroui-chip span,
-html body [role="button"],
-html body .heroui-navbar-item,
-html body .heroui-link {
-  font-family: ${bodyFontCSS} !important;
-  font-weight: ${theme.fonts.body.weight} !important;
+    : `/* Fuente de cuerpo del tenant en todo el portal (antes solo llegaba a
+   botones/chips; el resto del texto quedaba en la Inter de la app) */
+html body {
+  font-family: ${bodyFontCSS};
+  font-weight: ${theme.fonts.body.weight};
 }`;
 
   const css = `
@@ -431,7 +350,7 @@ ${customVars}
 }
 
 /* Target HeroUI's light theme class and default (no class) */
-${herouiVarsBlock}${classOverrides}
+${herouiVarsBlock}${inkRule}
 
 /* Custom utility classes */
 ${utilPrefix}.bg-brand { background-color: ${theme.colors.brand} !important; }
@@ -445,8 +364,9 @@ ${utilPrefix}.font-heading {
   font-weight: ${theme.fonts.heading.weight} !important;
 }
 ${utilPrefix}.font-body {
-  font-family: ${bodyFontCSS} !important;
-  font-weight: ${theme.fonts.body.weight} !important;
+  font-family: ${bodyFontCSS} !important;${
+    scope ? `\n  font-weight: ${theme.fonts.body.weight} !important;` : ""
+  }
 }
 
 ${fontRules}
@@ -460,7 +380,7 @@ ${
   background: ${TRAINER_SURFACES.background} !important;
 }`
     : `body {
-  background: ${theme.colors.surface["1"]} !important;
+  background: ${surface.background} !important;
 }`
 }
 `;

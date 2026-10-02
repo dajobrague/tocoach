@@ -3,7 +3,6 @@
 import {
   Button,
   Input,
-  Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
@@ -19,6 +18,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
+import { ClientPage } from "@/components/client-dashboard/client-page";
+import { ClientSheet } from "@/components/client-dashboard/client-sheet";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import { buildInitials, thumbnailUrl } from "@/lib/utils/avatar";
 
@@ -320,11 +321,11 @@ export function ProfileContent() {
   if (isLoading) {
     return (
       <>
-        <div className="min-h-screen bg-background pb-32">
-          <div className="mx-auto flex max-w-lg items-center justify-center py-20">
+        <ClientPage title="Mi perfil">
+          <div className="flex items-center justify-center py-20">
             <Spinner size="lg" />
           </div>
-        </div>
+        </ClientPage>
         <ClientBottomNav />
       </>
     );
@@ -341,22 +342,15 @@ export function ProfileContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-32">
-        <div className="mx-auto max-w-lg space-y-4 px-4 pt-8">
-          <h1
-            className="text-2xl text-foreground"
-            style={{ fontFamily: "var(--font-heading)", fontWeight: 800 }}
-          >
-            Mi perfil
-          </h1>
-
-          <section className="rounded-2xl border border-default-200 bg-content1 p-5 shadow-sm">
+      <ClientPage title="Mi perfil">
+        <div className="space-y-4 px-4 pt-4">
+          <section className="rounded-large bg-content1 p-5 shadow-small">
             <div className="flex items-center gap-5">
               <button
                 aria-label={
                   showAvatarImage ? "Cambiar foto de perfil" : "Subir foto"
                 }
-                className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-primary-50 transition-opacity active:opacity-80"
+                className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-primary/10 transition-opacity active:opacity-80"
                 disabled={isUploadingAvatar}
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -372,13 +366,7 @@ export function ProfileContent() {
                     onError={() => setAvatarFailed(true)}
                   />
                 ) : (
-                  <span
-                    className="flex h-full w-full items-center justify-center text-2xl text-primary"
-                    style={{
-                      fontFamily: "var(--font-heading)",
-                      fontWeight: 800,
-                    }}
-                  >
+                  <span className="flex h-full w-full items-center justify-center font-heading text-2xl text-primary">
                     {initials}
                   </span>
                 )}
@@ -398,29 +386,16 @@ export function ProfileContent() {
               />
 
               <div className="min-w-0 flex-1">
-                <h2
-                  className="truncate text-lg text-foreground"
-                  style={{
-                    fontFamily: "var(--font-heading)",
-                    fontWeight: 700,
-                  }}
-                >
+                <h2 className="truncate font-heading text-lg text-foreground">
                   {fullName}
                 </h2>
-                <p
-                  className="truncate text-sm text-default-500"
-                  style={{ fontFamily: "var(--font-body)" }}
-                >
+                <p className="truncate text-sm text-default-500">
                   {clientProfile?.email}
                 </p>
                 <div className="mt-2 flex items-center gap-2 text-xs">
                   <button
-                    className="text-primary"
+                    className="font-semibold text-primary"
                     disabled={isUploadingAvatar}
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      fontWeight: 600,
-                    }}
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                   >
@@ -432,12 +407,8 @@ export function ProfileContent() {
                         ·
                       </span>
                       <button
-                        className="text-danger disabled:opacity-50"
+                        className="font-semibold text-danger disabled:opacity-50"
                         disabled={isDeletingAvatar}
-                        style={{
-                          fontFamily: "var(--font-body)",
-                          fontWeight: 600,
-                        }}
                         type="button"
                         onClick={openDeleteModal}
                       >
@@ -450,7 +421,7 @@ export function ProfileContent() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-default-200 bg-content1 p-5 shadow-sm">
+          <section className="rounded-large bg-content1 p-5 shadow-small">
             <dl className="space-y-3">
               {clientProfile?.phone && (
                 <MetadataRow
@@ -498,7 +469,7 @@ export function ProfileContent() {
             </dl>
           </section>
 
-          <section className="overflow-hidden rounded-2xl border border-default-200 bg-content1 shadow-sm">
+          <section className="overflow-hidden rounded-large bg-content1 shadow-small">
             {!showPasswordForm ? (
               <button
                 className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-default-100/60 active:bg-default-200/60"
@@ -509,13 +480,7 @@ export function ProfileContent() {
                   className="shrink-0 text-2xl text-default-700"
                   icon="solar:lock-password-bold"
                 />
-                <span
-                  className="flex-1 text-base text-foreground"
-                  style={{
-                    fontFamily: "var(--font-body)",
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="flex-1 text-base font-semibold text-foreground">
                   Cambiar contraseña
                 </span>
                 <Icon
@@ -528,7 +493,7 @@ export function ProfileContent() {
                 <Input
                   endContent={
                     <button
-                      className="focus:outline-none"
+                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowCurrentPw(!showCurrentPw)}
                     >
@@ -552,7 +517,7 @@ export function ProfileContent() {
                 <Input
                   endContent={
                     <button
-                      className="focus:outline-none"
+                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowNewPw(!showNewPw)}
                     >
@@ -574,7 +539,7 @@ export function ProfileContent() {
                 <Input
                   endContent={
                     <button
-                      className="focus:outline-none"
+                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowConfirmPw(!showConfirmPw)}
                     >
@@ -598,7 +563,7 @@ export function ProfileContent() {
 
                 <div className="flex gap-2 pt-1">
                   <Button
-                    className="flex-1 font-body"
+                    className="flex-1"
                     variant="flat"
                     onPress={() => {
                       setShowPasswordForm(false);
@@ -610,7 +575,7 @@ export function ProfileContent() {
                     Cancelar
                   </Button>
                   <Button
-                    className="flex-1 font-body font-semibold"
+                    className="flex-1 font-semibold"
                     color="primary"
                     isLoading={isChangingPassword}
                     onPress={handleChangePassword}
@@ -622,39 +587,28 @@ export function ProfileContent() {
             )}
           </section>
 
-          <p
-            className="pt-2 text-center text-xs text-default-400"
-            style={{ fontFamily: "var(--font-body)" }}
-          >
-            Top Coach · v1.0.0
-          </p>
-
           <button
-            className="mt-6 flex w-full items-center gap-4 rounded-2xl border border-danger-100 bg-danger-50/40 px-5 py-4 transition-colors hover:bg-danger-50 active:bg-danger-100/60"
+            className="flex w-full items-center gap-4 rounded-large bg-content1 px-5 py-4 shadow-small transition-colors hover:bg-default-100 active:bg-default-200"
             type="button"
             onClick={openLogoutModal}
           >
             <Icon
               className="shrink-0 text-2xl text-danger"
-              icon="material-symbols:logout-rounded"
+              icon="solar:logout-2-linear"
             />
-            <span
-              className="flex-1 text-left text-base text-danger"
-              style={{ fontFamily: "var(--font-body)", fontWeight: 600 }}
-            >
+            <span className="flex-1 text-left text-base font-semibold text-danger">
               Cerrar sesión
             </span>
           </button>
+
+          <p className="pt-2 text-center text-xs text-default-400">
+            Top Coach · v1.0.0
+          </p>
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
 
-      <Modal
-        isOpen={isDeleteOpen}
-        placement="center"
-        size="sm"
-        onClose={closeDeleteModal}
-      >
+      <ClientSheet isOpen={isDeleteOpen} size="sm" onClose={closeDeleteModal}>
         <ModalContent>
           <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-6">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
@@ -666,21 +620,21 @@ export function ProfileContent() {
             <span className="font-heading text-lg">¿Eliminar foto?</span>
           </ModalHeader>
           <ModalBody className="px-6 pb-2 text-center">
-            <p className="font-body text-sm text-default-500">
+            <p className="text-sm text-default-500">
               Tu foto de perfil será eliminada. Esta acción no se puede
               deshacer.
             </p>
           </ModalBody>
           <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
             <Button
-              className="flex-1 font-body"
+              className="flex-1"
               variant="flat"
               onPress={closeDeleteModal}
             >
               Cancelar
             </Button>
             <Button
-              className="flex-1 font-body font-semibold"
+              className="flex-1 font-semibold"
               color="danger"
               isLoading={isDeletingAvatar}
               onPress={handleAvatarDelete}
@@ -689,40 +643,35 @@ export function ProfileContent() {
             </Button>
           </ModalFooter>
         </ModalContent>
-      </Modal>
+      </ClientSheet>
 
-      <Modal
-        isOpen={isLogoutOpen}
-        placement="center"
-        size="sm"
-        onClose={closeLogoutModal}
-      >
+      <ClientSheet isOpen={isLogoutOpen} size="sm" onClose={closeLogoutModal}>
         <ModalContent>
           <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-6">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
               <Icon
                 className="text-3xl text-danger"
-                icon="material-symbols:logout-rounded"
+                icon="solar:logout-2-linear"
               />
             </div>
             <span className="font-heading text-lg">¿Cerrar sesión?</span>
           </ModalHeader>
           <ModalBody className="px-6 pb-2 text-center">
-            <p className="font-body text-sm text-default-500">
+            <p className="text-sm text-default-500">
               Tendrás que volver a ingresar tu contraseña para acceder a tu
               cuenta.
             </p>
           </ModalBody>
           <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
             <Button
-              className="flex-1 font-body"
+              className="flex-1"
               variant="flat"
               onPress={closeLogoutModal}
             >
               Cancelar
             </Button>
             <Button
-              className="flex-1 font-body font-semibold"
+              className="flex-1 font-semibold"
               color="danger"
               isLoading={isLoggingOut}
               onPress={handleLogout}
@@ -731,7 +680,7 @@ export function ProfileContent() {
             </Button>
           </ModalFooter>
         </ModalContent>
-      </Modal>
+      </ClientSheet>
     </>
   );
 }
@@ -748,16 +697,10 @@ function MetadataRow({
   return (
     <div className="flex items-center gap-3">
       <Icon className="shrink-0 text-lg text-default-400" icon={icon} />
-      <dt
-        className="text-sm text-default-500"
-        style={{ fontFamily: "var(--font-body)" }}
-      >
+      <dt className="shrink-0 whitespace-nowrap text-sm text-default-500">
         {label}
       </dt>
-      <dd
-        className="ml-auto truncate text-right text-sm text-foreground"
-        style={{ fontFamily: "var(--font-body)", fontWeight: 600 }}
-      >
+      <dd className="ml-auto min-w-0 text-right text-sm font-semibold text-foreground">
         {value}
       </dd>
     </div>

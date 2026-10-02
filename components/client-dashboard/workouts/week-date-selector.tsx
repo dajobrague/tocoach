@@ -206,11 +206,9 @@ export function WeekDateSelector({
           <Icon icon="solar:alt-arrow-left-linear" width={18} />
         </Button>
         <div className="flex flex-col items-center text-center">
-          <p className="text-[11px] font-body uppercase tracking-wide text-foreground/50">
-            {headerLabel}
-          </p>
+          <p className="text-xs text-default-500">{headerLabel}</p>
           {subtitleLabel ? (
-            <p className="text-xs font-body text-foreground/70">
+            <p className="text-xs font-medium text-foreground">
               {subtitleLabel}
             </p>
           ) : null}
@@ -232,15 +230,15 @@ export function WeekDateSelector({
           const hasActivity = datesWithActivity?.has(d.ymd) ?? false;
           const baseClass =
             "flex flex-col items-center justify-center rounded-xl py-2 transition-colors relative aspect-square disabled:opacity-30 disabled:cursor-not-allowed";
+          // Todos los días son el mismo tile neutro (pasado no se ve
+          // deshabilitado); hoy = anillo de marca; seleccionado = marca sólida.
           const stateClass = d.isOutOfRange
-            ? "bg-default-50 text-foreground/40"
+            ? "bg-default-100 text-default-400"
             : isSelected
               ? "bg-primary text-primary-foreground"
               : d.isToday
-                ? "bg-content1 text-foreground border-2 border-primary"
-                : d.isPast
-                  ? "bg-default-50 text-foreground/60"
-                  : "bg-content1 text-foreground border border-default-200";
+                ? "bg-default-100 text-foreground ring-2 ring-inset ring-primary"
+                : "bg-default-100 text-foreground hover:bg-default-200";
 
           // El puntito de actividad: success cuando hay logs ese día.
           // Si está seleccionado el bg ya es primary, así que usamos
@@ -266,7 +264,7 @@ export function WeekDateSelector({
               onClick={() => onSelect(d.ymd)}
             >
               <span
-                className={`text-[10px] font-body uppercase ${
+                className={`text-[11px] ${
                   isSelected ? "opacity-90" : "opacity-70"
                 }`}
               >

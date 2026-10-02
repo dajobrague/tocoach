@@ -5,10 +5,13 @@
 
 import type { MicrocycleSlotView } from "@/types/training";
 
-import { Modal, ModalBody, ModalContent, ModalHeader } from "@heroui/react";
-import { Icon } from "@iconify/react";
+import { ModalBody, ModalContent, ModalHeader } from "@heroui/react";
+
+import { ClientSheet } from "../client-sheet";
 
 import { getSessionTypeStyle } from "./session-type-style";
+
+import { IconTile } from "@/components/shared/icon-tile";
 
 interface Props {
   isOpen: boolean;
@@ -24,31 +27,27 @@ export function MicrocycleReferenceModal({
   onClose,
 }: Props) {
   return (
-    <Modal isOpen={isOpen} placement="center" size="md" onClose={onClose}>
+    <ClientSheet isOpen={isOpen} size="md" onClose={onClose}>
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <Icon
-              className="text-primary"
-              icon="solar:calendar-bold"
-              width={22}
-            />
+            <IconTile icon="solar:calendar-linear" size="sm" />
             <span className="text-lg font-heading font-bold text-foreground">
               Tu microciclo
             </span>
           </div>
-          <p className="text-xs font-body text-foreground/60">
+          <p className="text-xs text-default-500">
             Esta es la guía que armó tu entrenador.
           </p>
         </ModalHeader>
         <ModalBody className="pb-6">
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col divide-y divide-default-100">
             {slots.map((slot) => (
               <li
                 key={slot.day_index}
-                className="flex items-center gap-3 rounded-md border border-default-200 bg-content1 px-3 py-2"
+                className="flex items-center gap-3 py-2.5"
               >
-                <span className="w-12 shrink-0 text-sm font-semibold text-foreground/70">
+                <span className="w-12 shrink-0 text-sm font-semibold text-default-600">
                   Día {slot.day_index}
                 </span>
                 <span className="flex-1 truncate text-sm text-foreground">
@@ -62,25 +61,25 @@ export function MicrocycleReferenceModal({
 
                     return (
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-body font-medium ${s.chipClass}`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${s.chipClass}`}
                       >
                         {s.label}
                       </span>
                     );
                   })()
                 ) : (
-                  <span className="inline-flex items-center rounded-full bg-default-100 px-2.5 py-0.5 text-xs font-body font-medium text-foreground/70 border border-default-200/60">
+                  <span className="inline-flex items-center rounded-full bg-default-100 px-2.5 py-0.5 text-xs font-medium text-default-600">
                     Descanso
                   </span>
                 )}
               </li>
             ))}
           </ul>
-          <p className="text-xs text-foreground/50 mt-2">
+          <p className="mt-2 text-xs text-default-500">
             Microciclo de {durationDays} {durationDays === 1 ? "día" : "días"}.
           </p>
         </ModalBody>
       </ModalContent>
-    </Modal>
+    </ClientSheet>
   );
 }

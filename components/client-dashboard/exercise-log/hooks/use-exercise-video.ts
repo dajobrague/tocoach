@@ -5,6 +5,7 @@
 
 /* eslint-disable no-console */
 import { useEffect, useRef, useState } from "react";
+import { addToast } from "@heroui/react";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
 
@@ -55,11 +56,19 @@ export function useExerciseVideo({
         setVideoUrl(data.url);
         setVideoPath(data.path);
       } else {
-        alert("Error al subir video: " + (data.error || "Error desconocido"));
+        addToast({
+          title: "No se pudo subir el vídeo",
+          description: data.error || "Inténtalo de nuevo.",
+          color: "danger",
+        });
       }
     } catch (err) {
       console.error("[useExerciseVideo] upload error:", err);
-      alert("Error al subir video");
+      addToast({
+        title: "No se pudo subir el vídeo",
+        description: "Revisa tu conexión e inténtalo de nuevo.",
+        color: "danger",
+      });
     } finally {
       setIsUploading(false);
     }

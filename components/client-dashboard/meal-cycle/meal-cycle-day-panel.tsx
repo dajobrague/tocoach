@@ -15,6 +15,8 @@ import {
   slotComponents,
   slotPlannedTotals,
 } from "@/components/client-dashboard/meal-cycle/slot-grouping";
+import { IconTile } from "@/components/shared/icon-tile";
+import { OutlineChip } from "@/components/shared/outline-chip";
 import { mealVisual } from "@/features/trainer/cycles/cycle-format";
 
 /** Photo thumbnail from the frozen snapshot, with a source-icon fallback. */
@@ -69,8 +71,8 @@ function OptionCard({
 
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl border bg-content1 p-2.5 transition-colors ${
-        isSelected ? "border-primary ring-1 ring-primary" : "border-default-200"
+      className={`flex items-center gap-3 rounded-large p-1 transition-shadow ${
+        isSelected ? "ring-2 ring-primary" : ""
       }`}
       data-selected={isSelected}
       data-testid="option-card"
@@ -126,7 +128,7 @@ function OptionCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {showMacros ? (
             <span className="text-sm font-semibold text-foreground tabular-nums">
-              {Math.round(snapshot.totals.kcal)}{" "}
+              {Math.round(snapshot.totals.kcal).toLocaleString("es")}{" "}
               <span className="text-xs font-normal text-default-400">kcal</span>
             </span>
           ) : null}
@@ -164,8 +166,8 @@ function CarouselOptionCard({
 
   return (
     <div
-      className={`w-[72%] max-w-[240px] shrink-0 snap-start overflow-hidden rounded-xl border bg-content1 transition-colors ${
-        isSelected ? "border-primary ring-1 ring-primary" : "border-default-200"
+      className={`w-[72%] max-w-[240px] shrink-0 snap-start overflow-hidden rounded-large bg-content2 transition-shadow ${
+        isSelected ? "ring-2 ring-inset ring-primary" : ""
       }`}
       data-selected={isSelected}
       data-testid="option-card"
@@ -188,7 +190,7 @@ function CarouselOptionCard({
             src={image}
           />
         ) : (
-          <span className="flex h-24 w-full items-center justify-center bg-content2">
+          <span className="flex h-24 w-full items-center justify-center bg-default-100">
             <Icon
               className="text-default-300"
               icon={
@@ -237,7 +239,7 @@ function CarouselOptionCard({
           <IngredientQuantities ingredients={snapshot.ingredients} />
           {showMacros ? (
             <p className="text-xs text-default-500 tabular-nums">
-              {Math.round(snapshot.totals.kcal)} kcal
+              {Math.round(snapshot.totals.kcal).toLocaleString("es")} kcal
             </p>
           ) : null}
         </div>
@@ -317,10 +319,10 @@ function ComponentSection({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="flex items-center gap-1 self-start rounded-full border border-primary/50 px-2 py-0.5 text-[11px] font-semibold text-primary">
+      <OutlineChip className="inline-flex items-center gap-1 self-start">
         <Icon icon="solar:transfer-horizontal-linear" width={13} />
         ¡Tú eliges!
-      </span>
+      </OutlineChip>
       <div
         className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1"
         data-testid="option-carousel"
@@ -361,20 +363,16 @@ function SlotBlock({
   const mealKcal = slotPlannedTotals(options, selectedOptionIds).kcal;
 
   return (
-    <Card>
+    <Card shadow="sm">
       <CardBody className="gap-3 p-3">
         <div className="flex items-center gap-3">
-          <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${visual.bg} ${visual.fg}`}
-          >
-            <Icon icon={visual.icon} width={18} />
-          </span>
-          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+          <IconTile icon={visual.icon} size="sm" />
+          <p className="min-w-0 flex-1 truncate font-heading text-base text-foreground">
             {cleanLabel}
           </p>
           {showMacros && components.length > 0 ? (
             <span className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-              {Math.round(mealKcal)} kcal
+              {Math.round(mealKcal).toLocaleString("es")} kcal
             </span>
           ) : null}
         </div>
@@ -418,7 +416,7 @@ function DayNotesBanner({ notes }: { notes: ClientDayNote[] }) {
 
   return (
     <div
-      className="rounded-xl border border-warning-200 bg-warning-50 p-3"
+      className="rounded-large border border-warning-200 bg-warning-50 p-3"
       data-testid="day-notes"
     >
       <div className="flex items-center gap-2">
@@ -462,7 +460,7 @@ export function MealCycleDayPanel({
 }) {
   if (day.started === false) {
     return (
-      <Card>
+      <Card shadow="sm">
         <CardBody className="px-6 py-10 text-center text-sm text-default-500">
           Este día es anterior al inicio de tu plan.
         </CardBody>
@@ -475,7 +473,7 @@ export function MealCycleDayPanel({
       <DayNotesBanner notes={day.notes} />
 
       {day.slots.length === 0 ? (
-        <Card>
+        <Card shadow="sm">
           <CardBody className="px-6 py-10 text-center text-sm text-default-500">
             No hay comidas para este día.
           </CardBody>

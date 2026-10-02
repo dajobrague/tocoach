@@ -8,6 +8,8 @@ import type { LoggedSession } from "./hooks/use-logged-sessions-for-date";
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { SectionHeader } from "../client-page";
+
 import { SessionCard } from "./session-card";
 
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
@@ -51,16 +53,7 @@ export function LoggedSessionsSection({
 
   return (
     <section className="w-full">
-      <div className="flex items-center gap-2 mb-3">
-        <Icon
-          className="text-success"
-          icon="solar:check-circle-bold"
-          width={20}
-        />
-        <h2 className="text-xl font-heading font-semibold text-foreground">
-          {headingFor(scheduledDate, todayYmd)}
-        </h2>
-      </div>
+      <SectionHeader title={headingFor(scheduledDate, todayYmd)} />
       <div className="space-y-3 w-full">
         {loggedSessions.map((s) => (
           <div
@@ -81,7 +74,7 @@ export function LoggedSessionsSection({
               name={s.name}
               rightContent={
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-body text-foreground/60 mr-1">
+                  <span className="text-[11px] text-default-500 mr-1">
                     {s.exercisesLogged}/{s.exercisesTotal}
                   </span>
                   {!s.templateMissing ? (

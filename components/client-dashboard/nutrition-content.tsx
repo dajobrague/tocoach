@@ -28,7 +28,6 @@ import {
 } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientHeader } from "@/components/client-dashboard/client-header";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { useNutritionPlan } from "@/lib/hooks/use-client-queries";
@@ -615,15 +614,6 @@ function NutritionPdfClientSection({ plan }: { plan: NutritionPlanWithDays }) {
 // ─── Main component ────────────────────────────────────────────────────────
 
 export function NutritionContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
-
   const { data: nutritionPlans, isLoading } = useNutritionPlan();
 
   const nutritionPlan = useMemo<NutritionPlanWithDays | null>(() => {
@@ -803,15 +793,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="flex items-center justify-center py-20">
               <Spinner size="lg" />
             </div>
@@ -829,15 +811,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="px-4 py-20 text-center">
               <Icon
                 className="text-6xl text-default-300 mx-auto mb-4"
@@ -865,15 +839,7 @@ export function NutritionContent() {
       <>
         <div className="min-h-screen bg-background pb-20">
           <div className="max-w-lg mx-auto">
-            <ClientHeader
-              clientId={clientId}
-              clientProfilePicture={clientProfilePicture}
-              firstName={firstName}
-              logoUrl={logoUrl}
-              tagline="¡A alimentarte bien!"
-              tenantSlug={tenantSlug}
-              trainerName={trainerName}
-            />
+            <ClientHeader title="Nutrición" />
             <div className="px-4 py-20 text-center">
               <Icon
                 className="text-6xl text-default-300 mx-auto mb-4"
@@ -899,15 +865,7 @@ export function NutritionContent() {
     <>
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-lg mx-auto">
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tagline="¡A alimentarte bien!"
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-          />
+          <ClientHeader title="Nutrición" />
 
           <div className="px-4 space-y-5">
             {(effectivePlanMode === "pdf" ||
@@ -956,7 +914,7 @@ export function NutritionContent() {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {entry.isToday ? (
-                            <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full font-body uppercase flex-shrink-0 tracking-widest">
+                            <span className="bg-primary-foreground/20 text-primary-foreground text-xs font-black px-2.5 py-1 rounded-full font-body uppercase flex-shrink-0 tracking-widest">
                               Hoy
                             </span>
                           ) : (
@@ -966,19 +924,19 @@ export function NutritionContent() {
                             />
                           )}
                           <h2
-                            className={`text-base font-bold font-heading truncate ${entry.isToday ? "text-white" : "text-foreground"}`}
+                            className={`text-base font-bold font-heading truncate ${entry.isToday ? "text-primary-foreground" : "text-foreground"}`}
                           >
                             {entry.title}
                           </h2>
                           <span
-                            className={`text-xs font-body flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/50"}`}
+                            className={`text-xs font-body flex-shrink-0 ${entry.isToday ? "text-primary-foreground/70" : "text-foreground/50"}`}
                           >
                             · {day.meals.length} comida
                             {day.meals.length !== 1 ? "s" : ""}
                           </span>
                         </div>
                         <Icon
-                          className={`text-lg transition-transform flex-shrink-0 ${entry.isToday ? "text-white/70" : "text-foreground/40 group-hover:text-foreground/60"}`}
+                          className={`text-lg transition-transform flex-shrink-0 ${entry.isToday ? "text-primary-foreground/70" : "text-foreground/40 group-hover:text-foreground/60"}`}
                           icon={
                             isDayExpanded
                               ? "solar:alt-arrow-up-linear"

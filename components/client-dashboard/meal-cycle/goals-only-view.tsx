@@ -6,6 +6,7 @@ import type { NutritionGoals } from "@/lib/nutrition/goals/client-goals-service"
 import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { SectionHeader } from "@/components/client-dashboard/client-page";
 import { MACRO_COLORS } from "@/components/client-dashboard/meal-cycle/macro-ui";
 
 interface GoalsOnlyViewProps {
@@ -24,10 +25,8 @@ interface GoalsOnlyViewProps {
 export function GoalsOnlyView({ goals, presets }: GoalsOnlyViewProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-foreground">
-          Tus objetivos nutricionales
-        </h2>
+      <div>
+        <SectionHeader className="!mb-1" title="Tus objetivos nutricionales" />
         <p className="text-sm text-default-500">
           Tu entrenador gestiona tu dieta por objetivos: organiza tus comidas
           libremente para acercarte a estas metas.
@@ -82,7 +81,7 @@ export function GoalCard({
   ];
 
   return (
-    <Card className={highlight ? "border border-primary/30" : ""}>
+    <Card shadow="sm">
       <CardBody className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2">
@@ -91,17 +90,17 @@ export function GoalCard({
               icon={icon}
               width={18}
             />
-            <span className="truncate text-sm font-semibold text-foreground">
+            <span className="truncate font-heading text-lg text-foreground">
               {name}
             </span>
           </span>
           <span className="shrink-0 text-sm font-bold text-foreground tabular-nums">
-            {Math.round(values.kcal)}{" "}
+            {Math.round(values.kcal).toLocaleString("es")}{" "}
             <span className="text-xs font-medium text-default-400">kcal</span>
           </span>
         </div>
 
-        <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-default-200 bg-content2">
+        <div className="grid grid-cols-3 overflow-hidden rounded-medium bg-content2">
           {macros.map((macro) => (
             <div
               key={macro.label}
@@ -111,7 +110,7 @@ export function GoalCard({
                 <span className={`h-1.5 w-1.5 rounded-full ${macro.dot}`} />
                 {Math.round(macro.grams)} g
               </span>
-              <span className="text-[10px] uppercase tracking-wide text-default-400">
+              <span className="text-[11px] text-default-500">
                 {macro.label}
               </span>
             </div>

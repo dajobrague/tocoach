@@ -65,6 +65,7 @@ import {
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useDeleteExerciseLogs } from "@/lib/hooks/use-client-queries";
+import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
 interface ExtendedExerciseShape extends ExerciseShape {
   imageUrl?: string;
@@ -398,17 +399,24 @@ export function ExerciseLogModal({
           }
           setAutoSaveState("error");
           if (!silent) {
-            alert(
-              "Error al guardar registro: " +
-                (data.error || "Error desconocido")
-            );
+            addToast({
+              title: "No se pudo guardar el registro",
+              description: data.error || "Inténtalo de nuevo.",
+              color: "danger",
+            });
           }
 
           return FAILED_SAVE;
         } catch (err) {
           console.error("[ExerciseLogModal] Error saving log:", err);
           setAutoSaveState("error");
-          if (!silent) alert("Error al guardar registro");
+          if (!silent) {
+            addToast({
+              title: "No se pudo guardar el registro",
+              description: "Revisa tu conexión e inténtalo de nuevo.",
+              color: "danger",
+            });
+          }
 
           return FAILED_SAVE;
         } finally {
@@ -586,13 +594,13 @@ export function ExerciseLogModal({
 
   const handleDelete = async () => {
     if (!existingLog?.id) return;
-    if (
-      !window.confirm(
-        "¿Borrar este registro? Esta acción no se puede deshacer."
-      )
-    ) {
-      return;
-    }
+    // confirmAfterPress: un confirm() síncrono dentro de onPress congela
+    // la página (react-aria se queda esperando el pointer-up).
+    const ok = await confirmAfterPress(
+      "¿Borrar este registro? Esta acción no se puede deshacer."
+    );
+
+    if (!ok) return;
     try {
       await deleteLog.mutateAsync({ logId: existingLog.id });
       clearExerciseLogDraft(draftKey);
@@ -600,7 +608,11 @@ export function ExerciseLogModal({
       onClose();
     } catch (err) {
       console.error("[ExerciseLogModal] Error deleting log:", err);
-      alert("Error al borrar registro");
+      addToast({
+        title: "No se pudo borrar el registro",
+        description: "Revisa tu conexión e inténtalo de nuevo.",
+        color: "danger",
+      });
     }
   };
 
@@ -725,7 +737,7 @@ export function ExerciseLogModal({
               Cerrar
             </Button>
             <Button
-              className="flex-1 text-white font-semibold"
+              className="flex-1 font-semibold"
               color="primary"
               isDisabled={
                 isSaving ||
@@ -754,34 +766,28 @@ export function ExerciseLogModal({
 }
 
 /**
- * Récord nuevo: banner amber con una línea por marca. La primera vez que
- * se registra el ejercicio no hay récord que batir, así que ahí sólo va
- * una línea discreta (sin confeti, sin toast).
- *
- * El amber es literal (no la paleta warning del theme) por lo mismo que
- * el PR de exercise-history-section: warning pelea con el primario del
- * entrenador. El texto se queda neutro — el amber marrón se leía sucio.
+ * Récord nuevo: aviso en tinte warning (logro) con una línea por marca. La
+ * primera vez que se registra el ejercicio no hay récord que batir, así que
+ * ahí sólo va una línea discreta (sin confeti, sin toast). El texto se queda
+ * neutro para leerse con cualquier tema.
  */
 function CelebrationBanner({ celebration }: { celebration: Celebration }) {
   if (celebration.kind === "first") {
     return (
-      <p className="w-full text-center text-xs font-body text-foreground/60">
+      <p className="w-full text-center text-xs text-default-500">
         Primera marca registrada 📈
       </p>
     );
   }
 
   return (
-    <div className="w-full rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+    <div className="w-full rounded-large border border-warning/40 bg-warning/10 px-3 py-2">
       <p className="text-xs font-semibold text-foreground font-heading">
         🏅 ¡Nuevo récord!
       </p>
       <ul className="mt-1 space-y-0.5">
         {celebration.records.map((record) => (
-          <li
-            key={record.bucket}
-            className="text-xs font-body text-foreground/70"
-          >
+          <li key={record.bucket} className="text-xs text-default-600">
             {bannerLine(record)}
           </li>
         ))}

@@ -2,12 +2,11 @@
 
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
-import { Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import { useClientData } from "@/components/client-dashboard/client-data-provider";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { ClientPage } from "@/components/client-dashboard/client-page";
 import { DaySummaryCard } from "@/components/client-dashboard/meal-cycle/day-summary-card";
 import {
   GoalCard,
@@ -40,29 +39,11 @@ const MAX_BACK_DAYS = 30;
 
 /** Page chrome shared by every branch (header + bottom nav). */
 function MealCycleShell({ children }: { children: ReactNode }) {
-  const {
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    clientId,
-    tenantSlug,
-  } = useClientData();
-
   return (
     <>
-      <div className="min-h-screen bg-background pb-20">
-        <ClientHeader
-          clientId={clientId}
-          clientProfilePicture={clientProfilePicture}
-          firstName={firstName}
-          logoUrl={logoUrl}
-          tagline="Tu plan de comidas"
-          tenantSlug={tenantSlug}
-          trainerName={trainerName}
-        />
-        <main className="mx-auto w-full max-w-2xl px-4 py-4">{children}</main>
-      </div>
+      <ClientPage title="Nutrición">
+        <main className="px-4 py-4">{children}</main>
+      </ClientPage>
       <ClientBottomNav />
     </>
   );
@@ -96,7 +77,7 @@ export function MealCycleContent() {
   const [chooserFor, setChooserFor] = useState<string | null>(null);
 
   const weekStart = mondayOf(selectedDate);
-  const { data, isPending, isError } = useClientMealCycleWeek(
+  const { data, isPending, isError, refetch } = useClientMealCycleWeek(
     weekStart,
     timeZone
   );
@@ -122,6 +103,15 @@ export function MealCycleContent() {
     return (
       <MealCycleShell>
         <CenteredState
+          action={
+            <Button
+              color="primary"
+              variant="flat"
+              onPress={() => void refetch()}
+            >
+              Reintentar
+            </Button>
+          }
           icon="solar:danger-triangle-linear"
           subtitle="Vuelve a intentarlo en un momento."
           title="No pudimos cargar tu plan"

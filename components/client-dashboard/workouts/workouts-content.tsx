@@ -34,8 +34,10 @@ import { WeekDateSelector } from "./week-date-selector";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
-import { ClientHeader } from "@/components/client-dashboard/client-header";
+import { ClientPage } from "@/components/client-dashboard/client-page";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log/exercise-log-modal";
+import { CenteredState } from "@/components/shared/centered-state";
+import { IconTile } from "@/components/shared/icon-tile";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import {
   useDeleteExerciseLogs,
@@ -44,14 +46,7 @@ import {
 } from "@/lib/hooks/use-client-queries";
 
 export function WorkoutsContent() {
-  const {
-    clientId,
-    firstName,
-    logoUrl,
-    trainerName,
-    clientProfilePicture,
-    tenantSlug,
-  } = useClientData();
+  const { clientId } = useClientData();
   const queryClient = useQueryClient();
 
   const {
@@ -337,171 +332,136 @@ export function WorkoutsContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-20">
-        <div className="max-w-lg mx-auto">
-          <ClientHeader
-            clientId={clientId}
-            clientProfilePicture={clientProfilePicture}
-            firstName={firstName}
-            logoUrl={logoUrl}
-            tenantSlug={tenantSlug}
-            trainerName={trainerName}
-          />
+      <ClientPage title="Entrenamiento">
+        <div className="px-4 pt-4 space-y-6 w-full">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="lg" />
+            </div>
+          ) : null}
 
-          <div className="px-4 space-y-6 w-full">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <Spinner size="lg" />
-              </div>
-            ) : null}
+          {error && !isLoading ? (
+            <CenteredState
+              action={
+                <Button
+                  color="primary"
+                  startContent={<Icon icon="solar:refresh-linear" width={18} />}
+                  onPress={() => refetchAvailable()}
+                >
+                  Reintentar
+                </Button>
+              }
+              icon="solar:danger-circle-linear"
+              subtitle={error}
+              title="Error al cargar entrenamientos"
+            />
+          ) : null}
 
-            {error && !isLoading ? (
-              <Card className="bg-content1 border border-danger-200">
-                <CardBody className="p-12 text-center">
-                  <Icon
-                    className="text-danger text-6xl mx-auto mb-4"
-                    icon="solar:danger-circle-bold"
-                  />
-                  <h3 className="text-lg font-heading font-semibold text-foreground mb-2">
-                    Error al cargar entrenamientos
-                  </h3>
-                  <p className="text-foreground/60 font-body text-sm mb-4">
-                    {error}
-                  </p>
-                  <Button
-                    color="primary"
-                    startContent={
-                      <Icon icon="solar:refresh-linear" width={18} />
-                    }
-                    onPress={() => refetchAvailable()}
-                  >
-                    Reintentar
-                  </Button>
-                </CardBody>
-              </Card>
-            ) : null}
+          {!isLoading && !error && showNoProgramEmptyState ? (
+            <CenteredState
+              icon="solar:dumbbell-linear"
+              subtitle={
+                hasPausedPrograms
+                  ? "Tienes programas en pausa — actívalos desde Más → Programas"
+                  : "Tu entrenador asignará un programa pronto"
+              }
+              title="No tienes un programa activo"
+            />
+          ) : null}
 
-            {!isLoading && !error && showNoProgramEmptyState ? (
-              <Card className="bg-content1 border border-default-200 shadow-sm">
-                <CardBody className="p-12">
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <div className="bg-default-100 p-4 rounded-full mb-4">
-                      <Icon
-                        className="text-foreground/40 text-5xl"
-                        icon="solar:dumbbell-linear"
+          {!isLoading && !error && (hasActiveProgram || hasHistory) ? (
+            <WeekDateSelector
+              datesWithActivity={datesWithActivity}
+              selectedDate={selectedDate}
+              todayYmd={todayYmd}
+              onSelect={handleSelectDate}
+            />
+          ) : null}
+
+          {!isLoading && !error && activeSession ? (
+            <ActiveSessionView
+              exerciseLogs={exerciseLogs}
+              programs={programs}
+              scheduledDate={selectedDate}
+              session={activeSession}
+              onExit={handleExitSession}
+              onLogExercise={handleLogExercise}
+            />
+          ) : null}
+
+          {!isLoading &&
+          !error &&
+          !activeSession &&
+          (hasActiveProgram || hasHistory) ? (
+            <>
+              {loggedSessions.length > 0 ? (
+                <LoggedSessionsSection
+                  loggedSessions={loggedSessions}
+                  scheduledDate={selectedDate}
+                  todayYmd={todayYmd}
+                  onActivate={handleActivateSession}
+                  onDelete={handleDeleteLoggedSession}
+                />
+              ) : null}
+
+              {hasActiveProgram ? (
+                <AvailableSessionsList
+                  availableSessions={availableData?.sessions ?? []}
+                  heading={
+                    isViewingToday
+                      ? "Escoge tu siguiente entrenamiento"
+                      : loggedSessions.length > 0
+                        ? "Agregar otro entrenamiento"
+                        : isViewingPast
+                          ? "¿Qué hiciste ese día?"
+                          : "Plan para ese día"
+                  }
+                  loggedSessionIds={
+                    new Set(loggedSessions.map((s) => s.sessionId))
+                  }
+                  programNameById={programNameById}
+                  recommendedSessionIds={recommendedSessionIds}
+                  onActivate={handleActivateSession}
+                />
+              ) : (
+                <Card shadow="sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <IconTile
+                        icon="solar:pause-circle-linear"
+                        tone="default"
                       />
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground font-heading mb-2">
-                      No tienes un programa activo
-                    </h3>
-                    <p className="text-foreground/60 text-sm font-body">
-                      {hasPausedPrograms
-                        ? "Tienes programas en pausa — actívalos desde Más → Programas"
-                        : "Tu entrenador asignará un programa pronto"}
-                    </p>
-                  </div>
-                </CardBody>
-              </Card>
-            ) : null}
-
-            {!isLoading && !error && (hasActiveProgram || hasHistory) ? (
-              <WeekDateSelector
-                datesWithActivity={datesWithActivity}
-                selectedDate={selectedDate}
-                todayYmd={todayYmd}
-                onSelect={handleSelectDate}
-              />
-            ) : null}
-
-            {!isLoading && !error && activeSession ? (
-              <ActiveSessionView
-                exerciseLogs={exerciseLogs}
-                programs={programs}
-                scheduledDate={selectedDate}
-                session={activeSession}
-                onExit={handleExitSession}
-                onLogExercise={handleLogExercise}
-              />
-            ) : null}
-
-            {!isLoading &&
-            !error &&
-            !activeSession &&
-            (hasActiveProgram || hasHistory) ? (
-              <>
-                {loggedSessions.length > 0 ? (
-                  <LoggedSessionsSection
-                    loggedSessions={loggedSessions}
-                    scheduledDate={selectedDate}
-                    todayYmd={todayYmd}
-                    onActivate={handleActivateSession}
-                    onDelete={handleDeleteLoggedSession}
-                  />
-                ) : null}
-
-                {hasActiveProgram ? (
-                  <AvailableSessionsList
-                    availableSessions={availableData?.sessions ?? []}
-                    heading={
-                      isViewingToday
-                        ? "Escoge tu siguiente entrenamiento"
-                        : loggedSessions.length > 0
-                          ? "Agregar otro entrenamiento"
-                          : isViewingPast
-                            ? "¿Qué hiciste ese día?"
-                            : "Plan para ese día"
-                    }
-                    loggedSessionIds={
-                      new Set(loggedSessions.map((s) => s.sessionId))
-                    }
-                    programNameById={programNameById}
-                    recommendedSessionIds={recommendedSessionIds}
-                    onActivate={handleActivateSession}
-                  />
-                ) : (
-                  <Card className="bg-content1 border border-default-200 shadow-sm">
-                    <CardBody className="p-6">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-default-100">
-                          <Icon
-                            className="text-foreground/40 text-xl"
-                            icon="solar:pause-circle-linear"
-                          />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-heading font-semibold text-foreground">
-                            No tienes un programa activo ahora mismo
-                          </p>
-                          <p className="text-xs font-body text-foreground/60">
-                            Tu historial de entrenamientos sigue disponible
-                            aquí.
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-heading font-semibold text-foreground">
+                          No tienes un programa activo ahora mismo
+                        </p>
+                        <p className="text-xs text-default-500">
+                          Tu historial de entrenamientos sigue disponible aquí.
+                        </p>
                       </div>
-                    </CardBody>
-                  </Card>
-                )}
+                    </div>
+                  </CardBody>
+                </Card>
+              )}
 
-                {hasActiveProgram && microcycle ? (
-                  <div className="flex justify-center">
-                    <Button
-                      className="text-foreground/70"
-                      endContent={
-                        <Icon icon="solar:alt-arrow-right-linear" width={16} />
-                      }
-                      size="sm"
-                      variant="light"
-                      onPress={() => setIsMicrocycleModalOpen(true)}
-                    >
-                      Ver mi microciclo
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
+              {hasActiveProgram && microcycle ? (
+                <div className="flex justify-center">
+                  <Button
+                    endContent={
+                      <Icon icon="solar:alt-arrow-right-linear" width={16} />
+                    }
+                    size="sm"
+                    variant="light"
+                    onPress={() => setIsMicrocycleModalOpen(true)}
+                  >
+                    Ver mi microciclo
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
-      </div>
+      </ClientPage>
       <ClientBottomNav />
 
       <ExerciseLogModal

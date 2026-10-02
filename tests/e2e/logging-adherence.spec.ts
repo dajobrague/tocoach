@@ -37,7 +37,7 @@ const CYCLE_NAME = "E2E Plan adherencia";
 const SLOT_LABEL = "Desayuno";
 const COMMENT = "Quedó delicioso, lo repetiré";
 const PHOTO_BUCKET = "meal-photos";
-const PLAN_PATH = `/${TEST_TENANT_SLUG}/plan-de-comidas`;
+const PLAN_PATH = `/${TEST_TENANT_SLUG}/nutricion`;
 const PROFILE_PATH = `/trainer/dashboard/clients/${TEST_CLIENT_ID}`;
 
 // A tiny valid 1x1 PNG — the meal photo fixture (no file on disk needed).

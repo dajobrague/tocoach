@@ -17,7 +17,6 @@
 
 import {
   Button,
-  Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
@@ -27,6 +26,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import { ClientSheet } from "@/components/client-dashboard/client-sheet";
 import { useTenant } from "@/components/tenant-provider";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { shareCardSettingsFromFeatures } from "@/lib/share-card/settings";
@@ -167,13 +167,7 @@ export function ShareSessionButton({
         Compartir
       </Button>
 
-      <Modal
-        isOpen={isOpen}
-        placement="center"
-        scrollBehavior="inside"
-        size="sm"
-        onClose={() => setIsOpen(false)}
-      >
+      <ClientSheet isOpen={isOpen} size="sm" onClose={() => setIsOpen(false)}>
         <ModalContent>
           <ModalHeader className="font-heading">Comparte tu sesión</ModalHeader>
           <ModalBody className="items-center">
@@ -249,7 +243,7 @@ export function ShareSessionButton({
             </Button>
           </ModalFooter>
         </ModalContent>
-      </Modal>
+      </ClientSheet>
     </>
   );
 }

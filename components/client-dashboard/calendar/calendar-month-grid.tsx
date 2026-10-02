@@ -6,7 +6,12 @@ import type { CalendarEntrySession } from "./hooks/use-calendar-entries";
 
 import { Icon } from "@iconify/react";
 
-import { DAY_NAMES_SHORT, dotColor, isFullyCompleted } from "./calendar-shared";
+import {
+  DAY_NAMES_SHORT,
+  dotColor,
+  isFullyCompleted,
+  mondayFirstIndex,
+} from "./calendar-shared";
 
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 
@@ -64,7 +69,7 @@ export function CalendarMonthGrid({
               }
             >
               <span
-                className={`text-sm ${isToday ? "font-bold text-white" : ""}`}
+                className={`text-sm ${isToday ? "font-bold text-primary-foreground" : ""}`}
               >
                 {cell.day}
               </span>
@@ -107,7 +112,7 @@ function buildMonthCells(monthDate: Date): MonthCell[] {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const daysInMonth = lastDay.getDate();
-  const startingDow = firstDay.getDay();
+  const startingDow = mondayFirstIndex(firstDay.getDay());
   const cells: MonthCell[] = [];
 
   const prevMonthLastDay = new Date(year, month, 0).getDate();
@@ -153,7 +158,7 @@ function cellClass({
   hasSessions: boolean;
 }): string {
   const base =
-    "aspect-square rounded-lg p-1 flex flex-col items-center justify-center transition-all relative";
+    "aspect-square rounded-medium p-1 flex flex-col items-center justify-center transition-all relative";
   const text = inMonth ? "text-foreground" : "text-default-300";
   const bg = isToday
     ? "bg-primary"
