@@ -4,17 +4,16 @@ import {
   addToast,
   Badge,
   Button,
-  Dropdown,
-  DropdownItem,
-  DropdownMenu,
-  DropdownSection,
-  DropdownTrigger,
+  ModalBody,
+  ModalContent,
+  ModalHeader,
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ClientSheet } from "@/components/client-dashboard/client-sheet";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   useRealtimeNotifications,
@@ -347,170 +346,92 @@ export function NotificationsDropdown({
 
   return (
     <>
-      <Dropdown
-        classNames={{
-          content: "w-80 md:w-96 max-h-[500px] overflow-hidden",
-        }}
-        isOpen={isOpen}
-        placement="bottom-end"
-        onOpenChange={setIsOpen}
+      <Button
+        isIconOnly
+        aria-label={
+          unreadCount > 0
+            ? `Notificaciones (${unreadCount} sin leer)`
+            : "Notificaciones"
+        }
+        className={`relative ${triggerClassName}`}
+        variant="light"
+        onPress={() => setIsOpen(true)}
       >
-        <DropdownTrigger>
-          <Button
-            isIconOnly
-            aria-label={
-              unreadCount > 0
-                ? `Notificaciones (${unreadCount} sin leer)`
-                : "Notificaciones"
-            }
-            className={`relative ${triggerClassName}`}
-            variant="light"
-          >
-            <RealtimeStatusIndicator
-              hasAttempted={realtimeAttempted}
-              isConnected={realtimeConnected}
-            />
-            {unreadCount > 0 && (
-              <Badge
-                classNames={{
-                  badge: "text-xs font-bold",
-                }}
-                color="danger"
-                content={unreadCount > 99 ? "99+" : unreadCount}
-                placement="top-right"
-                size="sm"
-              >
-                <Icon className="text-2xl" icon="solar:bell-linear" />
-              </Badge>
-            )}
-            {unreadCount === 0 && (
-              <Icon className="text-2xl" icon="solar:bell-linear" />
-            )}
-          </Button>
-        </DropdownTrigger>
-        <DropdownMenu
-          aria-label="Notificaciones"
-          className="p-0"
-          classNames={{
-            base: "p-0 max-h-[450px] overflow-y-auto",
-            list: "p-0 gap-0",
-          }}
-        >
-          <DropdownSection
-            showDivider
+        <RealtimeStatusIndicator
+          hasAttempted={realtimeAttempted}
+          isConnected={realtimeConnected}
+        />
+        {unreadCount > 0 && (
+          <Badge
             classNames={{
-              base: "p-0",
-              heading: "px-4 py-3",
+              badge: "text-xs font-bold",
             }}
+            color="danger"
+            content={unreadCount > 99 ? "99+" : unreadCount}
+            placement="top-right"
+            size="sm"
           >
-            <DropdownItem
-              key="header"
-              isReadOnly
-              className="cursor-default hover:bg-transparent"
-              classNames={{
-                base: "p-0",
-              }}
-            >
-              <div className="flex items-center justify-between px-4 py-3">
-                <h3 className="text-lg font-semibold font-heading">
-                  Notificaciones
-                </h3>
-                {unreadCount > 0 && (
-                  <Button
-                    className="text-primary"
-                    size="sm"
-                    variant="light"
-                    onPress={markAllAsRead}
-                  >
-                    Marcar todas leídas
-                  </Button>
-                )}
-              </div>
-            </DropdownItem>
-          </DropdownSection>
+            <Icon className="text-2xl" icon="solar:bell-linear" />
+          </Badge>
+        )}
+        {unreadCount === 0 && (
+          <Icon className="text-2xl" icon="solar:bell-linear" />
+        )}
+      </Button>
 
-          {isLoading ? (
-            <DropdownItem
-              key="loading"
-              isReadOnly
-              className="justify-center py-8"
-            >
-              <Spinner color="primary" size="md" />
-            </DropdownItem>
-          ) : null}
-          {!isLoading && notifications.length === 0 ? (
-            <DropdownItem key="empty" isReadOnly className="cursor-default">
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Icon
-                  className="text-5xl text-foreground/20 mb-3"
-                  icon="solar:bell-off-linear"
-                />
-                <p className="text-foreground/60 font-body text-sm">
+      {/* Hoja inferior en móvil (como el resto de diálogos del portal), en
+          vez del desplegable de escritorio de 320px. */}
+      <ClientSheet isOpen={isOpen} size="md" onClose={() => setIsOpen(false)}>
+        <ModalContent>
+          <ModalHeader className="flex items-center justify-between gap-2 pr-12">
+            <span className="font-heading text-lg">Notificaciones</span>
+            {unreadCount > 0 ? (
+              <Button
+                className="text-primary"
+                size="sm"
+                variant="light"
+                onPress={markAllAsRead}
+              >
+                Marcar todas leídas
+              </Button>
+            ) : null}
+          </ModalHeader>
+          <ModalBody className="px-3 pb-4">
+            {isLoading && notifications.length === 0 ? (
+              <div className="flex justify-center py-10">
+                <Spinner color="primary" />
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-default-100">
+                  <Icon
+                    className="text-2xl text-default-400"
+                    icon="solar:bell-off-linear"
+                  />
+                </div>
+                <p className="text-sm text-default-500">
                   No tienes notificaciones
                 </p>
               </div>
-            </DropdownItem>
-          ) : null}
-          {!isLoading && notifications.length > 0 ? (
-            <DropdownSection classNames={{ base: "p-0" }}>
-              {notifications.map((notification) => (
-                <DropdownItem
-                  key={notification.id}
-                  className="py-3 px-4"
-                  classNames={{
-                    base: "data-[hover=true]:bg-content2",
-                  }}
-                  onPress={() => handleNotificationClick(notification)}
-                >
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          !notification.read_at
-                            ? "bg-primary/20"
-                            : "bg-content2"
-                        }`}
-                      >
-                        <Icon
-                          className={`text-xl ${
-                            !notification.read_at
-                              ? "text-primary"
-                              : "text-foreground/60"
-                          }`}
-                          icon={notification.icon}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p
-                          className={`text-sm font-semibold font-heading ${
-                            !notification.read_at
-                              ? "text-foreground"
-                              : "text-foreground/70"
-                          }`}
-                        >
-                          {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
-                          {notification.title}
-                        </p>
-                        {!notification.read_at && (
-                          <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
-                        )}
-                      </div>
-                      <p className="text-xs text-foreground/60 font-body mb-1 line-clamp-2">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-foreground/50 font-body">
-                        {formatTimeAgo(notification.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                </DropdownItem>
-              ))}
-            </DropdownSection>
-          ) : null}
-        </DropdownMenu>
-      </Dropdown>
+            ) : (
+              <>
+                <NotificationGroup
+                  formatTimeAgo={formatTimeAgo}
+                  items={notifications.filter((n) => !n.read_at)}
+                  title="Nuevas"
+                  onSelect={handleNotificationClick}
+                />
+                <NotificationGroup
+                  formatTimeAgo={formatTimeAgo}
+                  items={notifications.filter((n) => n.read_at)}
+                  title="Anteriores"
+                  onSelect={handleNotificationClick}
+                />
+              </>
+            )}
+          </ModalBody>
+        </ModalContent>
+      </ClientSheet>
 
       <VideoFeedbackStoryViewer
         initialIndex={storyIndex}
@@ -520,5 +441,84 @@ export function NotificationsDropdown({
         onViewed={handleStoryViewed}
       />
     </>
+  );
+}
+
+function NotificationGroup({
+  title,
+  items,
+  formatTimeAgo,
+  onSelect,
+}: {
+  title: string;
+  items: Notification[];
+  formatTimeAgo: (iso: string) => string;
+  onSelect: (n: Notification) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="mt-1">
+      <h4 className="px-2 pb-1.5 pt-2 text-xs font-semibold text-default-500">
+        {title}
+      </h4>
+      <ul className="space-y-1">
+        {items.map((n) => {
+          const unread = !n.read_at;
+
+          return (
+            <li key={n.id}>
+              <button
+                className={`flex w-full items-start gap-3 rounded-large p-2.5 text-left transition-colors ${
+                  unread
+                    ? "bg-primary/5 hover:bg-primary/10"
+                    : "hover:bg-default-100"
+                }`}
+                type="button"
+                onClick={() => onSelect(n)}
+              >
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    unread
+                      ? "bg-primary/15 text-primary"
+                      : "bg-default-100 text-default-500"
+                  }`}
+                >
+                  <Icon className="text-xl" icon={n.icon} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start justify-between gap-2">
+                    <span
+                      className={`text-sm leading-snug ${
+                        unread
+                          ? "font-semibold text-foreground"
+                          : "font-medium text-default-700"
+                      }`}
+                    >
+                      {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
+                      {n.title}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-xs text-default-400">
+                      {formatTimeAgo(n.created_at)}
+                      {unread ? (
+                        <span
+                          aria-label="Sin leer"
+                          className="h-2 w-2 rounded-full bg-primary"
+                        />
+                      ) : null}
+                    </span>
+                  </span>
+                  {n.message ? (
+                    <span className="mt-0.5 line-clamp-2 block text-sm text-default-500">
+                      {n.message}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
