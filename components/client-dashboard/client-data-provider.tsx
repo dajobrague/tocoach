@@ -3,6 +3,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo } from "react";
 
+import { CommunityFrameHost } from "./community-frame";
+
 import { useClientBootstrap } from "@/lib/hooks/use-client-queries";
 
 export interface ClientData {
@@ -84,7 +86,9 @@ export function ClientDataProvider({
 
   return (
     <ClientDataContext.Provider value={data}>
-      {children}
+      <CommunityFrameHost communityUrl={data.communityUrl}>
+        {children}
+      </CommunityFrameHost>
     </ClientDataContext.Provider>
   );
 }

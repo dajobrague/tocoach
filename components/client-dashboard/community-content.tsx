@@ -2,10 +2,10 @@
 
 import { Button, Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
 
 import { ClientBottomNav } from "./bottom-nav";
 import { useClientData } from "./client-data-provider";
+import { useCommunityFrame } from "./community-frame";
 import { ClientHeader } from "./client-header";
 
 export function CommunityContent() {
@@ -79,8 +79,8 @@ export function CommunityContent() {
  * headers that prevent embedding. When that happens the iframe stays blank
  * and the user is stuck on a "loading…" state.
  *
- * This component starts a load timeout — if the iframe hasn't fired `onLoad`
- * after a few seconds, we replace it with a friendly empty-state explaining
+ * CommunityFrameHost runs a load timeout — if the iframe hasn't fired `onLoad`
+ * after a few seconds, this page swaps in a friendly empty-state explaining
  * what happened, with an "Abrir comunidad" external link as the escape hatch.
  * (There is deliberately NO standing open-in-new-tab button when the iframe
  * works — removed at José Carlos's request, Jul 13 2026.)
@@ -102,32 +102,13 @@ function CommunityIframeView({
   tenantSlug: string;
   trainerName: string;
 }) {
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [loadTimedOut, setLoadTimedOut] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    // Browsers that block embedding may never fire `onLoad`, or fire it on
-    // an empty error page. 6s is a comfortable threshold for a real page to
-    // appear on slow networks while still being responsive when blocked.
-    timeoutRef.current = setTimeout(() => {
-      if (!iframeLoaded) setLoadTimedOut(true);
-    }, 6000);
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-    // We intentionally only run this once per mount — the timer is cancelled
-    // by `onLoad` setting `iframeLoaded` and by the cleanup above.
-  }, []);
-
-  const handleIframeLoad = () => {
-    setIframeLoaded(true);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
+  // The iframe itself lives in CommunityFrameHost (client layout) so the
+  // community login survives tab switches; this page only provides the slot.
+  const {
+    setSlot,
+    loaded: iframeLoaded,
+    timedOut: loadTimedOut,
+  } = useCommunityFrame();
 
   const showFallback = loadTimedOut && !iframeLoaded;
 
@@ -181,14 +162,9 @@ function CommunityIframeView({
               </CardBody>
             </Card>
           ) : (
-            <iframe
-              allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; payment"
-              className="w-full h-full min-h-[calc(100vh-170px)] border-0"
-              loading="lazy"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-              src={communityUrl}
-              title="Comunidad"
-              onLoad={handleIframeLoad}
+            <div
+              ref={setSlot}
+              className="w-full h-full min-h-[calc(100vh-170px)]"
             />
           )}
         </div>
