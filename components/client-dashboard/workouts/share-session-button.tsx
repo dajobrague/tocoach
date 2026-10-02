@@ -158,7 +158,7 @@ export function ShareSessionButton({
     <>
       <Button
         className="shrink-0"
-        color="success"
+        color="primary"
         size="sm"
         startContent={<Icon icon="solar:share-linear" width={16} />}
         variant="flat"

@@ -16,6 +16,8 @@
 import type { ProgressionPoint } from "@/lib/training/progression-query";
 import type { RepMax } from "@/lib/training/e1rm";
 
+import { Icon } from "@iconify/react";
+
 import { formatKg } from "./helpers";
 import { useExerciseProgression } from "./hooks/use-exercise-progression";
 
@@ -54,21 +56,22 @@ export function ExerciseProgressionSection({
   const bestBucket = pickBestBucket(data.repMaxes);
 
   return (
-    <div className="overflow-hidden rounded-large bg-content1 shadow-small">
-      <p className="border-b border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
-        Tu progreso
-      </p>
-
-      <div className="px-3 pt-4 pb-2">
-        <Sparkline exerciseName={exerciseName} series={series} />
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 font-heading text-base text-foreground">
+          Tu progreso
+        </p>
+        <div className="rounded-large bg-content1 px-3 pb-2 pt-4 shadow-small">
+          <Sparkline exerciseName={exerciseName} series={series} />
+        </div>
       </div>
 
       {repMaxes.length > 0 ? (
-        <>
-          <p className="border-y border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
+        <div>
+          <p className="mb-2 font-heading text-base text-foreground">
             Tus récords
           </p>
-          <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
+          <div className="flex flex-wrap gap-1.5">
             {repMaxes.map((rm) => (
               <RecordChip
                 key={rm.bucket}
@@ -77,7 +80,7 @@ export function ExerciseProgressionSection({
               />
             ))}
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   );
@@ -162,11 +165,18 @@ function RecordChip({ repMax, isBest }: { repMax: RepMax; isBest: boolean }) {
     <span
       className={
         isBest
-          ? "inline-flex items-center gap-1 rounded-md border border-warning/50 bg-warning/10 px-2 py-1 text-xs font-semibold text-foreground"
-          : "inline-flex items-center gap-1 rounded-md border border-default-200 px-2 py-1 text-xs font-medium text-default-700"
+          ? "inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-foreground"
+          : "inline-flex items-center gap-1 rounded-full border border-default-200 px-2.5 py-1 text-xs font-medium text-default-700"
       }
     >
-      {isBest ? <span aria-label="Tu mejor marca">🏅</span> : null}
+      {isBest ? (
+        <Icon
+          aria-label="Tu mejor marca"
+          className="text-primary"
+          icon="solar:medal-ribbon-star-bold"
+          width={14}
+        />
+      ) : null}
       {label}
     </span>
   );

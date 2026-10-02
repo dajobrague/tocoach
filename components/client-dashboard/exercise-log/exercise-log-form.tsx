@@ -83,9 +83,7 @@ export function ExerciseLogForm({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-foreground font-heading">
-          {formTitle}
-        </h4>
+        <h4 className="font-heading text-base text-foreground">{formTitle}</h4>
         <InlineSaveStatus state={autoSaveState} />
       </div>
 

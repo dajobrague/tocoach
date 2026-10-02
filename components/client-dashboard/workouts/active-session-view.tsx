@@ -352,13 +352,13 @@ export function ActiveSessionView({
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
           cubre también el completado automático (cobertura total). */}
       {sessionCompleted ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-large bg-success/10 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-large bg-content1 px-3 py-2.5 shadow-small">
           <Icon
             className="shrink-0 text-success-600"
             icon="solar:check-circle-bold"
             width={18}
           />
-          <span className="flex-1 text-sm font-medium text-success-700">
+          <span className="flex-1 text-sm font-semibold text-foreground">
             Entrenamiento completado
           </span>
           <ShareSessionButton
@@ -384,7 +384,7 @@ export function ActiveSessionView({
         // botón el cliente quedaría sin forma de cerrar la sesión.
         <Button
           fullWidth
-          color="success"
+          color="primary"
           isLoading={markCompleted.isPending}
           startContent={
             markCompleted.isPending ? null : (

@@ -122,10 +122,10 @@ export function ExerciseSetRow({
             className="shrink-0 h-10 w-10 min-w-10"
             color="danger"
             radius="md"
-            variant="flat"
+            variant="light"
             onPress={onRemove}
           >
-            <Icon icon="solar:trash-bin-minimalistic-bold" width={20} />
+            <Icon icon="solar:trash-bin-minimalistic-linear" width={20} />
           </Button>
         ) : null}
       </div>

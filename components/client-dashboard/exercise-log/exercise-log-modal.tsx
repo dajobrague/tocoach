@@ -716,12 +716,13 @@ export function ExerciseLogModal({
               isDisabled={isSaving || deleteLog.isPending}
               isLoading={deleteLog.isPending}
               radius="md"
+              size="sm"
               startContent={
                 !deleteLog.isPending && (
                   <Icon icon="solar:trash-bin-minimalistic-bold" width={18} />
                 )
               }
-              variant="flat"
+              variant="light"
               onPress={handleDelete}
             >
               Borrar registro
@@ -781,9 +782,15 @@ function CelebrationBanner({ celebration }: { celebration: Celebration }) {
   }
 
   return (
-    <div className="w-full rounded-large border border-warning/40 bg-warning/10 px-3 py-2">
-      <p className="text-xs font-semibold text-foreground font-heading">
-        🏅 ¡Nuevo récord!
+    <div className="w-full rounded-large border border-primary/30 bg-primary/10 px-3 py-2">
+      <p className="flex items-center gap-1 text-xs font-semibold text-foreground font-heading">
+        <Icon
+          aria-hidden
+          className="text-primary"
+          icon="solar:medal-ribbon-star-bold"
+          width={14}
+        />
+        ¡Nuevo récord!
       </p>
       <ul className="mt-1 space-y-0.5">
         {celebration.records.map((record) => (

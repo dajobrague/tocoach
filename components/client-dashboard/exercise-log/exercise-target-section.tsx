@@ -29,7 +29,7 @@ export function ExerciseTargetSection({ exercise, isCardio }: Props) {
 
   return (
     <div>
-      <p className="mb-2 text-sm font-semibold text-foreground">
+      <p className="mb-2 font-heading text-base text-foreground">
         Datos del programa
       </p>
       <div className="flex flex-wrap gap-1.5">

@@ -101,7 +101,7 @@ function PrBanner({
 
   return (
     <div className="flex items-center gap-3 rounded-large bg-content1 px-4 py-3 shadow-small">
-      <IconTile icon="solar:medal-star-bold" tone="warning" />
+      <IconTile icon="solar:medal-star-bold" />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-default-500">Tu mejor marca</p>
         <p className="text-sm font-semibold text-foreground font-heading">
@@ -129,49 +129,52 @@ function RecentList({
   onOpenStory: (item: StoryItem) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-large bg-content1 shadow-small">
-      <p className="border-b border-default-100 px-3 py-2 text-sm font-semibold text-foreground">
+    <div>
+      <p className="mb-2 font-heading text-base text-foreground">
         Últimas sesiones
       </p>
-
-      {/* Header de la mini-tabla. Mismas anchos que las filas para que
+      <div className="overflow-hidden rounded-large bg-content1 shadow-small">
+        {/* Header de la mini-tabla. Mismas anchos que las filas para que
           alineen sin gap shifts. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-default-100 text-[11px] text-default-500">
-        <span className="w-14 shrink-0">Fecha</span>
-        <span className="flex-1">Mejor</span>
-        <span className="w-10 shrink-0 text-center">Series</span>
-        <span className="w-8 shrink-0 text-center">Tend.</span>
-        <span className="w-4 shrink-0" />
-      </div>
-
-      <ul className="divide-y divide-default-100">
-        {recent.map((entry, idx) => {
-          const previous = recent[idx + 1];
-          const trend = previous ? compareEntries(entry, previous) : "unknown";
-
-          return (
-            <HistoryRow
-              key={entry.exercise_log_id}
-              entry={entry}
-              exerciseName={exerciseName}
-              trend={trend}
-              onOpenStory={onOpenStory}
-            />
-          );
-        })}
-      </ul>
-      {canExpand ? (
-        <div className="border-t border-default-100">
-          <Button
-            className="w-full"
-            size="sm"
-            variant="light"
-            onPress={onExpand}
-          >
-            Ver más
-          </Button>
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-default-100 text-[11px] text-default-500">
+          <span className="w-14 shrink-0">Fecha</span>
+          <span className="flex-1">Mejor</span>
+          <span className="w-10 shrink-0 text-center">Series</span>
+          <span className="w-8 shrink-0 text-center">Tend.</span>
+          <span className="w-4 shrink-0" />
         </div>
-      ) : null}
+
+        <ul className="divide-y divide-default-100">
+          {recent.map((entry, idx) => {
+            const previous = recent[idx + 1];
+            const trend = previous
+              ? compareEntries(entry, previous)
+              : "unknown";
+
+            return (
+              <HistoryRow
+                key={entry.exercise_log_id}
+                entry={entry}
+                exerciseName={exerciseName}
+                trend={trend}
+                onOpenStory={onOpenStory}
+              />
+            );
+          })}
+        </ul>
+        {canExpand ? (
+          <div className="border-t border-default-100">
+            <Button
+              className="w-full"
+              size="sm"
+              variant="light"
+              onPress={onExpand}
+            >
+              Ver más
+            </Button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
