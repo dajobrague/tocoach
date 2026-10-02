@@ -24,7 +24,7 @@ import {
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { ClientSheet } from "@/components/client-dashboard/client-sheet";
 import { useTenant } from "@/components/tenant-provider";
@@ -35,6 +35,8 @@ interface ShareSessionButtonProps {
   scheduledDate: string;
   sessionId: string;
   sessionName: string;
+  /** Disparador propio (p.ej. el CTA del resumen de sesión). */
+  trigger?: (open: () => void) => ReactNode;
 }
 
 type CardState =
@@ -57,6 +59,7 @@ export function ShareSessionButton({
   scheduledDate,
   sessionId,
   sessionName,
+  trigger,
 }: ShareSessionButtonProps) {
   // El entrenador puede desactivarla (Ajustes → Marca → Tarjeta de sesión).
   const enabled = shareCardSettingsFromFeatures(useTenant()?.features).enabled;
@@ -156,16 +159,20 @@ export function ShareSessionButton({
 
   return (
     <>
-      <Button
-        className="shrink-0"
-        color="success"
-        size="sm"
-        startContent={<Icon icon="solar:share-linear" width={16} />}
-        variant="flat"
-        onPress={() => setIsOpen(true)}
-      >
-        Compartir
-      </Button>
+      {trigger ? (
+        trigger(() => setIsOpen(true))
+      ) : (
+        <Button
+          className="shrink-0"
+          color="success"
+          size="sm"
+          startContent={<Icon icon="solar:share-linear" width={16} />}
+          variant="flat"
+          onPress={() => setIsOpen(true)}
+        >
+          Compartir
+        </Button>
+      )}
 
       <ClientSheet isOpen={isOpen} size="sm" onClose={() => setIsOpen(false)}>
         <ModalContent>

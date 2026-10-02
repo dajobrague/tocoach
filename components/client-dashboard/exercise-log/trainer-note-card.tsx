@@ -3,14 +3,15 @@
 // hero/identity. Ahora es una card propia debajo de "Datos del
 // programa" con preview clamped y toggle "Ver más / menos".
 //
-// Heurística: si la nota es corta (≤140 chars) la mostramos completa
-// sin toggle. Si es larga, clamp a 3 líneas + botón.
+// Compacta: va justo encima de las series. Si la nota es corta (≤100
+// chars) se ve completa; si es larga, clamp a 2 líneas + "Ver más".
 
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useState } from "react";
 
-const LONG_NOTE_THRESHOLD = 140;
+const LONG_NOTE_THRESHOLD = 100;
 
 interface Props {
   note: string;
@@ -21,26 +22,33 @@ export function TrainerNoteCard({ note }: Props) {
   const isLong = note.length > LONG_NOTE_THRESHOLD;
 
   return (
-    <div className="rounded-large bg-content1 px-3 py-2.5 shadow-small">
-      <p className="mb-1.5 text-sm font-semibold text-foreground">
-        Nota del entrenador
-      </p>
-      <p
-        className={`text-sm text-default-700 whitespace-pre-line break-words ${
-          !expanded && isLong ? "line-clamp-3" : ""
-        }`}
-      >
-        {note}
-      </p>
-      {isLong ? (
-        <button
-          className="mt-1.5 text-xs font-medium text-primary hover:underline"
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
+    <div className="flex items-start gap-2 rounded-medium bg-default-100 px-3 py-2">
+      <Icon
+        aria-hidden
+        className="mt-0.5 shrink-0 text-default-500"
+        icon="solar:chat-round-line-linear"
+        width={16}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="sr-only">Nota del entrenador</p>
+        <p
+          className={`text-sm text-default-700 whitespace-pre-line break-words ${
+            !expanded && isLong ? "line-clamp-2" : ""
+          }`}
         >
-          {expanded ? "Ver menos" : "Ver más"}
-        </button>
-      ) : null}
+          {note}
+        </p>
+        {isLong ? (
+          <button
+            aria-expanded={expanded}
+            className="mt-1 min-h-8 text-xs font-medium text-primary hover:underline"
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "Ver menos" : "Ver más"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
