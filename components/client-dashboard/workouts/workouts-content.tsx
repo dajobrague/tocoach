@@ -369,7 +369,13 @@ export function WorkoutsContent() {
             />
           ) : null}
 
-          {!isLoading && !error && (hasActiveProgram || hasHistory) ? (
+          {/* Dentro de una sesión el selector de semana sobra: elegir día es
+              cosa de la lista. La fecha se muestra junto a "Cambiar
+              entrenamiento" (ActiveSessionView). */}
+          {!isLoading &&
+          !error &&
+          !activeSession &&
+          (hasActiveProgram || hasHistory) ? (
             <WeekDateSelector
               datesWithActivity={datesWithActivity}
               selectedDate={selectedDate}

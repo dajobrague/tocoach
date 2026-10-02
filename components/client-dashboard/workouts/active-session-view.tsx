@@ -250,14 +250,19 @@ export function ActiveSessionView({
 
   return (
     <section className="w-full space-y-4">
-      <Button
-        size="sm"
-        startContent={<Icon icon="solar:alt-arrow-left-linear" width={18} />}
-        variant="light"
-        onPress={onExit}
-      >
-        Cambiar entrenamiento
-      </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          size="sm"
+          startContent={<Icon icon="solar:alt-arrow-left-linear" width={18} />}
+          variant="light"
+          onPress={onExit}
+        >
+          Cambiar entrenamiento
+        </Button>
+        <span className="pr-1 text-sm font-medium text-default-500">
+          {sessionDateLabel(scheduledDate)}
+        </span>
+      </div>
 
       {/* Card de la sesión. Al completarla se convierte en el momento de
           cierre (mismo patrón que el check-in en Inicio): insignia, mensaje y
@@ -329,12 +334,21 @@ export function ActiveSessionView({
             </span>
             <input
               aria-label="Hora de inicio del entrenamiento"
-              className="ml-auto bg-transparent text-sm font-semibold text-primary-foreground outline-none"
+              // Sin el icono de reloj nativo (sale negro y no sigue el tema);
+              // tocar el campo abre el selector igualmente.
+              className="ml-auto bg-transparent text-sm font-semibold text-primary-foreground outline-none [&::-webkit-calendar-picker-indicator]:hidden"
               disabled={setStartTime.isPending}
               type="time"
               value={timeDraft ?? schedState.data?.scheduled_time ?? ""}
               onBlur={commitTimeDraft}
               onChange={(event) => setTimeDraft(event.target.value)}
+              onClick={(event) => {
+                try {
+                  event.currentTarget.showPicker();
+                } catch {
+                  // Navegadores sin showPicker: edición con teclado.
+                }
+              }}
             />
           </div>
         ) : !sessionCompleted &&
@@ -725,4 +739,16 @@ function findExercisesForSession(
   }
 
   return [];
+}
+
+/** "Hoy" o "Mar, 29 sept" para situar la sesión sin el selector de semana. */
+function sessionDateLabel(ymd: string): string {
+  if (ymd === getLocalTodayYmd()) return "Hoy";
+  const label = new Date(`${ymd}T12:00:00`).toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
