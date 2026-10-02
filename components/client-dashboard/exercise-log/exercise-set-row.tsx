@@ -99,10 +99,14 @@ export function ExerciseSetRow({
           aria-label={
             hasVideo ? "Ver video de esta serie" : "Subir video de esta serie"
           }
+          // Cámara en tinte de marca para invitar a grabar (37% de los
+          // clientes activos lo usa); con vídeo, sólido con ▶ para ver
+          // de un vistazo qué series ya lo tienen.
           className={`shrink-0 h-10 w-10 min-w-10 ${
-            hasVideo ? "text-primary" : ""
+            hasVideo
+              ? "bg-primary text-primary-foreground"
+              : "bg-primary/10 text-primary"
           }`}
-          color="default"
           isLoading={isUploading}
           radius="md"
           variant="flat"
@@ -110,7 +114,9 @@ export function ExerciseSetRow({
         >
           {!isUploading ? (
             <Icon
-              icon={hasVideo ? "solar:play-circle-bold" : "solar:upload-linear"}
+              icon={
+                hasVideo ? "solar:play-bold" : "solar:videocamera-record-linear"
+              }
               width={20}
             />
           ) : null}

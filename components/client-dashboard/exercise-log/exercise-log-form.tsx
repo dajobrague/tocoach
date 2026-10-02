@@ -230,7 +230,7 @@ function StrengthFields({
           <span className="w-10 shrink-0 text-center">Serie</span>
           <span className="flex-1">Peso (kg)</span>
           <span className="flex-1">Reps</span>
-          <span className="w-10 shrink-0 text-center">Video</span>
+          <span className="w-10 shrink-0 text-center">Vídeo</span>
           {hasMultipleSets ? <span className="w-10 shrink-0" /> : null}
         </div>
 
@@ -248,6 +248,18 @@ function StrengthFields({
           />
         ))}
       </div>
+
+      {!formData.sets.some((s) => s.videoUrl) ? (
+        <p className="flex items-center gap-1.5 px-0.5 text-xs text-default-500">
+          <Icon
+            aria-hidden
+            className="shrink-0 text-primary"
+            icon="solar:videocamera-record-linear"
+            width={14}
+          />
+          Graba una serie y tu entrenador revisará tu técnica.
+        </p>
+      ) : null}
 
       <Button
         className="w-full"
