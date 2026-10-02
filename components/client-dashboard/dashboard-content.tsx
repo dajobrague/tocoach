@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
@@ -12,7 +12,6 @@ import {
   ClientPage,
   SectionHeader,
 } from "@/components/client-dashboard/client-page";
-import { IconTile } from "@/components/shared/icon-tile";
 import { SegmentedControl } from "@/components/shared/segmented-control";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { daysToFetchForChartRange } from "@/lib/forms/chart-helpers";
@@ -335,42 +334,49 @@ export function DashboardContent() {
           </div>
         )}
 
-        {/* Check-in pendiente: card neutra con IconTile de marca y CTA
-              primario — el color de estado no va en superficies ni CTAs
-              (DESIGN.md). El título (custom_name del trainer) vive dentro. */}
+        {/* Check-in pendiente: la acción más importante de la semana, así
+              que lleva el tratamiento de marca completo (como la barra de
+              Inicio): superficie bg-primary + primary-foreground, ambos
+              calculados por contraste en el pipeline de tema → legible con
+              marcas oscuras y pálidas. El CTA invierte la pareja (texto con
+              la marca cruda, no .text-primary, que con marcas pálidas usa
+              una tinta oscurecida pensada para el lienzo claro). */}
         {showWeeklyBanner && (
           <div className="mb-4 px-4">
-            <Card shadow="sm">
-              <CardBody className="p-4">
-                <div className="flex items-start gap-3">
-                  <IconTile icon="solar:clipboard-list-linear" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-foreground">
-                      {`Tu ${checkinSchedule.custom_name} te espera`}
-                    </p>
-                    <p className="text-sm text-default-600 mt-0.5">
-                      Completa tu seguimiento para que tu entrenador vea cómo va
-                      la semana.
-                    </p>
-                    <p className="text-xs text-default-500 mt-1">
-                      {formatScheduleDescription(checkinSchedule)}
-                    </p>
-                  </div>
+            <div className="rounded-large bg-primary p-4 text-primary-foreground shadow-medium">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-medium bg-primary-foreground/15">
+                  <Icon
+                    aria-hidden
+                    className="text-primary-foreground"
+                    icon="solar:clipboard-list-bold"
+                    width={24}
+                  />
                 </div>
-                <Button
-                  aria-label={`Completar ${checkinSchedule.custom_name}`}
-                  className="mt-3 w-full font-semibold"
-                  color="primary"
-                  endContent={
-                    <Icon icon="solar:alt-arrow-right-linear" width={18} />
-                  }
-                  variant="solid"
-                  onPress={() => setShowWeeklyFormModal(true)}
-                >
-                  Empezar check-in
-                </Button>
-              </CardBody>
-            </Card>
+                <div className="min-w-0 flex-1">
+                  <p className="font-heading text-lg leading-snug text-primary-foreground">
+                    {`Tu ${checkinSchedule.custom_name} te espera`}
+                  </p>
+                  <p className="mt-0.5 text-sm text-primary-foreground/85">
+                    Completa tu seguimiento para que tu entrenador vea cómo va
+                    la semana.
+                  </p>
+                  <p className="mt-1.5 text-xs font-medium text-primary-foreground/75">
+                    {formatScheduleDescription(checkinSchedule)}
+                  </p>
+                </div>
+              </div>
+              <Button
+                aria-label={`Completar ${checkinSchedule.custom_name}`}
+                className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+                endContent={
+                  <Icon icon="solar:alt-arrow-right-linear" width={18} />
+                }
+                onPress={() => setShowWeeklyFormModal(true)}
+              >
+                Empezar check-in
+              </Button>
+            </div>
           </div>
         )}
 
