@@ -19,8 +19,7 @@
 //   useDeleteExerciseLogs   — borrar registro existente
 //
 // Y compone los sub-componentes presentacionales:
-//   ExerciseLogHero / ExerciseLogIdentity
-//   TrainerVideoBanner
+//   ExerciseLogHero (imagen + "Ver vídeo" del entrenador) / ExerciseLogIdentity
 //   ExerciseTargetSection
 //   ExerciseHistorySection
 //   ExerciseLogForm
@@ -56,7 +55,6 @@ import { useExerciseLogDraft } from "./hooks/use-exercise-log-draft";
 import { useExerciseVideo } from "./hooks/use-exercise-video";
 import { useSetVideos } from "./hooks/use-set-videos";
 import { TrainerNoteCard } from "./trainer-note-card";
-import { TrainerVideoBanner } from "./trainer-video-banner";
 
 import {
   clearExerciseLogDraft,
@@ -665,8 +663,10 @@ export function ExerciseLogModal({
       <ModalContent>
         <div className="flex-1 overflow-y-auto">
           <ExerciseLogHero
+            exerciseName={exercise.name}
             imageUrl={exercise.imageUrl ?? null}
             isCardio={isCardio}
+            videoUrl={trainerVideoUrl}
             onClose={handleClose}
           />
 
@@ -676,13 +676,6 @@ export function ExerciseLogModal({
             onFocus={() => setTimeout(scrollToFocused, 200)}
           >
             <ExerciseLogIdentity name={exercise.name} />
-
-            {trainerVideoUrl ? (
-              <TrainerVideoBanner
-                exerciseName={exercise.name}
-                videoUrl={trainerVideoUrl}
-              />
-            ) : null}
 
             <ExerciseTargetSection exercise={exercise} isCardio={isCardio} />
 
