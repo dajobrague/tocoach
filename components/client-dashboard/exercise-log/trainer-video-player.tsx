@@ -20,8 +20,9 @@
 
 "use client";
 
+import { Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getVideoEmbed } from "@/lib/utils/video-url";
@@ -34,6 +35,8 @@ interface Props {
 }
 
 export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
+  const [isVideoReady, setIsVideoReady] = useState(false);
+
   // Cerrar con Esc + lock del scroll del body. Capture phase +
   // stopImmediatePropagation para que el handler global de HeroUI no
   // dispare un close del modal padre cuando el player está arriba.
@@ -101,15 +104,31 @@ export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
       {embed.type === "direct" ? (
         // PATH ORIGINAL — no tocar. Cualquier archivo subido (Supabase
         // u otro CDN) cae aquí. Mismo markup, mismas props.
-        // eslint-disable-next-line jsx-a11y/media-has-caption
-        <video
-          autoPlay
-          controls
-          loop
-          playsInline
-          className="max-h-full max-w-full object-contain"
-          src={embed.embedUrl}
-        />
+
+        <>
+          {/* Tamaño fijo (pantalla completa + object-contain) desde el primer
+              render: sin él, mientras cargan los metadatos el navegador pinta
+              el vídeo a 300×150 y luego salta al vertical. Spinner hasta el
+              primer fotograma. */}
+          {!isVideoReady ? (
+            <Spinner
+              aria-label="Cargando vídeo"
+              className="absolute"
+              color="white"
+            />
+          ) : null}
+          <video
+            autoPlay
+            controls
+            loop
+            playsInline
+            className={`h-full w-full object-contain transition-opacity duration-200 ${
+              isVideoReady ? "opacity-100" : "opacity-0"
+            }`}
+            src={embed.embedUrl}
+            onLoadedData={() => setIsVideoReady(true)}
+          />
+        </>
       ) : embed.type === "youtube" || embed.type === "vimeo" ? (
         <iframe
           allowFullScreen
