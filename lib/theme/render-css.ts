@@ -209,6 +209,9 @@ export function generateThemeCSS(
   --color-success: ${successHex};
   --color-warning: ${warningHex};
   --color-error: ${errorHex};
+  /* Anillo de foco global (globals.css) con la marca del entrenador; antes
+     se quedaba en el azul por defecto en todos los tenants. */
+  --color-focus: hsl(${hexToHeroUIHSL(theme.colors.brand)} / 0.5);
 
   /* Typography */
   --font-heading: ${headingFontCSS};
