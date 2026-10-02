@@ -326,6 +326,31 @@ export async function POST(
       );
     }
 
+    // `*` instead of naming `reviewed_at`: if the column isn't migrated yet the
+    // select still succeeds, so orphan answers are never dropped.
+    const { data: existingRow } = await supabase
+      .from("form_responses")
+      .select("*")
+      .eq("tenant_host", tenantHost)
+      .eq("client_id", clientId)
+      .eq("form_type", form_type)
+      .eq("response_date", resolvedDate)
+      .maybeSingle();
+
+    // Once the trainer reviewed a check-in it's locked for the client — the
+    // trainer already gave feedback on that version. Checked BEFORE answer
+    // validation so the client gets this reason, not a missing-field error.
+    if (!trainerSession && existingRow?.reviewed_at) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Tu entrenador ya revisó este check-in, así que no se puede editar.",
+        },
+        { status: 409 }
+      );
+    }
+
     if (
       !answers ||
       typeof answers !== "object" ||
@@ -498,34 +523,11 @@ export async function POST(
     // source of truth — ver comentario arriba).
 
     // Preserve historical answers for questions that were renamed or disabled
-    // after this day's response was first submitted. Without this merge, a
-    // client re-editing an old record would wipe keys no longer present in
-    // the current config. We only merge keys NOT in validQuestionIds — the
+    // after this day's response was first submitted (existingRow is loaded
+    // up front, next to the review lock). Without this merge, a client
+    // re-editing an old record would wipe keys no longer present in the
+    // current config. We only merge keys NOT in validQuestionIds — the
     // current-config keys are fully overwritten by the new submission.
-    // `*` instead of naming `reviewed_at`: if the column isn't migrated yet the
-    // select still succeeds, so orphan answers are never dropped.
-    const { data: existingRow } = await supabase
-      .from("form_responses")
-      .select("*")
-      .eq("tenant_host", tenantHost)
-      .eq("client_id", clientId)
-      .eq("form_type", form_type)
-      .eq("response_date", resolvedDate)
-      .maybeSingle();
-
-    // Once the trainer reviewed a check-in it's locked for the client — the
-    // trainer already gave feedback on that version.
-    if (!trainerSession && existingRow?.reviewed_at) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Tu entrenador ya revisó este check-in, así que no se puede editar.",
-        },
-        { status: 409 }
-      );
-    }
-
     const existingAnswers = existingRow
       ? normalizeFormAnswers(existingRow.answers)
       : {};

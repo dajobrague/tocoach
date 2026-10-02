@@ -27,9 +27,11 @@ export function StatTile({
       <IconTile icon={icon} size="sm" tone={tone} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-default-500">{label}</p>
-        <p className="mt-0.5 text-2xl font-bold leading-none tabular-nums text-foreground">
+        {/* div, no p: el valor puede ser un bloque (Skeleton de HeroUI) y
+            <div> dentro de <p> rompe la hidratación. */}
+        <div className="mt-0.5 text-2xl font-bold leading-none tabular-nums text-foreground">
           {value}
-        </p>
+        </div>
         {caption !== undefined && (
           <p className="mt-1 truncate text-xs text-default-400">{caption}</p>
         )}
