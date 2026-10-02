@@ -283,31 +283,27 @@ export function formatRestTime(seconds?: number): string {
 }
 
 /**
- * Parse rest time string to seconds
+ * Parse a rest prescription to seconds: "90", "90s", "90 seg", "2 min",
+ * "1min 30s", "1,5 min", "1:30", "2'", "45''". Free text ("El necesario") → null.
+ * Ranges ("2-3 min") take the last number.
  */
 export function parseRestTimeToSeconds(restString: string): number | null {
-  if (!restString || restString.trim() === "") return null;
+  const s = restString?.trim().toLowerCase() ?? "";
 
-  // Try to parse as plain number (assume seconds)
-  const plainNumber = parseInt(restString, 10);
+  if (!s) return null;
 
-  if (!isNaN(plainNumber)) {
-    return plainNumber;
-  }
+  // Bare number = seconds. (parseInt("1min 30s") used to return 1.)
+  if (/^\d+$/.test(s)) return Number(s) > 0 ? Number(s) : null;
 
-  // Try to parse "1min 30s" or "90s" format
-  const minMatch = restString.match(/(\d+)\s*min/i);
-  const secMatch = restString.match(/(\d+)\s*s/i);
+  const clock = s.match(/^(\d+):([0-5]\d)$/);
 
-  let totalSeconds = 0;
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]) || null;
 
-  if (minMatch && minMatch[1]) {
-    totalSeconds += parseInt(minMatch[1], 10) * 60;
-  }
+  const minMatch = s.match(/(\d+(?:[.,]\d+)?)\s*(?:min|m\b|'(?!'))/);
+  const secMatch = s.match(/(\d+)\s*(?:s|''|")/);
+  const minutes = minMatch?.[1] ? Number(minMatch[1].replace(",", ".")) : 0;
+  const seconds = secMatch?.[1] ? Number(secMatch[1]) : 0;
+  const total = Math.round(minutes * 60 + seconds);
 
-  if (secMatch && secMatch[1]) {
-    totalSeconds += parseInt(secMatch[1], 10);
-  }
-
-  return totalSeconds > 0 ? totalSeconds : null;
+  return total > 0 ? total : null;
 }
