@@ -320,9 +320,50 @@ export function DashboardContent() {
     return days;
   }, [responsesByDate, todayYmd]);
 
+  // Check-in pendiente: la acción más importante de la semana, así que se
+  // funde con la barra de marca de Inicio (misma superficie bg-primary +
+  // primary-foreground calculado por contraste). El CTA invierte la pareja
+  // y usa la marca cruda (no .text-primary, que con marcas pálidas aplica
+  // una tinta oscurecida pensada para el lienzo claro).
+  const checkinExtension = showWeeklyBanner ? (
+    <div className="border-t border-primary-foreground/15 pt-4">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-medium bg-primary-foreground/15">
+          <Icon
+            aria-hidden
+            className="text-primary-foreground"
+            icon="solar:clipboard-list-bold"
+            width={22}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-heading text-base leading-snug text-primary-foreground">
+            {`Tu ${checkinSchedule.custom_name} te espera`}
+          </p>
+          <p className="mt-0.5 text-sm text-primary-foreground/85">
+            Completa tu seguimiento para que tu entrenador vea cómo va la semana
+            · {formatScheduleDescription(checkinSchedule)}
+          </p>
+        </div>
+      </div>
+      <Button
+        aria-label={`Completar ${checkinSchedule.custom_name}`}
+        className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+        endContent={<Icon icon="solar:alt-arrow-right-linear" width={18} />}
+        onPress={() => {
+          setWeeklyFormDate(undefined);
+          setShowWeeklyFormModal(true);
+        }}
+      >
+        Empezar check-in
+      </Button>
+    </div>
+  ) : null;
+
   return (
     <>
       <ClientPage
+        heroExtension={checkinExtension}
         onOpenDailyForm={() => setSelectedDayForForm(getLocalTodayYmd())}
         onOpenWeeklyForm={() => {
           setWeeklyFormDate(undefined);
@@ -349,53 +390,6 @@ export function DashboardContent() {
                   Recarga la página o vuelve a intentarlo en un momento.
                 </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Check-in pendiente: la acción más importante de la semana, así
-              que lleva el tratamiento de marca completo (como la barra de
-              Inicio): superficie bg-primary + primary-foreground, ambos
-              calculados por contraste en el pipeline de tema → legible con
-              marcas oscuras y pálidas. El CTA invierte la pareja. */}
-        {showWeeklyBanner && (
-          <div className="mb-4 px-4">
-            <div className="rounded-large bg-primary p-4 text-primary-foreground shadow-medium">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-medium bg-primary-foreground/15">
-                  <Icon
-                    aria-hidden
-                    className="text-primary-foreground"
-                    icon="solar:clipboard-list-bold"
-                    width={24}
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-heading text-lg leading-snug text-primary-foreground">
-                    {`Tu ${checkinSchedule.custom_name} te espera`}
-                  </p>
-                  <p className="mt-0.5 text-sm text-primary-foreground/85">
-                    Completa tu seguimiento para que tu entrenador vea cómo va
-                    la semana.
-                  </p>
-                  <p className="mt-1.5 text-xs font-medium text-primary-foreground/75">
-                    {formatScheduleDescription(checkinSchedule)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                aria-label={`Completar ${checkinSchedule.custom_name}`}
-                className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
-                endContent={
-                  <Icon icon="solar:alt-arrow-right-linear" width={18} />
-                }
-                onPress={() => {
-                  setWeeklyFormDate(undefined);
-                  setShowWeeklyFormModal(true);
-                }}
-              >
-                Empezar check-in
-              </Button>
             </div>
           </div>
         )}

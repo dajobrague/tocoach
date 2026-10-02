@@ -2,7 +2,7 @@
 
 import { Badge, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { ChatPanel } from "./chat-panel";
 import { useClientData } from "./client-data-provider";
@@ -15,6 +15,12 @@ import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 interface ClientHeaderProps {
   /** Título de la pestaña: barra compacta. Sin título: banda de marca (Inicio). */
   title?: string | undefined;
+  /**
+   * Solo Inicio: contenido que prolonga la banda de marca hacia abajo (p. ej.
+   * el check-in pendiente). La fila del saludo sigue fija; la extensión hace
+   * scroll por debajo y, al ser del mismo color, se lee como una sola pieza.
+   */
+  heroExtension?: ReactNode;
   onOpenWeeklyForm?: () => void;
   onOpenDailyForm?: () => void;
 }
@@ -30,6 +36,7 @@ interface ClientHeaderProps {
  */
 export function ClientHeader({
   title,
+  heroExtension,
   onOpenWeeklyForm,
   onOpenDailyForm,
 }: ClientHeaderProps) {
@@ -165,20 +172,29 @@ export function ClientHeader({
   return (
     <>
       {isHero ? (
-        <header className="sticky top-0 z-30 mb-4 bg-primary pt-[env(safe-area-inset-top)] text-primary-foreground">
-          <div className="flex h-16 items-center gap-3 px-4">
-            {logo}
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate font-heading text-lg leading-tight text-primary-foreground">
-                Hola, {firstName}
-              </h1>
-              <p className="truncate text-xs text-primary-foreground/80">
-                {todayLabel()}
-              </p>
+        <>
+          <header
+            className={`sticky top-0 z-30 bg-primary pt-[env(safe-area-inset-top)] text-primary-foreground ${heroExtension ? "" : "mb-4"}`}
+          >
+            <div className="flex h-16 items-center gap-3 px-4">
+              {logo}
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate font-heading text-lg leading-tight text-primary-foreground">
+                  Hola, {firstName}
+                </h1>
+                <p className="truncate text-xs text-primary-foreground/80">
+                  {todayLabel()}
+                </p>
+              </div>
+              {actions}
             </div>
-            {actions}
-          </div>
-        </header>
+          </header>
+          {heroExtension ? (
+            <div className="mb-4 rounded-b-[1.75rem] bg-primary px-4 pb-5 pt-1 text-primary-foreground">
+              {heroExtension}
+            </div>
+          ) : null}
+        </>
       ) : (
         <header className="sticky top-0 z-30 border-b border-default-200 bg-background pt-[env(safe-area-inset-top)]">
           <div className="flex h-14 items-center gap-3 px-4">
