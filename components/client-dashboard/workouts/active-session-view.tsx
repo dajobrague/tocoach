@@ -12,7 +12,7 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { BorrowExerciseModal } from "./borrow-exercise-modal";
 import { collectExtraLoggedExercises } from "./extra-logged-exercises";
@@ -24,8 +24,7 @@ import {
   useSetStartTime,
 } from "./hooks/use-scheduled-session-state";
 import { getSessionTypeStyle } from "./session-type-style";
-import { summarizeSession } from "./session-summary";
-import { SessionSummaryCard } from "./session-summary-card";
+import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
@@ -87,8 +86,6 @@ interface ExerciseLogLike {
   training_date?: string;
   scheduled_date?: string;
   finalized_at?: string | null;
-  /** Series del log (las trae /api/clients/[id]/exercise-logs). */
-  sets?: Array<{ reps: number | null; weight_kg: number | null }> | null;
 }
 
 type ExerciseStatus = "not_started" | "in_progress" | "completed";
@@ -235,10 +232,11 @@ export function ActiveSessionView({
   // que comparta el exercise_id de la librería. Sólo cuando el log es legacy
   // (sin session_exercise_id) caemos al match por exercise_id, y además lo
   // acotamos a esta sesión para evitar bleed entre sesiones del mismo día.
-  const finalizedLogs = trackable
-    .map((e) => logsForDate.find((l) => logMatchesSlot(l, e, session.id)))
-    .filter((log): log is ExerciseLogLike => Boolean(log?.finalized_at));
-  const completed = finalizedLogs.length;
+  const completed = trackable.filter((e) => {
+    const log = logsForDate.find((l) => logMatchesSlot(l, e, session.id));
+
+    return Boolean(log?.finalized_at);
+  }).length;
   const total = trackable.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Conteo a mostrar en el banner. Preferimos `total` (alineado con la
@@ -249,18 +247,6 @@ export function ActiveSessionView({
   const displayExerciseCount = total > 0 ? total : session.exercise_count;
 
   const typeStyle = getSessionTypeStyle(session.session_type);
-
-  // Momento de cierre: solo cuando la sesión pasa a completada DURANTE esta
-  // visita (no al reabrir una ya completada). null = estado aún sin cargar.
-  const [celebrate, setCelebrate] = useState(false);
-  const prevCompleted = useRef<boolean | null>(null);
-
-  useEffect(() => {
-    if (!schedState.isSuccess) return;
-    if (prevCompleted.current === false && sessionCompleted) setCelebrate(true);
-    if (!sessionCompleted) setCelebrate(false);
-    prevCompleted.current = sessionCompleted;
-  }, [schedState.isSuccess, sessionCompleted]);
 
   return (
     <section className="w-full space-y-4">
@@ -366,32 +352,32 @@ export function ActiveSessionView({
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
           cubre también el completado automático (cobertura total). */}
       {sessionCompleted ? (
-        <SessionSummaryCard
-          celebrate={celebrate}
-          completed={completed}
-          scheduledDate={scheduledDate}
-          sessionId={session.id}
-          sessionName={session.name}
-          summary={summarizeSession(
-            finalizedLogs,
-            scheduledDate,
-            schedState.data?.scheduled_time
-          )}
-          total={total}
-          undo={
-            schedState.data?.completedManually === true ? (
-              <Button
-                className="text-primary-foreground/80"
-                isLoading={markCompleted.isPending}
-                size="sm"
-                variant="light"
-                onPress={() => markCompleted.mutate({ undo: true })}
-              >
-                Deshacer
-              </Button>
-            ) : null
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2 rounded-large bg-success/10 px-3 py-2.5">
+          <Icon
+            className="shrink-0 text-success-600"
+            icon="solar:check-circle-bold"
+            width={18}
+          />
+          <span className="flex-1 text-sm font-medium text-success-700">
+            Entrenamiento completado
+          </span>
+          <ShareSessionButton
+            scheduledDate={scheduledDate}
+            sessionId={session.id}
+            sessionName={session.name}
+          />
+          {schedState.data?.completedManually === true ? (
+            <Button
+              className="shrink-0"
+              isLoading={markCompleted.isPending}
+              size="sm"
+              variant="light"
+              onPress={() => markCompleted.mutate({ undo: true })}
+            >
+              Deshacer
+            </Button>
+          ) : null}
+        </div>
       ) : total > 0 ? (
         // También con todo hecho pero sin estado "completed" (p.ej. el
         // auto-completado por cobertura falló o va con retraso): sin el

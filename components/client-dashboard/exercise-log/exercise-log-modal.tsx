@@ -1,19 +1,16 @@
 // Orquestador del modal de registro de ejercicio.
 //
-// Layout (inputs primero: se usa en el gimnasio, a una mano, entre series):
+// Layout (rediseñado, estilo página de detalle):
 //
-//   [cabecera: miniatura · nombre · chip vídeo entrenador · X]
-//   ┌─ scroll body ─────────────────────────┐
-//   │ [objetivo en una línea: 3 × 12 · 90s]  │
-//   │ [nota del entrenador, compacta]        │
-//   │ [form: series con check + ⋯]           │
-//   │ [▸ Ver historial y progresión] (lazy)  │
-//   └────────────────────────────────────────┘
-//   [píldora de descanso flotante]
-//   [footer sticky: Borrar | Cerrar | Finalizado]
-//
-// Checks por serie + descanso (useRestTimer) son estado SOLO de cliente:
-// no viven en formData, así que no tocan draft, autosave ni payload.
+//   [hero ~33vh con imagen + close X]
+//   ┌─ scroll body ────────────────────┐
+//   │ [identidad: nombre + tipo + nota] │
+//   │ [banner video del entrenador]     │
+//   │ [datos del programa — chips]      │
+//   │ [PR + últimas sesiones]           │
+//   │ [form: tus números de hoy]        │
+//   └───────────────────────────────────┘
+//   [footer sticky: Borrar | Cancelar | Guardar]
 //
 // Estado mínimo (saving, keyboard) y delega a hooks especializados:
 //   useExerciseLogDraft     — formData + persistencia local
@@ -22,11 +19,11 @@
 //   useDeleteExerciseLogs   — borrar registro existente
 //
 // Y compone los sub-componentes presentacionales:
-//   ExerciseLogHeader (incluye TrainerVideoBanner)
-//   ExerciseTargetSection / TrainerNoteCard
+//   ExerciseLogHero / ExerciseLogIdentity
+//   TrainerVideoBanner
+//   ExerciseTargetSection
+//   ExerciseHistorySection
 //   ExerciseLogForm
-//   ExerciseHistorySection / ExerciseProgressionSection
-//   RestTimerPill
 
 /* eslint-disable no-console */
 "use client";
@@ -45,7 +42,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ExerciseHistorySection } from "./exercise-history-section";
 import { ExerciseLogForm } from "./exercise-log-form";
-import { ExerciseLogHeader } from "./exercise-log-header";
+import { ExerciseLogHero } from "./exercise-log-hero";
+import { ExerciseLogIdentity } from "./exercise-log-identity";
 import { ExerciseProgressionSection } from "./exercise-progression-section";
 import { ExerciseTargetSection } from "./exercise-target-section";
 import {
@@ -56,10 +54,9 @@ import {
 } from "./helpers";
 import { useExerciseLogDraft } from "./hooks/use-exercise-log-draft";
 import { useExerciseVideo } from "./hooks/use-exercise-video";
-import { useRestTimer } from "./hooks/use-rest-timer";
 import { useSetVideos } from "./hooks/use-set-videos";
-import { RestTimerPill } from "./rest-timer";
 import { TrainerNoteCard } from "./trainer-note-card";
+import { TrainerVideoBanner } from "./trainer-video-banner";
 
 import {
   clearExerciseLogDraft,
@@ -69,7 +66,6 @@ import { clientFetch } from "@/lib/auth/client-token-storage";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useDeleteExerciseLogs } from "@/lib/hooks/use-client-queries";
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
-import { parseRestTimeToSeconds } from "@/lib/utils/exercise-utils";
 
 interface ExtendedExerciseShape extends ExerciseShape {
   imageUrl?: string;
@@ -276,21 +272,6 @@ export function ExerciseLogModal({
     clientId,
     setFormData: handleUserFormChange,
   });
-
-  // Progreso visual por serie + descanso. Fuera de formData a propósito:
-  // marcar una serie no es input que se guarde (ver cabecera).
-  const [checkedSets, setCheckedSets] = useState<boolean[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const restTimer = useRestTimer();
-  // exercise.rest ya viene resuelto (metadata.rest_description gana sobre
-  // rest_seconds, ver resolveRestLabel). Sin descanso parseable → sin timer.
-  const restSeconds = exercise?.rest
-    ? parseRestTimeToSeconds(exercise.rest)
-    : null;
-  const { start: startRest } = restTimer;
-  const handleSetChecked = useCallback(() => {
-    if (restSeconds) startRest(restSeconds);
-  }, [restSeconds, startRest]);
 
   const scrollToFocused = useCallback(() => {
     requestAnimationFrame(() => {
@@ -514,10 +495,7 @@ export function ExerciseLogModal({
   }, []);
 
   // Reset al cerrar el modal: volvemos a estado limpio para la próxima
-  // apertura (otro ejercicio o reapertura del mismo). Cerrar también
-  // corta el descanso: el timer vive en el modal.
-  const { stop: stopRest } = restTimer;
-
+  // apertura (otro ejercicio o reapertura del mismo).
   useEffect(() => {
     if (!isOpen) {
       isDirtyRef.current = false;
@@ -525,11 +503,8 @@ export function ExerciseLogModal({
       setCelebration(null);
       setIsCelebrating(false);
       cancelPendingClose();
-      setCheckedSets([]);
-      setHistoryOpen(false);
-      stopRest();
     }
-  }, [isOpen, cancelPendingClose, stopRest]);
+  }, [isOpen, cancelPendingClose]);
 
   useEffect(() => cancelPendingClose, [cancelPendingClose]);
 
@@ -682,97 +657,50 @@ export function ExerciseLogModal({
       onClose={handleClose}
     >
       <ModalContent>
-        <ExerciseLogHeader
-          imageUrl={exercise.imageUrl ?? null}
-          name={exercise.name}
-          trainerVideoUrl={trainerVideoUrl}
-          onClose={handleClose}
-        />
+        <div className="flex-1 overflow-y-auto">
+          <ExerciseLogHero
+            imageUrl={exercise.imageUrl ?? null}
+            isCardio={isCardio}
+            onClose={handleClose}
+          />
 
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <div className="flex-1 overflow-y-auto">
-            <div
-              ref={bodyRef}
-              className={`px-4 py-4 flex flex-col gap-4 ${
-                keyboardOpen
-                  ? "pb-[40vh]"
-                  : restTimer.isRunning || restTimer.isFinished
-                    ? "pb-24"
-                    : ""
-              }`}
-              onFocus={() => setTimeout(scrollToFocused, 200)}
-            >
-              <ExerciseTargetSection exercise={exercise} isCardio={isCardio} />
+          <div
+            ref={bodyRef}
+            className={`px-4 py-5 flex flex-col gap-6 ${keyboardOpen ? "pb-[40vh]" : ""}`}
+            onFocus={() => setTimeout(scrollToFocused, 200)}
+          >
+            <ExerciseLogIdentity name={exercise.name} />
 
-              {trainerNote ? <TrainerNoteCard note={trainerNote} /> : null}
+            {trainerVideoUrl ? (
+              <TrainerVideoBanner videoUrl={trainerVideoUrl} />
+            ) : null}
 
-              <ExerciseLogForm
-                autoSaveState={autoSaveState}
-                cardioVideo={cardioVideo}
-                checkedSets={checkedSets}
-                formData={formData}
-                formTitle={formTitle}
-                isCardio={isCardio}
-                setVideos={setVideos}
-                onChange={handleUserFormChange}
-                onCheckedSetsChange={setCheckedSets}
-                onSetChecked={handleSetChecked}
-              />
+            <ExerciseTargetSection exercise={exercise} isCardio={isCardio} />
 
-              {exerciseId ? (
-                <div className="flex flex-col gap-3">
-                  <Button
-                    aria-controls="exercise-log-history"
-                    aria-expanded={historyOpen}
-                    className="w-full justify-between"
-                    endContent={
-                      <Icon
-                        className={`transition-transform motion-reduce:transition-none ${
-                          historyOpen ? "rotate-180" : ""
-                        }`}
-                        icon="solar:alt-arrow-down-linear"
-                        width={18}
-                      />
-                    }
-                    startContent={
-                      <Icon icon="solar:history-linear" width={18} />
-                    }
-                    variant="flat"
-                    onPress={() => setHistoryOpen((v) => !v)}
-                  >
-                    <span className="flex-1 text-left">
-                      Ver historial y progresión
-                    </span>
-                  </Button>
+            {trainerNote ? <TrainerNoteCard note={trainerNote} /> : null}
 
-                  {/* Lazy: las secciones solo consultan (enabled) cuando
-                      el desplegable está abierto. Si ninguna tiene datos
-                      quedan vacías y el peer-empty muestra el aviso. */}
-                  {historyOpen ? (
-                    <div id="exercise-log-history">
-                      <div className="peer flex flex-col gap-3">
-                        <ExerciseHistorySection
-                          exerciseId={exerciseId}
-                          exerciseName={exercise.name}
-                          isOpen={isOpen}
-                        />
-                        <ExerciseProgressionSection
-                          exerciseId={exerciseId}
-                          exerciseName={exercise.name}
-                          isOpen={isOpen}
-                        />
-                      </div>
-                      <p className="hidden text-sm text-default-500 peer-empty:block">
-                        Aún no hay historial de este ejercicio.
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+            <ExerciseHistorySection
+              exerciseId={exerciseId || null}
+              exerciseName={exercise.name}
+              isOpen={isOpen}
+            />
+
+            <ExerciseProgressionSection
+              exerciseId={exerciseId || null}
+              exerciseName={exercise.name}
+              isOpen={isOpen}
+            />
+
+            <ExerciseLogForm
+              autoSaveState={autoSaveState}
+              cardioVideo={cardioVideo}
+              formData={formData}
+              formTitle={formTitle}
+              isCardio={isCardio}
+              setVideos={setVideos}
+              onChange={handleUserFormChange}
+            />
           </div>
-
-          <RestTimerPill timer={restTimer} />
         </div>
 
         <ModalFooter className="flex-col gap-2 border-t border-default-200 bg-background">

@@ -1,5 +1,5 @@
-// Formulario de registro: variantes fuerza (sets/reps/peso/check +
-// menú con video por serie) y cardio (duración/distancia/intensidad/FC + un solo video
+// Formulario de registro: variantes fuerza (sets/reps/peso/video por
+// serie) y cardio (duración/distancia/intensidad/FC + un solo video
 // porque cardio no tiene series). El estado vive en el orquestador;
 // acá solo recibimos formData + setters.
 
@@ -42,12 +42,6 @@ interface Props {
   formTitle: string;
   // Estado del autosave para mostrar inline al lado del título.
   autoSaveState: "idle" | "saving" | "saved" | "error";
-  // Checks por serie (solo fuerza). Estado SOLO de cliente: no viaja en
-  // formData, así que ni el draft, ni el autosave, ni el payload lo ven.
-  checkedSets: boolean[];
-  onCheckedSetsChange: (next: boolean[]) => void;
-  // Se llama al MARCAR una serie (no al desmarcar): arranca el descanso.
-  onSetChecked: () => void;
 }
 
 export function ExerciseLogForm({
@@ -58,9 +52,6 @@ export function ExerciseLogForm({
   setVideos,
   formTitle,
   autoSaveState,
-  checkedSets,
-  onCheckedSetsChange,
-  onSetChecked,
 }: Props) {
   const updateSet = (index: number, field: keyof SetDraft, value: string) => {
     const newSets = [...formData.sets];
@@ -87,19 +78,6 @@ export function ExerciseLogForm({
     const newSets = formData.sets.filter((_, i) => i !== index);
 
     onChange({ ...formData, sets: newSets });
-    // Los checks van por índice: corremos los posteriores con la serie.
-    onCheckedSetsChange(checkedSets.filter((_, i) => i !== index));
-  };
-
-  const toggleCheck = (index: number) => {
-    const willCheck = !checkedSets[index];
-
-    onCheckedSetsChange(
-      formData.sets.map((_, i) =>
-        i === index ? willCheck : Boolean(checkedSets[i])
-      )
-    );
-    if (willCheck) onSetChecked();
   };
 
   return (
@@ -116,11 +94,9 @@ export function ExerciseLogForm({
       ) : (
         <StrengthFields
           addSet={addSet}
-          checkedSets={checkedSets}
           formData={formData}
           removeSet={removeSet}
           setVideos={setVideos}
-          toggleCheck={toggleCheck}
           updateSet={updateSet}
           onChange={onChange}
         />
@@ -234,13 +210,9 @@ function StrengthFields({
   addSet,
   removeSet,
   setVideos,
-  checkedSets,
-  toggleCheck,
   onChange,
 }: {
   formData: ExerciseLogFormDraft;
-  checkedSets: boolean[];
-  toggleCheck: (index: number) => void;
   updateSet: (index: number, field: keyof SetDraft, value: string) => void;
   addSet: () => void;
   removeSet: (index: number) => void;
@@ -260,8 +232,8 @@ function StrengthFields({
           <span className="w-10 shrink-0 text-center">Serie</span>
           <span className="flex-1">Peso (kg)</span>
           <span className="flex-1">Reps</span>
-          <span className="w-11 shrink-0 text-center">Hecha</span>
-          <span className="w-8 shrink-0" />
+          <span className="w-10 shrink-0 text-center">Video</span>
+          {hasMultipleSets ? <span className="w-10 shrink-0" /> : null}
         </div>
 
         {formData.sets.map((set, index) => (
@@ -269,13 +241,11 @@ function StrengthFields({
             key={index}
             canRemove={hasMultipleSets}
             index={index}
-            isChecked={Boolean(checkedSets[index])}
             isUploading={setVideos.uploadingIndex === index}
             set={set}
             onPickVideo={(file) => setVideos.onPickFile(index, file)}
             onRemove={() => removeSet(index)}
             onRemoveVideo={() => setVideos.onRemove(index)}
-            onToggleCheck={() => toggleCheck(index)}
             onUpdate={(field, value) => updateSet(index, field, value)}
           />
         ))}

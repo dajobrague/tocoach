@@ -1,8 +1,6 @@
-// Objetivo del programa en UNA línea compacta ("3 × 12 · 90s descanso ·
-// RIR 2"): sets/reps/descanso/RIR/tempo/sistema para fuerza,
-// duración/distancia/intensidad/zona FC para cardio. Solo presentación.
-
-import { Icon } from "@iconify/react";
+// "Datos del programa" — chips inline con los targets del entrenador
+// (sets/reps/sistema/tempo para fuerza, duración/distancia/intensidad
+// /zona FC para cardio). Solo presentación.
 
 interface TargetExercise {
   sets?: number;
@@ -23,51 +21,62 @@ interface Props {
 }
 
 export function ExerciseTargetSection({ exercise, isCardio }: Props) {
-  const parts = isCardio
-    ? buildCardioParts(exercise)
-    : buildStrengthParts(exercise);
+  const chips = isCardio
+    ? buildCardioChips(exercise)
+    : buildStrengthChips(exercise);
 
-  if (parts.length === 0) return null;
+  if (chips.length === 0) return null;
 
   return (
-    <p className="flex items-start gap-2 rounded-medium bg-default-100 px-3 py-2 text-sm text-foreground">
-      <Icon
-        aria-hidden
-        className="mt-0.5 shrink-0 text-default-500"
-        icon="solar:target-linear"
-        width={16}
-      />
-      <span>
-        <span className="sr-only">Objetivo: </span>
-        {parts.join(" · ")}
-      </span>
-    </p>
+    <div>
+      <p className="mb-2 text-sm font-semibold text-foreground">
+        Datos del programa
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map((c) => (
+          <span
+            key={c.label}
+            className="inline-flex items-center gap-1 rounded-md bg-default-100 px-2 py-1 text-xs"
+          >
+            <span className="text-default-500">{c.label}</span>
+            <span className="font-semibold text-foreground">{c.value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
-function buildStrengthParts(e: TargetExercise): string[] {
-  const parts: string[] = [];
-
-  if (e.sets && e.reps) parts.push(`${e.sets} × ${e.reps}`);
-  else if (e.sets) parts.push(`${e.sets} series`);
-  else if (e.reps) parts.push(`${e.reps} reps`);
-  if (e.rest) parts.push(`${e.rest} descanso`);
-  if (e.rir) parts.push(`RIR ${e.rir}`);
-  if (e.tempo) parts.push(`Tempo ${e.tempo}`);
-  if (e.trainingSystem) parts.push(e.trainingSystem);
-
-  return parts;
+interface Chip {
+  label: string;
+  value: string;
 }
 
-function buildCardioParts(e: TargetExercise): string[] {
-  const parts: string[] = [];
+function buildStrengthChips(e: TargetExercise): Chip[] {
+  const chips: Chip[] = [];
 
-  if (e.duration) parts.push(`${e.duration} min`);
-  if (e.distance) parts.push(`${e.distance} km`);
-  if (e.intensity) parts.push(`Intensidad ${e.intensity.toLowerCase()}`);
-  if (e.heartRateZone) {
-    parts.push(`${e.heartRateZone.min}-${e.heartRateZone.max} bpm`);
-  }
+  if (e.sets) chips.push({ label: "Series", value: String(e.sets) });
+  if (e.reps) chips.push({ label: "Reps", value: String(e.reps) });
+  if (e.rest) chips.push({ label: "Descanso", value: String(e.rest) });
+  if (e.rir) chips.push({ label: "RIR", value: String(e.rir) });
+  if (e.tempo) chips.push({ label: "Tempo", value: String(e.tempo) });
+  if (e.trainingSystem)
+    chips.push({ label: "Sistema", value: String(e.trainingSystem) });
 
-  return parts;
+  return chips;
+}
+
+function buildCardioChips(e: TargetExercise): Chip[] {
+  const chips: Chip[] = [];
+
+  if (e.duration) chips.push({ label: "Duración", value: `${e.duration} min` });
+  if (e.distance) chips.push({ label: "Distancia", value: `${e.distance} km` });
+  if (e.intensity) chips.push({ label: "Intensidad", value: e.intensity });
+  if (e.heartRateZone)
+    chips.push({
+      label: "Zona FC",
+      value: `${e.heartRateZone.min}-${e.heartRateZone.max} bpm`,
+    });
+
+  return chips;
 }
