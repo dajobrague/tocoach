@@ -284,7 +284,6 @@ export function ActiveSessionView({
             <p className="text-xs text-primary-foreground/80">
               {displayExerciseCount}{" "}
               {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
-              {total > 0 && completed > 0 ? ` · ${completed} hechos` : null}
             </p>
           </div>
           {sessionCompleted ? (
@@ -294,6 +293,71 @@ export function ActiveSessionView({
             </span>
           ) : null}
         </div>
+
+        {!sessionCompleted && total > 0 ? (
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs text-primary-foreground/85">
+              <span>
+                {completed} de {total} hechos
+              </span>
+              <span>{progress}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-primary-foreground/20">
+              <div
+                className="h-full bg-primary-foreground transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {/* Hora de inicio: con hora ya declarada se muestra editable (última
+            gana); sin hora, un botón explícito la registra — nunca se
+            registra sola al abrir la vista (llamada 29 Jul: el cliente puede
+            entrar solo a revisar qué le toca). */}
+        {!sessionCompleted &&
+        (schedState.data?.scheduled_time != null || timeDraft !== null) ? (
+          <div className="mt-4 flex items-center gap-2 rounded-medium bg-primary-foreground/10 px-3 py-2">
+            <Icon
+              aria-hidden
+              className="shrink-0 text-primary-foreground/80"
+              icon="solar:clock-circle-linear"
+              width={16}
+            />
+            <span className="text-xs text-primary-foreground/85">
+              Empezaste a las
+            </span>
+            <input
+              aria-label="Hora de inicio del entrenamiento"
+              className="ml-auto bg-transparent text-sm font-semibold text-primary-foreground outline-none"
+              disabled={setStartTime.isPending}
+              type="time"
+              value={timeDraft ?? schedState.data?.scheduled_time ?? ""}
+              onBlur={commitTimeDraft}
+              onChange={(event) => setTimeDraft(event.target.value)}
+            />
+          </div>
+        ) : !sessionCompleted &&
+          schedState.isSuccess &&
+          scheduledDate === getLocalTodayYmd() ? (
+          // isSuccess: sin esperar la respuesta del server, el botón se
+          // pintaría durante la carga aunque YA exista hora registrada, y un
+          // tap la sobrescribiría con la hora actual.
+          <Button
+            // Invertido sobre la marca: texto con la marca cruda (no
+            // .text-primary, que con marcas pálidas es una tinta oscurecida).
+            className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+            isLoading={setStartTime.isPending}
+            startContent={
+              setStartTime.isPending ? null : (
+                <Icon icon="solar:play-bold" width={18} />
+              )
+            }
+            onPress={() => setStartTime.mutate(nowHHMM())}
+          >
+            Empezar entrenamiento
+          </Button>
+        ) : null}
 
         {sessionCompleted ? (
           <div className="mt-4 border-t border-primary-foreground/15 pt-4">
@@ -325,93 +389,6 @@ export function ActiveSessionView({
           </div>
         ) : null}
       </div>
-
-      {total > 0 ? (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-default-600">
-            <span>
-              {completed} de {total} hechos
-            </span>
-            <span>{progress}%</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-default-200 overflow-hidden">
-            <div
-              className="h-full bg-success transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Hora de inicio: con hora ya declarada se muestra editable (última
-          gana); sin hora, un botón explícito la registra — nunca se registra
-          sola al abrir la vista (llamada 29 Jul: el cliente puede entrar solo
-          a revisar qué le toca). */}
-      {schedState.data?.scheduled_time != null || timeDraft !== null ? (
-        <div className="flex items-center gap-2 rounded-large bg-content1 px-3 py-2 shadow-small">
-          <Icon
-            className="shrink-0 text-default-400"
-            icon="solar:clock-circle-linear"
-            width={16}
-          />
-          <span className="text-xs text-default-600">Hora de inicio</span>
-          <input
-            aria-label="Hora de inicio del entrenamiento"
-            className="ml-auto bg-transparent text-xs font-semibold text-foreground outline-none"
-            disabled={setStartTime.isPending}
-            type="time"
-            value={timeDraft ?? schedState.data?.scheduled_time ?? ""}
-            onBlur={commitTimeDraft}
-            onChange={(event) => setTimeDraft(event.target.value)}
-          />
-        </div>
-      ) : schedState.isSuccess &&
-        !sessionCompleted &&
-        scheduledDate === getLocalTodayYmd() ? (
-        // isSuccess: sin esperar la respuesta del server, el botón se pintaría
-        // durante la carga aunque YA exista hora registrada, y un tap la
-        // sobrescribiría con la hora actual.
-        <button
-          className="flex w-full items-center gap-2 rounded-large bg-primary/10 px-3 py-2.5 text-left transition-colors hover:bg-primary/15 disabled:opacity-60"
-          disabled={setStartTime.isPending}
-          type="button"
-          onClick={() => setStartTime.mutate(nowHHMM())}
-        >
-          <Icon
-            className="shrink-0 text-primary"
-            icon="solar:play-circle-bold"
-            width={18}
-          />
-          <span className="flex-1 text-sm font-medium text-foreground">
-            Pulsa al iniciar tu entrenamiento
-          </span>
-          <span className="shrink-0 text-[11px] text-default-500">
-            {setStartTime.isPending ? "Guardando…" : "Registra tu hora"}
-          </span>
-        </button>
-      ) : null}
-
-      {/* Completar aunque queden ejercicios sin hacer (15 Jul). El banner
-          cubre también el completado automático (cobertura total). */}
-      {!sessionCompleted && total > 0 ? (
-        // También con todo hecho pero sin estado "completed" (p.ej. el
-        // auto-completado por cobertura falló o va con retraso): sin el
-        // botón el cliente quedaría sin forma de cerrar la sesión.
-        <Button
-          fullWidth
-          color="primary"
-          isLoading={markCompleted.isPending}
-          startContent={
-            markCompleted.isPending ? null : (
-              <Icon icon="solar:check-circle-linear" width={18} />
-            )
-          }
-          variant="flat"
-          onPress={() => markCompleted.mutate({})}
-        >
-          Marcar entrenamiento como completado
-        </Button>
-      ) : null}
 
       {resolvedLoading && !resolved ? (
         // Don't render the clickable list until the override fetch lands —
@@ -479,14 +456,36 @@ export function ActiveSessionView({
       {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
           sesiones ya completadas — el entrenamiento terminó. */}
       {!sessionCompleted ? (
-        <button
-          className="flex w-full items-center justify-center gap-2 rounded-large border border-dashed border-default-300 px-3 py-2.5 text-sm text-default-500 transition-colors hover:border-default-400 hover:text-default-700"
-          type="button"
-          onClick={() => setIsBorrowOpen(true)}
+        <Button
+          fullWidth
+          startContent={<Icon icon="solar:add-circle-linear" width={18} />}
+          variant="flat"
+          onPress={() => setIsBorrowOpen(true)}
         >
-          <Icon icon="solar:add-circle-linear" width={17} />
           Agregar ejercicio de otro día
-        </button>
+        </Button>
+      ) : null}
+
+      {/* Completar aunque queden ejercicios sin hacer (15 Jul). Va al final
+          y discreto: es la salida para cerrar la sesión, no el siguiente
+          paso. También cubre el caso con todo hecho pero sin estado
+          "completed" (el auto-completado por cobertura falló o va con
+          retraso): sin el botón el cliente no podría cerrar la sesión. */}
+      {!sessionCompleted && total > 0 ? (
+        <Button
+          fullWidth
+          className="text-default-600"
+          isLoading={markCompleted.isPending}
+          startContent={
+            markCompleted.isPending ? null : (
+              <Icon icon="solar:check-circle-linear" width={18} />
+            )
+          }
+          variant="light"
+          onPress={() => markCompleted.mutate({})}
+        >
+          Marcar entrenamiento como completado
+        </Button>
       ) : null}
 
       <BorrowExerciseModal
@@ -527,9 +526,9 @@ const STATUS_STYLE: Record<
 > = {
   not_started: {
     container: "hover:bg-default-50",
-    icon: "solar:check-circle-linear",
+    icon: "mdi:circle-outline",
     iconClass: "text-default-300",
-    label: "Falta",
+    label: "Pendiente",
     labelClass: "text-default-400",
   },
   in_progress: {
@@ -675,7 +674,8 @@ function formatExerciseStats(
     }
     const rest = exercise.rest?.toString().trim();
 
-    if (rest) parts.push(`${rest} descanso`);
+    // Descanso siempre con unidad: el entrenador a veces escribe solo "90".
+    if (rest) parts.push(`${/^\d+$/.test(rest) ? `${rest}s` : rest} descanso`);
 
     const rir = exercise.rir?.toString().trim();
 
