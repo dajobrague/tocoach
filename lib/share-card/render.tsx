@@ -208,7 +208,8 @@ function headlineFor(
 }
 
 /**
- * Resto de datos en una línea, en el orden de SHARE_CARD_STATS (máx. 4).
+ * Resto de datos, en el orden de SHARE_CARD_STATS (si no caben en una
+ * línea, pasan a la siguiente: cada casilla marcada se ve).
  * Con la lista de ejercicios, los minutos de cardio y el nº de ejercicios ya
  * están en ella: del cardio solo se añade la distancia.
  */
@@ -238,7 +239,7 @@ function statLine(
     if (stat === "reps" && stats.reps > 0) parts.push(`${stats.reps} reps`);
   }
 
-  return parts.slice(0, 4).join("  ·  ");
+  return parts.join("  ·  ");
 }
 
 export async function renderShareCard(
@@ -257,13 +258,18 @@ export async function renderShareCard(
   const innerPad = palette.panelBg !== null ? 56 : 0;
   const contentWidth = WIDTH - 2 * outerPad - 2 * innerPad;
 
-  const withList = settings.exerciseList && stats.signature.length > 0;
+  // Sin "Cardio" marcado, el cardio no sale en ningún sitio (ni barras ni
+  // lista), para que la casilla siempre tenga efecto.
+  const signatureGroups = settings.stats.includes("cardio")
+    ? stats.signature
+    : stats.signature.filter((group) => group.kind !== "cardio");
+  const withList = settings.exerciseList && signatureGroups.length > 0;
   const listRows = !withList
     ? []
-    : stats.signature.length <= MAX_LIST_ROWS
-      ? stats.signature
-      : stats.signature.slice(0, MAX_LIST_ROWS - 1);
-  const hiddenRows = withList ? stats.signature.length - listRows.length : 0;
+    : signatureGroups.length <= MAX_LIST_ROWS
+      ? signatureGroups
+      : signatureGroups.slice(0, MAX_LIST_ROWS - 1);
+  const hiddenRows = withList ? signatureGroups.length - listRows.length : 0;
   const recordInList = listRows.some(
     (group) => group.kind === "strength" && group.sets.some((set) => set.record)
   );
@@ -271,7 +277,7 @@ export async function renderShareCard(
     ? SIGNATURE_HEIGHT_WITH_LIST
     : SIGNATURE_HEIGHT;
 
-  const bars = layoutSignature(stats.signature, contentWidth).map((bar) => ({
+  const bars = layoutSignature(signatureGroups, contentWidth).map((bar) => ({
     ...bar,
     // Nunca más baja que ancha: la cápsula se vería como un punto.
     px: Math.max(bar.width, bar.height * signatureHeight),
@@ -642,6 +648,7 @@ export async function renderShareCard(
               display: "flex",
               marginTop: 12,
               fontSize: 30,
+              lineHeight: 1.35,
               fontWeight: 400,
               color: palette.muted,
             }}

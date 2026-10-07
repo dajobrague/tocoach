@@ -7,7 +7,6 @@
 
 import type {
   ShareCardSettings,
-  ShareCardStat,
   ShareCardStyle,
 } from "@/lib/share-card/settings";
 
@@ -62,15 +61,6 @@ const STYLE_OPTIONS: Array<{
   },
 ];
 
-/** Máximo de cifras grandes en la tarjeta (el resto se omite). */
-const TILE_STATS: ShareCardStat[] = [
-  "volume",
-  "sets",
-  "cardio",
-  "exercises",
-  "reps",
-];
-
 function previewUrl(settings: ShareCardSettings): string {
   const params = new URLSearchParams({
     style: settings.style,
@@ -123,10 +113,6 @@ export default function ShareCardTab() {
 
   const isDirty =
     saved !== null && JSON.stringify(saved) !== JSON.stringify(draft);
-  const tileCount = draft.stats.filter((stat) =>
-    TILE_STATS.includes(stat)
-  ).length;
-
   const save = async () => {
     setIsSaving(true);
     setMessage(null);
@@ -329,18 +315,24 @@ export default function ShareCardTab() {
               }
             >
               {SHARE_CARD_STATS.map((stat) => (
-                <Checkbox key={stat} value={stat}>
+                <Checkbox
+                  key={stat}
+                  // La lista ya enseña los ejercicios: el número no se pinta.
+                  isDisabled={stat === "exercises" && draft.exerciseList}
+                  value={stat}
+                >
                   {SHARE_CARD_STAT_LABELS[stat]}
+                  {stat === "exercises" && draft.exerciseList ? (
+                    <span className="block text-xs text-gray-400">
+                      Ya aparecen en la lista
+                    </span>
+                  ) : null}
                 </Checkbox>
               ))}
             </CheckboxGroup>
             <p className="text-xs text-gray-500">
-              Además de la lista caben hasta 4 datos en una línea (volumen,
-              series, cardio, ejercicios, repeticiones), en ese orden, y solo se
-              muestran si el cliente tiene ese dato.
-              {tileCount > 4
-                ? ` Has marcado ${tileCount}: las últimas no entrarán.`
-                : ""}
+              Cada dato solo aparece si el cliente lo tiene en esa sesión. Sin
+              «Cardio», el cardio no sale ni en las barras ni en la lista.
             </p>
           </section>
         </div>
