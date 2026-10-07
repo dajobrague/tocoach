@@ -25,7 +25,11 @@ describe("share card settings", () => {
           stats: ["reps", "x", "volume"],
         },
       })
-    ).toEqual({ enabled: false, style: "panel", stats: ["volume", "reps"] });
+    ).toEqual({
+      ...DEFAULT_SHARE_CARD_SETTINGS,
+      enabled: false,
+      stats: ["volume", "reps"],
+    });
   });
 
   it("el PUT rechaza valores desconocidos", () => {
@@ -35,7 +39,11 @@ describe("share card settings", () => {
         style: "white",
         stats: ["sets"],
       })
-    ).toEqual({ enabled: true, style: "white", stats: ["sets"] });
+    ).toEqual({
+      ...DEFAULT_SHARE_CARD_SETTINGS,
+      style: "white",
+      stats: ["sets"],
+    });
     expect(
       validateShareCardSettings({
         enabled: true,
@@ -44,5 +52,33 @@ describe("share card settings", () => {
       })
     ).toBeNull();
     expect(validateShareCardSettings({ style: "panel", stats: [] })).toBeNull();
+  });
+
+  it("nombre e Instagram se sanean; un usuario inválido no se guarda", () => {
+    const base = { enabled: true, style: "panel", stats: [] };
+
+    expect(
+      validateShareCardSettings({
+        ...base,
+        displayName: "  Coach   Joseca ",
+        instagram: "@coach.joseca",
+        exerciseList: false,
+        showTopcoach: false,
+      })
+    ).toMatchObject({
+      displayName: "Coach Joseca",
+      instagram: "coach.joseca",
+      exerciseList: false,
+      showTopcoach: false,
+    });
+    expect(
+      validateShareCardSettings({ ...base, instagram: "no vale" })
+    ).toBeNull();
+    // Ajustes guardados antes de existir estos campos: activados.
+    expect(shareCardSettingsFromFeatures({ share_card: base })).toMatchObject({
+      exerciseList: true,
+      showTopcoach: true,
+      instagram: "",
+    });
   });
 });

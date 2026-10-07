@@ -38,13 +38,46 @@ export interface ShareCardSettings {
   enabled: boolean;
   style: ShareCardStyle;
   stats: ShareCardStat[];
+  /** Nombre en la tarjeta; "" = el nombre de la marca (JC, 3 oct). */
+  displayName: string;
+  /** Usuario de Instagram sin @; "" = no se muestra. */
+  instagram: string;
+  /** Lista de ejercicios bajo la firma ("Press banca · 4 series"). */
+  exerciseList: boolean;
+  /** "topcoach.io" al pie. */
+  showTopcoach: boolean;
 }
 
+// JC (3 oct): fuera volumen, reps, series y "Sesiones con…"; la lista de
+// ejercicios cuenta la sesión. Lista y topcoach.io son campos propios (no
+// stats) para que los ajustes ya guardados también los tengan activados.
 export const DEFAULT_SHARE_CARD_SETTINGS: ShareCardSettings = {
   enabled: true,
   style: "panel",
-  stats: [...SHARE_CARD_STATS],
+  stats: ["cardio", "records"],
+  displayName: "",
+  instagram: "",
+  exerciseList: true,
+  showTopcoach: true,
 };
+
+const DISPLAY_NAME_MAX = 40;
+const INSTAGRAM_RE = /^[A-Za-z0-9._]{1,30}$/;
+
+const cleanDisplayName = (value: unknown): string =>
+  typeof value === "string"
+    ? value.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX)
+    : "";
+
+/** "@usuario" o "usuario" → "usuario"; null si no es un usuario válido. */
+export function cleanInstagram(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const handle = value.trim().replace(/^@/, "");
+
+  if (handle === "") return "";
+
+  return INSTAGRAM_RE.test(handle) ? handle : null;
+}
 
 const isStyle = (value: unknown): value is ShareCardStyle =>
   (SHARE_CARD_STYLES as readonly unknown[]).includes(value);
@@ -69,6 +102,16 @@ export function parseShareCardSettings(value: unknown): ShareCardSettings {
         : DEFAULT_SHARE_CARD_SETTINGS.enabled,
     style: isStyle(raw.style) ? raw.style : DEFAULT_SHARE_CARD_SETTINGS.style,
     stats,
+    displayName: cleanDisplayName(raw.displayName),
+    instagram: cleanInstagram(raw.instagram) ?? "",
+    exerciseList:
+      typeof raw.exerciseList === "boolean"
+        ? raw.exerciseList
+        : DEFAULT_SHARE_CARD_SETTINGS.exerciseList,
+    showTopcoach:
+      typeof raw.showTopcoach === "boolean"
+        ? raw.showTopcoach
+        : DEFAULT_SHARE_CARD_SETTINGS.showTopcoach,
   };
 }
 
@@ -93,6 +136,15 @@ export function validateShareCardSettings(
 
   if (typeof raw.enabled !== "boolean" || !isStyle(raw.style)) return null;
   if (!Array.isArray(raw.stats) || !raw.stats.every(isStat)) return null;
+  if (raw.displayName !== undefined && typeof raw.displayName !== "string") {
+    return null;
+  }
+  if (raw.instagram !== undefined && cleanInstagram(raw.instagram) === null) {
+    return null;
+  }
+  for (const key of ["exerciseList", "showTopcoach"] as const) {
+    if (raw[key] !== undefined && typeof raw[key] !== "boolean") return null;
+  }
 
   return parseShareCardSettings(raw);
 }

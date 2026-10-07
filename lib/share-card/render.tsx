@@ -13,6 +13,9 @@ import "server-only";
 //   panel — un panel oscuro translúcido detrás de todo. Default.
 //   white — sin panel, texto blanco con sombra (fotos oscuras).
 //   ink   — sin panel, texto oscuro con halo claro (fotos claras).
+//
+// JC (3 oct): nombre e Instagram del entrenador configurables, lista de
+// ejercicios con sus series bajo la firma, y "topcoach.io" opcional.
 
 import type { ShareCardBranding } from "./branding";
 import type { ShareCardSettings } from "./settings";
@@ -38,6 +41,10 @@ export interface ShareCardContent {
 const WIDTH = 1080;
 const HEIGHT = 1350;
 const SIGNATURE_HEIGHT = 520;
+/** Más baja con la lista de ejercicios debajo, para que quepa todo. */
+const SIGNATURE_HEIGHT_WITH_LIST = 340;
+/** Filas de la lista; si hay más ejercicios, la última dice "+N más". */
+const MAX_LIST_ROWS = 6;
 /** Hueco sobre las barras para la etiqueta del récord. */
 const LABEL_SPACE = 56;
 
@@ -200,11 +207,16 @@ function headlineFor(
   return null;
 }
 
-/** Resto de datos en una línea, en el orden de SHARE_CARD_STATS (máx. 4). */
+/**
+ * Resto de datos en una línea, en el orden de SHARE_CARD_STATS (máx. 4).
+ * Con la lista de ejercicios, los minutos de cardio y el nº de ejercicios ya
+ * están en ella: del cardio solo se añade la distancia.
+ */
 function statLine(
   stats: ShareCardStats,
   chosen: ShareCardSettings["stats"],
-  used: Headline["used"]
+  used: Headline["used"],
+  withList: boolean
 ): string {
   const parts: string[] = [];
 
@@ -213,10 +225,14 @@ function statLine(
       parts.push(`${numberEs(stats.volumeKg)} kg`);
     }
     if (stat === "sets" && stats.sets > 0) parts.push(`${stats.sets} series`);
-    if (stat === "cardio" && used !== "cardio" && stats.cardioSeconds > 0) {
-      parts.push(`${Math.round(stats.cardioSeconds / 60)} min de cardio`);
+    if (stat === "cardio" && used !== "cardio") {
+      if (withList && stats.cardioMeters > 0) {
+        parts.push(`${numberEs(stats.cardioMeters / 1000, 1)} km`);
+      } else if (!withList && stats.cardioSeconds > 0) {
+        parts.push(`${Math.round(stats.cardioSeconds / 60)} min de cardio`);
+      }
     }
-    if (stat === "exercises" && stats.exercises > 0) {
+    if (stat === "exercises" && !withList && stats.exercises > 0) {
       parts.push(`${stats.exercises} ejercicios`);
     }
     if (stat === "reps" && stats.reps > 0) parts.push(`${stats.reps} reps`);
@@ -241,13 +257,39 @@ export async function renderShareCard(
   const innerPad = palette.panelBg !== null ? 56 : 0;
   const contentWidth = WIDTH - 2 * outerPad - 2 * innerPad;
 
+  const withList = settings.exerciseList && stats.signature.length > 0;
+  const listRows = !withList
+    ? []
+    : stats.signature.length <= MAX_LIST_ROWS
+      ? stats.signature
+      : stats.signature.slice(0, MAX_LIST_ROWS - 1);
+  const hiddenRows = withList ? stats.signature.length - listRows.length : 0;
+  const recordInList = listRows.some(
+    (group) => group.kind === "strength" && group.sets.some((set) => set.record)
+  );
+  const signatureHeight = withList
+    ? SIGNATURE_HEIGHT_WITH_LIST
+    : SIGNATURE_HEIGHT;
+
   const bars = layoutSignature(stats.signature, contentWidth).map((bar) => ({
     ...bar,
     // Nunca más baja que ancha: la cápsula se vería como un punto.
-    px: Math.max(bar.width, bar.height * SIGNATURE_HEIGHT),
+    px: Math.max(bar.width, bar.height * signatureHeight),
   }));
-  const headline = headlineFor(stats, settings.stats);
-  const line = statLine(stats, settings.stats, headline?.used ?? null);
+  // Con lista, el récord va en su fila; la línea destacada solo lo repite si
+  // su ejercicio quedó fuera de la lista.
+  const headline = withList
+    ? record !== undefined && !recordInList
+      ? headlineFor(stats, ["records"])
+      : null
+    : headlineFor(stats, settings.stats);
+  const line = statLine(
+    stats,
+    settings.stats,
+    headline?.used ?? null,
+    withList
+  );
+  const trainerName = settings.displayName || branding.trainerName;
   const sessionLabel =
     settings.stats.includes("sessionCount") &&
     content.sessionNumber !== null &&
@@ -256,9 +298,12 @@ export async function renderShareCard(
       : shortDate(content.date);
 
   const name = content.sessionName;
-  const nameSize = name.length <= 16 ? 96 : name.length <= 24 ? 80 : 64;
+  const nameSize = Math.min(
+    withList ? 80 : 96,
+    name.length <= 16 ? 96 : name.length <= 24 ? 80 : 64
+  );
   const monoText = { fontFamily: "Geist Mono", fontWeight: 500 } as const;
-  const baseline = LABEL_SPACE + SIGNATURE_HEIGHT;
+  const baseline = LABEL_SPACE + signatureHeight;
 
   const mark = branding.logoSrc ? (
     // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
@@ -285,7 +330,7 @@ export async function renderShareCard(
         textShadow: "none",
       }}
     >
-      {initials(branding.trainerName)}
+      {initials(trainerName)}
     </div>
   );
 
@@ -343,7 +388,7 @@ export async function renderShareCard(
               height: bar.px,
               borderRadius: bar.width / 2,
               backgroundColor:
-                bar === recordBar
+                bar.record && record !== undefined
                   ? palette.accent
                   : bar.cardio
                     ? palette.cardioBar
@@ -429,11 +474,24 @@ export async function renderShareCard(
         >
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             {mark}
-            <span
-              style={{ fontSize: 32, fontWeight: 600, letterSpacing: -0.5 }}
-            >
-              {branding.trainerName}
-            </span>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span
+                style={{ fontSize: 32, fontWeight: 600, letterSpacing: -0.5 }}
+              >
+                {trainerName}
+              </span>
+              {settings.instagram ? (
+                <span
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 400,
+                    color: palette.muted,
+                  }}
+                >
+                  {`@${settings.instagram}`}
+                </span>
+              ) : null}
+            </div>
           </div>
           <span
             style={{
@@ -452,7 +510,7 @@ export async function renderShareCard(
         <div
           style={{
             display: "flex",
-            marginTop: 64,
+            marginTop: withList ? 52 : 64,
             fontSize: nameSize,
             fontWeight: 600,
             lineHeight: 1.05,
@@ -488,6 +546,96 @@ export async function renderShareCard(
           </div>
         ) : null}
 
+        {listRows.length > 0 ? (
+          <div
+            style={{ display: "flex", flexDirection: "column", marginTop: 20 }}
+          >
+            {listRows.map((group, i) => {
+              const recordSet =
+                record !== undefined && group.kind === "strength"
+                  ? group.sets.find((set) => set.record)
+                  : undefined;
+              const amount =
+                group.kind === "strength"
+                  ? `${group.sets.length} ${group.sets.length === 1 ? "serie" : "series"}`
+                  : `${group.minutes} min`;
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    height: 48,
+                    fontSize: 30,
+                  }}
+                >
+                  <span
+                    style={{
+                      flexShrink: 1,
+                      overflow: "hidden",
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {group.name}
+                  </span>
+                  {recordSet !== undefined ? (
+                    <div
+                      style={{
+                        ...monoText,
+                        display: "flex",
+                        alignItems: "center",
+                        flexShrink: 0,
+                        gap: 10,
+                        marginLeft: 18,
+                        fontSize: 24,
+                        color: palette.accent,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          width: 14,
+                          height: 14,
+                          borderRadius: 7,
+                          backgroundColor: palette.accent,
+                        }}
+                      />
+                      {`${numberEs(recordSet.weightKg, 1)} kg × ${recordSet.reps}`}
+                    </div>
+                  ) : null}
+                  <span
+                    style={{
+                      ...monoText,
+                      flexShrink: 0,
+                      marginLeft: "auto",
+                      paddingLeft: 24,
+                      fontSize: 24,
+                      color: palette.muted,
+                    }}
+                  >
+                    {amount}
+                  </span>
+                </div>
+              );
+            })}
+            {hiddenRows > 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  height: 48,
+                  fontSize: 30,
+                  color: palette.muted,
+                }}
+              >
+                {`+${hiddenRows} ejercicios más`}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {line ? (
           <div
             style={{
@@ -502,18 +650,20 @@ export async function renderShareCard(
           </div>
         ) : null}
 
-        <div
-          style={{
-            ...monoText,
-            display: "flex",
-            justifyContent: "flex-end",
-            marginTop: 48,
-            fontSize: 20,
-            color: palette.muted,
-          }}
-        >
-          topcoach.io
-        </div>
+        {settings.showTopcoach ? (
+          <div
+            style={{
+              ...monoText,
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 40,
+              fontSize: 20,
+              color: palette.muted,
+            }}
+          >
+            topcoach.io
+          </div>
+        ) : null}
       </div>
     </div>
   );

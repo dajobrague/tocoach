@@ -36,8 +36,8 @@ export interface ShareCardSignatureSet {
 
 /** Un grupo por ejercicio, en orden de aparición. */
 export type ShareCardSignatureGroup =
-  | { kind: "strength"; sets: ShareCardSignatureSet[] }
-  | { kind: "cardio"; minutes: number };
+  | { kind: "strength"; name: string; sets: ShareCardSignatureSet[] }
+  | { kind: "cardio"; name: string; minutes: number };
 
 export interface ShareCardStats {
   exercises: number;
@@ -86,11 +86,16 @@ export function computeShareCardStats(
       signatureSets.push({ reps, weightKg: weight, record: false });
     }
     if (signatureSets.length > 0) {
-      stats.signature.push({ kind: "strength", sets: signatureSets });
+      stats.signature.push({
+        kind: "strength",
+        name: log.exerciseName,
+        sets: signatureSets,
+      });
     }
     if (positive(log.durationSeconds) > 0) {
       stats.signature.push({
         kind: "cardio",
+        name: log.exerciseName,
         minutes: Math.round(positive(log.durationSeconds) / 60),
       });
     }

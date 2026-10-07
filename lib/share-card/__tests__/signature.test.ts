@@ -12,9 +12,9 @@ describe("layoutSignature", () => {
   it("una barra por serie, dentro del ancho y la más cargada a tope", () => {
     const bars = layoutSignature(
       [
-        { kind: "strength", sets: [set(80, 8), set(105, 5, true)] },
-        { kind: "strength", sets: [set(200, 10), set(200, 8)] },
-        { kind: "cardio", minutes: 25 },
+        { kind: "strength", name: "x", sets: [set(80, 8), set(105, 5, true)] },
+        { kind: "strength", name: "x", sets: [set(200, 10), set(200, 8)] },
+        { kind: "cardio", name: "x", minutes: 25 },
       ],
       936
     );
@@ -30,7 +30,11 @@ describe("layoutSignature", () => {
   it("muchas series se estrechan sin salirse del ancho", () => {
     const sets = Array.from({ length: 6 }, () => set(50, 10));
     const bars = layoutSignature(
-      Array.from({ length: 10 }, () => ({ kind: "strength" as const, sets })),
+      Array.from({ length: 10 }, () => ({
+        kind: "strength" as const,
+        name: "x",
+        sets,
+      })),
       888
     );
     const last = bars[bars.length - 1]!;
@@ -40,7 +44,7 @@ describe("layoutSignature", () => {
 
   it("ejercicio sin peso usa las reps y nada queda en cero", () => {
     const bars = layoutSignature(
-      [{ kind: "strength", sets: [set(0, 12), set(0, 6)] }],
+      [{ kind: "strength", name: "x", sets: [set(0, 12), set(0, 6)] }],
       936
     );
 

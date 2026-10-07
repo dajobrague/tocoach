@@ -93,12 +93,13 @@ describe("computeShareCardStats", () => {
     expect(stats.signature).toEqual([
       {
         kind: "strength",
+        name: "Press banca",
         sets: [
           { reps: 5, weightKg: 80, record: false },
           { reps: 5, weightKg: 90, record: true },
         ],
       },
-      { kind: "cardio", minutes: 25 },
+      { kind: "cardio", name: "Bici", minutes: 25 },
     ]);
   });
 });

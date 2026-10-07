@@ -1,4 +1,4 @@
-// GET /api/trainer/share-card/preview?style=…&stats=a,b,c
+// GET /api/trainer/share-card/preview?style=…&stats=a,b,c&name=…&ig=…&list=1&tc=1
 // Vista previa de la tarjeta de sesión con la marca real del entrenador y
 // una sesión de EJEMPLO, para que vea el resultado antes de guardar. Usa el
 // mismo dibujo que la tarjeta del cliente (lib/share-card/render).
@@ -14,8 +14,13 @@ import { renderShareCard } from "@/lib/share-card/render";
 import { parseShareCardSettings } from "@/lib/share-card/settings";
 
 // Una barra por serie de la sesión de ejemplo (22 series + 10 min de cardio).
-const sample = (sets: Array<[number, number]>, recordAt = -1) => ({
+const sample = (
+  name: string,
+  sets: Array<[number, number]>,
+  recordAt = -1
+) => ({
   kind: "strength" as const,
+  name,
   sets: sets.map(([weightKg, reps], i) => ({
     weightKg,
     reps,
@@ -24,6 +29,7 @@ const sample = (sets: Array<[number, number]>, recordAt = -1) => ({
 });
 const SAMPLE_SIGNATURE: ShareCardSignatureGroup[] = [
   sample(
+    "Press banca",
     [
       [70, 8],
       [80, 6],
@@ -32,35 +38,35 @@ const SAMPLE_SIGNATURE: ShareCardSignatureGroup[] = [
     ],
     3
   ),
-  sample([
+  sample("Press inclinado mancuerna", [
     [30, 10],
     [32, 10],
     [32, 8],
     [32, 8],
   ]),
-  sample([
+  sample("Fondos lastrados", [
     [40, 8],
     [40, 8],
     [42.5, 6],
   ]),
-  sample([
+  sample("Elevaciones laterales", [
     [20, 12],
     [22, 10],
     [22, 10],
     [22, 9],
   ]),
-  sample([
+  sample("Extensión de tríceps", [
     [12, 15],
     [12, 15],
     [12, 12],
   ]),
-  sample([
+  sample("Press militar", [
     [25, 12],
     [27.5, 10],
     [27.5, 10],
     [30, 8],
   ]),
-  { kind: "cardio", minutes: 10 },
+  { kind: "cardio", name: "Cinta inclinada", minutes: 10 },
 ];
 
 export const runtime = "nodejs";
@@ -79,6 +85,10 @@ export async function GET(request: NextRequest) {
     enabled: true,
     style: params.get("style"),
     stats: (params.get("stats") ?? "").split(",").filter(Boolean),
+    displayName: params.get("name") ?? "",
+    instagram: params.get("ig") ?? "",
+    exerciseList: params.get("list") !== "0",
+    showTopcoach: params.get("tc") !== "0",
   });
 
   const supabase = createSupabaseClient();

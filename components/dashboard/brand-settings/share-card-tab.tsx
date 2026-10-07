@@ -16,6 +16,7 @@ import {
   Button,
   Checkbox,
   CheckboxGroup,
+  Input,
   Skeleton,
   Spinner,
   Switch,
@@ -74,6 +75,10 @@ function previewUrl(settings: ShareCardSettings): string {
   const params = new URLSearchParams({
     style: settings.style,
     stats: settings.stats.join(","),
+    name: settings.displayName,
+    ig: settings.instagram,
+    list: settings.exerciseList ? "1" : "0",
+    tc: settings.showTopcoach ? "1" : "0",
   });
 
   return `/api/trainer/share-card/preview?${params.toString()}`;
@@ -245,8 +250,70 @@ export default function ShareCardTab() {
 
           <section className="space-y-3">
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+              Tu marca en la tarjeta
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                description="Vacío = el nombre de tu marca."
+                id="share-card-display-name"
+                label="Nombre"
+                labelPlacement="outside"
+                maxLength={40}
+                placeholder="Como quieres que aparezca"
+                value={draft.displayName}
+                onValueChange={(displayName) =>
+                  setDraft((d) => ({ ...d, displayName }))
+                }
+              />
+              <Input
+                description="Se muestra debajo de tu nombre."
+                id="share-card-instagram"
+                label="Instagram"
+                labelPlacement="outside"
+                placeholder="tu.usuario"
+                startContent={<span className="text-sm text-gray-400">@</span>}
+                value={draft.instagram}
+                onValueChange={(value) =>
+                  setDraft((d) => ({
+                    ...d,
+                    // Solo lo que admite un usuario de Instagram.
+                    instagram: value
+                      .trim()
+                      .replace(/^@/, "")
+                      .replace(/[^A-Za-z0-9._]/g, "")
+                      .slice(0, 30),
+                  }))
+                }
+              />
+            </div>
+            <Switch
+              isSelected={draft.showTopcoach}
+              size="sm"
+              onValueChange={(showTopcoach) =>
+                setDraft((d) => ({ ...d, showTopcoach }))
+              }
+            >
+              <span className="text-sm text-gray-700">
+                Mostrar «topcoach.io» al pie
+              </span>
+            </Switch>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
               Datos que se muestran
             </h4>
+            <Switch
+              isSelected={draft.exerciseList}
+              size="sm"
+              onValueChange={(exerciseList) =>
+                setDraft((d) => ({ ...d, exerciseList }))
+              }
+            >
+              <span className="text-sm text-gray-700">
+                Lista de ejercicios con sus series
+              </span>
+            </Switch>
             <CheckboxGroup
               aria-label="Datos que se muestran en la tarjeta"
               classNames={{ wrapper: "grid gap-2 sm:grid-cols-2" }}
@@ -268,7 +335,7 @@ export default function ShareCardTab() {
               ))}
             </CheckboxGroup>
             <p className="text-xs text-gray-500">
-              El récord va destacado y debajo caben hasta 4 datos (volumen,
+              Además de la lista caben hasta 4 datos en una línea (volumen,
               series, cardio, ejercicios, repeticiones), en ese orden, y solo se
               muestran si el cliente tiene ese dato.
               {tileCount > 4
