@@ -22,7 +22,7 @@ import {
   getLocalYmd,
 } from "@/lib/forms/client-helpers";
 import {
-  formatScheduleDescription,
+  getEffectiveSubmissionDeadline,
   getCheckInPeriodStart,
   getScheduleOrDefault,
   isCheckInDue,
@@ -276,7 +276,7 @@ export function DashboardContent() {
   // Último check-in enviado y aún sin revisar: el cliente puede editarlo
   // hasta que el entrenador lo marque como revisado (mismo flujo que los
   // vídeos de técnica). Solo cuando no toca uno nuevo, para no competir
-  // con el banner de "te espera".
+  // con el banner de "Completa tu check-in".
   const pendingReviewCheckin = useMemo(() => {
     if (showWeeklyBanner || !checkinSchedule.enabled) return null;
     const latest = [...weeklyResponses].sort((a, b) =>
@@ -322,40 +322,55 @@ export function DashboardContent() {
 
   // Check-in pendiente: la acción más importante de la semana, así que se
   // funde con la barra de marca de Inicio (misma superficie bg-primary +
-  // primary-foreground calculado por contraste). El CTA invierte la pareja
-  // y usa la marca cruda (no .text-primary, que con marcas pálidas aplica
-  // una tinta oscurecida pensada para el lienzo claro).
+  // primary-foreground calculado por contraste). JC (3 oct): compacto, solo
+  // "Completa tu <check-in>" y hasta cuándo está abierto; el cliente ya sabe
+  // de qué se trata. El CTA invierte la pareja y usa la marca cruda (no
+  // .text-primary, que con marcas pálidas oscurece la tinta).
+  const checkinDeadlineLabel = useMemo(() => {
+    if (!showWeeklyBanner) return null;
+    try {
+      return getEffectiveSubmissionDeadline(checkinSchedule).toLocaleString(
+        "es-ES",
+        {
+          weekday: "long",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: checkinSchedule.timezone,
+        }
+      );
+    } catch {
+      return null;
+    }
+  }, [showWeeklyBanner, checkinSchedule]);
+  const checkinName =
+    checkinSchedule.custom_name.charAt(0).toLowerCase() +
+    checkinSchedule.custom_name.slice(1);
+
   const checkinExtension = showWeeklyBanner ? (
-    <div className="border-t border-primary-foreground/15 pt-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-medium bg-primary-foreground/15">
-          <Icon
-            aria-hidden
-            className="text-primary-foreground"
-            icon="solar:clipboard-list-bold"
-            width={22}
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-heading text-base leading-snug text-primary-foreground">
-            {`Tu ${checkinSchedule.custom_name} te espera`}
-          </p>
+    <div className="flex items-center gap-3 border-t border-primary-foreground/15 pt-3">
+      <div className="min-w-0 flex-1">
+        <p className="font-heading text-base leading-snug text-primary-foreground">
+          {`Completa tu ${checkinName}`}
+        </p>
+        {checkinDeadlineLabel ? (
           <p className="mt-0.5 text-sm text-primary-foreground/85">
-            Completa tu seguimiento para que tu entrenador vea cómo va la semana
-            · {formatScheduleDescription(checkinSchedule)}
+            {`Disponible hasta el ${checkinDeadlineLabel}`}
           </p>
-        </div>
+        ) : null}
       </div>
       <Button
         aria-label={`Completar ${checkinSchedule.custom_name}`}
-        className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
-        endContent={<Icon icon="solar:alt-arrow-right-linear" width={18} />}
+        className="shrink-0 bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+        endContent={<Icon icon="solar:alt-arrow-right-linear" width={16} />}
+        size="sm"
         onPress={() => {
           setWeeklyFormDate(undefined);
           setShowWeeklyFormModal(true);
         }}
       >
-        Empezar check-in
+        Empezar
       </Button>
     </div>
   ) : null;
