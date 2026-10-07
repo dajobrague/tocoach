@@ -4,7 +4,7 @@
 // ajustes, las rutas de imagen y el botón del cliente.
 
 // Todos transparentes, como los stickers de Strava (David, 23 sep):
-//   panel — tarjetas "cristal" semitransparentes sobre fondo transparente.
+//   panel — un panel oscuro translúcido detrás de la tarjeta.
 //   white — sin tarjetas, texto blanco (fotos oscuras).
 //   ink   — sin tarjetas, texto oscuro (fotos claras).
 export const SHARE_CARD_STYLES = ["panel", "white", "ink"] as const;

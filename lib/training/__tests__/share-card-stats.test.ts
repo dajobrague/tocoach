@@ -67,4 +67,38 @@ describe("computeShareCardStats", () => {
       computeShareCardStats([bench([[5, 100]])], new Map()).records
     ).toEqual([]);
   });
+
+  it("la firma tiene una barra por serie y marca la serie del récord", () => {
+    const prior = new Map([
+      ["bench", [{ date: "2026-09-01", sets: [{ reps: 5, weight_kg: 85 }] }]],
+    ]);
+    const stats = computeShareCardStats(
+      [
+        bench([
+          [5, 80],
+          [5, 90],
+          [0, 0],
+        ]),
+        {
+          exerciseId: "bike",
+          exerciseName: "Bici",
+          sets: [],
+          durationSeconds: 1500,
+          distanceMeters: null,
+        },
+      ],
+      prior
+    );
+
+    expect(stats.signature).toEqual([
+      {
+        kind: "strength",
+        sets: [
+          { reps: 5, weightKg: 80, record: false },
+          { reps: 5, weightKg: 90, record: true },
+        ],
+      },
+      { kind: "cardio", minutes: 25 },
+    ]);
+  });
 });

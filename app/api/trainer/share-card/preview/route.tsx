@@ -3,6 +3,8 @@
 // una sesión de EJEMPLO, para que vea el resultado antes de guardar. Usa el
 // mismo dibujo que la tarjeta del cliente (lib/share-card/render).
 
+import type { ShareCardSignatureGroup } from "@/lib/training/share-card-stats";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -10,6 +12,56 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { loadShareCardBranding } from "@/lib/share-card/branding";
 import { renderShareCard } from "@/lib/share-card/render";
 import { parseShareCardSettings } from "@/lib/share-card/settings";
+
+// Una barra por serie de la sesión de ejemplo (22 series + 10 min de cardio).
+const sample = (sets: Array<[number, number]>, recordAt = -1) => ({
+  kind: "strength" as const,
+  sets: sets.map(([weightKg, reps], i) => ({
+    weightKg,
+    reps,
+    record: i === recordAt,
+  })),
+});
+const SAMPLE_SIGNATURE: ShareCardSignatureGroup[] = [
+  sample(
+    [
+      [70, 8],
+      [80, 6],
+      [85, 5],
+      [90, 5],
+    ],
+    3
+  ),
+  sample([
+    [30, 10],
+    [32, 10],
+    [32, 8],
+    [32, 8],
+  ]),
+  sample([
+    [40, 8],
+    [40, 8],
+    [42.5, 6],
+  ]),
+  sample([
+    [20, 12],
+    [22, 10],
+    [22, 10],
+    [22, 9],
+  ]),
+  sample([
+    [12, 15],
+    [12, 15],
+    [12, 12],
+  ]),
+  sample([
+    [25, 12],
+    [27.5, 10],
+    [27.5, 10],
+    [30, 8],
+  ]),
+  { kind: "cardio", minutes: 10 },
+];
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +103,7 @@ export async function GET(request: NextRequest) {
           cardioSeconds: 600,
           cardioMeters: 0,
           records: [{ exerciseName: "Press banca", reps: 5, weightKg: 90 }],
+          signature: SAMPLE_SIGNATURE,
         },
         sessionNumber: 47,
       },

@@ -26,6 +26,19 @@ export interface ShareCardRecord {
   weightKg: number;
 }
 
+/** Una serie de la "firma" de la sesión (una barra por serie). */
+export interface ShareCardSignatureSet {
+  reps: number;
+  weightKg: number;
+  /** La serie que dio el récord del ejercicio. */
+  record: boolean;
+}
+
+/** Un grupo por ejercicio, en orden de aparición. */
+export type ShareCardSignatureGroup =
+  | { kind: "strength"; sets: ShareCardSignatureSet[] }
+  | { kind: "cardio"; minutes: number };
+
 export interface ShareCardStats {
   exercises: number;
   sets: number;
@@ -36,6 +49,7 @@ export interface ShareCardStats {
   cardioMeters: number;
   /** Un récord por ejercicio (el de mayor e1RM), orden de aparición. */
   records: ShareCardRecord[];
+  signature: ShareCardSignatureGroup[];
 }
 
 const positive = (value: number | null): number =>
@@ -54,9 +68,12 @@ export function computeShareCardStats(
     cardioSeconds: 0,
     cardioMeters: 0,
     records: [],
+    signature: [],
   };
 
   for (const log of logs) {
+    const signatureSets: ShareCardSignatureSet[] = [];
+
     for (const set of log.sets) {
       const reps = positive(set.reps);
       const weight = positive(set.weight_kg);
@@ -66,6 +83,16 @@ export function computeShareCardStats(
       stats.sets += 1;
       stats.reps += reps;
       stats.volumeKg += reps * weight;
+      signatureSets.push({ reps, weightKg: weight, record: false });
+    }
+    if (signatureSets.length > 0) {
+      stats.signature.push({ kind: "strength", sets: signatureSets });
+    }
+    if (positive(log.durationSeconds) > 0) {
+      stats.signature.push({
+        kind: "cardio",
+        minutes: Math.round(positive(log.durationSeconds) / 60),
+      });
     }
     stats.cardioSeconds += positive(log.durationSeconds);
     stats.cardioMeters += positive(log.distanceMeters);
@@ -91,6 +118,12 @@ export function computeShareCardStats(
     }
 
     if (best !== null) {
+      const { reps, weightKg } = best;
+      const recordSet = signatureSets.find(
+        (set) => set.reps === reps && set.weightKg === weightKg
+      );
+
+      if (recordSet) recordSet.record = true;
       stats.records.push({
         exerciseName: best.exerciseName,
         reps: best.reps,

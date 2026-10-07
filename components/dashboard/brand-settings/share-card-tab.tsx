@@ -43,10 +43,9 @@ const STYLE_OPTIONS: Array<{
 }> = [
   {
     key: "panel",
-    title: "Cristal",
-    description: "Tarjetas de cristal sobre la foto. Se lee siempre.",
-    sample:
-      "rounded-md border border-white/25 bg-white/15 px-2 py-1 text-white",
+    title: "Panel",
+    description: "Panel oscuro detrás de la tarjeta. Se lee siempre.",
+    sample: "rounded-md bg-black/45 px-2 py-1 text-white",
   },
   {
     key: "white",
@@ -269,9 +268,9 @@ export default function ShareCardTab() {
               ))}
             </CheckboxGroup>
             <p className="text-xs text-gray-500">
-              Caben hasta 4 cifras grandes (volumen, series, cardio, ejercicios,
-              repeticiones), en ese orden, y solo se muestran si el cliente
-              tiene ese dato.
+              El récord va destacado y debajo caben hasta 4 datos (volumen,
+              series, cardio, ejercicios, repeticiones), en ese orden, y solo se
+              muestran si el cliente tiene ese dato.
               {tileCount > 4
                 ? ` Has marcado ${tileCount}: las últimas no entrarán.`
                 : ""}
