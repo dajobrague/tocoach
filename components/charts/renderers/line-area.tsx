@@ -29,10 +29,9 @@ import {
 
 import { avgNonNull, formatNumber, xAxisInterval } from "../utils";
 
-import { resolveColor } from "@/lib/charts/palette";
+import { INK, TOOLTIP_CLASSES } from "./ink";
 
-const TOOLTIP_BOX_CLASS =
-  "rounded-[10px] border-0 shadow-md text-xs text-gray-900 px-3 py-2 bg-white";
+import { resolveColor } from "@/lib/charts/palette";
 
 interface Props {
   buckets: BucketedPoint[];
@@ -46,6 +45,11 @@ interface Props {
   yMax?: number;
   /** Stable id used to scope the gradient `<defs>`. */
   gradientId: string;
+  /**
+   * Portal del cliente: línea/puntos en la tinta de marca, rejilla y ejes
+   * con tokens del tema, y "area" con relleno plano (sin degradado).
+   */
+  ink?: boolean;
 }
 
 export function LineAreaRenderer({
@@ -57,8 +61,13 @@ export function LineAreaRenderer({
   targetZone,
   yMax,
   gradientId,
+  ink = false,
 }: Props) {
   const palette = resolveColor(color);
+  const stroke = ink ? INK.mark : palette.stroke;
+  const dotRing = ink ? INK.surface : "#fff";
+  const tick = ink ? INK.tick : "#9ca3af";
+  const tip = TOOLTIP_CLASSES[ink ? "ink" : "default"];
   // Recharts requires `value` to be `number | undefined`. Map nulls to
   // undefined and use connectNulls so gaps still draw a continuous line.
   const data = buckets.map((b) => ({
@@ -80,7 +89,7 @@ export function LineAreaRenderer({
   return (
     <ResponsiveContainer height={160} width="100%">
       <Renderer data={data} margin={{ top: 5, right: 5, left: -20, bottom: 4 }}>
-        {variant === "area" ? (
+        {variant === "area" && !ink ? (
           <defs>
             <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
               <stop offset="5%" stopColor={palette.fill} stopOpacity={0.3} />
@@ -89,7 +98,7 @@ export function LineAreaRenderer({
           </defs>
         ) : null}
         <CartesianGrid
-          stroke="#f3f4f6"
+          stroke={ink ? INK.grid : "#f3f4f6"}
           strokeDasharray="3 3"
           vertical={false}
         />
@@ -100,12 +109,12 @@ export function LineAreaRenderer({
           height={data.length > 8 ? 56 : 24}
           interval={xAxisInterval(data.length)}
           textAnchor={data.length > 8 ? "end" : "middle"}
-          tick={{ fontSize: 9, fill: "#9ca3af" }}
+          tick={{ fontSize: 9, fill: tick }}
           tickLine={false}
         />
         <YAxis
           axisLine={false}
-          tick={{ fontSize: 10, fill: "#9ca3af" }}
+          tick={{ fontSize: 10, fill: tick }}
           tickLine={false}
           {...(yMax !== undefined
             ? { domain: [0, yMax] as [number, number] }
@@ -129,13 +138,11 @@ export function LineAreaRenderer({
             };
 
             return (
-              <div className={TOOLTIP_BOX_CLASS}>
+              <div className={tip.box}>
                 {row.periodTooltip ? (
-                  <p className="text-[10px] text-gray-500 mb-1 leading-snug">
-                    {row.periodTooltip}
-                  </p>
+                  <p className={tip.period}>{row.periodTooltip}</p>
                 ) : null}
-                <p className="text-[11px] text-gray-600 mb-0.5">{row.label}</p>
+                <p className={tip.label}>{row.label}</p>
                 <p className="text-sm font-semibold">
                   {row.value === undefined
                     ? "—"
@@ -144,7 +151,7 @@ export function LineAreaRenderer({
               </div>
             );
           }}
-          cursor={{ stroke: "#e5e7eb" }}
+          cursor={{ stroke: ink ? INK.grid : "#e5e7eb" }}
         />
         {avg !== null ? (
           <ReferenceLine
@@ -152,9 +159,9 @@ export function LineAreaRenderer({
               value: `${Math.round(avg)}${unit ?? ""}`,
               position: "right",
               fontSize: 9,
-              fill: palette.stroke,
+              fill: ink ? INK.tick : palette.stroke,
             }}
-            stroke={palette.stroke}
+            stroke={ink ? INK.tick : palette.stroke}
             strokeDasharray="5 3"
             strokeWidth={1.5}
             y={avg}
@@ -181,8 +188,8 @@ export function LineAreaRenderer({
             connectNulls
             activeDot={{
               r: 4,
-              fill: palette.stroke,
-              stroke: "#fff",
+              fill: stroke,
+              stroke: dotRing,
               strokeWidth: 2,
             }}
             dataKey="value"
@@ -193,12 +200,13 @@ export function LineAreaRenderer({
             // skips dots for null/undefined values automatically.
             dot={{
               r: 2.5,
-              fill: palette.stroke,
-              stroke: "#fff",
+              fill: stroke,
+              stroke: dotRing,
               strokeWidth: 1.5,
             }}
-            fill={`url(#${gradientId})`}
-            stroke={palette.stroke}
+            fill={ink ? INK.mark : `url(#${gradientId})`}
+            fillOpacity={ink ? 0.08 : 1}
+            stroke={stroke}
             strokeWidth={2.5}
             type="monotone"
           />
@@ -207,8 +215,8 @@ export function LineAreaRenderer({
             connectNulls
             activeDot={{
               r: 4,
-              fill: palette.stroke,
-              stroke: "#fff",
+              fill: stroke,
+              stroke: dotRing,
               strokeWidth: 2,
             }}
             dataKey="value"
@@ -216,11 +224,11 @@ export function LineAreaRenderer({
             // values still render. Recharts skips dots for null values.
             dot={{
               r: 2.5,
-              fill: palette.stroke,
-              stroke: "#fff",
+              fill: stroke,
+              stroke: dotRing,
               strokeWidth: 1.5,
             }}
-            stroke={palette.stroke}
+            stroke={stroke}
             strokeWidth={2.5}
             type="monotone"
           />

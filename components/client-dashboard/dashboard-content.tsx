@@ -65,9 +65,9 @@ const ChartsSection = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="space-y-4">
-        <div className="h-48 rounded-xl bg-default-100 animate-pulse" />
-        <div className="h-48 rounded-xl bg-default-100 animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-[260px] rounded-large bg-content1 shadow-small" />
+        <div className="h-[260px] rounded-large bg-content1 shadow-small" />
       </div>
     ),
   }
@@ -87,12 +87,12 @@ const DynamicFormModal = dynamic(
  * snapshot endpoint de charts entienden — no cambiar sin alinear ambos.
  */
 const PERIOD_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: "7d", label: "7 Días" },
-  { key: "14d", label: "14 Días" },
-  { key: "30d", label: "30 Días" },
-  { key: "3m", label: "3 Meses" },
-  { key: "6m", label: "6 Meses" },
-  { key: "12m", label: "12 Meses" },
+  { key: "7d", label: "7 d" },
+  { key: "14d", label: "14 d" },
+  { key: "30d", label: "30 d" },
+  { key: "3m", label: "3 m" },
+  { key: "6m", label: "6 m" },
+  { key: "12m", label: "1 año" },
 ];
 
 export function DashboardContent() {
@@ -295,6 +295,8 @@ export function DashboardContent() {
       date: string;
       label: string;
       dayName: string;
+      /** Título de la tarjeta: "Hoy", "Ayer" o el día de la semana. */
+      when: string;
       isToday: boolean;
       isSubmitted: boolean;
     }[] = [];
@@ -304,6 +306,7 @@ export function DashboardContent() {
 
       d.setDate(anchor.getDate() - i);
       const dateStr = getLocalYmd(d);
+      const dayName = d.toLocaleDateString("es-ES", { weekday: "long" });
 
       days.push({
         date: dateStr,
@@ -311,7 +314,13 @@ export function DashboardContent() {
           day: "numeric",
           month: "short",
         }),
-        dayName: d.toLocaleDateString("es-ES", { weekday: "long" }),
+        dayName,
+        when:
+          i === 0
+            ? "Hoy"
+            : i === 1
+              ? "Ayer"
+              : dayName.charAt(0).toUpperCase() + dayName.slice(1),
         isToday: i === 0,
         isSubmitted: responsesByDate.has(dateStr),
       });
@@ -320,8 +329,8 @@ export function DashboardContent() {
     return days;
   }, [responsesByDate, todayYmd]);
 
-  // Check-in pendiente: la acción más importante de la semana, así que se
-  // funde con la barra de marca de Inicio (misma superficie bg-primary +
+  // Check-in pendiente: la acción más importante de la semana, así que es
+  // la ÚNICA tarjeta de marca de Inicio, justo bajo el título (bg-primary +
   // primary-foreground calculado por contraste). JC (3 oct): compacto, solo
   // "Completa tu <check-in>" y hasta cuándo está abierto; el cliente ya sabe
   // de qué se trata. El CTA invierte la pareja y usa la marca cruda (no
@@ -349,22 +358,21 @@ export function DashboardContent() {
     checkinSchedule.custom_name.slice(1);
 
   const checkinExtension = showWeeklyBanner ? (
-    <div className="flex items-center gap-3 border-t border-primary-foreground/15 pt-3">
+    <div className="flex items-center gap-3.5 rounded-large bg-primary p-4 text-primary-foreground">
       <div className="min-w-0 flex-1">
-        <p className="font-heading text-base leading-snug text-primary-foreground">
+        <p className="font-heading text-lg leading-tight tracking-[-0.01em]">
           {`Completa tu ${checkinName}`}
         </p>
         {checkinDeadlineLabel ? (
-          <p className="mt-0.5 text-sm text-primary-foreground/85">
+          <p className="mt-[3px] text-sm leading-snug text-primary-foreground/85">
             {`Disponible hasta el ${checkinDeadlineLabel}`}
           </p>
         ) : null}
       </div>
       <Button
         aria-label={`Completar ${checkinSchedule.custom_name}`}
-        className="shrink-0 bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
-        endContent={<Icon icon="solar:alt-arrow-right-linear" width={16} />}
-        size="sm"
+        className="h-10 shrink-0 bg-primary-foreground px-4 text-[15px] font-bold text-[hsl(var(--heroui-primary))]"
+        radius="full"
         onPress={() => {
           setWeeklyFormDate(undefined);
           setShowWeeklyFormModal(true);
@@ -385,39 +393,40 @@ export function DashboardContent() {
           setShowWeeklyFormModal(true);
         }}
       >
-        {/* Banner de error cuando falla la carga de respuestas. No
-              tumba la página — sigue mostrando el resto de secciones,
-              pero avisa al cliente que algo se cargó incompleto. */}
-        {isErrorForms && (
-          <div className="mb-4 px-4" role="alert">
-            <div className="rounded-large bg-danger/10 p-3 flex items-start gap-3">
+        <div className="space-y-7 px-4">
+          {/* Banner de error cuando falla la carga de respuestas. No
+                tumba la página — sigue mostrando el resto de secciones,
+                pero avisa al cliente que algo se cargó incompleto. */}
+          {isErrorForms && (
+            <div
+              className="flex items-start gap-2.5 rounded-2xl bg-danger/10 px-3.5 py-3"
+              role="alert"
+            >
               <Icon
                 aria-hidden
-                className="text-danger flex-shrink-0 mt-0.5"
-                icon="solar:danger-triangle-bold"
+                className="mt-px flex-shrink-0 text-danger"
+                icon="solar:danger-triangle-linear"
                 width={20}
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-danger">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-danger">
                   No pudimos cargar tus registros
                 </p>
-                <p className="text-xs text-default-600 mt-0.5">
+                <p className="mt-0.5 text-[13px] leading-snug text-default-500">
                   Recarga la página o vuelve a intentarlo en un momento.
                 </p>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {pendingReviewCheckin && (
-          <div className="mb-4 px-4">
-            <div className="flex items-center gap-3 rounded-large bg-content1 p-3 shadow-small">
-              <IconTile icon="solar:clipboard-check-linear" size="sm" />
+          {pendingReviewCheckin && (
+            <div className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small">
+              <IconTile icon="solar:clipboard-check-linear" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">
+                <p className="text-[15px] font-semibold text-foreground">
                   {`${checkinSchedule.custom_name} enviado`}
                 </p>
-                <p className="mt-0.5 text-xs text-default-500">
+                <p className="mt-0.5 text-[13px] leading-snug text-default-500">
                   {`${new Date(
                     pendingReviewCheckin.response_date + "T12:00:00"
                   ).toLocaleDateString("es-ES", {
@@ -427,6 +436,8 @@ export function DashboardContent() {
                 </p>
               </div>
               <Button
+                className="shrink-0 font-semibold"
+                radius="full"
                 size="sm"
                 variant="flat"
                 onPress={() => {
@@ -437,102 +448,115 @@ export function DashboardContent() {
                 Editar
               </Button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Registro diario — 3 cards (hoy + 2 anteriores). Skeleton con
-              el mismo alto durante la carga para evitar CLS.
+          {/* Registro diario — 3 tarjetas (hoy + 2 anteriores). Skeleton con
+                el mismo alto durante la carga para evitar CLS.
 
-              Theme-safe multi-tenant: las 3 cards son superficie neutra
-              (`bg-content1 shadow-small`); "hoy" se marca con anillo
-              `ring-primary` + chip sólido `bg-primary text-primary-foreground`
-              (par con contraste garantizado por el pipeline de tema).
-              Estado: enviado → chip success; hoy sin enviar → chip de marca
-              (accionable); días pasados sin enviar → chip neutro. */}
-        {isLoadingForms ? (
-          <div className="mb-4 px-4">
+                Theme-safe multi-tenant: las 3 tarjetas son superficie neutra
+                (`bg-content1 shadow-small`); el estado vive en un anillo de
+                44px: enviado → círculo sólido success con check; hoy sin
+                enviar → anillo discontinuo de marca con lápiz (accionable);
+                días pasados sin enviar → anillo fino neutro con guion. */}
+          <section>
             <SectionHeader title="Registro diario" />
-            <div className="grid grid-cols-3 gap-2">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  aria-hidden
-                  className="rounded-large bg-default-100 h-[100px] animate-pulse"
-                />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="mb-4 px-4">
-            <SectionHeader title="Registro diario" />
-            <div className="grid grid-cols-3 gap-2">
-              {dailyFormDays.map((day) => (
-                <button
-                  key={day.date}
-                  aria-label={`Abrir registro de ${day.dayName} ${day.label}${
-                    day.isToday ? ", hoy" : ""
-                  }, ${
-                    day.isSubmitted
-                      ? "enviado"
-                      : day.isToday
-                        ? "pendiente"
-                        : "sin registro"
-                  }`}
-                  className={`flex flex-col items-center rounded-large bg-content1 p-3 shadow-small transition-transform active:scale-[0.97] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-                    day.isToday ? "ring-2 ring-primary" : ""
-                  }`}
-                  type="button"
-                  onClick={() => setSelectedDayForForm(day.date)}
-                >
-                  <span className="text-sm font-bold capitalize mt-1 text-foreground">
-                    {day.label}
-                  </span>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <span className="text-xs capitalize text-default-600">
-                      {day.dayName}
-                    </span>
-                    {day.isToday ? (
-                      <span className="text-[11px] font-semibold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-small leading-none">
-                        Hoy
+            {isLoadingForms ? (
+              <div className="grid grid-cols-3 gap-2.5">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    aria-hidden
+                    className="h-[142px] rounded-large bg-default-100 motion-safe:animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2.5">
+                {dailyFormDays.map((day) => {
+                  const status = day.isSubmitted
+                    ? "sent"
+                    : day.isToday
+                      ? "todo"
+                      : "miss";
+
+                  return (
+                    <button
+                      key={day.date}
+                      aria-label={`Abrir registro de ${day.dayName} ${day.label}${
+                        day.isToday ? ", hoy" : ""
+                      }, ${
+                        status === "sent"
+                          ? "enviado"
+                          : status === "todo"
+                            ? "pendiente"
+                            : "sin registro"
+                      }`}
+                      className="flex min-w-0 cursor-pointer flex-col items-center rounded-large bg-content1 px-1.5 pb-3 pt-3.5 shadow-small transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none motion-reduce:active:scale-100"
+                      type="button"
+                      onClick={() => setSelectedDayForForm(day.date)}
+                    >
+                      <span className="max-w-full truncate text-sm font-semibold text-foreground">
+                        {day.when}
                       </span>
-                    ) : null}
-                  </div>
-                  {day.isSubmitted ? (
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10">
-                      <Icon
+                      <span className="mt-0.5 text-xs text-default-500">
+                        {day.label.replace(".", "")}
+                      </span>
+                      <span
                         aria-hidden
-                        className="text-success-700"
-                        icon="solar:check-circle-bold"
-                        width={14}
-                      />
-                      <span className="text-[11px] font-semibold text-success-700">
-                        Enviado
+                        className={`mt-2.5 grid h-11 w-11 place-items-center rounded-full border-2 ${
+                          status === "sent"
+                            ? "border-success bg-success text-success-foreground"
+                            : status === "todo"
+                              ? "border-dashed border-primary text-primary"
+                              : "border-default-200 text-default-400"
+                        }`}
+                      >
+                        {status === "sent" ? (
+                          <Icon icon="solar:unread-linear" width={20} />
+                        ) : status === "todo" ? (
+                          <Icon icon="solar:pen-linear" width={20} />
+                        ) : (
+                          <span className="h-0.5 w-3.5 rounded-full bg-current" />
+                        )}
                       </span>
-                    </div>
-                  ) : day.isToday ? (
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10">
-                      <Icon
-                        aria-hidden
-                        className="text-primary"
-                        icon="solar:pen-linear"
-                        width={14}
-                      />
-                      <span className="whitespace-nowrap text-[11px] font-semibold text-primary">
-                        Pendiente
+                      <span
+                        className={`mt-2.5 whitespace-nowrap text-xs font-semibold ${
+                          status === "sent"
+                            ? "text-success-700"
+                            : status === "todo"
+                              ? "text-primary"
+                              : "text-default-500"
+                        }`}
+                      >
+                        {status === "sent"
+                          ? "Enviado"
+                          : status === "todo"
+                            ? "Pendiente"
+                            : "Sin registro"}
                       </span>
-                    </div>
-                  ) : (
-                    <div className="px-2 py-0.5 rounded-full bg-default-100">
-                      <span className="whitespace-nowrap text-[11px] font-medium text-default-600">
-                        Sin registro
-                      </span>
-                    </div>
-                  )}
-                </button>
-              ))}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <SectionHeader title="Progreso" />
+            <SegmentedControl
+              ariaLabel="Seleccionar período de progreso"
+              options={PERIOD_OPTIONS}
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+            />
+            <div className="mt-3.5">
+              <ChartsSection
+                clientId={clientId}
+                selectedPeriod={selectedPeriod}
+              />
             </div>
-          </div>
-        )}
+          </section>
+        </div>
 
         {/* Check-in modal. `onSuccess` invalida formResponses,
               formConfig (puede haber cambiado el shape del check-in si
@@ -589,20 +613,6 @@ export function DashboardContent() {
             }}
           />
         )}
-
-        {/* Progress Section */}
-        <div className="px-4 space-y-4">
-          <SectionHeader className="mb-0" title="Progreso" />
-
-          <SegmentedControl
-            ariaLabel="Seleccionar período de progreso"
-            options={PERIOD_OPTIONS}
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
-          />
-
-          <ChartsSection clientId={clientId} selectedPeriod={selectedPeriod} />
-        </div>
       </ClientPage>
       <ClientBottomNav />
     </>

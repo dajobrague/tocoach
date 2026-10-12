@@ -40,6 +40,7 @@ import { headerStatValue, type HeaderStatMode } from "./header-stat";
 import { useHeaderStatPref } from "./use-header-stat-pref";
 import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
+import { IconTile } from "@/components/shared/icon-tile";
 import { RATING_MAX } from "@/lib/forms/types";
 import { resolveColor } from "@/lib/charts/palette";
 
@@ -61,6 +62,14 @@ interface Props {
   series?: ReadonlyArray<{ id: string; label: string }>;
   editable?: boolean;
   editOverlay?: React.ReactNode;
+  /**
+   * "client" = look del portal del cliente (tile de marca, toggle en la
+   * cabecera, número en la fuente de títulos + pie "Media de …"). Opt-in:
+   * el trainer (chart-surface) sigue con el look por defecto.
+   */
+  variant?: "default" | "client";
+  /** Solo variant="client": período visible para el pie ("7 días"). */
+  periodLabel?: string;
 }
 
 function CardSkeleton() {
@@ -98,17 +107,25 @@ function NoDataOverlay() {
 function HeaderStatToggle({
   mode,
   onChange,
+  client = false,
 }: {
   mode: HeaderStatMode;
   onChange: (mode: HeaderStatMode) => void;
+  client?: boolean;
 }) {
   const segment = (target: HeaderStatMode, label: string) => (
     <button
       aria-pressed={mode === target}
-      className={`px-1.5 py-0.5 rounded-md transition-colors ${
+      className={`${
+        client
+          ? "h-[26px] px-2.5 rounded-[7px] active:scale-[0.97] motion-reduce:active:scale-100"
+          : "px-1.5 py-0.5 rounded-md"
+      } transition-colors ${
         mode === target
           ? "bg-content1 text-foreground shadow-sm"
-          : "text-foreground/45"
+          : client
+            ? "text-default-500"
+            : "text-foreground/45"
       }`}
       type="button"
       onClick={() => onChange(target)}
@@ -120,7 +137,11 @@ function HeaderStatToggle({
   return (
     <div
       aria-label="Valor mostrado"
-      className="flex items-center rounded-lg bg-default-100 p-0.5 text-[10px] font-medium flex-shrink-0 mb-1"
+      className={
+        client
+          ? "flex items-center rounded-[9px] bg-default-100 p-0.5 text-xs font-semibold flex-shrink-0"
+          : "flex items-center rounded-lg bg-default-100 p-0.5 text-[10px] font-medium flex-shrink-0 mb-1"
+      }
       role="group"
     >
       {segment("average", "Media")}
@@ -190,7 +211,10 @@ export function ChartCard({
   series,
   editable,
   editOverlay,
+  variant = "default",
+  periodLabel,
 }: Props) {
+  const isClient = variant === "client";
   const isPhotoTimeline = config.chart_type === "photo_timeline";
   // Los charts 1-D (line/area/bar) llevan el toggle Último/Media del
   // header — ring/stacked/kpi tienen su propia semántica de valor.
@@ -261,6 +285,107 @@ export function ChartCard({
     Array.isArray(buckets) &&
     isBucketsEmpty(buckets);
 
+  const showStatToggle = hasStatToggle && !isLoading && !orphan && !noData;
+  const hasValueRow =
+    config.chart_type !== "kpi" &&
+    config.chart_type !== "calendar" &&
+    !isPhotoTimeline;
+  const valueText =
+    headerValue === null
+      ? isLoading
+        ? ""
+        : "—"
+      : formatNumber(headerValue, headerValue >= 100 ? 0 : 1);
+
+  // State branches.
+  // We intentionally render the chart silhouette even when there is
+  // no data — Recharts draws axes + grid for null values, and the
+  // ring/kpi renderers have their own empty-state visuals. The
+  // watermark sits on top via <NoDataOverlay /> so the card never
+  // collapses to "blank". Photo timeline dispatches to its own
+  // renderer which handles its own empty state.
+  const body = orphan ? (
+    <CardOrphan />
+  ) : isLoading ? (
+    <CardSkeleton />
+  ) : isPhotoTimeline ? (
+    <ChartErrorBoundary chartId={config.id}>
+      <PhotoTimelineRenderer photos={photos ?? []} />
+    </ChartErrorBoundary>
+  ) : (
+    <div className="relative">
+      <ChartErrorBoundary chartId={config.id}>
+        <ChartRenderer
+          buckets={buckets!}
+          config={config}
+          ink={isClient}
+          {...(series !== undefined ? { series } : {})}
+          {...(yMax !== undefined
+            ? { yMax }
+            : isRating
+              ? { yMax: RATING_MAX }
+              : {})}
+        />
+      </ChartErrorBoundary>
+      {noData ? <NoDataOverlay /> : null}
+    </div>
+  );
+
+  if (isClient) {
+    const caption =
+      showStatToggle && headerValue !== null
+        ? statMode === "average"
+          ? periodLabel
+            ? `Media de ${periodLabel}`
+            : "Media del período"
+          : "Último registro"
+        : null;
+
+    return (
+      <div className="relative rounded-large bg-content1 p-4 shadow-small">
+        <div className="flex min-h-8 items-center gap-2.5">
+          <IconTile
+            className="!h-8 !w-8 !rounded-[10px]"
+            icon={resolvedIcon}
+            size="sm"
+          />
+          <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
+            {config.label}
+          </p>
+          {showStatToggle ? (
+            <HeaderStatToggle client mode={statMode} onChange={setStatMode} />
+          ) : null}
+        </div>
+        {hasValueRow ? (
+          <div className="mt-3.5">
+            {headerValue !== null && isRating ? (
+              <RatingStars muted={noData} value={headerValue} />
+            ) : (
+              <p className="flex items-baseline gap-1.5">
+                <span
+                  className={`font-heading text-[34px] leading-none tracking-[-0.02em] tabular-nums ${
+                    noData ? "text-foreground/30" : "text-foreground"
+                  }`}
+                >
+                  {valueText}
+                </span>
+                {headerValue !== null && displayUnit ? (
+                  <span className="text-base font-semibold text-default-500">
+                    {displayUnit}
+                  </span>
+                ) : null}
+              </p>
+            )}
+            {caption ? (
+              <p className="mt-1 text-[13px] text-default-500">{caption}</p>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="mt-3">{body}</div>
+      </div>
+    );
+  }
+
   return (
     <Card className="relative" radius="lg" shadow="sm">
       <CardBody>
@@ -303,9 +428,7 @@ export function ChartCard({
         </div>
         {/* calendar lleva sus totales bajo la grilla; el número grande
             sobra ahí. */}
-        {config.chart_type !== "kpi" &&
-        config.chart_type !== "calendar" &&
-        !isPhotoTimeline ? (
+        {hasValueRow ? (
           <div className="flex items-end justify-between gap-2 mb-3">
             {headerValue !== null && isRating ? (
               <RatingStars muted={noData} value={headerValue} />
@@ -315,11 +438,7 @@ export function ChartCard({
                   noData ? "text-foreground/30" : "text-foreground"
                 }`}
               >
-                {headerValue === null
-                  ? isLoading
-                    ? ""
-                    : "—"
-                  : formatNumber(headerValue, headerValue >= 100 ? 0 : 1)}
+                {valueText}
                 {headerValue !== null && displayUnit ? (
                   <span className="text-base text-foreground/40 ml-1 font-medium">
                     {displayUnit}
@@ -327,44 +446,13 @@ export function ChartCard({
                 ) : null}
               </p>
             )}
-            {hasStatToggle && !isLoading && !orphan && !noData ? (
+            {showStatToggle ? (
               <HeaderStatToggle mode={statMode} onChange={setStatMode} />
             ) : null}
           </div>
         ) : null}
 
-        {/* State branches.
-            We intentionally render the chart silhouette even when there is
-            no data — Recharts draws axes + grid for null values, and the
-            ring/kpi renderers have their own empty-state visuals. The
-            watermark sits on top via <NoDataOverlay /> so the card never
-            collapses to "blank". Photo timeline dispatches to its own
-            renderer which handles its own empty state. */}
-        {orphan ? (
-          <CardOrphan />
-        ) : isLoading ? (
-          <CardSkeleton />
-        ) : isPhotoTimeline ? (
-          <ChartErrorBoundary chartId={config.id}>
-            <PhotoTimelineRenderer photos={photos ?? []} />
-          </ChartErrorBoundary>
-        ) : (
-          <div className="relative">
-            <ChartErrorBoundary chartId={config.id}>
-              <ChartRenderer
-                buckets={buckets!}
-                config={config}
-                {...(series !== undefined ? { series } : {})}
-                {...(yMax !== undefined
-                  ? { yMax }
-                  : isRating
-                    ? { yMax: RATING_MAX }
-                    : {})}
-              />
-            </ChartErrorBoundary>
-            {noData ? <NoDataOverlay /> : null}
-          </div>
-        )}
+        {body}
       </CardBody>
     </Card>
   );

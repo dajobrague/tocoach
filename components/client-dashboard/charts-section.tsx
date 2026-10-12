@@ -26,14 +26,12 @@ import type {
   PhotoPoint,
 } from "@/lib/charts/types";
 
-import { Icon } from "@iconify/react";
-import { Card, CardBody } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 
 import { ChartCard } from "@/components/charts/chart-card";
 import { iconForChartType, isBucketsEmpty } from "@/components/charts/utils";
+import { IconTile } from "@/components/shared/icon-tile";
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import { resolveColor } from "@/lib/charts/palette";
 import { resolveAdapter } from "@/lib/charts/registry";
 
 interface SnapshotResponse {
@@ -55,6 +53,16 @@ interface SnapshotResponse {
   };
   error?: string;
 }
+
+/** Período del selector → texto del pie de cada gráfica ("Media de 7 días"). */
+const PERIOD_LABELS: Record<string, string> = {
+  "7d": "7 días",
+  "14d": "14 días",
+  "30d": "30 días",
+  "3m": "3 meses",
+  "6m": "6 meses",
+  "12m": "12 meses",
+};
 
 interface Props {
   clientId: string | number;
@@ -101,17 +109,24 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     staleTime: 60 * 1000,
   });
 
+  const periodLabel = PERIOD_LABELS[selectedPeriod] ?? selectedPeriod;
+
   if (query.isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {[0, 1, 2, 3].map((i) => (
-          <Card key={i} shadow="sm">
-            <CardBody className="p-4">
-              <div className="h-3 w-1/2 bg-default-100 rounded animate-pulse mb-2" />
-              <div className="h-8 w-1/3 bg-default-100 rounded animate-pulse mb-3" />
-              <div className="h-[140px] w-full bg-default-100 rounded animate-pulse" />
-            </CardBody>
-          </Card>
+          <div
+            key={i}
+            aria-hidden
+            className="rounded-large bg-content1 p-4 shadow-small"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-[10px] bg-default-100 motion-safe:animate-pulse" />
+              <div className="h-3.5 w-1/3 rounded bg-default-100 motion-safe:animate-pulse" />
+            </div>
+            <div className="mt-3.5 h-8 w-1/3 rounded bg-default-100 motion-safe:animate-pulse" />
+            <div className="mt-3 h-[140px] w-full rounded bg-default-100 motion-safe:animate-pulse" />
+          </div>
         ))}
       </div>
     );
@@ -119,13 +134,11 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
 
   if (query.isError || !query.data) {
     return (
-      <Card shadow="sm">
-        <CardBody className="p-4 text-center">
-          <p className="text-sm text-default-500">
-            No se pudieron cargar las gráficas. Inténtalo más tarde.
-          </p>
-        </CardBody>
-      </Card>
+      <div className="rounded-large bg-content1 p-4 text-center shadow-small">
+        <p className="text-sm text-default-500">
+          No se pudieron cargar las gráficas. Inténtalo más tarde.
+        </p>
+      </div>
     );
   }
 
@@ -176,7 +189,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
   const pendingCharts = enriched.filter(isEmpty);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {visibleCharts.map(
         ({ chart, buckets: chartBuckets, photos, adapter, series }) => (
           <ChartCard
@@ -198,12 +211,14 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
             {...(adapter?.metadata.rating === true ? { rating: true } : {})}
             orphan={!adapter}
             {...(series !== undefined ? { series } : {})}
+            periodLabel={periodLabel}
+            variant="client"
           />
         )
       )}
 
       {pendingCharts.length > 0 ? (
-        <PendingChartsCard charts={pendingCharts} period={selectedPeriod} />
+        <PendingChartsCard charts={pendingCharts} period={periodLabel} />
       ) : null}
     </div>
   );
@@ -219,55 +234,45 @@ interface PendingChartsCardProps {
 
 /**
  * Compact checklist that replaces the stack of empty chart canvases.
- * Each row keeps the trainer's metric color + icon so when data starts
- * coming in the row "graduates" to a full <ChartCard> with continuity.
+ * Each row keeps the metric icon so when data starts coming in the row
+ * "graduates" to a full <ChartCard> with continuity (same brand tile).
  */
 function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
   return (
-    <Card shadow="sm">
-      <CardBody>
-        <p className="text-sm font-medium text-foreground">Aún sin registrar</p>
-        <p className="text-xs text-default-500 mt-0.5">
-          Registra para ver tu progreso aquí
-        </p>
-        <ul className="mt-3 divide-y divide-default-100">
-          {charts.map(({ chart, adapter }) => {
-            const colorToken = Array.isArray(chart.color)
-              ? (chart.color[0] ?? "neutral-slate")
-              : chart.color;
-            const palette = resolveColor(colorToken);
-            const icon =
-              chart.icon ??
-              adapter?.metadata.icon ??
-              iconForChartType(chart.chart_type);
+    <div className="rounded-large bg-content1 p-4 shadow-small">
+      <p className="text-[15px] font-semibold text-foreground">
+        Aún sin registrar
+      </p>
+      <p className="mt-0.5 text-[13px] text-default-500">
+        Registra para ver tu progreso aquí
+      </p>
+      <ul className="mt-2 divide-y divide-default-100">
+        {charts.map(({ chart, adapter }) => {
+          const icon =
+            chart.icon ??
+            adapter?.metadata.icon ??
+            iconForChartType(chart.chart_type);
 
-            return (
-              <li
-                key={chart.id}
-                className="flex items-center gap-3 py-2.5 min-h-[48px]"
-              >
-                <div
-                  className="p-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: palette.soft }}
-                >
-                  <Icon
-                    aria-hidden
-                    icon={icon}
-                    style={{ color: palette.stroke }}
-                    width={16}
-                  />
-                </div>
-                <p className="text-sm font-medium text-foreground truncate flex-1">
-                  {chart.label}
-                </p>
-                <p className="text-[11px] text-default-500 tabular-nums flex-shrink-0">
-                  Sin datos · {period}
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      </CardBody>
-    </Card>
+          return (
+            <li
+              key={chart.id}
+              className="flex min-h-[52px] items-center gap-3 py-2.5"
+            >
+              <IconTile
+                className="!h-8 !w-8 !rounded-[10px]"
+                icon={icon}
+                size="sm"
+              />
+              <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground">
+                {chart.label}
+              </p>
+              <p className="flex-shrink-0 text-[13px] tabular-nums text-default-500">
+                Sin datos · {period}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -28,10 +28,9 @@ import {
 
 import { avgNonNull, formatNumber, xAxisInterval } from "../utils";
 
-import { resolveColor, resolveTargetZoneFill } from "@/lib/charts/palette";
+import { INK, INK_PAST_OPACITY, TOOLTIP_CLASSES } from "./ink";
 
-const TOOLTIP_BOX_CLASS =
-  "rounded-[10px] border-0 shadow-md text-xs text-gray-900 px-3 py-2 bg-white";
+import { resolveColor, resolveTargetZoneFill } from "@/lib/charts/palette";
 
 interface Props {
   buckets: BucketedPoint[];
@@ -41,6 +40,11 @@ interface Props {
   targetZone?: TargetZone;
   /** Optional fixed Y-axis ceiling (e.g. 10 for rating-style metrics). */
   yMax?: number;
+  /**
+   * Portal del cliente: barras en la tinta de marca (las anteriores al
+   * 35 %, la última plena), rejilla y ejes con tokens del tema.
+   */
+  ink?: boolean;
 }
 
 export function BarRenderer({
@@ -50,8 +54,11 @@ export function BarRenderer({
   showAverageLine,
   targetZone,
   yMax,
+  ink = false,
 }: Props) {
   const palette = resolveColor(color);
+  const tick = ink ? INK.tick : "#9ca3af";
+  const tip = TOOLTIP_CLASSES[ink ? "ink" : "default"];
   const data = buckets.map((b) => ({
     label: b.label,
     value: typeof b.value === "number" ? b.value : 0,
@@ -68,7 +75,7 @@ export function BarRenderer({
     <ResponsiveContainer height={160} width="100%">
       <Renderer data={data} margin={{ top: 5, right: 5, left: -20, bottom: 4 }}>
         <CartesianGrid
-          stroke="#f3f4f6"
+          stroke={ink ? INK.grid : "#f3f4f6"}
           strokeDasharray="3 3"
           vertical={false}
         />
@@ -79,13 +86,13 @@ export function BarRenderer({
           height={data.length > 8 ? 56 : 24}
           interval={xAxisInterval(data.length)}
           textAnchor={data.length > 8 ? "end" : "middle"}
-          tick={{ fontSize: 9, fill: "#9ca3af" }}
+          tick={{ fontSize: 9, fill: tick }}
           tickLine={false}
         />
         <YAxis
           allowDecimals={false}
           axisLine={false}
-          tick={{ fontSize: 10, fill: "#9ca3af" }}
+          tick={{ fontSize: 10, fill: tick }}
           tickLine={false}
           {...(yMax !== undefined
             ? { domain: [0, yMax] as [number, number] }
@@ -103,13 +110,11 @@ export function BarRenderer({
             };
 
             return (
-              <div className={TOOLTIP_BOX_CLASS}>
+              <div className={tip.box}>
                 {row.periodTooltip ? (
-                  <p className="text-[10px] text-gray-500 mb-1 leading-snug">
-                    {row.periodTooltip}
-                  </p>
+                  <p className={tip.period}>{row.periodTooltip}</p>
                 ) : null}
-                <p className="text-[11px] text-gray-600 mb-0.5">{row.label}</p>
+                <p className={tip.label}>{row.label}</p>
                 <p className="text-sm font-semibold">
                   {row.hasValue
                     ? `${formatNumber(Number(row.value), 2, 0)}${unit ?? ""}`
@@ -118,7 +123,7 @@ export function BarRenderer({
               </div>
             );
           }}
-          cursor={{ fill: "rgba(243,244,246,0.6)" }}
+          cursor={{ fill: ink ? INK.cursor : "rgba(243,244,246,0.6)" }}
         />
         {targetZone && targetZone.margin && targetZone.margin > 0 ? (
           <ReferenceLine
@@ -134,25 +139,32 @@ export function BarRenderer({
               value: `${Math.round(avg)}`,
               position: "right",
               fontSize: 9,
-              fill: "#a78bfa",
+              fill: ink ? INK.tick : "#a78bfa",
             }}
-            stroke="#a78bfa"
+            stroke={ink ? INK.tick : "#a78bfa"}
             strokeDasharray="5 3"
             strokeWidth={1.5}
             y={avg}
           />
         ) : null}
-        <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+        <Bar dataKey="value" radius={ink ? [4, 4, 4, 4] : [3, 3, 0, 0]}>
           {data.map((d, i) => {
-            let fill = palette.fill;
+            let fill = ink ? INK.mark : palette.fill;
 
             if (!d.hasValue) {
-              fill = "#d1d5db";
+              fill = ink ? INK.grid : "#d1d5db";
             } else if (targetZone) {
               fill = resolveTargetZoneFill(d.value, targetZone);
             }
 
-            return <Cell key={i} fill={fill} />;
+            // Tinta: solo la barra actual va plena (la zona objetivo
+            // conserva su semáforo a opacidad completa).
+            const fillOpacity =
+              ink && d.hasValue && !targetZone && i !== data.length - 1
+                ? INK_PAST_OPACITY
+                : 1;
+
+            return <Cell key={i} fill={fill} fillOpacity={fillOpacity} />;
           })}
         </Bar>
       </Renderer>

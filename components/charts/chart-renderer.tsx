@@ -32,9 +32,17 @@ interface Props {
   series?: ReadonlyArray<{ id: string; label: string }>;
   /** Optional fixed Y-axis ceiling; comes from the resolved adapter. */
   yMax?: number;
+  /** Portal del cliente: line/area/bar en la tinta de marca (ver renderers/ink). */
+  ink?: boolean;
 }
 
-export function ChartRenderer({ config, buckets, series, yMax }: Props) {
+export function ChartRenderer({
+  config,
+  buckets,
+  series,
+  yMax,
+  ink = false,
+}: Props) {
   switch (config.chart_type) {
     case "line":
     case "area": {
@@ -52,6 +60,7 @@ export function ChartRenderer({ config, buckets, series, yMax }: Props) {
             ? { targetZone: config.target_zone }
             : {})}
           {...(yMax !== undefined ? { yMax } : {})}
+          ink={ink}
           variant={config.chart_type}
         />
       );
@@ -70,6 +79,7 @@ export function ChartRenderer({ config, buckets, series, yMax }: Props) {
             ? { targetZone: config.target_zone }
             : {})}
           {...(yMax !== undefined ? { yMax } : {})}
+          ink={ink}
         />
       );
     }
