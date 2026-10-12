@@ -293,20 +293,20 @@ export const VerticalVideoPlayerModal = forwardRef<
               )}
             </AnimatePresence>
 
-            {/* Bottom gradient */}
+            {/* Caption on a solid translucent plate (no gradient scrim) */}
             <AnimatePresence>
               {showControls && (
                 <motion.div
                   animate={{ opacity: 1 }}
-                  className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none"
+                  className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 right-3 z-20 pointer-events-none"
                   exit={{ opacity: 0 }}
                   initial={{ opacity: 0 }}
                 >
-                  <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16 pb-8 px-6">
-                    <h3 className="text-white text-lg font-bold">
+                  <div className="rounded-[14px] bg-black/55 px-3.5 py-3 backdrop-blur-sm">
+                    <h3 className="text-white text-[15px] font-semibold">
                       {exerciseName}
                     </h3>
-                    <p className="text-white/60 text-sm mt-1">
+                    <p className="text-white/80 text-[13px] mt-0.5">
                       Toca para pausar · Desliza abajo para cerrar
                     </p>
                   </div>

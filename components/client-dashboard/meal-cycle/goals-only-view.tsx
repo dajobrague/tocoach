@@ -3,11 +3,9 @@
 import type { ClientDietPreset } from "@/lib/nutrition/cycles/client-week";
 import type { NutritionGoals } from "@/lib/nutrition/goals/client-goals-service";
 
-import { Card, CardBody } from "@heroui/react";
-import { Icon } from "@iconify/react";
-
 import { SectionHeader } from "@/components/client-dashboard/client-page";
 import { MACRO_COLORS } from "@/components/client-dashboard/meal-cycle/macro-ui";
+import { IconTile } from "@/components/shared/icon-tile";
 
 interface GoalsOnlyViewProps {
   /** The client's default daily targets, or null when only presets exist. */
@@ -24,40 +22,41 @@ interface GoalsOnlyViewProps {
  */
 export function GoalsOnlyView({ goals, presets }: GoalsOnlyViewProps) {
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <SectionHeader className="!mb-1" title="Tus objetivos nutricionales" />
-        <p className="text-sm text-default-500">
-          Tu entrenador gestiona tu dieta por objetivos: organiza tus comidas
-          libremente para acercarte a estas metas.
-        </p>
+    <section>
+      <SectionHeader className="!mb-1" title="Tus objetivos nutricionales" />
+      <p className="mb-4 text-[15px] leading-snug text-default-500">
+        Tu entrenador gestiona tu dieta por objetivos: organiza tus comidas
+        libremente para acercarte a estas metas.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        {goals !== null ? (
+          <GoalCard
+            highlight
+            icon="solar:target-linear"
+            name="Objetivo diario"
+            values={goals}
+          />
+        ) : null}
+
+        {presets.map((preset) => (
+          <GoalCard
+            key={preset.id}
+            icon="solar:target-linear"
+            name={preset.name}
+            values={preset}
+          />
+        ))}
       </div>
-
-      {goals !== null ? (
-        <GoalCard
-          highlight
-          icon="solar:target-bold"
-          name="Objetivo diario"
-          values={goals}
-        />
-      ) : null}
-
-      {presets.map((preset) => (
-        <GoalCard
-          key={preset.id}
-          icon="solar:target-linear"
-          name={preset.name}
-          values={preset}
-        />
-      ))}
-    </div>
+    </section>
   );
 }
 
 /**
  * Tarjeta de un objetivo (nombre + kcal + macros). Exportada además para la
  * vista con plan: ahí se muestra UNA sola — la del objetivo al que el día
- * seleccionado está vinculado.
+ * seleccionado está vinculado. Card plana (sin anillo de marca): `highlight`
+ * solo tiñe el icono.
  */
 export function GoalCard({
   name,
@@ -81,42 +80,40 @@ export function GoalCard({
   ];
 
   return (
-    <Card shadow="sm">
-      <CardBody className="flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <Icon
-              className={highlight ? "text-primary" : "text-default-400"}
-              icon={icon}
-              width={18}
-            />
-            <span className="truncate font-heading text-lg text-foreground">
-              {name}
-            </span>
-          </span>
-          <span className="shrink-0 text-sm font-bold text-foreground tabular-nums">
-            {Math.round(values.kcal).toLocaleString("es")}{" "}
-            <span className="text-xs font-medium text-default-400">kcal</span>
-          </span>
-        </div>
+    <article className="rounded-large bg-content1 px-4 py-3.5 shadow-small">
+      <div className="flex items-center gap-2.5">
+        <IconTile
+          icon={icon}
+          size="sm"
+          tone={highlight ? "primary" : "default"}
+        />
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
+          {name}
+        </span>
+        <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-default-500">
+          <span className="font-heading text-xl tracking-[-0.01em] text-foreground tabular-nums">
+            {Math.round(values.kcal).toLocaleString("es")}
+          </span>{" "}
+          kcal
+        </span>
+      </div>
 
-        <div className="grid grid-cols-3 overflow-hidden rounded-medium bg-content2">
-          {macros.map((macro) => (
-            <div
-              key={macro.label}
-              className="flex flex-col items-center gap-0.5 border-l border-default-200 py-2 first:border-l-0"
-            >
-              <span className="flex items-center gap-1.5 text-sm font-bold text-foreground tabular-nums">
-                <span className={`h-1.5 w-1.5 rounded-full ${macro.dot}`} />
-                {Math.round(macro.grams)} g
-              </span>
-              <span className="text-[11px] text-default-500">
-                {macro.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      </CardBody>
-    </Card>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {macros.map((macro) => (
+          <div
+            key={macro.label}
+            className="grid grid-cols-[auto_1fr] items-center gap-x-1.5 rounded-xl bg-default-100 px-2.5 py-2"
+          >
+            <span className={`h-2 w-2 rounded-full ${macro.dot}`} />
+            <span className="text-[15px] font-semibold text-foreground tabular-nums">
+              {Math.round(macro.grams)} g
+            </span>
+            <span className="col-start-2 text-xs text-default-500">
+              {macro.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }

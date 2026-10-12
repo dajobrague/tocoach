@@ -5,13 +5,14 @@ import type {
   ClientWeekMenu,
 } from "@/lib/nutrition/cycles/client-week";
 
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/client-dashboard/client-page";
+import { SoftChip } from "@/components/client-dashboard/meal-cycle/macro-ui";
 import { IconTile } from "@/components/shared/icon-tile";
-import { OutlineChip } from "@/components/shared/outline-chip";
+import { mealVisual } from "@/features/trainer/cycles/cycle-format";
 import { thumbnailUrl } from "@/lib/utils/avatar";
 
 /** "Día de entreno" when named, "Menú N" otherwise ("Día N" would collide
@@ -19,6 +20,9 @@ import { thumbnailUrl } from "@/lib/utils/avatar";
 export function menuLabel(menu: ClientWeekMenu): string {
   return menu.name ?? `Menú ${menu.dayIndex + 1}`;
 }
+
+/** Shared easing of the portal's expand/collapse motion (iOS-like). */
+const EASE = "ease-[cubic-bezier(0.32,0.72,0,1)]";
 
 /**
  * Small thumbnail that asks Supabase for a server-side resized version and
@@ -42,49 +46,50 @@ function Thumb({ className, url }: { className: string; url: string }) {
   );
 }
 
-/** Horizontal photo slide; tapping a photo reveals the dish name. */
+/** Horizontal photo strip; tapping a photo shows the dish name below it. */
 function MenuImageSlide({
   images,
 }: {
   images: { url: string; name: string }[];
 }) {
-  const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string | null>(
+    images[0]?.url ?? null
+  );
 
   if (images.length === 0) return null;
 
-  return (
-    <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1">
-      {images.map((image) => {
-        const active = activeUrl === image.url;
+  const activeName = images.find((image) => image.url === activeUrl)?.name;
 
-        return (
-          <button
-            key={image.url}
-            aria-label={image.name.length > 0 ? image.name : "Ver plato"}
-            className="relative shrink-0 snap-start overflow-hidden rounded-xl border border-default-200"
-            type="button"
-            onClick={() =>
-              setActiveUrl((current) =>
-                current === image.url ? null : image.url
-              )
-            }
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt=""
-              className="h-20 w-28 object-cover"
-              decoding="async"
-              loading="lazy"
-              src={image.url}
-            />
-            {active && image.name.length > 0 ? (
-              <span className="absolute inset-x-0 bottom-0 bg-black/65 px-1.5 py-1 text-left text-[11px] font-medium leading-tight text-white">
-                {image.name}
-              </span>
-            ) : null}
-          </button>
-        );
-      })}
+  return (
+    <div>
+      <div className="-mx-4 flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {images.map((image) => {
+          const active = activeUrl === image.url;
+
+          return (
+            <button
+              key={image.url}
+              aria-label={image.name.length > 0 ? image.name : "Ver plato"}
+              aria-pressed={active}
+              className={`shrink-0 snap-start overflow-hidden rounded-[14px] transition-transform active:scale-[0.97] motion-reduce:transition-none ${
+                active
+                  ? "ring-2 ring-foreground ring-offset-2 ring-offset-content1"
+                  : ""
+              }`}
+              type="button"
+              onClick={() => setActiveUrl(image.url)}
+            >
+              <Thumb className="h-16 w-16 object-cover" url={image.url} />
+            </button>
+          );
+        })}
+      </div>
+      <p
+        aria-live="polite"
+        className="mt-2 min-h-[18px] truncate text-[13px] font-semibold text-default-500"
+      >
+        {activeName ?? ""}
+      </p>
     </div>
   );
 }
@@ -116,109 +121,117 @@ function MenuCard({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-large bg-content1 shadow-small transition-shadow ${
-        expanded ? "ring-2 ring-primary" : ""
-      }`}
+      className="overflow-hidden rounded-large bg-content1 shadow-small"
       data-expanded={expanded}
       data-testid="menu-card"
     >
       <button
-        className="flex w-full items-center gap-3 p-3 text-left"
+        aria-expanded={expanded}
+        className="flex min-h-[72px] w-full items-center gap-3 py-3.5 pl-4 pr-3.5 text-left transition-colors [@media(hover:hover)]:hover:bg-default-100"
         data-testid="menu-card-toggle"
         type="button"
         onClick={onToggle}
       >
-        {/* Collapsed cards get the photo stack teaser; the expanded card
-            already shows the full slide below, so no leading image there. */}
-        {expanded === false ? (
-          menu.images.length > 0 ? (
-            <span className="flex shrink-0 -space-x-3">
-              {menu.images.slice(0, 3).map((image) => (
-                <Thumb
-                  key={image.url}
-                  className="h-10 w-10 rounded-xl border-2 border-content1 object-cover"
-                  url={image.url}
-                />
-              ))}
-            </span>
-          ) : (
-            <IconTile icon="solar:notes-linear" tone="default" />
-          )
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {menuLabel(menu)}
-            </p>
+        {menu.images.length > 0 ? (
+          <span className="flex shrink-0 pl-2.5">
+            {menu.images.slice(0, 3).map((image) => (
+              <Thumb
+                key={image.url}
+                className="-ml-2.5 h-[34px] w-[34px] rounded-full object-cover ring-[2.5px] ring-content1"
+                url={image.url}
+              />
+            ))}
+          </span>
+        ) : (
+          <IconTile icon="solar:plate-linear" size="sm" tone="default" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-semibold leading-tight text-foreground">
+            {menuLabel(menu)}
+          </span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             {/* One status per card: the current menu wins over the
                 recommendation (usually the same menu). */}
-            {isCurrent || isRecommended ? (
-              <OutlineChip tone="primary">
-                {isCurrent ? "Menú actual" : "Recomendado"}
-              </OutlineChip>
+            {isCurrent ? (
+              <SoftChip>Menú actual</SoftChip>
+            ) : isRecommended ? (
+              <SoftChip brand>Recomendado</SoftChip>
             ) : null}
-          </div>
-          <p className="text-xs text-default-500 tabular-nums">
-            {menu.meals.length} {menu.meals.length === 1 ? "comida" : "comidas"}
-            {showMacros && menu.kcal > 0
-              ? ` · ${menu.kcal.toLocaleString("es")} kcal`
-              : ""}
-          </p>
-        </div>
+            <span className="text-[13px] text-default-500 tabular-nums">
+              {menu.meals.length === 0
+                ? "Sin comidas aún"
+                : `${menu.meals.length} ${menu.meals.length === 1 ? "comida" : "comidas"}`}
+              {showMacros && menu.kcal > 0
+                ? ` · ${menu.kcal.toLocaleString("es")} kcal`
+                : ""}
+            </span>
+          </span>
+        </span>
         <Icon
-          className={`shrink-0 text-default-300 transition-transform ${
+          className={`shrink-0 text-default-400 transition-transform duration-300 motion-reduce:transition-none ${EASE} ${
             expanded ? "rotate-180" : ""
           }`}
           icon="solar:alt-arrow-down-linear"
-          width={18}
+          width={20}
         />
       </button>
 
-      {expanded ? (
-        <div className="flex flex-col gap-3 border-t border-default-100 p-3">
-          <MenuImageSlide images={menu.images} />
+      {/* Always mounted so it can slide open; `invisible` (after the
+          collapse finishes) keeps the hidden buttons out of tab order. */}
+      <div
+        className={`grid motion-reduce:!transition-none ${
+          expanded
+            ? `visible grid-rows-[1fr] [transition:grid-template-rows_420ms_cubic-bezier(0.32,0.72,0,1)]`
+            : `invisible grid-rows-[0fr] [transition:grid-template-rows_420ms_cubic-bezier(0.32,0.72,0,1),visibility_0s_420ms]`
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden px-4">
+          <div className="flex flex-col pb-4">
+            <MenuImageSlide images={menu.images} />
 
-          {menu.meals.length === 0 ? (
-            <p className="text-xs text-default-400">
-              Este menú no tiene comidas aún.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {menu.meals.map((meal, index) => (
-                <li
-                  key={`${index}-${meal.label}`}
-                  className="flex items-baseline gap-2"
-                >
-                  <span className="shrink-0 text-sm font-medium text-foreground">
-                    {meal.label}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-default-500">
-                    {meal.primaryName ?? "Sin opciones"}
-                    {meal.optionCount > 1
-                      ? ` · ${meal.optionCount - 1} alt.`
-                      : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+            {menu.meals.length === 0 ? (
+              <p className="mt-1 rounded-[14px] bg-default-100 p-3.5 text-center text-sm text-default-500">
+                Este menú no tiene comidas aún.
+              </p>
+            ) : (
+              <ul className="mt-2.5 divide-y divide-default-100">
+                {menu.meals.map((meal, index) => (
+                  <li
+                    key={`${index}-${meal.label}`}
+                    className="flex items-start gap-2.5 py-2 text-sm leading-snug text-default-500"
+                  >
+                    <Icon
+                      className="mt-px shrink-0 text-default-400"
+                      icon={mealVisual(meal.label).icon}
+                      width={20}
+                    />
+                    <span className="min-w-0">
+                      <span className="font-semibold text-foreground">
+                        {meal.label}
+                      </span>
+                      {" — "}
+                      {meal.primaryName ?? "Sin opciones"}
+                      {meal.optionCount > 1
+                        ? ` · ${meal.optionCount - 1} alt.`
+                        : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          <Button
-            className="w-full font-medium"
-            color="primary"
-            data-testid="menu-card-choose"
-            isLoading={pending}
-            startContent={
-              pending ? null : (
-                <Icon icon="solar:check-circle-linear" width={18} />
-              )
-            }
-            onPress={onChoose}
-          >
-            Elegir este menú
-          </Button>
+            <Button
+              className="mt-3.5 h-[52px] w-full rounded-medium text-[17px] font-semibold"
+              color="primary"
+              data-testid="menu-card-choose"
+              isLoading={pending}
+              onPress={onChoose}
+            >
+              {pending ? "Guardando…" : "Elegir este menú"}
+            </Button>
+          </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -250,36 +263,36 @@ export function MenuChooser({
     return aRec - bRec || a.dayIndex - b.dayIndex;
   });
   const [expanded, setExpanded] = useState<number | null>(
-    day.recommendedDayIndex ?? null
+    day.recommendedDayIndex ?? ordered[0]?.dayIndex ?? null
   );
 
   return (
-    <div className="flex flex-col gap-2" data-testid="menu-chooser">
-      <div>
-        <SectionHeader className="!mb-1" title="¿Qué menú vas a seguir?" />
-        <p className="text-sm text-default-500">
-          Revisa lo que incluye cada menú y elige el tuyo para este día.
-        </p>
-      </div>
+    <section data-testid="menu-chooser">
+      <SectionHeader className="!mb-1" title="¿Qué menú vas a seguir?" />
+      <p className="mb-4 text-[15px] leading-snug text-default-500">
+        Revisa lo que incluye cada menú y elige el tuyo para este día.
+      </p>
 
-      {ordered.map((menu) => (
-        <MenuCard
-          key={menu.dayIndex}
-          expanded={expanded === menu.dayIndex}
-          isCurrent={menu.dayIndex === day.dayIndex}
-          isRecommended={menu.dayIndex === day.recommendedDayIndex}
-          menu={menu}
-          pending={pending && expanded === menu.dayIndex}
-          showMacros={showMacros}
-          onChoose={() => onChoose(menu.dayIndex)}
-          onToggle={() =>
-            setExpanded((current) =>
-              current === menu.dayIndex ? null : menu.dayIndex
-            )
-          }
-        />
-      ))}
-    </div>
+      <div className="flex flex-col gap-3">
+        {ordered.map((menu) => (
+          <MenuCard
+            key={menu.dayIndex}
+            expanded={expanded === menu.dayIndex}
+            isCurrent={menu.dayIndex === day.dayIndex}
+            isRecommended={menu.dayIndex === day.recommendedDayIndex}
+            menu={menu}
+            pending={pending && expanded === menu.dayIndex}
+            showMacros={showMacros}
+            onChoose={() => onChoose(menu.dayIndex)}
+            onToggle={() =>
+              setExpanded((current) =>
+                current === menu.dayIndex ? null : menu.dayIndex
+              )
+            }
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -306,35 +319,35 @@ export function MenuBar({
   const confirmed = day.hasMenuChoice === true;
 
   return (
-    <Card data-testid="menu-bar" shadow="sm">
-      <CardBody className="flex-row items-center gap-3 p-3">
-        <IconTile icon="solar:notes-linear" size="sm" />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-default-500">Menú del día</p>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {effective !== undefined
-                ? menuLabel(effective)
-                : `Menú ${day.dayIndex + 1}`}
-            </p>
-            <OutlineChip tone="primary">
-              {confirmed ? "Elegido por ti" : "Recomendado"}
-            </OutlineChip>
-          </div>
+    <div
+      className="flex items-center gap-2.5 rounded-large bg-content1 py-2.5 pl-3 pr-2.5 shadow-small"
+      data-testid="menu-bar"
+    >
+      <IconTile icon="solar:notebook-linear" size="sm" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-default-500">Menú del día</span>
+          <SoftChip brand={!confirmed} className="h-5 px-[7px] text-[11px]">
+            {confirmed ? "Elegido por ti" : "Recomendado"}
+          </SoftChip>
         </div>
-        {onChange !== undefined ? (
-          <Button
-            className="shrink-0"
-            data-testid="menu-bar-change"
-            size="sm"
-            startContent={<Icon icon="solar:refresh-linear" width={14} />}
-            variant="flat"
-            onPress={onChange}
-          >
-            Cambiar
-          </Button>
-        ) : null}
-      </CardBody>
-    </Card>
+        <p className="mt-0.5 truncate text-[15px] font-semibold leading-snug text-foreground">
+          {effective !== undefined
+            ? menuLabel(effective)
+            : `Menú ${day.dayIndex + 1}`}
+        </p>
+      </div>
+      {onChange !== undefined ? (
+        <Button
+          className="h-9 shrink-0 rounded-full bg-default-100 px-3 text-sm font-semibold text-foreground"
+          data-testid="menu-bar-change"
+          size="sm"
+          variant="flat"
+          onPress={onChange}
+        >
+          Cambiar
+        </Button>
+      ) : null}
+    </div>
   );
 }

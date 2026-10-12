@@ -3,21 +3,19 @@
 import type { PlannedTotals } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import type { NutritionGoals } from "@/lib/nutrition/goals/client-goals-service";
 
-import { Card, CardBody } from "@heroui/react";
-import { Icon } from "@iconify/react";
-
 import {
   KcalRing,
   MACRO_COLORS,
   MacroProgressBar,
+  MacroStrip,
+  SoftChip,
 } from "@/components/client-dashboard/meal-cycle/macro-ui";
 import { pctOf } from "@/components/client-dashboard/meal-cycle/slot-grouping";
-import { OutlineChip } from "@/components/shared/outline-chip";
 
 /**
  * "Nutrición del día" — the day's planned totals, against the goals the
  * trainer set when they exist (ring + per-macro bars, mirroring the trainer's
- * day panel) or as a compact 4-stat row when no goals are saved yet.
+ * day panel) or as a compact 4-stat strip when no goals are saved yet.
  */
 export function DaySummaryCard({
   totals,
@@ -30,62 +28,34 @@ export function DaySummaryCard({
   goalName?: string | null;
 }) {
   return (
-    <Card data-testid="day-summary" shadow="sm">
-      <CardBody className="gap-4 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Icon
-            className="text-primary"
-            icon="solar:pie-chart-2-linear"
-            width={18}
-          />
-          <h2 className="font-heading text-lg text-foreground">
-            Nutrición del día
-          </h2>
-          {goalName !== null && (
-            <OutlineChip className="ml-auto">{goalName}</OutlineChip>
-          )}
-        </div>
-
-        {goals === null ? (
-          <TotalsRow totals={totals} />
-        ) : (
-          <GoalsProgress goals={goals} totals={totals} />
+    <section
+      className="rounded-large bg-content1 p-4 shadow-small"
+      data-testid="day-summary"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-heading text-lg leading-tight tracking-[-0.01em] text-foreground">
+          Nutrición del día
+        </h2>
+        {goalName !== null && (
+          <SoftChip className="min-w-0 max-w-[55%] truncate">
+            {goalName}
+          </SoftChip>
         )}
-      </CardBody>
-    </Card>
-  );
-}
+      </div>
 
-/** No goals saved: the planned totals as a simple 4-stat strip. */
-function TotalsRow({ totals }: { totals: PlannedTotals }) {
-  const stats = [
-    {
-      label: "Calorías",
-      value: Math.round(totals.kcal).toLocaleString("es"),
-      unit: "kcal",
-    },
-    { label: "Proteína", value: `${Math.round(totals.protein_g)}`, unit: "g" },
-    { label: "Carbos", value: `${Math.round(totals.carbs_g)}`, unit: "g" },
-    { label: "Grasa", value: `${Math.round(totals.fat_g)}`, unit: "g" },
-  ];
-
-  return (
-    <div className="grid grid-cols-4 overflow-hidden rounded-medium bg-content2">
-      {stats.map((stat) => (
-        <div
-          key={stat.label}
-          className="flex flex-col items-center gap-0.5 border-l border-default-200 py-3 first:border-l-0"
-        >
-          <span className="text-sm font-bold text-foreground tabular-nums">
-            {stat.value}{" "}
-            <span className="text-[11px] font-medium text-default-400">
-              {stat.unit}
-            </span>
-          </span>
-          <span className="text-[11px] text-default-500">{stat.label}</span>
+      {goals === null ? (
+        <div className="mt-3.5">
+          <MacroStrip
+            carbs_g={totals.carbs_g}
+            fat_g={totals.fat_g}
+            kcal={totals.kcal}
+            protein_g={totals.protein_g}
+          />
         </div>
-      ))}
-    </div>
+      ) : (
+        <GoalsProgress goals={goals} totals={totals} />
+      )}
+    </section>
   );
 }
 
@@ -122,40 +92,43 @@ function GoalsProgress({
 
   return (
     <>
-      <div className="flex items-center gap-4">
+      <div className="mb-4 mt-3.5 flex items-center gap-4">
         <KcalRing value={kcalPct} />
         <div className="min-w-0 flex-1">
-          <p className="text-xl font-bold text-foreground tabular-nums">
-            {Math.round(totals.kcal).toLocaleString("es")}{" "}
-            <span className="text-sm font-medium text-default-400">
+          <p className="tabular-nums">
+            <span className="font-heading text-[32px] leading-none tracking-[-0.02em] text-foreground">
+              {Math.round(totals.kcal).toLocaleString("es")}
+            </span>
+            <span className="text-[15px] font-semibold text-default-500">
+              {" "}
               / {goals.kcal.toLocaleString("es")} kcal
             </span>
           </p>
-          <p className="text-xs text-default-500">
+          <p className="mt-1.5 text-sm text-default-500">
             {kcalPct}% de tu objetivo diario
           </p>
-          <MacroProgressBar
-            className="mt-2"
-            color="bg-primary"
-            value={kcalPct}
-          />
         </div>
       </div>
 
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         {macros.map((macro) => (
-          <div key={macro.label} className="flex items-center gap-3">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${macro.dot}`} />
-            <span className="w-28 shrink-0 text-xs text-default-600">
-              {macro.label}
-            </span>
+          <div key={macro.label}>
+            <div className="mb-1.5 flex items-center justify-between text-sm">
+              <span className="inline-flex items-center gap-2 font-semibold text-foreground">
+                <span className={`h-2 w-2 rounded-full ${macro.dot}`} />
+                {macro.label}
+              </span>
+              <span className="text-default-500 tabular-nums">
+                <span className="font-semibold text-foreground">
+                  {Math.round(macro.value)}
+                </span>{" "}
+                / {macro.target} g
+              </span>
+            </div>
             <MacroProgressBar
               color={macro.bar}
               value={pctOf(macro.value, macro.target)}
             />
-            <span className="w-16 shrink-0 text-right text-xs font-medium text-default-500 tabular-nums">
-              {Math.round(macro.value)}/{macro.target} g
-            </span>
           </div>
         ))}
       </div>

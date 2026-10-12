@@ -3,6 +3,7 @@
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
 import { Button, Spinner } from "@heroui/react";
+import { Icon } from "@iconify/react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
@@ -12,6 +13,7 @@ import {
   GoalCard,
   GoalsOnlyView,
 } from "@/components/client-dashboard/meal-cycle/goals-only-view";
+import { NutritionState } from "@/components/client-dashboard/meal-cycle/macro-ui";
 import { PdfDietView } from "@/components/client-dashboard/meal-cycle/pdf-diet-view";
 import { dayPlannedTotals } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { MealCycleDayPanel } from "@/components/client-dashboard/meal-cycle/meal-cycle-day-panel";
@@ -26,7 +28,6 @@ import {
 import { RecipeOptionDetail } from "@/components/client-dashboard/meal-cycle/recipe-option-detail";
 import { ShoppingListSection } from "@/components/client-dashboard/shopping-list/shopping-list-section";
 import { WeekDateSelector } from "@/components/client-dashboard/workouts/week-date-selector";
-import { CenteredState } from "@/components/shared/centered-state";
 import { getLocalYmd } from "@/lib/forms/client-helpers";
 import {
   useClientMealCycleWeek,
@@ -42,7 +43,7 @@ function MealCycleShell({ children }: { children: ReactNode }) {
   return (
     <>
       <ClientPage title="Nutrición">
-        <main className="px-4 py-4">{children}</main>
+        <main className="px-4">{children}</main>
       </ClientPage>
       <ClientBottomNav />
     </>
@@ -92,8 +93,12 @@ export function MealCycleContent() {
   if (isPending) {
     return (
       <MealCycleShell>
-        <div className="flex justify-center p-12">
-          <Spinner color="primary" />
+        <div
+          className="flex flex-col items-center gap-3 px-6 py-20 text-center"
+          role="status"
+        >
+          <Spinner color="default" />
+          <p className="text-sm text-default-500">Cargando tu plan…</p>
         </div>
       </MealCycleShell>
     );
@@ -102,10 +107,12 @@ export function MealCycleContent() {
   if (isError) {
     return (
       <MealCycleShell>
-        <CenteredState
+        <NutritionState
           action={
             <Button
-              color="primary"
+              className="h-9 rounded-full bg-default-100 px-3.5 text-sm font-semibold text-foreground"
+              size="sm"
+              startContent={<Icon icon="solar:refresh-linear" width={18} />}
               variant="flat"
               onPress={() => void refetch()}
             >
@@ -115,6 +122,7 @@ export function MealCycleContent() {
           icon="solar:danger-triangle-linear"
           subtitle="Vuelve a intentarlo en un momento."
           title="No pudimos cargar tu plan"
+          tone="danger"
         />
       </MealCycleShell>
     );
@@ -140,7 +148,7 @@ export function MealCycleContent() {
     return (
       <MealCycleShell>
         {showGoals || showPdf ? (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-7">
             {showGoals ? (
               <GoalsOnlyView goals={goals} presets={presets} />
             ) : null}
@@ -149,7 +157,7 @@ export function MealCycleContent() {
             ) : null}
           </div>
         ) : (
-          <CenteredState
+          <NutritionState
             icon="solar:plate-linear"
             subtitle="Tu entrenador aún no te ha asignado un plan de comidas."
             title="Sin plan activo"
@@ -203,16 +211,8 @@ export function MealCycleContent() {
 
   return (
     <MealCycleShell>
-      <div className="flex flex-col gap-4">
-        {dayGoal !== null ? (
-          <GoalCard
-            highlight
-            icon="solar:target-bold"
-            name={dayGoal.name}
-            values={dayGoal.values}
-          />
-        ) : null}
-
+      <div className="flex flex-col gap-5">
+        {/* Calendario arriba, objetivo del día debajo (petición de David). */}
         <WeekDateSelector
           datesWithActivity={datesWithActivity}
           maxBackDays={MAX_BACK_DAYS}
@@ -220,6 +220,15 @@ export function MealCycleContent() {
           todayYmd={todayYmd}
           onSelect={setSelectedDate}
         />
+
+        {dayGoal !== null ? (
+          <GoalCard
+            highlight
+            icon="solar:target-linear"
+            name={dayGoal.name}
+            values={dayGoal.values}
+          />
+        ) : null}
 
         {chooserVisible && selectedDay !== null ? (
           <MenuChooser
@@ -256,9 +265,9 @@ export function MealCycleContent() {
             ) : null}
 
             {selectedDay === null ? (
-              <CenteredState
+              <NutritionState
                 icon="solar:plate-linear"
-                title="No hay comidas para este día"
+                title="No hay comidas para este día."
               />
             ) : (
               <MealCycleDayPanel

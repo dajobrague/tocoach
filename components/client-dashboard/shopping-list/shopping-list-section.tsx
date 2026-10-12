@@ -11,7 +11,11 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
-import { ClientSheet } from "@/components/client-dashboard/client-sheet";
+import {
+  ClientSheet,
+  ClientSheetGrabber,
+} from "@/components/client-dashboard/client-sheet";
+import { NutritionState } from "@/components/client-dashboard/meal-cycle/macro-ui";
 import {
   checkedStorageKey,
   dedupeProducts,
@@ -92,24 +96,24 @@ export function ShoppingListSection() {
   return (
     <>
       <button
-        className="flex w-full items-center gap-3 rounded-large bg-content1 p-4 text-left shadow-small transition-colors active:scale-[0.995] hover:bg-default-50"
+        className="flex min-h-14 w-full items-center gap-3 rounded-large bg-content1 px-4 py-2.5 text-left shadow-small transition-transform active:scale-[0.98] motion-reduce:transition-none [@media(hover:hover)]:hover:bg-default-50"
         data-testid="shopping-list-trigger"
         type="button"
         onClick={() => setOpen(true)}
       >
-        <IconTile icon="solar:cart-large-2-bold" />
+        <IconTile icon="solar:cart-large-2-linear" size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block font-heading text-base text-foreground">
+          <span className="block text-[15px] font-semibold text-foreground">
             Lista de la compra
           </span>
-          <span className="block text-xs text-default-500">
+          <span className="mt-0.5 block text-[13px] leading-snug text-default-500">
             Los productos de tu plan de los próximos días
           </span>
         </span>
         <Icon
-          className="shrink-0 text-default-300"
+          className="shrink-0 text-default-400"
           icon="solar:alt-arrow-right-linear"
-          width={20}
+          width={18}
         />
       </button>
 
@@ -174,77 +178,99 @@ function ShoppingListModal({
   ).length;
 
   return (
-    <ClientSheet isOpen={isOpen} size="md" onClose={onClose}>
+    <ClientSheet isOpen={isOpen} size="lg" onClose={onClose}>
       <ModalContent>
-        <ModalHeader className="flex items-center gap-3 pb-2 pr-10">
-          <IconTile icon="solar:cart-large-2-bold" />
-          <span className="min-w-0 flex-1">
-            <span className="block font-heading text-base text-foreground">
-              Lista de la compra
-            </span>
-            <span className="block text-xs font-normal text-default-500">
-              {products.length > 0
-                ? `${checkedCount} de ${products.length} en el carro`
-                : "Próximos 7 días"}
-            </span>
-          </span>
-        </ModalHeader>
-        <ModalBody className="gap-1 py-2" data-testid="shopping-list">
-          {isPending ? (
-            <div className="flex justify-center py-10">
-              <Spinner color="primary" size="sm" />
-            </div>
-          ) : isError ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <p className="text-sm text-default-500">
-                No pudimos cargar tu lista. Vuelve a intentarlo en un momento.
-              </p>
-              <Button
-                color="primary"
-                size="sm"
-                variant="flat"
-                onPress={() => void refetch()}
+        {(close) => (
+          <>
+            <ClientSheetGrabber onClose={close} />
+            <ModalHeader className="flex-col items-start gap-0.5 pb-2 pr-12 pt-1 sm:pt-4">
+              <span className="font-heading text-[22px] leading-tight tracking-[-0.015em] text-foreground">
+                Lista de la compra
+              </span>
+              <span
+                aria-live="polite"
+                className="text-sm font-normal text-default-500"
               >
-                Reintentar
-              </Button>
-            </div>
-          ) : products.length === 0 ? (
-            <div
-              className="flex flex-col items-center gap-2 py-10 text-center"
-              data-testid="shopping-empty"
-            >
-              <Icon
-                className="text-default-300"
-                icon="solar:cart-large-2-linear"
-                width={30}
-              />
-              <p className="text-sm text-default-500">
-                No hay nada que comprar por ahora.
-              </p>
-            </div>
-          ) : (
-            products.map((product) => (
-              <ProductRow
-                key={product.key}
-                checked={checked.has(product.key)}
-                product={product}
-                onToggle={() => toggle(product.key)}
-              />
-            ))
-          )}
-        </ModalBody>
-        <ModalFooter className="justify-between pt-2">
-          {checkedCount > 0 ? (
-            <Button size="sm" variant="light" onPress={clearChecked}>
-              Vaciar carro
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button color="primary" size="sm" onPress={onClose}>
-            Listo
-          </Button>
-        </ModalFooter>
+                {products.length > 0 ? (
+                  <>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      {checkedCount} de {products.length}
+                    </span>{" "}
+                    en el carro · Próximos 7 días
+                  </>
+                ) : (
+                  "Próximos 7 días"
+                )}
+              </span>
+            </ModalHeader>
+            <ModalBody className="pb-4 pt-2" data-testid="shopping-list">
+              {isPending ? (
+                <div className="flex justify-center py-12" role="status">
+                  <Spinner color="default" size="sm" />
+                </div>
+              ) : isError ? (
+                <NutritionState
+                  flat
+                  action={
+                    <Button
+                      className="h-9 rounded-full bg-content1 px-3.5 text-sm font-semibold text-foreground"
+                      size="sm"
+                      startContent={
+                        <Icon icon="solar:refresh-linear" width={18} />
+                      }
+                      variant="flat"
+                      onPress={() => void refetch()}
+                    >
+                      Reintentar
+                    </Button>
+                  }
+                  icon="solar:danger-triangle-linear"
+                  subtitle="Vuelve a intentarlo en un momento."
+                  title="No pudimos cargar tu lista"
+                  tone="danger"
+                />
+              ) : products.length === 0 ? (
+                <NutritionState
+                  flat
+                  icon="solar:cart-large-2-linear"
+                  testId="shopping-empty"
+                  title="No hay nada que comprar por ahora."
+                />
+              ) : (
+                <div className="divide-y divide-default-200/70 overflow-hidden rounded-large bg-default-100">
+                  {products.map((product) => (
+                    <ProductRow
+                      key={product.key}
+                      checked={checked.has(product.key)}
+                      product={product}
+                      onToggle={() => toggle(product.key)}
+                    />
+                  ))}
+                </div>
+              )}
+            </ModalBody>
+            {products.length > 0 ? (
+              <ModalFooter className="gap-2.5 pt-2">
+                {checkedCount > 0 ? (
+                  <Button
+                    className="h-[52px] flex-1 rounded-medium bg-default-100 text-base font-semibold text-foreground"
+                    variant="flat"
+                    onPress={clearChecked}
+                  >
+                    Vaciar carro
+                  </Button>
+                ) : null}
+                <Button
+                  className="h-[52px] flex-1 rounded-medium text-base font-semibold"
+                  color="primary"
+                  onPress={close}
+                >
+                  Listo
+                </Button>
+              </ModalFooter>
+            ) : null}
+          </>
+        )}
       </ModalContent>
     </ClientSheet>
   );
@@ -261,16 +287,19 @@ function ProductRow({
 }) {
   return (
     <button
-      aria-pressed={checked}
-      className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors active:scale-[0.99] ${
-        checked ? "opacity-55" : "hover:bg-default-50"
-      }`}
+      aria-checked={checked}
+      className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-default-200/60"
       data-checked={checked}
       data-testid="shopping-item"
+      role="checkbox"
       type="button"
       onClick={onToggle}
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-default-100 bg-default-50">
+      <span
+        className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-content1 transition-opacity duration-200 ${
+          checked ? "opacity-50" : ""
+        }`}
+      >
         {product.imageUrl !== null ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -282,7 +311,7 @@ function ProductRow({
           />
         ) : (
           <Icon
-            className="text-default-300"
+            className="text-default-400"
             icon="solar:chef-hat-linear"
             width={20}
           />
@@ -290,25 +319,31 @@ function ProductRow({
       </span>
       <span className="min-w-0 flex-1">
         <span
-          className={`block truncate text-sm font-medium ${
-            checked ? "text-default-400 line-through" : "text-foreground"
+          className={`block truncate text-[15px] font-semibold transition-colors ${
+            checked ? "text-default-500 line-through" : "text-foreground"
           }`}
         >
           {product.name}
         </span>
         {product.brand !== null && (
-          <span className="block truncate text-xs text-default-400">
+          <span
+            className={`block truncate text-[13px] text-default-500 ${
+              checked ? "opacity-50" : ""
+            }`}
+          >
             {product.brand}
           </span>
         )}
       </span>
-      <Icon
-        className={`shrink-0 ${checked ? "text-primary" : "text-default-200"}`}
-        icon={
-          checked ? "solar:check-circle-bold" : "solar:record-circle-linear"
-        }
-        width={22}
-      />
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors duration-150 ${
+          checked
+            ? "bg-primary text-primary-foreground"
+            : "text-transparent ring-2 ring-inset ring-default-300"
+        }`}
+      >
+        <Icon icon="solar:unread-linear" width={16} />
+      </span>
     </button>
   );
 }

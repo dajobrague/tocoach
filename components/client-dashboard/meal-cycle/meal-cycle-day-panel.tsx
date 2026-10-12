@@ -5,10 +5,14 @@ import type { ClientWeekDay } from "@/lib/nutrition/cycles/client-week";
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 import type { NormalizedSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
 
-import { Card, CardBody } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
-import { MacroDotsLine } from "@/components/client-dashboard/meal-cycle/macro-ui";
+import { SectionHeader } from "@/components/client-dashboard/client-page";
+import {
+  MacroDotsLine,
+  NutritionState,
+  SoftChip,
+} from "@/components/client-dashboard/meal-cycle/macro-ui";
 import { normalizeOptionSnapshot } from "@/components/client-dashboard/meal-cycle/normalize-snapshot";
 import {
   chosenOption,
@@ -16,25 +20,26 @@ import {
   slotPlannedTotals,
 } from "@/components/client-dashboard/meal-cycle/slot-grouping";
 import { IconTile } from "@/components/shared/icon-tile";
-import { OutlineChip } from "@/components/shared/outline-chip";
 import { mealVisual } from "@/features/trainer/cycles/cycle-format";
 
-/** Photo thumbnail from the frozen snapshot, with a source-icon fallback. */
-function OptionThumb({ option }: { option: MealSlotOptionRow }) {
-  const snapshot = normalizeOptionSnapshot(option.item_snapshot);
+/** Source-type pictogram for options frozen without a photo. */
+function fallbackIcon(snapshot: NormalizedSnapshot): string {
+  return snapshot.sourceType === "recipe"
+    ? "solar:chef-hat-linear"
+    : "solar:cup-hot-linear";
+}
+
+/** 48px photo from the frozen snapshot, with a source-icon fallback. */
+function OptionThumb({ snapshot }: { snapshot: NormalizedSnapshot }) {
   const image = snapshot.images[0]?.url;
 
   if (image === undefined) {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-default-200 bg-content2">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-default-100">
         <Icon
-          className="text-default-300"
-          icon={
-            snapshot.sourceType === "recipe"
-              ? "solar:chef-hat-linear"
-              : "solar:cup-hot-linear"
-          }
-          width={20}
+          className="text-default-400"
+          icon={fallbackIcon(snapshot)}
+          width={22}
         />
       </span>
     );
@@ -44,7 +49,7 @@ function OptionThumb({ option }: { option: MealSlotOptionRow }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img
       alt=""
-      className="h-12 w-12 shrink-0 rounded-xl border border-default-200 object-cover"
+      className="h-12 w-12 shrink-0 rounded-xl object-cover"
       decoding="async"
       loading="lazy"
       src={image}
@@ -52,92 +57,69 @@ function OptionThumb({ option }: { option: MealSlotOptionRow }) {
   );
 }
 
-function OptionCard({
+/** "Pollo con arroz · Marca" — the option name with its brand muted. */
+function OptionName({ snapshot }: { snapshot: NormalizedSnapshot }) {
+  return (
+    <>
+      {snapshot.name}
+      {snapshot.brand !== null && (
+        <span className="font-medium text-default-500">
+          {" · "}
+          {snapshot.brand}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A component with a single option: one tappable row → detail. */
+function OptionRow({
   option,
   showMacros,
-  selectable,
-  isSelected,
   onOpen,
-  onSelect,
 }: {
   option: MealSlotOptionRow;
   showMacros: boolean;
-  selectable: boolean;
-  isSelected: boolean;
   onOpen: (option: MealSlotOptionRow) => void;
-  onSelect: (option: MealSlotOptionRow) => void;
 }) {
   const snapshot = normalizeOptionSnapshot(option.item_snapshot);
 
   return (
-    <div
-      className={`flex items-center gap-3 rounded-large p-1 transition-shadow ${
-        isSelected ? "ring-2 ring-primary" : ""
-      }`}
-      data-selected={isSelected}
-      data-testid="option-card"
-    >
-      {selectable ? (
-        <button
-          aria-label="Elegir esta opción"
-          aria-pressed={isSelected}
-          className="shrink-0"
-          data-testid="option-select"
-          type="button"
-          onClick={() => onSelect(option)}
-        >
-          <Icon
-            className={isSelected ? "text-primary" : "text-default-300"}
-            icon={
-              isSelected
-                ? "solar:check-circle-bold"
-                : "solar:record-circle-linear"
-            }
-            width={22}
-          />
-        </button>
-      ) : null}
-
+    <div data-selected={false} data-testid="option-card">
       <button
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-transform active:scale-[0.98] motion-reduce:transition-none [@media(hover:hover)]:hover:bg-default-100"
         data-testid="option-open"
         type="button"
         onClick={() => onOpen(option)}
       >
-        <OptionThumb option={option} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {snapshot.name}
-            {snapshot.brand !== null && (
-              <span className="font-normal text-default-400">
-                {" · "}
-                {snapshot.brand}
-              </span>
-            )}
-          </p>
+        <OptionThumb snapshot={snapshot} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold leading-snug text-foreground">
+            <OptionName snapshot={snapshot} />
+          </span>
           <IngredientQuantities ingredients={snapshot.ingredients} />
           {showMacros ? (
             <MacroDotsLine
               carbs_g={snapshot.totals.carbs_g}
-              className="mt-1 text-xs"
+              className="mt-1"
               fat_g={snapshot.totals.fat_g}
               protein_g={snapshot.totals.protein_g}
             />
           ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {showMacros ? (
-            <span className="text-sm font-semibold text-foreground tabular-nums">
-              {Math.round(snapshot.totals.kcal).toLocaleString("es")}{" "}
-              <span className="text-xs font-normal text-default-400">kcal</span>
+        </span>
+        {showMacros ? (
+          <span className="shrink-0 text-right">
+            <span className="block text-[15px] font-semibold text-foreground tabular-nums">
+              {Math.round(snapshot.totals.kcal).toLocaleString("es")}
             </span>
-          ) : null}
-          <Icon
-            className="text-default-300"
-            icon="solar:alt-arrow-right-linear"
-            width={16}
-          />
-        </div>
+            <span className="block text-xs text-default-500">kcal</span>
+          </span>
+        ) : null}
+        <Icon
+          className="-ml-1 shrink-0 text-default-400"
+          icon="solar:alt-arrow-right-linear"
+          width={16}
+        />
       </button>
     </div>
   );
@@ -145,8 +127,8 @@ function OptionCard({
 
 /**
  * One alternative inside the swipe carousel: photo on top (tap = choose),
- * name/macros row below (tap = open the recipe detail). Same testids as the
- * stacked card so the e2e selection flow keeps working.
+ * name/portion/kcal below (tap = open the recipe detail). Testids shared
+ * with the single-option row so the e2e selection flow keeps working.
  */
 function CarouselOptionCard({
   option,
@@ -166,17 +148,18 @@ function CarouselOptionCard({
 
   return (
     <div
-      className={`w-[72%] max-w-[240px] shrink-0 snap-start overflow-hidden rounded-large bg-content2 transition-shadow ${
-        isSelected ? "ring-2 ring-inset ring-primary" : ""
+      className={`flex w-[72%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl transition-[box-shadow,background-color] duration-200 motion-reduce:transition-none ${
+        isSelected ? "bg-content1 ring-2 ring-primary" : "bg-default-100"
       }`}
       data-selected={isSelected}
       data-testid="option-card"
     >
       <button
-        aria-label="Elegir esta opción"
-        aria-pressed={isSelected}
-        className="relative block w-full"
+        aria-checked={isSelected}
+        aria-label={`Elegir ${snapshot.name}`}
+        className="relative block w-full active:opacity-80"
         data-testid="option-select"
+        role="radio"
         type="button"
         onClick={() => onSelect(option)}
       >
@@ -184,70 +167,57 @@ function CarouselOptionCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             alt=""
-            className="h-24 w-full object-cover"
+            className="aspect-video w-full object-cover"
             decoding="async"
             loading="lazy"
             src={image}
           />
         ) : (
-          <span className="flex h-24 w-full items-center justify-center bg-default-100">
+          <span className="flex aspect-video w-full items-center justify-center bg-default-200/60">
             <Icon
-              className="text-default-300"
-              icon={
-                snapshot.sourceType === "recipe"
-                  ? "solar:chef-hat-linear"
-                  : "solar:cup-hot-linear"
-              }
-              width={28}
+              className="text-default-400"
+              icon={fallbackIcon(snapshot)}
+              width={34}
             />
           </span>
         )}
         <span
-          className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${
+          className={`absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full transition-[transform,background-color] duration-200 motion-reduce:transition-none ${
             isSelected
-              ? "bg-primary text-primary-foreground"
-              : "bg-background/80 text-default-400"
+              ? "scale-105 bg-primary text-primary-foreground ring-2 ring-content1"
+              : "bg-black/40 text-transparent ring-2 ring-inset ring-white"
           }`}
         >
-          <Icon
-            icon={
-              isSelected
-                ? "solar:check-circle-bold"
-                : "solar:record-circle-linear"
-            }
-            width={18}
-          />
+          <Icon icon="solar:unread-linear" width={16} />
         </span>
       </button>
 
       <button
-        className="flex w-full items-center gap-2 p-2.5 text-left"
+        className="group flex flex-1 flex-col items-start gap-0.5 px-3 pb-3 pt-2.5 text-left"
         data-testid="option-open"
         type="button"
         onClick={() => onOpen(option)}
       >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {snapshot.name}
-            {snapshot.brand !== null && (
-              <span className="font-normal text-default-400">
-                {" · "}
-                {snapshot.brand}
-              </span>
-            )}
-          </p>
-          <IngredientQuantities ingredients={snapshot.ingredients} />
+        <b className="text-[15px] font-semibold leading-snug text-foreground underline-offset-[3px] [@media(hover:hover)]:group-hover:underline">
+          <OptionName snapshot={snapshot} />
+        </b>
+        <IngredientQuantities ingredients={snapshot.ingredients} />
+        <span className="mt-auto flex w-full items-center justify-between pt-2 text-[13px] text-default-500">
           {showMacros ? (
-            <p className="text-xs text-default-500 tabular-nums">
-              {Math.round(snapshot.totals.kcal).toLocaleString("es")} kcal
-            </p>
-          ) : null}
-        </div>
-        <Icon
-          className="shrink-0 text-default-300"
-          icon="solar:alt-arrow-right-linear"
-          width={16}
-        />
+            <span>
+              <span className="text-[15px] font-semibold text-foreground tabular-nums">
+                {Math.round(snapshot.totals.kcal).toLocaleString("es")}
+              </span>{" "}
+              kcal
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className="inline-flex items-center font-semibold text-primary">
+            {snapshot.sourceType === "recipe" ? "Ver receta" : "Ver alimento"}
+            <Icon icon="solar:alt-arrow-right-linear" width={14} />
+          </span>
+        </span>
       </button>
     </div>
   );
@@ -267,11 +237,11 @@ function IngredientQuantities({
   if (ingredients.length === 0) return null;
 
   return (
-    <p className="mt-0.5 truncate text-xs text-default-500 tabular-nums">
+    <span className="mt-0.5 line-clamp-2 block text-[13px] leading-snug text-default-500 tabular-nums">
       {ingredients
         .map((ing) => `${ing.name} ${ing.quantity} ${ing.unit}`)
         .join(" · ")}
-    </p>
+    </span>
   );
 }
 
@@ -282,35 +252,32 @@ function IngredientQuantities({
  * option counts toward the meal. A single option renders as a plain row.
  */
 function ComponentSection({
+  label,
   options,
   showMacros,
   selectedOptionIds,
   onOpenOption,
   onSelectOption,
 }: {
+  label: string;
   options: MealSlotOptionRow[];
   showMacros: boolean;
   selectedOptionIds: readonly string[];
   onOpenOption: (option: MealSlotOptionRow) => void;
   onSelectOption: (option: MealSlotOptionRow) => void;
 }) {
-  const selectable = options.length > 1;
-
-  if (selectable === false) {
+  if (options.length <= 1) {
     return (
-      <div className="flex flex-col gap-1.5">
+      <>
         {options.map((option) => (
-          <OptionCard
+          <OptionRow
             key={option.id}
-            isSelected={false}
             option={option}
-            selectable={false}
             showMacros={showMacros}
             onOpen={onOpenOption}
-            onSelect={onSelectOption}
           />
         ))}
-      </div>
+      </>
     );
   }
 
@@ -318,14 +285,18 @@ function ComponentSection({
     chosenOption({ groupIndex: 0, options }, selectedOptionIds)?.id ?? null;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <OutlineChip className="inline-flex items-center gap-1 self-start">
-        <Icon icon="solar:transfer-horizontal-linear" width={13} />
-        ¡Tú eliges!
-      </OutlineChip>
+    <div>
+      <div className="mb-2.5 flex items-center gap-2">
+        <SoftChip brand>¡Tú eliges!</SoftChip>
+        <span className="text-xs text-default-500">
+          {options.length} opciones · toca la foto para elegir
+        </span>
+      </div>
       <div
-        className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1"
+        aria-label={`Opciones de ${label.toLowerCase()}`}
+        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2.5 overflow-x-auto overscroll-x-contain px-4 pb-1.5 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         data-testid="option-carousel"
+        role="radiogroup"
       >
         {options.map((option) => (
           <CarouselOptionCard
@@ -338,6 +309,18 @@ function ComponentSection({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** "+" between components that add up within the same meal. */
+function PlusDivider() {
+  return (
+    <div aria-hidden className="relative grid h-7 place-items-center">
+      <span className="absolute inset-x-0 top-1/2 h-px bg-default-200" />
+      <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-content1 text-default-400 ring-1 ring-inset ring-default-200">
+        <Icon icon="solar:add-linear" width={14} />
+      </span>
     </div>
   );
 }
@@ -363,78 +346,65 @@ function SlotBlock({
   const mealKcal = slotPlannedTotals(options, selectedOptionIds).kcal;
 
   return (
-    <Card shadow="sm">
-      <CardBody className="gap-3 p-3">
-        <div className="flex items-center gap-3">
-          <IconTile icon={visual.icon} size="sm" />
-          <p className="min-w-0 flex-1 truncate font-heading text-base text-foreground">
-            {cleanLabel}
-          </p>
-          {showMacros && components.length > 0 ? (
-            <span className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-              {Math.round(mealKcal).toLocaleString("es")} kcal
-            </span>
-          ) : null}
-        </div>
+    <article className="rounded-large bg-content1 px-4 pb-4 pt-3.5 shadow-small">
+      <header className="mb-3 flex items-center gap-2.5">
+        <IconTile icon={visual.icon} size="sm" />
+        <h3 className="min-w-0 flex-1 truncate font-heading text-[17px] leading-tight tracking-[-0.01em] text-foreground">
+          {cleanLabel}
+        </h3>
+        {showMacros && components.length > 0 ? (
+          <span className="shrink-0 text-sm font-semibold text-default-500 tabular-nums">
+            {Math.round(mealKcal).toLocaleString("es")} kcal
+          </span>
+        ) : null}
+      </header>
 
-        {components.length === 0 ? (
-          <p className="text-xs text-default-400">Sin opciones aún.</p>
-        ) : (
-          components.map((component, index) => (
-            <div key={component.groupIndex} className="flex flex-col gap-1.5">
-              {index > 0 ? (
-                <div className="flex items-center gap-2 py-0.5">
-                  <span className="h-px flex-1 bg-default-100" />
-                  <Icon
-                    className="text-default-300"
-                    icon="solar:add-circle-linear"
-                    width={14}
-                  />
-                  <span className="h-px flex-1 bg-default-100" />
-                </div>
-              ) : null}
-              <ComponentSection
-                options={component.options}
-                selectedOptionIds={selectedOptionIds}
-                showMacros={showMacros}
-                onOpenOption={onOpenOption}
-                onSelectOption={onSelectOption}
-              />
-            </div>
-          ))
-        )}
-      </CardBody>
-    </Card>
+      {components.length === 0 ? (
+        <p className="rounded-[14px] bg-default-100 p-3.5 text-center text-sm text-default-500">
+          Sin opciones aún.
+        </p>
+      ) : (
+        components.map((component, index) => (
+          <div key={component.groupIndex}>
+            {index > 0 ? <PlusDivider /> : null}
+            <ComponentSection
+              label={cleanLabel}
+              options={component.options}
+              selectedOptionIds={selectedOptionIds}
+              showMacros={showMacros}
+              onOpenOption={onOpenOption}
+              onSelectOption={onSelectOption}
+            />
+          </div>
+        ))
+      )}
+    </article>
   );
 }
 
-/** Trainer notes for the selected day — a clearly highlighted banner. */
+/** Trainer notes for the selected day — a neutral card with a small tile. */
 function DayNotesBanner({ notes }: { notes: ClientDayNote[] }) {
   if (notes.length === 0) {
     return null;
   }
 
   return (
-    <div
-      className="rounded-large border border-warning-200 bg-warning-50 p-3"
+    <aside
+      className="rounded-large bg-content1 px-4 py-3.5 shadow-small"
       data-testid="day-notes"
     >
-      <div className="flex items-center gap-2">
-        <Icon
-          className="text-warning-600"
-          icon="solar:notebook-bold"
-          width={18}
-        />
-        <p className="text-sm font-semibold text-warning-700">
+      <div className="flex items-center gap-2.5">
+        <IconTile icon="solar:notebook-linear" size="sm" />
+        <p className="text-[15px] font-semibold text-foreground">
           Notas de tu entrenador
         </p>
       </div>
-      <ul className="mt-1 flex flex-col gap-1 pl-1 text-sm text-foreground">
+      <ul className="mt-2.5 flex list-disc flex-col gap-1.5 pl-5 text-sm leading-snug text-foreground marker:text-default-400">
         {notes.map((note) => (
           <li key={note.id}>{note.text}</li>
         ))}
       </ul>
-    </div>
+    </aside>
   );
 }
 
@@ -460,36 +430,39 @@ export function MealCycleDayPanel({
 }) {
   if (day.started === false) {
     return (
-      <Card shadow="sm">
-        <CardBody className="px-6 py-10 text-center text-sm text-default-500">
-          Este día es anterior al inicio de tu plan.
-        </CardBody>
-      </Card>
+      <NutritionState
+        icon="solar:calendar-linear"
+        title="Este día es anterior al inicio de tu plan."
+      />
     );
   }
 
   return (
-    <div className="flex flex-col gap-3" data-testid="day-panel">
+    <div className="flex flex-col gap-5" data-testid="day-panel">
       <DayNotesBanner notes={day.notes} />
 
       {day.slots.length === 0 ? (
-        <Card shadow="sm">
-          <CardBody className="px-6 py-10 text-center text-sm text-default-500">
-            No hay comidas para este día.
-          </CardBody>
-        </Card>
+        <NutritionState
+          icon="solar:plate-linear"
+          title="No hay comidas para este día."
+        />
       ) : (
-        day.slots.map((slot) => (
-          <SlotBlock
-            key={slot.id}
-            label={slot.label}
-            options={slot.options}
-            selectedOptionIds={selections[slot.id] ?? EMPTY_IDS}
-            showMacros={showMacros}
-            onOpenOption={onOpenOption}
-            onSelectOption={onSelectOption}
-          />
-        ))
+        <section>
+          <SectionHeader title="Comidas del día" />
+          <div className="flex flex-col gap-3">
+            {day.slots.map((slot) => (
+              <SlotBlock
+                key={slot.id}
+                label={slot.label}
+                options={slot.options}
+                selectedOptionIds={selections[slot.id] ?? EMPTY_IDS}
+                showMacros={showMacros}
+                onOpenOption={onOpenOption}
+                onSelectOption={onSelectOption}
+              />
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
