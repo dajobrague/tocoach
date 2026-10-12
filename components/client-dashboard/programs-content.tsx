@@ -1,19 +1,17 @@
 "use client";
 
 import type { WorkoutProgram } from "@/types/training";
+import type { ReactNode } from "react";
 
-import { Button, Card, CardBody, Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
-import {
-  ClientPage,
-  SectionHeader,
-} from "@/components/client-dashboard/client-page";
+import { ClientPage } from "@/components/client-dashboard/client-page";
+import { SessionTypeTile } from "@/components/client-dashboard/workouts/session-card";
 import { CenteredState } from "@/components/shared/centered-state";
-import { OutlineChip } from "@/components/shared/outline-chip";
 import { usePrograms } from "@/lib/hooks/use-client-queries";
 
 export function ProgramsContent() {
@@ -36,8 +34,8 @@ export function ProgramsContent() {
 
   return (
     <>
-      <ClientPage title="Programas">
-        <div className="px-4 space-y-6 pt-4 pb-4">
+      <ClientPage showBack title="Programas">
+        <div className="space-y-[26px] px-4 pb-4">
           {isLoading && (
             <div className="flex justify-center py-16">
               <Spinner label="Cargando programas..." size="lg" />
@@ -47,11 +45,17 @@ export function ProgramsContent() {
           {isError && !isLoading && (
             <CenteredState
               action={
-                <Button color="primary" size="sm" onPress={() => refetch()}>
+                <Button
+                  className="mt-1.5 font-semibold"
+                  radius="full"
+                  size="sm"
+                  variant="flat"
+                  onPress={() => refetch()}
+                >
                   Reintentar
                 </Button>
               }
-              icon="solar:danger-circle-linear"
+              icon="solar:danger-triangle-linear"
               subtitle={
                 (error as Error)?.message ||
                 "No se pudieron cargar los programas."
@@ -71,108 +75,91 @@ export function ProgramsContent() {
           {!isLoading && !isError && programs.length > 0 && (
             <>
               {active.length > 0 && (
-                <div className="space-y-3">
-                  <SectionHeader className="mb-0" title="Activos" />
-                  {active.map((p: WorkoutProgram) => (
-                    // Toda la card lleva a Entrenamiento (calendario + registro).
-                    <Link
-                      key={p.clientProgramId}
-                      aria-label={`${p.name}: ir a Entrenamiento`}
-                      className="block rounded-large"
-                      href={`/${slug}/ejercicio`}
-                    >
-                      <Card
-                        className="transition-colors hover:bg-default-50"
-                        shadow="sm"
-                      >
-                        <CardBody className="p-4">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-heading font-bold text-foreground truncate">
-                                {p.name}
-                              </p>
-                              <p className="text-xs text-default-500 mt-1">
-                                {p.type} · {p.division} · {p.currentWeek}
-                              </p>
-                              <p className="text-xs text-default-500">
-                                {p.sessions?.length ?? 0} sesiones en plantilla
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <OutlineChip tone="success">Activo</OutlineChip>
+                <section>
+                  <ProgramsHeading title="Activos" />
+                  <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+                    {active.map((p: WorkoutProgram) => (
+                      <li key={p.clientProgramId}>
+                        {/* Toda la fila lleva a Entrenamiento (calendario + registro). */}
+                        <Link
+                          aria-label={`${p.name}: ir a Entrenamiento`}
+                          className="block active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
+                          href={`/${slug}/ejercicio`}
+                        >
+                          <ProgramRow
+                            chip={
+                              <StatusChip
+                                className="bg-success/15 text-success-700"
+                                icon="solar:check-circle-bold"
+                                label="Activo"
+                              />
+                            }
+                            meta={joinMeta(p.type, p.division, p.currentWeek)}
+                            program={p}
+                            sessions={sessionsLabel(p)}
+                            trailing={
                               <Icon
-                                className="text-default-400"
+                                aria-hidden
+                                className="shrink-0 text-default-400"
                                 icon="solar:alt-arrow-right-linear"
                                 width={18}
                               />
-                            </div>
-                          </div>
-                        </CardBody>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
+                            }
+                          />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
 
               {paused.length > 0 && (
-                <div className="space-y-3">
-                  <SectionHeader className="mb-0" title="Pausados" />
-                  <p className="text-xs text-default-500">
+                <section>
+                  <ProgramsHeading title="Pausados" />
+                  <p className="mx-1 -mt-1 mb-3 text-sm leading-normal text-default-500">
                     Tu entrenador pausó estos programas. Si quieres retomar
                     alguno, pídeselo y él lo reactivará.
                   </p>
-                  {paused.map((p: WorkoutProgram) => (
-                    <Card
-                      key={p.clientProgramId}
-                      className="opacity-80"
-                      shadow="sm"
-                    >
-                      <CardBody className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-heading font-semibold text-foreground truncate">
-                              {p.name}
-                            </p>
-                            <p className="text-xs text-default-500 mt-1">
-                              {p.type} · {p.division}
-                            </p>
-                            <p className="text-xs text-default-500">
-                              {p.sessions?.length ?? 0} sesiones en plantilla
-                            </p>
-                          </div>
-                          <OutlineChip tone="warning">Pausado</OutlineChip>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  ))}
-                </div>
+                  <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+                    {paused.map((p: WorkoutProgram) => (
+                      <li key={p.clientProgramId}>
+                        <ProgramRow
+                          chip={
+                            <StatusChip
+                              className="bg-warning/15 text-warning-700"
+                              label="Pausado"
+                            />
+                          }
+                          meta={joinMeta(p.type, p.division)}
+                          program={p}
+                          sessions={sessionsLabel(p)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
 
               {completed.length > 0 && (
-                <div className="space-y-3">
-                  <SectionHeader className="mb-0" title="Completados" />
-                  {completed.map((p: WorkoutProgram) => (
-                    <Card
-                      key={p.clientProgramId}
-                      className="opacity-80"
-                      shadow="sm"
-                    >
-                      <CardBody className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-heading font-semibold text-foreground truncate">
-                              {p.name}
-                            </p>
-                            <p className="text-xs text-default-500 mt-1">
-                              {p.type} · {p.division}
-                            </p>
-                          </div>
-                          <OutlineChip tone="muted">Completado</OutlineChip>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  ))}
-                </div>
+                <section>
+                  <ProgramsHeading title="Completados" />
+                  <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+                    {completed.map((p: WorkoutProgram) => (
+                      <li key={p.clientProgramId}>
+                        <ProgramRow
+                          chip={
+                            <StatusChip
+                              className="bg-default-100 text-default-500"
+                              label="Completado"
+                            />
+                          }
+                          meta={joinMeta(p.type, p.division)}
+                          program={p}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
             </>
           )}
@@ -181,4 +168,80 @@ export function ProgramsContent() {
       <ClientBottomNav />
     </>
   );
+}
+
+function ProgramsHeading({ title }: { title: string }) {
+  return (
+    <h2 className="mb-3 font-heading text-xl tracking-[-0.015em] text-foreground">
+      {title}
+    </h2>
+  );
+}
+
+function ProgramRow({
+  program,
+  meta,
+  sessions,
+  chip,
+  trailing,
+}: {
+  program: WorkoutProgram;
+  meta: string;
+  sessions?: string;
+  chip: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-14 items-start gap-3 px-4 py-3">
+      <SessionTypeTile
+        sessionType={program.category === "cardio" ? "cardio" : "strength"}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-semibold text-foreground">
+          {program.name}
+        </p>
+        {meta ? (
+          <p className="mt-0.5 text-[13px] leading-snug text-default-500">
+            {meta}
+          </p>
+        ) : null}
+        {sessions ? (
+          <p className="text-[13px] leading-snug text-default-500">
+            {sessions}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1 self-center">
+        {chip}
+        {trailing}
+      </div>
+    </div>
+  );
+}
+
+function StatusChip({
+  label,
+  className,
+  icon,
+}: {
+  label: string;
+  className: string;
+  icon?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${className}`}
+    >
+      {icon ? <Icon aria-hidden icon={icon} width={14} /> : null}
+      {label}
+    </span>
+  );
+}
+
+function joinMeta(...parts: Array<string | null | undefined>): string {
+  return parts.filter((part) => part != null && part !== "").join(" · ");
+}
+
+function sessionsLabel(p: WorkoutProgram): string {
+  return `${p.sessions?.length ?? 0} sesiones en plantilla`;
 }

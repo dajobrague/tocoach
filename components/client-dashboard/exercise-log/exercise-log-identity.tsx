@@ -9,8 +9,8 @@ interface Props {
 
 export function ExerciseLogIdentity({ name }: Props) {
   return (
-    <h2 className="text-2xl font-heading font-bold text-foreground leading-tight">
+    <h1 className="font-heading text-[30px] leading-[1.08] tracking-[-0.025em] text-foreground [text-wrap:balance]">
       {name}
-    </h2>
+    </h1>
   );
 }

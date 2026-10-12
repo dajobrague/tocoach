@@ -16,7 +16,7 @@ import { ModalBody, ModalContent, ModalHeader } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
-import { ClientSheet } from "../client-sheet";
+import { ClientSheet, ClientSheetGrabber } from "../client-sheet";
 
 import { getSessionTypeStyle } from "./session-type-style";
 
@@ -111,85 +111,100 @@ export function BorrowExerciseModal({
   return (
     <ClientSheet isOpen={isOpen} size="md" onClose={onClose}>
       <ModalContent>
-        <ModalHeader className="flex-col gap-0.5 pb-2">
-          <span className="text-base font-heading">
-            Agregar ejercicio de otro día
-          </span>
-          <span className="text-xs font-normal text-default-500">
-            Se suma al entrenamiento de hoy; tu coach verá de qué sesión salió
-          </span>
-        </ModalHeader>
-        <ModalBody className="pb-4">
-          {groups.length === 0 ? (
-            <p className="py-6 text-center text-sm text-default-500">
-              No hay ejercicios de otras sesiones para agregar
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {groups.map((group) => {
-                const typeStyle = getSessionTypeStyle(
-                  group.session.sessionType
-                );
+        {(close) => (
+          <>
+            <ClientSheetGrabber onClose={close} />
+            <ModalHeader className="flex-col gap-1 pb-2 pt-1">
+              <span className="font-heading text-[22px] leading-tight text-foreground">
+                Agregar ejercicio de otro día
+              </span>
+              <span className="text-sm font-normal text-default-500">
+                Se suma al entrenamiento de hoy; tu coach verá de qué sesión
+                salió
+              </span>
+            </ModalHeader>
+            <ModalBody className="pb-6">
+              {groups.length === 0 ? (
+                <div className="flex flex-col items-center gap-2.5 px-5 py-7 text-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-default-100 text-default-500">
+                    <Icon icon="solar:dumbbell-linear" width={22} />
+                  </span>
+                  <p className="text-[15px] text-default-500">
+                    No hay ejercicios de otras sesiones para agregar
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-5">
+                  {groups.map((group) => {
+                    const typeStyle = getSessionTypeStyle(
+                      group.session.sessionType
+                    );
 
-                return (
-                  <div key={group.session.id}>
-                    <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-default-500">
-                      <Icon icon={typeStyle.icon} width={13} />
-                      {group.session.name}
-                    </p>
-                    <ul className="flex flex-col divide-y divide-default-100">
-                      {group.exercises.map((exercise) => (
-                        <li key={String(exercise.exercise_id)}>
-                          <button
-                            className="flex w-full items-center gap-2.5 rounded-medium px-1 py-2 text-left transition-colors hover:bg-default-50"
-                            type="button"
-                            onClick={() => {
-                              onPick(exercise);
-                              onClose();
-                            }}
-                          >
-                            {typeof exercise.imageUrl === "string" &&
-                            exercise.imageUrl.length > 0 ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                alt=""
-                                className="h-9 w-9 shrink-0 rounded-md object-cover"
-                                decoding="async"
-                                loading="lazy"
-                                src={exercise.imageUrl}
-                              />
-                            ) : (
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-default-100">
-                                <Icon
-                                  className="text-default-400"
-                                  icon={typeStyle.icon}
-                                  width={16}
-                                />
-                              </span>
-                            )}
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium text-foreground">
-                                {exercise.name}
-                              </span>
-                              <span className="block text-[11px] text-default-500 tabular-nums">
-                                {summaryOf(exercise)}
-                              </span>
-                            </span>
-                            <Icon
-                              className="shrink-0 text-primary"
-                              icon="solar:add-circle-linear"
-                              width={18}
-                            />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </ModalBody>
+                    return (
+                      <div key={group.session.id}>
+                        <p className="mb-2.5 ml-1 flex items-center gap-2 text-sm font-semibold text-default-500">
+                          <span
+                            aria-hidden
+                            className={`h-2 w-2 rounded-full ${typeStyle.dotClass}`}
+                          />
+                          {group.session.name}
+                        </p>
+                        <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+                          {group.exercises.map((exercise) => (
+                            <li key={String(exercise.exercise_id)}>
+                              <button
+                                aria-label={`Agregar ${exercise.name}`}
+                                className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
+                                type="button"
+                                onClick={() => {
+                                  onPick(exercise);
+                                  onClose();
+                                }}
+                              >
+                                {typeof exercise.imageUrl === "string" &&
+                                exercise.imageUrl.length > 0 ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    alt=""
+                                    className="h-11 w-11 shrink-0 rounded-xl bg-default-100 object-cover"
+                                    decoding="async"
+                                    loading="lazy"
+                                    src={exercise.imageUrl}
+                                  />
+                                ) : (
+                                  <span
+                                    aria-hidden
+                                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${typeStyle.tileClass}`}
+                                  >
+                                    <Icon icon={typeStyle.icon} width={22} />
+                                  </span>
+                                )}
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[15px] font-semibold text-foreground">
+                                    {exercise.name}
+                                  </span>
+                                  <span className="mt-0.5 block text-[13px] tabular-nums text-default-500">
+                                    {summaryOf(exercise)}
+                                  </span>
+                                </span>
+                                <span
+                                  aria-hidden
+                                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                                >
+                                  <Icon icon="solar:add-linear" width={20} />
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ModalBody>
+          </>
+        )}
       </ModalContent>
     </ClientSheet>
   );

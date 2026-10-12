@@ -23,13 +23,13 @@ export function ExerciseVideoUpload({
   onRemove,
 }: Props) {
   return (
-    <div className="space-y-3">
-      <h4 className="text-sm font-semibold text-foreground font-heading">
+    <div className="flex flex-col gap-2">
+      <span className="text-[13px] font-semibold text-default-500">
         Video (Opcional)
-      </h4>
+      </span>
 
       {videoUrl ? (
-        <div className="relative rounded-lg overflow-hidden bg-black">
+        <div className="relative overflow-hidden rounded-medium bg-black">
           <video
             controls
             playsInline
@@ -39,9 +39,10 @@ export function ExerciseVideoUpload({
           />
           <Button
             isIconOnly
-            className="absolute top-2 right-2"
+            aria-label="Borrar video"
+            className="absolute right-2 top-2 h-11 w-11 min-w-11"
             color="danger"
-            size="sm"
+            radius="full"
             variant="solid"
             onPress={onRemove}
           >
@@ -64,20 +65,19 @@ export function ExerciseVideoUpload({
             }}
           />
           <Button
-            className="w-full"
+            className="h-[52px] w-full bg-default-100 text-[17px] font-semibold text-foreground"
             isDisabled={isUploading}
             isLoading={isUploading}
-            size="sm"
+            radius="md"
             startContent={
-              !isUploading && <Icon icon="solar:videocamera-bold" width={18} />
+              !isUploading && <Icon icon="solar:camera-linear" width={20} />
             }
-            variant="flat"
             onPress={() => fileInputRef.current?.click()}
           >
             {isUploading ? "Procesando video..." : "Subir video"}
           </Button>
           {isUploading ? (
-            <p className="text-xs text-default-500">
+            <p className="text-[13px] leading-snug text-default-500">
               Esto puede tardar un momento. Estamos optimizando el video para
               que se vea bien y cargue rápido.
             </p>

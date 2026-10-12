@@ -2,8 +2,13 @@
 // (sets/reps/sistema/tempo para fuerza, duración/distancia/intensidad
 // /zona FC para cardio). Solo presentación.
 
+import { Icon } from "@iconify/react";
+
+import { formatKg } from "./helpers";
+
 interface TargetExercise {
   sets?: number;
+  weightKg?: number | null;
   reps?: string;
   tempo?: string;
   rest?: string;
@@ -18,32 +23,53 @@ interface TargetExercise {
 interface Props {
   exercise: TargetExercise;
   isCardio: boolean;
+  /** El entrenador pidió subir peso (lib/training/increase-weight). */
+  increaseWeight?: boolean;
 }
 
-export function ExerciseTargetSection({ exercise, isCardio }: Props) {
+export function ExerciseTargetSection({
+  exercise,
+  isCardio,
+  increaseWeight = false,
+}: Props) {
   const chips = isCardio
     ? buildCardioChips(exercise)
     : buildStrengthChips(exercise);
 
-  if (chips.length === 0) return null;
+  if (chips.length === 0 && !increaseWeight) return null;
 
   return (
-    <div>
-      <p className="mb-2 font-heading text-base text-foreground">
+    <section>
+      <h3 className="mb-2.5 text-[15px] font-semibold text-foreground">
         Datos del programa
-      </p>
-      <div className="flex flex-wrap gap-1.5">
+      </h3>
+      <div className="flex flex-wrap gap-2">
         {chips.map((c) => (
           <span
             key={c.label}
-            className="inline-flex items-center gap-1 rounded-md bg-default-100 px-2 py-1 text-xs"
+            className="flex min-w-16 flex-col rounded-xl bg-content1 px-3 py-2 shadow-small"
           >
-            <span className="text-default-500">{c.label}</span>
-            <span className="font-semibold text-foreground">{c.value}</span>
+            <span className="text-xs font-medium text-default-500">
+              {c.label}
+            </span>
+            <span className="mt-px text-base font-bold tabular-nums text-foreground">
+              {c.value}
+            </span>
           </span>
         ))}
       </div>
-    </div>
+      {increaseWeight ? (
+        <p className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-success-700">
+          <Icon
+            aria-hidden
+            className="shrink-0"
+            icon="solar:arrow-up-linear"
+            width={16}
+          />
+          Tu entrenador te pide subir peso en este ejercicio.
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -57,7 +83,17 @@ function buildStrengthChips(e: TargetExercise): Chip[] {
 
   if (e.sets) chips.push({ label: "Series", value: String(e.sets) });
   if (e.reps) chips.push({ label: "Reps", value: String(e.reps) });
-  if (e.rest) chips.push({ label: "Descanso", value: String(e.rest) });
+  if (e.weightKg != null)
+    chips.push({ label: "Peso", value: `${formatKg(e.weightKg)} kg` });
+  // Descanso siempre con unidad: el entrenador a veces escribe solo "90".
+  if (e.rest) {
+    const rest = String(e.rest).trim();
+
+    chips.push({
+      label: "Descanso",
+      value: /^\d+$/.test(rest) ? `${rest} s` : rest,
+    });
+  }
   if (e.rir) chips.push({ label: "RIR", value: String(e.rir) });
   if (e.tempo) chips.push({ label: "Tempo", value: String(e.tempo) });
   if (e.trainingSystem)

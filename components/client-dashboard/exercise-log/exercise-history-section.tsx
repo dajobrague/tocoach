@@ -1,25 +1,24 @@
 // PR (mejor marca histórica) + últimas sesiones del cliente para este
 // ejercicio. Por defecto mostramos 10 sesiones; "Ver más" amplía a 30.
 //
-// Diseño:
-// - PR como card neutra con medalla en tinte warning (logro).
-// - Cada fila: chip de fecha + pills de peso × reps agrupadas por peso
-//   + indicador de tendencia vs sesión anterior + borde izquierdo por
-//   tendencia.
+// Diseño (vive dentro de la card plegable "Tu historial y récords"):
+// - PR como bloque en tinte warning (logro) con estrella.
+// - Mini-tabla Fecha | Mejor | Series | Tend.; cada fila se despliega con
+//   las series, el comentario del coach (vídeo) y la nota del cliente.
 //
 // Comportamiento: si no hay PR ni recent, la sección entera no se
 // renderiza (no mostramos "sin historial").
 
 import type { ExerciseHistoryEntry } from "@/types/training";
 
-import { Button, Skeleton } from "@heroui/react";
+import { Skeleton } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
 import { formatKg } from "./helpers";
 import { useExerciseHistory } from "./hooks/use-exercise-history";
 
-import { IconTile } from "@/components/shared/icon-tile";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import {
   VideoFeedbackStoryViewer,
   type StoryItem,
@@ -41,6 +40,7 @@ export function ExerciseHistorySection({
   exerciseName,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const { trainerName } = useClientData();
   const [story, setStory] = useState<StoryItem | null>(null);
   const limit = expanded ? EXPANDED_LIMIT : INITIAL_LIMIT;
   const { data, isLoading } = useExerciseHistory(exerciseId, {
@@ -52,9 +52,9 @@ export function ExerciseHistorySection({
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        <Skeleton className="h-16 w-full rounded-large" />
-        <Skeleton className="h-32 w-full rounded-large" />
+      <div className="space-y-2 pt-1">
+        <Skeleton className="h-16 w-full rounded-[14px]" />
+        <Skeleton className="h-32 w-full rounded-[14px]" />
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function ExerciseHistorySection({
   const canExpand = !expanded && data.recent.length >= INITIAL_LIMIT;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col">
       {data.pr ? <PrBanner pr={data.pr} /> : null}
       {data.recent.length > 0 ? (
         <RecentList
@@ -81,6 +81,7 @@ export function ExerciseHistorySection({
       ) : null}
 
       <VideoFeedbackStoryViewer
+        coachName={trainerName}
         initialIndex={0}
         isOpen={story !== null}
         items={story ? [story] : []}
@@ -100,20 +101,25 @@ function PrBanner({
   const ago = pr.achieved_at ? formatRelative(pr.achieved_at) : "";
 
   return (
-    <div className="flex items-center gap-3 rounded-large bg-content1 px-4 py-3 shadow-small">
-      <IconTile icon="solar:medal-star-bold" />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-default-500">Tu mejor marca</p>
-        <p className="text-sm font-semibold text-foreground font-heading">
+    <div className="flex items-center gap-3 rounded-[14px] bg-warning/10 p-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/20 text-warning-600">
+        <Icon aria-hidden icon="solar:star-bold" width={18} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-default-500">Tu mejor marca</p>
+        <p className="font-heading text-xl tabular-nums text-foreground">
           {formatKg(pr.weight_kg)} kg{reps}
-          {ago ? (
-            <span className="ml-1 font-normal text-default-500">({ago})</span>
-          ) : null}
         </p>
       </div>
+      {ago ? (
+        <span className="shrink-0 text-[13px] text-default-500">{ago}</span>
+      ) : null}
     </div>
   );
 }
+
+const ROW_GRID =
+  "grid w-full grid-cols-[1.25fr_1.4fr_0.8fr_44px_20px] items-center gap-1.5";
 
 function RecentList({
   recent,
@@ -130,21 +136,22 @@ function RecentList({
 }) {
   return (
     <div>
-      <p className="mb-2 font-heading text-base text-foreground">
+      <h4 className="mb-2 mt-5 text-sm font-semibold text-default-500">
         Últimas sesiones
-      </p>
-      <div className="overflow-hidden rounded-large bg-content1 shadow-small">
-        {/* Header de la mini-tabla. Mismas anchos que las filas para que
-          alineen sin gap shifts. */}
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-default-100 text-[11px] text-default-500">
-          <span className="w-14 shrink-0">Fecha</span>
-          <span className="flex-1">Mejor</span>
-          <span className="w-10 shrink-0 text-center">Series</span>
-          <span className="w-8 shrink-0 text-center">Tend.</span>
-          <span className="w-4 shrink-0" />
+      </h4>
+      <div>
+        <div
+          aria-hidden
+          className={`${ROW_GRID} min-h-7 text-xs font-semibold text-default-500`}
+        >
+          <span>Fecha</span>
+          <span>Mejor</span>
+          <span>Series</span>
+          <span>Tend.</span>
+          <span />
         </div>
 
-        <ul className="divide-y divide-default-100">
+        <ul>
           {recent.map((entry, idx) => {
             const previous = recent[idx + 1];
             const trend = previous
@@ -162,19 +169,16 @@ function RecentList({
             );
           })}
         </ul>
-        {canExpand ? (
-          <div className="border-t border-default-100">
-            <Button
-              className="w-full"
-              size="sm"
-              variant="light"
-              onPress={onExpand}
-            >
-              Ver más
-            </Button>
-          </div>
-        ) : null}
       </div>
+      {canExpand ? (
+        <button
+          className="min-h-9 py-1.5 text-[15px] font-semibold text-primary active:opacity-60"
+          type="button"
+          onClick={onExpand}
+        >
+          Ver más
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -197,83 +201,102 @@ function HistoryRow({
   const [expanded, setExpanded] = useState(false);
   const best = bestSet(entry);
   const bestLabel = best
-    ? `${best.weight > 0 ? `${formatKg(best.weight)}kg` : "—"} × ${best.reps}`
+    ? `${best.weight > 0 ? `${formatKg(best.weight)} kg` : "—"} × ${best.reps}`
     : "—";
   const hasCoachFeedback = entry.sets.some(
     (s) => (s.coach_comment ?? "") !== ""
   );
 
   return (
-    <li className={`relative border-l-[3px] ${trendBorderClass(trend)}`}>
+    <li className="shadow-[inset_0_1px_0_hsl(var(--heroui-default-200))]">
       <button
         aria-expanded={expanded}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-default-50 transition-colors"
+        className={`${ROW_GRID} min-h-11 text-left text-sm [@media(hover:hover)]:hover:bg-default-100`}
         type="button"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className="w-14 shrink-0 text-[11px] text-default-600">
+        <span className="text-foreground">
           {formatShortDate(entry.scheduled_date)}
         </span>
-        <span className="flex-1 text-xs font-semibold text-foreground truncate">
-          {bestLabel}
+        <span className="flex min-w-0 items-center gap-1 font-semibold tabular-nums text-foreground">
+          <span className="truncate">{bestLabel}</span>
           {entry.notes != null ? (
             <Icon
               aria-label="Tiene comentario"
-              className="ml-1.5 inline-block align-[-2px] text-default-400"
+              className="shrink-0 text-default-400"
               icon="solar:chat-round-line-linear"
-              width={12}
+              width={13}
             />
           ) : null}
           {hasCoachFeedback ? (
             <Icon
               aria-label="Tu coach comentó tu video"
-              className="ml-1.5 inline-block align-[-2px] text-primary"
-              icon="solar:videocamera-record-broken"
-              width={12}
+              className="shrink-0 text-primary"
+              icon="solar:videocamera-record-linear"
+              width={13}
             />
           ) : null}
         </span>
-        <span className="w-10 shrink-0 text-xs text-center text-default-600">
+        <span className="tabular-nums text-foreground">
           {entry.sets.length}
         </span>
-        <span className="w-8 shrink-0 flex justify-center">
-          <TrendIcon trend={trend} />
-        </span>
-        <span className="w-4 shrink-0 flex justify-center text-default-400">
-          <Icon
-            icon={
-              expanded
-                ? "solar:alt-arrow-up-linear"
-                : "solar:alt-arrow-down-linear"
-            }
-            width={14}
-          />
-        </span>
+        <TrendIcon trend={trend} />
+        <Icon
+          aria-hidden
+          className={`text-default-400 transition-transform duration-300 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
+          icon="solar:alt-arrow-down-linear"
+          width={18}
+        />
       </button>
 
       {expanded ? (
-        <div className="bg-default-50 border-t border-default-100 px-3 py-2">
+        <div className="flex flex-col gap-2.5 pb-3.5 pt-0.5">
           {entry.sets.length === 0 ? (
-            <p className="text-xs text-default-500">Sin sets</p>
+            <p className="text-[13px] text-default-500">Sin sets</p>
           ) : (
-            <ul className="space-y-1">
-              {entry.sets.map((s) => (
-                <SetLine
-                  key={`${entry.exercise_log_id}-${s.set_number}`}
-                  exerciseName={exerciseName}
-                  scheduledDate={entry.scheduled_date}
-                  set={s}
-                  onOpenStory={onOpenStory}
-                />
+            <ul className="flex flex-wrap gap-1.5">
+              {entry.sets.map((set) => (
+                <li
+                  key={`${entry.exercise_log_id}-${set.set_number}`}
+                  className="rounded-lg bg-default-100 px-2 py-1 text-[13px] tabular-nums text-foreground"
+                >
+                  S{set.set_number}{" "}
+                  {set.weight_kg != null
+                    ? `${formatKg(set.weight_kg)} kg × `
+                    : ""}
+                  {set.reps}
+                </li>
               ))}
             </ul>
           )}
+          {entry.sets
+            .filter((set) => (set.coach_comment ?? "") !== "")
+            .map((set) => (
+              <CoachComment
+                key={`${entry.exercise_log_id}-c${set.set_number}`}
+                comment={set.coach_comment ?? ""}
+                setLabel={
+                  entry.sets.length > 1 ? `Serie ${set.set_number}` : null
+                }
+                videoUrl={set.video_url ?? ""}
+                onOpen={() =>
+                  onOpenStory({
+                    videoUrl: set.video_url ?? "",
+                    exerciseName,
+                    scheduledDate: entry.scheduled_date,
+                    setLabel: buildSetLabel(set),
+                    comment: set.coach_comment ?? "",
+                  })
+                }
+              />
+            ))}
           {entry.notes != null ? (
-            <p className="mt-2 flex items-start gap-1.5 border-t border-default-100 pt-2 text-xs text-default-600">
+            <p className="flex gap-2 text-[13px] leading-snug text-default-500">
               <Icon
-                className="mt-0.5 shrink-0 text-default-400"
-                icon="solar:chat-round-line-linear"
-                width={13}
+                aria-hidden
+                className="mt-px shrink-0"
+                icon="solar:notes-linear"
+                width={16}
               />
               <span className="whitespace-pre-line">{entry.notes}</span>
             </p>
@@ -284,135 +307,77 @@ function HistoryRow({
   );
 }
 
-// Solo el icono (sin texto) para que entre en la columna de 32px de la
-// mini-tabla. Para fila colapsada / vista densa.
+// Tendencia vs la sesión anterior: círculo tintado con flecha.
 function TrendIcon({ trend }: { trend: Trend }) {
-  if (trend === "improved") {
-    return (
-      <Icon
-        aria-label="Mejora"
-        className="text-success-700"
-        icon="solar:arrow-up-bold"
-        width={14}
-      />
-    );
-  }
-  if (trend === "regressed") {
-    return (
-      <Icon
-        aria-label="Bajó"
-        className="text-warning-700"
-        icon="solar:arrow-down-bold"
-        width={14}
-      />
-    );
-  }
-  if (trend === "same") {
-    return (
-      <Icon
-        aria-label="Igual"
-        className="text-default-400"
-        icon="solar:minus-circle-linear"
-        width={14}
-      />
-    );
-  }
-
-  return null;
-}
-
-function SetLine({
-  set,
-  exerciseName,
-  scheduledDate,
-  onOpenStory,
-}: {
-  set: ExerciseHistoryEntry["sets"][number];
-  exerciseName: string;
-  scheduledDate: string;
-  onOpenStory: (item: StoryItem) => void;
-}) {
-  const weightLabel =
-    set.weight_kg != null ? `${formatKg(set.weight_kg)} kg` : "—";
-  const comment = set.coach_comment ?? "";
-  const videoUrl = set.video_url ?? "";
+  if (trend === "unknown") return <span />;
+  const style = {
+    improved: {
+      label: "Mejora",
+      icon: "solar:arrow-up-linear",
+      className: "bg-success/15 text-success-700",
+    },
+    regressed: {
+      label: "Bajó",
+      icon: "solar:arrow-down-linear",
+      className: "bg-warning/15 text-warning-700",
+    },
+    same: {
+      label: "Igual",
+      icon: "solar:minus-linear",
+      className: "bg-default-100 text-default-500",
+    },
+  }[trend];
 
   return (
-    <li className="text-xs">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-7 h-5 shrink-0 rounded bg-default-100 text-[10px] font-semibold text-default-600">
-          S{set.set_number}
-        </span>
-        <span className="text-foreground">
-          <span className="font-semibold">{weightLabel}</span>
-          <span className="text-default-400"> × </span>
-          <span>{set.reps} reps</span>
-        </span>
-      </div>
-
-      {comment ? (
-        <CoachComment
-          comment={comment}
-          videoUrl={videoUrl}
-          onOpen={() =>
-            onOpenStory({
-              videoUrl,
-              exerciseName,
-              scheduledDate,
-              setLabel: buildSetLabel(set),
-              comment,
-            })
-          }
-        />
-      ) : null}
-    </li>
+    <span
+      aria-label={style.label}
+      className={`flex h-[26px] w-[26px] items-center justify-center rounded-full ${style.className}`}
+      role="img"
+    >
+      <Icon aria-hidden icon={style.icon} width={15} />
+    </span>
   );
 }
 
-// Cita del comentario del coach bajo la serie. Con video se vuelve un
-// botón que reabre la story (video + comentario superpuesto).
+// Comentario del coach sobre una serie. Con video el botón de play reabre
+// la story (video + comentario superpuesto).
 function CoachComment({
   comment,
+  setLabel,
   videoUrl,
   onOpen,
 }: {
   comment: string;
+  setLabel: string | null;
   videoUrl: string;
   onOpen: () => void;
 }) {
-  const body = (
-    <span className="min-w-0 flex-1">
-      <span className="block text-[11px] font-semibold text-primary">
-        Comentario del coach
-      </span>
-      <span className="block whitespace-pre-line text-default-600">
-        {comment}
-      </span>
-    </span>
-  );
-
-  if (!videoUrl) {
-    return (
-      <div className="mt-1 ml-9 border-l-2 border-primary pl-2 text-xs">
-        {body}
-      </div>
-    );
-  }
-
   return (
-    <button
-      className="mt-1 ml-9 flex w-full items-start gap-1.5 border-l-2 border-primary pl-2 text-left text-xs"
-      type="button"
-      onClick={onOpen}
-    >
-      <Icon
-        aria-label="Ver video con el comentario"
-        className="mt-0.5 shrink-0 text-primary"
-        icon="solar:play-circle-bold"
-        width={14}
-      />
-      {body}
-    </button>
+    <div className="flex items-start gap-3 rounded-[14px] bg-primary/10 p-3">
+      {videoUrl ? (
+        <button
+          aria-label="Ver comentario en vídeo del coach"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground active:scale-[0.97] motion-reduce:transform-none"
+          type="button"
+          onClick={onOpen}
+        >
+          <Icon
+            aria-hidden
+            className="ml-0.5"
+            icon="solar:play-bold"
+            width={18}
+          />
+        </button>
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">
+          Comentario del coach{setLabel ? ` · ${setLabel}` : ""}
+        </span>
+        <span className="mt-0.5 block whitespace-pre-line text-[13px] leading-snug text-foreground/80">
+          {comment}
+        </span>
+      </span>
+    </div>
   );
 }
 
@@ -423,19 +388,6 @@ function buildSetLabel(set: ExerciseHistoryEntry["sets"][number]): string {
       : "";
 
   return `Serie ${set.set_number} · ${set.reps} reps${weight}`;
-}
-
-function trendBorderClass(trend: Trend): string {
-  switch (trend) {
-    case "improved":
-      return "border-l-success";
-    case "regressed":
-      return "border-l-warning";
-    case "same":
-      return "border-l-default-300";
-    default:
-      return "border-l-transparent";
-  }
 }
 
 // Calcula la "mejor" métrica de un log: peso máximo, desempate por reps

@@ -1,8 +1,9 @@
 // Orquestador del modal de registro de ejercicio.
 //
-// Layout (rediseñado, estilo página de detalle):
+// Layout (rediseñado, estilo página de detalle). Pantalla "push"
+// (ClientScreen) sin barra: el hero lleva el botón de volver flotante.
 //
-//   [hero ~33vh con imagen + close X]
+//   [hero ~33vh con imagen + volver]
 //   ┌─ scroll body ────────────────────┐
 //   │ [identidad: nombre + tipo + nota] │
 //   │ [banner video del entrenador]     │
@@ -10,7 +11,7 @@
 //   │ [PR + últimas sesiones]           │
 //   │ [form: tus números de hoy]        │
 //   └───────────────────────────────────┘
-//   [footer sticky: Borrar | Cancelar | Guardar]
+//   [footer sticky: celebración · Borrar registro · Cerrar | Finalizado]
 //
 // Estado mínimo (saving, keyboard) y delega a hooks especializados:
 //   useExerciseLogDraft     — formData + persistencia local
@@ -29,13 +30,7 @@
 
 import type { NewRecord } from "@/lib/training/e1rm";
 
-import {
-  addToast,
-  Button,
-  Modal,
-  ModalContent,
-  ModalFooter,
-} from "@heroui/react";
+import { addToast, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -56,6 +51,7 @@ import { useExerciseVideo } from "./hooks/use-exercise-video";
 import { useSetVideos } from "./hooks/use-set-videos";
 import { TrainerNoteCard } from "./trainer-note-card";
 
+import { ClientScreen } from "@/components/client-dashboard/client-screen";
 import {
   clearExerciseLogDraft,
   slotScopedExerciseId,
@@ -63,6 +59,7 @@ import {
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useDeleteExerciseLogs } from "@/lib/hooks/use-client-queries";
+import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
 interface ExtendedExerciseShape extends ExerciseShape {
@@ -71,6 +68,8 @@ interface ExtendedExerciseShape extends ExerciseShape {
   uploadedVideoUrl?: string;
   notes?: string;
   description?: string;
+  /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
+  increaseWeightAfter?: string;
 }
 
 export interface ExerciseLogModalProps {
@@ -126,8 +125,8 @@ type Celebration =
 const RECORD_CELEBRATION_MS = 2200;
 const FIRST_TIME_CELEBRATION_MS = 1400;
 
-// Por encima del modal de HeroUI (react-aria monta overlays con z-index
-// inline de 100000); si no, el confeti cae por detrás del modal.
+// Por encima de la pantalla del log (ClientScreen z-[60]) y de cualquier
+// overlay de HeroUI (react-aria monta overlays con z-index inline de 100000).
 const CONFETTI_Z_INDEX = 100060;
 
 /**
@@ -531,7 +530,7 @@ export function ExerciseLogModal({
           addToast({
             color: "success",
             description: `${exercise?.name ?? "Tu ejercicio"} — ${toastLine(first)}`,
-            title: "¡Nuevo récord! 🎉",
+            title: "¡Nuevo récord!",
           });
 
           return RECORD_CELEBRATION_MS;
@@ -637,105 +636,20 @@ export function ExerciseLogModal({
     exercise.uploadedVideoUrl || exercise.videoUrl || null;
   const trainerNote = exercise.notes || exercise.description || null;
 
+  const increaseWeight =
+    !existingLog?.finalized_at &&
+    isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate);
+
   return (
-    <Modal
-      hideCloseButton
-      // Backdrop click NO debería cerrar este modal: a) está full-screen
-      // (no hay backdrop visible para clickear), y b) el player de
-      // video del entrenador se monta en un portal sobre document.body
-      // — sin esto, el click cierra del player se interpreta como
-      // "click outside the modal" y cierra el log entero.
-      isDismissable={false}
-      // Escape se maneja en cada overlay de video por su cuenta. El log
-      // se cierra solo via los botones X / Cerrar / Finalizado.
-      isKeyboardDismissDisabled
-      classNames={{
-        base: "max-h-[100vh] m-0 bg-background",
-        wrapper: "items-end sm:items-center",
-        backdrop: "bg-black/80",
-        body: "p-0",
-      }}
-      isOpen={isOpen}
-      scrollBehavior="inside"
-      size="full"
-      onClose={handleClose}
-    >
-      <ModalContent>
-        <div className="flex-1 overflow-y-auto">
-          <ExerciseLogHero
-            exerciseName={exercise.name}
-            imageUrl={exercise.imageUrl ?? null}
-            isCardio={isCardio}
-            videoUrl={trainerVideoUrl}
-            onClose={handleClose}
-          />
-
-          <div
-            ref={bodyRef}
-            className={`px-4 py-5 flex flex-col gap-6 ${keyboardOpen ? "pb-[40vh]" : ""}`}
-            onFocus={() => setTimeout(scrollToFocused, 200)}
-          >
-            <ExerciseLogIdentity name={exercise.name} />
-
-            <ExerciseTargetSection exercise={exercise} isCardio={isCardio} />
-
-            {trainerNote ? <TrainerNoteCard note={trainerNote} /> : null}
-
-            {/* Historial, progreso y récords plegados (mismo sitio): así
-                las series quedan casi en la primera pantalla. Sus queries
-                solo corren al abrir. */}
-            <div>
-              <button
-                aria-expanded={historyOpen}
-                className="flex w-full items-center gap-3 rounded-large bg-content1 px-4 py-3 text-left shadow-small"
-                type="button"
-                onClick={() => setHistoryOpen((v) => !v)}
-              >
-                <Icon
-                  aria-hidden
-                  className="shrink-0 text-primary"
-                  icon="solar:history-linear"
-                  width={20}
-                />
-                <span className="flex-1 font-heading text-base text-foreground">
-                  Tu historial y récords
-                </span>
-                <Icon
-                  aria-hidden
-                  className={`shrink-0 text-default-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
-                  icon="solar:alt-arrow-down-linear"
-                  width={18}
-                />
-              </button>
-              {historyOpen ? (
-                <div className="mt-4 flex flex-col gap-6">
-                  <ExerciseHistorySection
-                    exerciseId={exerciseId || null}
-                    exerciseName={exercise.name}
-                    isOpen={isOpen}
-                  />
-                  <ExerciseProgressionSection
-                    exerciseId={exerciseId || null}
-                    exerciseName={exercise.name}
-                    isOpen={isOpen}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            <ExerciseLogForm
-              autoSaveState={autoSaveState}
-              cardioVideo={cardioVideo}
-              formData={formData}
-              formTitle={formTitle}
-              isCardio={isCardio}
-              setVideos={setVideos}
-              onChange={handleUserFormChange}
-            />
-          </div>
-        </div>
-
-        <ModalFooter className="flex-col gap-2 border-t border-default-200 bg-background">
+    // Sin backdrop (pantalla completa) y sin Esc: el log se cierra solo con
+    // volver / Cerrar / Finalizado. Los visores de vídeo (entrenador, serie,
+    // feedback) se montan en portales encima y manejan su Esc en captura.
+    <ClientScreen
+      ariaLabel={exercise.name}
+      bar={false}
+      closeOnEscape={false}
+      footer={
+        <div className="flex flex-col gap-2.5">
           {/* La celebración vive en el footer, no arriba del body: al
               finalizar el usuario está mirando el botón, y el body puede
               estar scrolleado abajo del todo. */}
@@ -743,15 +657,13 @@ export function ExerciseLogModal({
 
           {existingLog?.id ? (
             <Button
-              className="w-full"
+              className="h-10 self-center bg-transparent text-sm font-semibold"
               color="danger"
               isDisabled={isSaving || deleteLog.isPending}
               isLoading={deleteLog.isPending}
-              radius="md"
-              size="sm"
               startContent={
                 !deleteLog.isPending && (
-                  <Icon icon="solar:trash-bin-minimalistic-bold" width={18} />
+                  <Icon icon="solar:trash-bin-minimalistic-linear" width={16} />
                 )
               }
               variant="light"
@@ -760,17 +672,17 @@ export function ExerciseLogModal({
               Borrar registro
             </Button>
           ) : null}
-          <div className="flex gap-2 w-full">
+          <div className="grid grid-cols-[1fr_1.6fr] gap-2.5">
             <Button
-              className="flex-1"
+              className="h-[52px] bg-default-100 text-[17px] font-semibold text-foreground"
               isDisabled={isSaving || deleteLog.isPending}
-              variant="flat"
+              radius="lg"
               onPress={handleClose}
             >
               Cerrar
             </Button>
             <Button
-              className="flex-1 font-semibold"
+              className="h-[52px] text-[17px] font-semibold"
               color="primary"
               isDisabled={
                 isSaving ||
@@ -780,9 +692,7 @@ export function ExerciseLogModal({
                 deleteLog.isPending
               }
               isLoading={isSaving}
-              startContent={
-                !isSaving && <Icon icon="solar:check-circle-bold" width={18} />
-              }
+              radius="lg"
               onPress={handleFinalize}
             >
               {isSaving
@@ -792,9 +702,89 @@ export function ExerciseLogModal({
                   : "Finalizado"}
             </Button>
           </div>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+        </div>
+      }
+      isOpen={isOpen}
+      onClose={handleClose}
+    >
+      <ExerciseLogHero
+        exerciseName={exercise.name}
+        imageUrl={exercise.imageUrl ?? null}
+        isCardio={isCardio}
+        videoUrl={trainerVideoUrl}
+        onClose={handleClose}
+      />
+
+      <div
+        ref={bodyRef}
+        className={`flex flex-col gap-6 px-4 pb-6 pt-[18px] ${keyboardOpen ? "pb-[40vh]" : ""}`}
+        onFocus={() => setTimeout(scrollToFocused, 200)}
+      >
+        <ExerciseLogIdentity name={exercise.name} />
+
+        <ExerciseTargetSection
+          exercise={exercise}
+          increaseWeight={increaseWeight}
+          isCardio={isCardio}
+        />
+
+        {trainerNote ? <TrainerNoteCard note={trainerNote} /> : null}
+
+        {/* Historial, progreso y récords plegados (mismo sitio): así
+            las series quedan casi en la primera pantalla. Sus queries
+            solo corren al abrir. */}
+        <div className="rounded-large bg-content1 shadow-small">
+          <button
+            aria-expanded={historyOpen}
+            className="flex min-h-16 w-full items-center gap-3 rounded-large px-4 py-2.5 text-left [@media(hover:hover)]:hover:bg-default-50"
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-default-100 text-default-500">
+              <Icon aria-hidden icon="solar:cup-star-linear" width={18} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-foreground">
+                Tu historial y récords
+              </span>
+              <span className="mt-0.5 block text-[13px] text-default-500">
+                Tus últimas sesiones
+              </span>
+            </span>
+            <Icon
+              aria-hidden
+              className={`shrink-0 text-default-500 transition-transform duration-300 motion-reduce:transition-none ${historyOpen ? "rotate-180" : ""}`}
+              icon="solar:alt-arrow-down-linear"
+              width={18}
+            />
+          </button>
+          {historyOpen ? (
+            <div className="px-4 pb-4">
+              <ExerciseHistorySection
+                exerciseId={exerciseId || null}
+                exerciseName={exercise.name}
+                isOpen={isOpen}
+              />
+              <ExerciseProgressionSection
+                exerciseId={exerciseId || null}
+                exerciseName={exercise.name}
+                isOpen={isOpen}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <ExerciseLogForm
+          autoSaveState={autoSaveState}
+          cardioVideo={cardioVideo}
+          formData={formData}
+          formTitle={formTitle}
+          isCardio={isCardio}
+          setVideos={setVideos}
+          onChange={handleUserFormChange}
+        />
+      </div>
+    </ClientScreen>
   );
 }
 
@@ -807,30 +797,38 @@ export function ExerciseLogModal({
 function CelebrationBanner({ celebration }: { celebration: Celebration }) {
   if (celebration.kind === "first") {
     return (
-      <p className="w-full text-center text-xs text-default-500">
-        Primera marca registrada 📈
+      <p
+        className="w-full text-center text-[13px] text-default-500"
+        role="status"
+      >
+        Primera marca registrada
       </p>
     );
   }
 
   return (
-    <div className="w-full rounded-large border border-primary/30 bg-primary/10 px-3 py-2">
-      <p className="flex items-center gap-1 text-xs font-semibold text-foreground font-heading">
-        <Icon
-          aria-hidden
-          className="text-primary"
-          icon="solar:medal-ribbon-star-bold"
-          width={14}
-        />
-        ¡Nuevo récord!
-      </p>
-      <ul className="mt-1 space-y-0.5">
-        {celebration.records.map((record) => (
-          <li key={record.bucket} className="text-xs text-default-600">
-            {bannerLine(record)}
-          </li>
-        ))}
-      </ul>
+    <div
+      className="flex items-center gap-3 rounded-2xl bg-content1 p-3 shadow-[inset_0_0_0_1.5px_hsl(var(--heroui-warning)/0.45)]"
+      role="status"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning text-warning-foreground">
+        <Icon aria-hidden icon="solar:cup-star-bold" width={22} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-heading text-lg leading-tight tracking-[-0.01em] text-foreground">
+          ¡Nuevo récord!
+        </p>
+        <ul className="mt-px">
+          {celebration.records.map((record) => (
+            <li
+              key={record.bucket}
+              className="text-[13px] tabular-nums text-default-500"
+            >
+              {bannerLine(record)}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

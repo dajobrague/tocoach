@@ -3,18 +3,20 @@
 // porque cardio no tiene series). El estado vive en el orquestador;
 // acá solo recibimos formData + setters.
 
-import type { MutableRefObject } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import type {
   ExerciseLogFormDraft,
   SetDraft,
 } from "@/lib/client/exercise-log-draft";
 
-import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { useId } from "react";
 
 import { ExerciseSetRow } from "./exercise-set-row";
 import { ExerciseVideoUpload } from "./exercise-video-upload";
-import { defaultSet } from "./helpers";
+import { LOG_INPUT_CLASS, defaultSet } from "./helpers";
+
+import { SegmentedControl } from "@/components/shared/segmented-control";
 
 interface CardioVideoState {
   videoUrl: string | null;
@@ -81,29 +83,63 @@ export function ExerciseLogForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="font-heading text-base text-foreground">{formTitle}</h4>
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="font-heading text-[22px] leading-tight tracking-[-0.015em] text-foreground">
+          {formTitle}
+        </h2>
         <InlineSaveStatus state={autoSaveState} />
       </div>
 
-      {isCardio ? (
-        <CardioFields formData={formData} onChange={onChange} />
-      ) : (
-        <StrengthFields
-          addSet={addSet}
-          formData={formData}
-          removeSet={removeSet}
-          setVideos={setVideos}
-          updateSet={updateSet}
-          onChange={onChange}
-        />
-      )}
+      <div className="flex flex-col gap-4">
+        {isCardio ? (
+          <CardioFields formData={formData} onChange={onChange} />
+        ) : (
+          <StrengthFields
+            addSet={addSet}
+            formData={formData}
+            removeSet={removeSet}
+            setVideos={setVideos}
+            updateSet={updateSet}
+            onChange={onChange}
+          />
+        )}
 
-      {isCardio ? <ExerciseVideoUpload {...cardioVideo} /> : null}
+        {isCardio ? <ExerciseVideoUpload {...cardioVideo} /> : null}
+      </div>
+    </section>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: (id: string) => ReactNode;
+}) {
+  const id = useId();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        className="text-[13px] font-semibold text-default-500"
+        htmlFor={id}
+      >
+        {label}
+      </label>
+      {children(id)}
     </div>
   );
 }
+
+const INTENSITY_OPTIONS = [
+  { key: "Baja", label: "Baja" },
+  { key: "Moderada", label: "Moderada" },
+  { key: "Alta", label: "Alta" },
+  // El valor guardado sigue siendo "Por Intervalos"; solo se acorta la etiqueta.
+  { key: "Por Intervalos", label: "Intervalos" },
+] as const;
 
 function CardioFields({
   formData,
@@ -114,90 +150,74 @@ function CardioFields({
 }) {
   return (
     <>
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          classNames={{ input: "text-base" }}
-          inputMode="numeric"
-          label="Duración (min)"
-          startContent={
-            <Icon
-              className="text-default-400"
-              icon="solar:clock-circle-bold"
-              width={18}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Duración (min)">
+          {(id) => (
+            <input
+              className={LOG_INPUT_CLASS}
+              enterKeyHint="next"
+              id={id}
+              inputMode="numeric"
+              type="number"
+              value={formData.durationCompleted}
+              onChange={(e) =>
+                onChange({ ...formData, durationCompleted: e.target.value })
+              }
             />
-          }
-          type="number"
-          value={formData.durationCompleted}
-          onValueChange={(value) =>
-            onChange({ ...formData, durationCompleted: value })
-          }
-        />
-        <Input
-          classNames={{ input: "text-base" }}
-          inputMode="decimal"
-          label="Distancia (km)"
-          startContent={
-            <Icon
-              className="text-default-400"
-              icon="solar:route-bold"
-              width={18}
+          )}
+        </Field>
+        <Field label="Distancia (km)">
+          {(id) => (
+            <input
+              className={LOG_INPUT_CLASS}
+              enterKeyHint="next"
+              id={id}
+              inputMode="decimal"
+              step="0.1"
+              type="number"
+              value={formData.distanceCompleted}
+              onChange={(e) =>
+                onChange({ ...formData, distanceCompleted: e.target.value })
+              }
             />
-          }
-          step="0.1"
-          type="number"
-          value={formData.distanceCompleted}
-          onValueChange={(value) =>
-            onChange({ ...formData, distanceCompleted: value })
-          }
+          )}
+        </Field>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-[13px] font-semibold text-default-500">
+          Intensidad
+        </span>
+        <SegmentedControl<string>
+          ariaLabel="Intensidad"
+          options={INTENSITY_OPTIONS}
+          size="md"
+          value={formData.intensityCompleted}
+          onChange={(key) => onChange({ ...formData, intensityCompleted: key })}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Select
-          classNames={{ value: "text-base" }}
-          label="Intensidad"
-          selectedKeys={
-            formData.intensityCompleted ? [formData.intensityCompleted] : []
-          }
-          startContent={
-            <Icon
-              className="text-default-400"
-              icon="solar:fire-bold"
-              width={18}
-            />
-          }
-          onSelectionChange={(keys) => {
-            const selected = Array.from(keys)[0] as string;
+      <Field label="FC promedio (bpm)">
+        {(id) => (
+          <input
+            className={LOG_INPUT_CLASS}
+            enterKeyHint="next"
+            id={id}
+            inputMode="numeric"
+            type="number"
+            value={formData.avgHeartRate}
+            onChange={(e) =>
+              onChange({ ...formData, avgHeartRate: e.target.value })
+            }
+          />
+        )}
+      </Field>
 
-            onChange({ ...formData, intensityCompleted: selected });
-          }}
-        >
-          <SelectItem key="Baja">Baja</SelectItem>
-          <SelectItem key="Moderada">Moderada</SelectItem>
-          <SelectItem key="Alta">Alta</SelectItem>
-          <SelectItem key="Por Intervalos">Por Intervalos</SelectItem>
-        </Select>
-
-        <Input
-          classNames={{ input: "text-base" }}
-          inputMode="numeric"
-          label="FC promedio (bpm)"
-          startContent={
-            <Icon
-              className="text-default-400"
-              icon="solar:heart-pulse-bold"
-              width={18}
-            />
-          }
-          type="number"
-          value={formData.avgHeartRate}
-          onValueChange={(value) =>
-            onChange({ ...formData, avgHeartRate: value })
-          }
-        />
-      </div>
-
-      <NotesField formData={formData} onChange={onChange} />
+      <NotesField
+        formData={formData}
+        placeholder="¿Cómo te sentiste?"
+        onChange={onChange}
+      />
     </>
   );
 }
@@ -218,27 +238,32 @@ function StrengthFields({
   onChange: (next: ExerciseLogFormDraft) => void;
 }) {
   const hasMultipleSets = formData.sets.length > 1;
+  const grid = hasMultipleSets ? SET_GRID_MANY : SET_GRID_ONE;
 
   return (
     <>
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         {/* Headers — afuera de las filas para que cada fila quede pareja
             y no haya doble texto (label flotante + placeholder) en la
-            primera. Los anchos son los mismos que los de la fila para
-            que se alineen visualmente. */}
-        <div className="flex items-center gap-1.5 sm:gap-2 px-0.5 text-[11px] text-default-500">
-          <span className="w-10 shrink-0 text-center">Serie</span>
-          <span className="flex-1">Peso (kg)</span>
-          <span className="flex-1">Reps</span>
-          <span className="w-10 shrink-0 text-center">Vídeo</span>
-          {hasMultipleSets ? <span className="w-10 shrink-0" /> : null}
+            primera. Mismo grid que las filas para que se alineen. */}
+        <div
+          aria-hidden
+          className={`${grid} text-xs font-semibold text-default-500`}
+        >
+          <span className="text-center">Serie</span>
+          <span>Peso (kg)</span>
+          <span>Reps</span>
+          <span className="text-center">Vídeo</span>
+          {hasMultipleSets ? <span /> : null}
         </div>
 
         {formData.sets.map((set, index) => (
           <ExerciseSetRow
             key={index}
             canRemove={hasMultipleSets}
+            gridClass={grid}
             index={index}
+            isLast={index === formData.sets.length - 1}
             isUploading={setVideos.uploadingIndex === index}
             set={set}
             onPickVideo={(file) => setVideos.onPickFile(index, file)}
@@ -250,84 +275,102 @@ function StrengthFields({
       </div>
 
       {!formData.sets.some((s) => s.videoUrl) ? (
-        <p className="flex items-center gap-1.5 px-0.5 text-xs text-default-500">
+        <p className="flex items-start gap-2 text-[13px] leading-snug text-default-500">
           <Icon
             aria-hidden
-            className="shrink-0 text-primary"
+            className="mt-px shrink-0 text-primary"
             icon="solar:videocamera-record-linear"
-            width={14}
+            width={16}
           />
           Graba una serie y tu entrenador revisará tu técnica.
         </p>
       ) : null}
 
-      <Button
-        className="w-full"
-        size="sm"
-        startContent={<Icon icon="solar:add-circle-bold" width={18} />}
-        variant="flat"
-        onPress={addSet}
+      <button
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-medium bg-default-100 text-[15px] font-semibold text-foreground active:scale-[0.97] motion-reduce:transform-none [@media(hover:hover)]:hover:bg-default-200"
+        type="button"
+        onClick={addSet}
       >
+        <Icon aria-hidden icon="solar:add-linear" width={18} />
         Añadir serie
-      </Button>
+      </button>
 
-      <NotesField formData={formData} onChange={onChange} />
+      <NotesField
+        formData={formData}
+        placeholder="Sensaciones, molestias, ajustes…"
+        onChange={onChange}
+      />
     </>
   );
 }
 
+const SET_GRID_MANY =
+  "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_44px_36px] items-center gap-2";
+const SET_GRID_ONE =
+  "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_44px] items-center gap-2";
+
 // Indicador inline de autosave al lado del título "Tus números de hoy".
-// Tamaño muy chico, solo aparece mientras está guardando, después del
-// guardado exitoso, o si hubo un error. En idle no se muestra nada
-// para no agregar ruido visual.
+// Solo aparece mientras está guardando, después del guardado exitoso, o si
+// hubo un error. En idle no se muestra nada para no agregar ruido visual.
 function InlineSaveStatus({
   state,
 }: {
   state: "idle" | "saving" | "saved" | "error";
 }) {
-  if (state === "idle") return null;
-  if (state === "saving") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-default-500">
-        <Icon className="animate-spin" icon="solar:refresh-linear" width={11} />
+  const content =
+    state === "saving" ? (
+      <span className="inline-flex items-center gap-1 text-default-500">
+        <Icon
+          className="animate-spin motion-reduce:animate-none"
+          icon="solar:refresh-linear"
+          width={14}
+        />
         Guardando
       </span>
-    );
-  }
-  if (state === "saved") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-success">
-        <Icon icon="solar:check-circle-bold" width={11} />
+    ) : state === "saved" ? (
+      <span className="inline-flex items-center gap-1 text-success-700">
+        <Icon icon="solar:check-circle-bold" width={14} />
         Guardado
       </span>
-    );
-  }
+    ) : state === "error" ? (
+      <span className="inline-flex items-center gap-1 text-danger">
+        <Icon icon="solar:danger-triangle-linear" width={14} />
+        Error al guardar
+      </span>
+    ) : null;
 
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-danger">
-      <Icon icon="solar:danger-circle-linear" width={11} />
-      Error
+    <span
+      aria-live="polite"
+      className="whitespace-nowrap text-[13px] font-semibold"
+      role="status"
+    >
+      {content}
     </span>
   );
 }
 
 function NotesField({
   formData,
+  placeholder,
   onChange,
 }: {
   formData: ExerciseLogFormDraft;
+  placeholder: string;
   onChange: (next: ExerciseLogFormDraft) => void;
 }) {
   return (
-    <Textarea
-      classNames={{ input: "text-base", inputWrapper: "min-h-unit-12" }}
-      minRows={2}
-      placeholder="Notas"
-      startContent={
-        <Icon className="text-default-400" icon="solar:notes-bold" width={18} />
-      }
-      value={formData.notes}
-      onValueChange={(value) => onChange({ ...formData, notes: value })}
-    />
+    <Field label="Notas">
+      {(id) => (
+        <textarea
+          className="min-h-24 w-full rounded-medium border border-default-200 bg-content1 px-4 py-3 text-[17px] text-foreground caret-primary outline-none transition-[border-color,box-shadow] placeholder:text-default-400 focus:border-primary focus:ring-4 focus:ring-primary/20 motion-reduce:transition-none"
+          id={id}
+          placeholder={placeholder}
+          rows={3}
+          value={formData.notes}
+          onChange={(e) => onChange({ ...formData, notes: e.target.value })}
+        />
+      )}
+    </Field>
   );
 }

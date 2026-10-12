@@ -1,8 +1,7 @@
 // Lista "Escoge tu siguiente entrenamiento". Itera sobre useAvailableSessions
 // y muestra una card por sesión, agrupando por tipo de sesión (Fuerza,
-// Cardio, etc). Tap en card o "Comenzar" → emite onActivate(sessionId):
-// el orquestador entra en MODO ACTIVA (ver active-session-view.tsx) y
-// la lista deja de renderizarse.
+// Cardio, etc). Tap en la card → emite onActivate(sessionId): el
+// orquestador abre la pantalla de sesión activa (ver active-session-view.tsx).
 //
 // Si todas las sesiones son del mismo tipo, no renderizamos los headers
 // — añaden ruido visual cuando solo hay un grupo.
@@ -10,13 +9,12 @@
 import type { SessionType } from "@/types/training";
 import type { AvailableSession } from "./hooks/use-available-sessions";
 
-import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { useClientData } from "../client-data-provider";
 import { SectionHeader } from "../client-page";
 
-import { SessionCard } from "./session-card";
+import { SessionTypeTile } from "./session-card";
 import { SESSION_TYPE_ORDER, getSessionTypeStyle } from "./session-type-style";
 
 // Re-exportado aquí porque el orquestador y la vista activa lo consumen.
@@ -92,12 +90,12 @@ export function AvailableSessionsList({
 
   return (
     <section className="w-full">
-      <SectionHeader title={heading} />
-      <div className="space-y-5 w-full">
+      <SectionHeader className="mb-3.5" title={heading} />
+      <div className="w-full space-y-[18px]">
         {buckets.map((bucket) => (
-          <div key={bucket.type} className="space-y-2">
+          <div key={bucket.type}>
             {showHeaders ? <BucketHeader bucket={bucket} /> : null}
-            <div className="space-y-3 w-full">
+            <div className="w-full space-y-2.5">
               {bucket.sessions.map((session) => (
                 <SessionRow
                   key={session.id}
@@ -125,19 +123,12 @@ export function AvailableSessionsList({
 
 function BucketHeader({ bucket }: { bucket: Bucket }) {
   const style = getSessionTypeStyle(bucket.type);
-  const count = bucket.sessions.length;
 
   return (
-    <div className="flex items-center gap-2 px-1">
-      <Icon className="text-primary" icon={style.icon} width={16} />
-      <h3 className="text-sm font-heading font-semibold text-foreground">
-        {style.label}
-        <span className="font-body font-normal text-default-500">
-          {" "}
-          · {count}
-        </span>
-      </h3>
-    </div>
+    <h3 className="mb-2.5 ml-1 flex items-center gap-2 text-sm font-semibold text-default-500">
+      <span aria-hidden className={`h-2 w-2 rounded-full ${style.dotClass}`} />
+      {style.label} · {bucket.sessions.length}
+    </h3>
   );
 }
 
@@ -157,63 +148,66 @@ function SessionRow({
   // Sesión ya logueada hoy: la card va gris y no es clickable. El cliente
   // puede entrar a otra sesión, pero no a la misma de nuevo el mismo día —
   // si quiere editar logs existentes lo hace desde "Tu entrenamiento del día".
-  if (isDone) {
-    return (
-      <div
-        aria-disabled="true"
-        className="opacity-60 pointer-events-none select-none"
-      >
-        <SessionCard
-          exerciseCount={session.exercise_count}
-          isRecommended={isRecommended}
-          name={session.name}
-          programName={programName}
-          rightContent={
-            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-success-700">
-              <Icon icon="solar:check-circle-bold" width={14} />
-              <span className="text-xs font-semibold leading-none">Hecho</span>
-            </span>
-          }
-          sessionType={session.session_type}
-        />
-      </div>
-    );
-  }
+  const recommended = isRecommended && !isDone;
+  const count = session.exercise_count;
 
   return (
-    <div
-      className="cursor-pointer"
-      role="button"
-      tabIndex={0}
-      onClick={() => onActivate(session.id)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onActivate(session.id);
-        }
+    <button
+      aria-disabled={isDone}
+      aria-label={
+        isDone ? `${session.name}, hecho` : `Comenzar ${session.name}`
+      }
+      className={`flex w-full flex-col gap-3 rounded-large p-3.5 text-left transition-transform motion-reduce:transition-none ${
+        isDone
+          ? "pointer-events-none cursor-default select-none bg-default-100"
+          : `bg-content1 shadow-small active:scale-[0.97] [@media(hover:hover)]:hover:bg-default-50 ${
+              recommended ? "ring-2 ring-inset ring-primary" : ""
+            }`
+      }`}
+      tabIndex={isDone ? -1 : 0}
+      type="button"
+      onClick={() => {
+        if (!isDone) onActivate(session.id);
       }}
     >
-      <SessionCard
-        exerciseCount={session.exercise_count}
-        isRecommended={isRecommended}
-        name={session.name}
-        programName={programName}
-        rightContent={
-          // Toda la card ya es tocable; el botón queda como señal discreta
-          // (antes, cinco "Comenzar" sólidos iguales hacían una pared de
-          // color sin jerarquía).
-          <Button
-            isIconOnly
-            aria-label={`Comenzar ${session.name}`}
-            className="h-11 w-11 min-w-11 rounded-full bg-primary/10 text-primary"
-            onPress={() => onActivate(session.id)}
+      {recommended ? (
+        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+          <Icon aria-hidden icon="solar:star-bold" width={14} />
+          Recomendado por tu coach
+        </span>
+      ) : null}
+      <span className="flex w-full items-center gap-3">
+        <SessionTypeTile
+          className={isDone ? "opacity-55" : ""}
+          sessionType={session.session_type}
+        />
+        <span className={`min-w-0 flex-1 ${isDone ? "opacity-55" : ""}`}>
+          <span className="block truncate text-base font-semibold text-foreground">
+            {session.name}
+          </span>
+          <span className="mt-0.5 block truncate text-[13px] text-default-500">
+            {count} {count === 1 ? "ejercicio" : "ejercicios"}
+            {programName != null && programName.length > 0
+              ? ` · ${programName}`
+              : null}
+          </span>
+        </span>
+        {isDone ? (
+          <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
+            <Icon aria-hidden icon="solar:check-circle-bold" width={14} />
+            Hecho
+          </span>
+        ) : (
+          // Toda la card es el botón; el círculo es solo la señal visual.
+          <span
+            aria-hidden
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
           >
-            <Icon icon="solar:play-bold" width={18} />
-          </Button>
-        }
-        sessionType={session.session_type}
-      />
-    </div>
+            <Icon className="ml-0.5" icon="solar:play-bold" width={18} />
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 

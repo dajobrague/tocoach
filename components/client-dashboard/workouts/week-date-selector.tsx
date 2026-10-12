@@ -14,7 +14,6 @@
 
 "use client";
 
-import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -33,7 +32,8 @@ interface Props {
   datesWithActivity?: Set<string>;
 }
 
-const WEEKDAY_LETTERS = ["L", "M", "M", "J", "V", "S", "D"];
+// X = miércoles (convención española; "M" se repetía con el martes).
+const WEEKDAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
 const DEFAULT_MAX_BACK_DAYS = 30;
 
 interface DayCell {
@@ -191,93 +191,91 @@ export function WeekDateSelector({
   const subtitleLabel = isSelectedInVisibleWeek
     ? formatSelectedLabel(selectedDate, todayYmd)
     : null;
+  // Atajo de vuelta cuando el cliente se alejó de hoy (otro día elegido u
+  // otra semana a la vista).
+  const todayMonday = getMondayOf(todayYmd);
+  const showGoToday = selectedDate !== todayYmd || weekAnchor !== todayMonday;
 
   return (
-    <section className="w-full">
-      <div className="flex items-center justify-between mb-2 px-1">
-        <Button
-          isIconOnly
-          aria-label="Semana anterior"
-          isDisabled={!canGoPrev}
-          size="sm"
-          variant="light"
+    <section className="w-full rounded-large bg-content1 px-2 pb-3 pt-2 shadow-small">
+      <div className="flex items-center">
+        <WeekArrow
+          disabled={!canGoPrev}
+          icon="solar:alt-arrow-left-linear"
+          label="Semana anterior"
           onPress={() => setWeekAnchor(prevAnchor)}
-        >
-          <Icon icon="solar:alt-arrow-left-linear" width={18} />
-        </Button>
-        <div className="flex flex-col items-center text-center">
-          <p className="text-xs text-default-500">{headerLabel}</p>
-          {subtitleLabel ? (
-            <p className="text-xs font-medium text-foreground">
+        />
+        <div className="min-w-0 flex-1 text-center">
+          <p className="truncate text-[15px] font-semibold text-foreground">
+            {headerLabel}
+          </p>
+          {subtitleLabel || showGoToday ? (
+            <p className="mt-px text-[13px] text-default-500">
               {subtitleLabel}
+              {subtitleLabel && showGoToday ? " · " : null}
+              {showGoToday ? (
+                <button
+                  className="font-semibold text-primary active:opacity-60"
+                  type="button"
+                  onClick={() => {
+                    setWeekAnchor(todayMonday);
+                    onSelect(todayYmd);
+                  }}
+                >
+                  Ir a hoy
+                </button>
+              ) : null}
             </p>
           ) : null}
         </div>
-        <Button
-          isIconOnly
-          aria-label="Semana siguiente"
-          isDisabled={!canGoNext}
-          size="sm"
-          variant="light"
+        <WeekArrow
+          disabled={!canGoNext}
+          icon="solar:alt-arrow-right-linear"
+          label="Semana siguiente"
           onPress={() => setWeekAnchor(nextAnchor)}
-        >
-          <Icon icon="solar:alt-arrow-right-linear" width={18} />
-        </Button>
+        />
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="mt-2 grid grid-cols-7 gap-0.5">
         {week.map((d) => {
           const isSelected = d.ymd === selectedDate;
           const hasActivity = datesWithActivity?.has(d.ymd) ?? false;
-          const baseClass =
-            "flex flex-col items-center justify-center rounded-xl py-2 transition-colors relative aspect-square disabled:opacity-30 disabled:cursor-not-allowed";
-          // Todos los días son el mismo tile neutro (pasado no se ve
-          // deshabilitado); hoy = anillo de marca; seleccionado = marca sólida.
-          const stateClass = d.isOutOfRange
-            ? "bg-default-100 text-default-400"
-            : isSelected
-              ? "bg-primary text-primary-foreground"
-              : d.isToday
-                ? "bg-default-100 text-foreground ring-2 ring-inset ring-primary"
-                : "bg-default-100 text-foreground hover:bg-default-200";
-
-          // El puntito de actividad: success cuando hay logs ese día.
-          // Si está seleccionado el bg ya es primary, así que usamos
-          // primary-foreground para que el dot se lea contra el fondo.
-          // Si no hay actividad pero es hoy, mantenemos el dot primary
-          // viejo como hint visual de "estás acá".
-          let dotClass: string | null = null;
-
-          if (hasActivity) {
-            dotClass = isSelected ? "bg-primary-foreground" : "bg-success";
-          } else if (d.isToday && !isSelected) {
-            dotClass = "bg-primary";
-          }
+          // Seleccionado = círculo de marca sólido; hoy = anillo de marca.
+          const circleClass = isSelected
+            ? "bg-primary text-primary-foreground"
+            : d.isToday
+              ? "text-primary ring-2 ring-inset ring-primary"
+              : "text-foreground [@media(hover:hover)]:group-hover:bg-default-100";
+          // Puntito bajo el número: success si hay logs ese día; si no hay
+          // actividad pero es hoy, el punto de marca como pista de "estás acá".
+          const dotClass = hasActivity
+            ? "bg-success"
+            : d.isToday
+              ? "bg-primary"
+              : "bg-transparent";
 
           return (
             <button
               key={d.ymd}
-              aria-label={`Seleccionar día ${d.dayNumber}`}
+              aria-current={d.isToday ? "date" : undefined}
+              aria-label={`${longDayLabel(d.ymd)}${hasActivity ? ", con entrenamiento" : ""}`}
               aria-pressed={isSelected}
-              className={`${baseClass} ${stateClass}`}
+              className="group flex h-[66px] flex-col items-center justify-center gap-0.5 rounded-[14px] disabled:cursor-default disabled:opacity-30"
               disabled={d.isOutOfRange}
               type="button"
               onClick={() => onSelect(d.ymd)}
             >
-              <span
-                className={`text-[11px] ${
-                  isSelected ? "opacity-90" : "opacity-70"
-                }`}
-              >
+              <span className="text-xs font-semibold text-default-500">
                 {d.letter}
               </span>
-              <span className="text-base font-heading font-bold leading-none mt-0.5">
+              <span
+                className={`grid h-[34px] w-[34px] place-items-center rounded-full text-base font-semibold tabular-nums transition-colors duration-200 motion-reduce:transition-none ${circleClass}`}
+              >
                 {d.dayNumber}
               </span>
-              {dotClass ? (
-                <span
-                  className={`absolute bottom-1 h-1 w-1 rounded-full ${dotClass}`}
-                />
-              ) : null}
+              <span
+                aria-hidden
+                className={`h-[5px] w-[5px] rounded-full ${dotClass}`}
+              />
             </button>
           );
         })}
@@ -286,8 +284,49 @@ export function WeekDateSelector({
   );
 }
 
+function WeekArrow({
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <button
+      aria-label={label}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground active:bg-default-100 disabled:opacity-25"
+      disabled={disabled}
+      type="button"
+      onClick={onPress}
+    >
+      <Icon icon={icon} width={20} />
+    </button>
+  );
+}
+
+function longDayLabel(ymd: string): string {
+  try {
+    const formatted = new Intl.DateTimeFormat("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(parseYmd(ymd));
+
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  } catch {
+    return ymd;
+  }
+}
+
 // "Hoy" / "Ayer" / "Mañana" / "Lunes 12 de mayo".
-function formatSelectedLabel(selectedYmd: string, todayYmd: string): string {
+export function formatSelectedLabel(
+  selectedYmd: string,
+  todayYmd: string
+): string {
   if (selectedYmd === todayYmd) return "Hoy";
   const d = parseYmd(selectedYmd);
   const today = parseYmd(todayYmd);

@@ -71,11 +71,11 @@ export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Barra superior: qué ejercicio es + cerrar. Degradado para que se
-          lea sobre cualquier fotograma; no tapa los controles nativos, que
-          van abajo. */}
+      {/* Barra superior: qué ejercicio es + cerrar. Placa sólida translúcida
+          (sin degradados) para que se lea sobre cualquier fotograma; no tapa
+          los controles nativos, que van abajo. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-3 bg-gradient-to-b from-black/70 to-transparent px-4 pb-10"
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-3 bg-black/60 px-4 pb-3"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
         <div className="min-w-0 flex-1 pt-1.5">

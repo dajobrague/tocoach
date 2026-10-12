@@ -283,3 +283,7 @@ export function buildBaseFormData(
     notes: existingLog?.notes || "",
   };
 }
+
+/** Input de texto del registro: 52px, ≥16px (iOS no hace zoom), foco de marca. */
+export const LOG_INPUT_CLASS =
+  "h-[52px] w-full min-w-0 rounded-xl border border-default-200 bg-content1 px-3 text-lg font-semibold tabular-nums text-foreground caret-primary outline-none transition-[border-color,box-shadow] placeholder:font-medium placeholder:text-default-400 focus:border-primary focus:ring-4 focus:ring-primary/20 motion-reduce:transition-none";

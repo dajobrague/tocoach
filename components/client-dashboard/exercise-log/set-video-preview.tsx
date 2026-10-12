@@ -55,7 +55,7 @@ export function SetVideoPreview({
     >
       <button
         aria-label="Cerrar"
-        className="absolute z-10 inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/90 text-foreground shadow-md"
+        className="absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:bg-white/25"
         style={{
           top: "max(0.75rem, env(safe-area-inset-top))",
           right: "max(0.75rem, env(safe-area-inset-right))",
@@ -66,7 +66,7 @@ export function SetVideoPreview({
           onClose();
         }}
       >
-        <Icon icon="solar:close-circle-linear" width={22} />
+        <Icon icon="solar:close-linear" width={22} />
       </button>
       <div className="flex-1 flex items-center justify-center min-h-0">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -79,25 +79,25 @@ export function SetVideoPreview({
         />
       </div>
       <div
-        className="bg-content1 border-t border-default-200 px-4 py-3 flex gap-2 justify-end"
+        className="grid grid-cols-2 gap-2.5 px-3 pt-3"
         style={{
-          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+          paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
         }}
       >
         <Button
-          color="danger"
+          className="h-[52px] bg-white/15 text-[17px] font-semibold text-danger-300"
+          radius="lg"
           startContent={
-            <Icon icon="solar:trash-bin-minimalistic-bold" width={16} />
+            <Icon icon="solar:trash-bin-minimalistic-linear" width={20} />
           }
-          variant="flat"
           onPress={onRemove}
         >
           Borrar
         </Button>
         <Button
-          color="primary"
-          startContent={<Icon icon="solar:upload-linear" width={16} />}
-          variant="flat"
+          className="h-[52px] bg-white text-[17px] font-semibold text-black"
+          radius="lg"
+          startContent={<Icon icon="solar:camera-linear" width={20} />}
           onPress={onReplace}
         >
           Reemplazar

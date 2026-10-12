@@ -1,6 +1,7 @@
-// Modo "sesión activa": ocupa la pantalla principal del cliente cuando
-// éste tap "Comenzar" en una sesión. Las otras sesiones desaparecen y
-// queda solo esta — banner destacado + progreso + lista de ejercicios.
+// Modo "sesión activa": contenido de la pantalla (ClientScreen) que se abre
+// cuando el cliente toca una sesión — card de la sesión + progreso + lista
+// de ejercicios. El "Cambiar" y la fecha viven en la barra de esa pantalla
+// (workouts-content.tsx).
 //
 // Persistencia: el activeSessionId vive en localStorage (ver
 // hooks/use-persisted-active-training.ts), así que sobrevive a
@@ -23,6 +24,7 @@ import {
   useScheduledSessionState,
   useSetStartTime,
 } from "./hooks/use-scheduled-session-state";
+import { SessionTypeTile } from "./session-card";
 import { getSessionTypeStyle } from "./session-type-style";
 import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
@@ -95,7 +97,6 @@ interface Props {
   programs: WorkoutProgram[];
   exerciseLogs: ExerciseLogLike[];
   scheduledDate: string;
-  onExit: () => void;
   onLogExercise: (payload: OpenLogPayload) => void;
 }
 
@@ -104,7 +105,6 @@ export function ActiveSessionView({
   programs,
   exerciseLogs,
   scheduledDate,
-  onExit,
   onLogExercise,
 }: Props) {
   const { data: resolved, loading: resolvedLoading } =
@@ -248,68 +248,54 @@ export function ActiveSessionView({
 
   const typeStyle = getSessionTypeStyle(session.session_type);
 
-  return (
-    <section className="w-full space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          size="sm"
-          startContent={<Icon icon="solar:alt-arrow-left-linear" width={18} />}
-          variant="light"
-          onPress={onExit}
-        >
-          Cambiar entrenamiento
-        </Button>
-        <span className="pr-1 text-sm font-medium text-default-500">
-          {sessionDateLabel(scheduledDate)}
-        </span>
-      </div>
+  const isToday = scheduledDate === getLocalTodayYmd();
+  const hasStartTime =
+    schedState.data?.scheduled_time != null || timeDraft !== null;
 
-      {/* Card de la sesión. Al completarla se convierte en el momento de
-          cierre (mismo patrón que el check-in en Inicio): insignia, mensaje y
-          Compartir dentro de la superficie de marca que ya existía, sin
-          añadir otro bloque de color. */}
-      <div className="rounded-large bg-primary px-4 py-5 text-primary-foreground shadow-small">
-        <div className="flex items-start gap-3">
-          <div
-            aria-label={`Sesión de ${typeStyle.label.toLowerCase()}`}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15"
-            role="img"
-          >
-            <Icon
-              aria-hidden="true"
-              className="text-primary-foreground"
-              icon={typeStyle.icon}
-              width={22}
-            />
-          </div>
-          <div className="flex-1 min-w-0 space-y-1">
-            <h2 className="text-2xl font-heading font-bold text-primary-foreground leading-tight">
-              {session.name}
-            </h2>
-            <p className="text-xs text-primary-foreground/80">
-              {displayExerciseCount}{" "}
+  return (
+    <section className="flex w-full flex-col gap-6 px-4 pb-10 pt-4">
+      {/* Card de la sesión. Superficie neutra (no bloque de marca: con
+          algunos temas un bloque grande de color pesa demasiado); la marca
+          queda en la barra de progreso y el botón de empezar. */}
+      <div className="flex flex-col gap-4 rounded-large bg-content1 p-[18px] shadow-small">
+        <div className="flex items-center gap-3">
+          <SessionTypeTile sessionType={session.session_type} size="lg" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-default-500">
+              {typeStyle.label} · {displayExerciseCount}{" "}
               {displayExerciseCount === 1 ? "ejercicio" : "ejercicios"}
             </p>
+            <h2 className="mt-px font-heading text-[26px] leading-[1.1] tracking-[-0.02em] text-foreground">
+              {session.name}
+            </h2>
           </div>
           {sessionCompleted ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+            <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
               <Icon aria-hidden icon="solar:check-circle-bold" width={14} />
               Completado
             </span>
           ) : null}
         </div>
 
-        {!sessionCompleted && total > 0 ? (
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-xs text-primary-foreground/85">
-              <span>
+        {total > 0 ? (
+          <div
+            aria-label="Progreso"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={progress}
+            role="progressbar"
+          >
+            <div className="flex items-baseline justify-between tabular-nums">
+              <span className="text-[15px] font-semibold text-foreground">
                 {completed} de {total} hechos
               </span>
-              <span>{progress}%</span>
+              <span className="text-[13px] font-semibold text-default-500">
+                {progress}%
+              </span>
             </div>
-            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-primary-foreground/20">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
               <div
-                className="h-full bg-primary-foreground transition-all duration-300"
+                className="h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -320,23 +306,20 @@ export function ActiveSessionView({
             gana); sin hora, un botón explícito la registra — nunca se
             registra sola al abrir la vista (llamada 29 Jul: el cliente puede
             entrar solo a revisar qué le toca). */}
-        {!sessionCompleted &&
-        (schedState.data?.scheduled_time != null || timeDraft !== null) ? (
-          <div className="mt-4 flex items-center gap-2 rounded-medium bg-primary-foreground/10 px-3 py-2">
+        {!sessionCompleted && hasStartTime ? (
+          <label className="flex h-12 items-center gap-2 rounded-medium bg-default-100 pl-3.5 pr-1.5 text-[15px] text-default-500">
             <Icon
               aria-hidden
-              className="shrink-0 text-primary-foreground/80"
+              className="shrink-0"
               icon="solar:clock-circle-linear"
-              width={16}
+              width={20}
             />
-            <span className="text-xs text-primary-foreground/85">
-              Empezaste a las
-            </span>
+            <span className="flex-1 whitespace-nowrap">Empezaste a las</span>
             <input
               aria-label="Hora de inicio del entrenamiento"
               // Sin el icono de reloj nativo (sale negro y no sigue el tema);
               // tocar el campo abre el selector igualmente.
-              className="ml-auto bg-transparent text-sm font-semibold text-primary-foreground outline-none [&::-webkit-calendar-picker-indicator]:hidden"
+              className="h-9 shrink-0 rounded-[10px] bg-content1 px-2.5 text-[17px] font-bold tabular-nums text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-calendar-picker-indicator]:hidden"
               disabled={setStartTime.isPending}
               type="time"
               value={timeDraft ?? schedState.data?.scheduled_time ?? ""}
@@ -350,21 +333,20 @@ export function ActiveSessionView({
                 }
               }}
             />
-          </div>
-        ) : !sessionCompleted &&
-          schedState.isSuccess &&
-          scheduledDate === getLocalTodayYmd() ? (
+          </label>
+        ) : !sessionCompleted && schedState.isSuccess && isToday ? (
           // isSuccess: sin esperar la respuesta del server, el botón se
           // pintaría durante la carga aunque YA exista hora registrada, y un
           // tap la sobrescribiría con la hora actual.
           <Button
-            // Invertido sobre la marca: texto con la marca cruda (no
-            // .text-primary, que con marcas pálidas es una tinta oscurecida).
-            className="mt-4 w-full bg-primary-foreground font-semibold text-[hsl(var(--heroui-primary))]"
+            fullWidth
+            className="h-[52px] text-[17px] font-semibold"
+            color="primary"
             isLoading={setStartTime.isPending}
+            radius="lg"
             startContent={
               setStartTime.isPending ? null : (
-                <Icon icon="solar:play-bold" width={18} />
+                <Icon icon="solar:play-bold" width={20} />
               )
             }
             onPress={() => setStartTime.mutate(nowHHMM())}
@@ -372,113 +354,131 @@ export function ActiveSessionView({
             Empezar entrenamiento
           </Button>
         ) : null}
+      </div>
 
-        {sessionCompleted ? (
-          <div className="mt-4 border-t border-primary-foreground/15 pt-4">
-            <p className="font-heading text-lg leading-snug text-primary-foreground">
+      {sessionCompleted ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-large bg-content1 p-4 shadow-small">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success text-success-foreground">
+            <Icon aria-hidden icon="solar:check-read-linear" width={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-foreground">
               ¡Entrenamiento completado!
             </p>
-            <p className="mt-0.5 text-sm text-primary-foreground/85">
+            <p className="mt-0.5 text-sm text-default-500">
               Buen trabajo. Compártelo con tu gente.
             </p>
-            <div className="mt-4">
-              <ShareSessionButton
-                inverted
-                scheduledDate={scheduledDate}
-                sessionId={session.id}
-                sessionName={session.name}
-              />
-            </div>
+          </div>
+          <div className="flex w-full gap-2 pl-[52px]">
+            <ShareSessionButton
+              scheduledDate={scheduledDate}
+              sessionId={session.id}
+              sessionName={session.name}
+            />
             {schedState.data?.completedManually === true ? (
               <Button
-                className="mt-1 w-full text-primary-foreground/80"
+                className="h-9 bg-default-100 px-3.5 text-sm font-semibold text-foreground"
                 isLoading={markCompleted.isPending}
-                size="sm"
-                variant="light"
+                radius="full"
+                startContent={
+                  markCompleted.isPending ? null : (
+                    <Icon icon="solar:undo-left-linear" width={18} />
+                  )
+                }
                 onPress={() => markCompleted.mutate({ undo: true })}
               >
                 Deshacer
               </Button>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      <div>
+        <h2 className="mb-3 font-heading text-xl tracking-[-0.015em] text-foreground">
+          Ejercicios
+        </h2>
+        {resolvedLoading && !resolved ? (
+          // Don't render the clickable list until the override fetch lands —
+          // otherwise a tap before the data arrives captures stale template
+          // values and the modal opens with empty defaults.
+          <ul aria-busy="true" className="space-y-2">
+            {Array.from({ length: 3 }, (_, i) => (
+              <li
+                key={i}
+                className="h-20 animate-pulse rounded-large bg-content1 shadow-small motion-reduce:animate-none"
+              />
+            ))}
+          </ul>
+        ) : allExercises.length === 0 ? (
+          <div className="rounded-large bg-content1 p-4 text-sm text-default-500 shadow-small">
+            Esta sesión no tiene ejercicios todavía.
+          </div>
+        ) : (
+          <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+            {allExercises.map((exercise) => {
+              const exerciseId = exercise.exercise_id ?? "";
+              // Find the log for THIS slot (finalized or not); the status is
+              // derived from its finalized_at below. Same attribution rule as
+              // the `completed` count so banner and rows stay consistent.
+              const existingLog = exerciseId
+                ? logsForDate.find((log) =>
+                    logMatchesSlot(log, exercise, session.id)
+                  )
+                : undefined;
+              const status: ExerciseStatus = !existingLog
+                ? "not_started"
+                : existingLog.finalized_at
+                  ? "completed"
+                  : "in_progress";
+
+              return (
+                <li
+                  key={`${session.id}-${exercise.exercise_id ?? exercise.order}`}
+                >
+                  <ExerciseRow
+                    exercise={exercise}
+                    increaseWeight={
+                      status !== "completed" &&
+                      isIncreaseWeightPending(
+                        exercise.increaseWeightAfter,
+                        scheduledDate
+                      )
+                    }
+                    status={status}
+                    onClick={() =>
+                      onLogExercise({
+                        exercise,
+                        sessionId: session.id,
+                        scheduledDate,
+                        existingLog: existingLog ?? null,
+                      })
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
+            sesiones ya completadas — el entrenamiento terminó. */}
+        {!sessionCompleted ? (
+          <button
+            className="mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-medium border-[1.5px] border-dashed border-default-300 text-[15px] font-semibold text-foreground active:scale-[0.97] motion-reduce:transform-none [@media(hover:hover)]:hover:bg-default-100"
+            type="button"
+            onClick={() => setIsBorrowOpen(true)}
+          >
+            <Icon
+              aria-hidden
+              className="text-primary"
+              icon="solar:add-linear"
+              width={18}
+            />
+            Agregar ejercicio de otro día
+          </button>
         ) : null}
       </div>
-
-      {resolvedLoading && !resolved ? (
-        // Don't render the clickable list until the override fetch lands —
-        // otherwise a tap before the data arrives captures stale template
-        // values and the modal opens with empty defaults.
-        <ul aria-busy="true" className="space-y-2">
-          {Array.from({ length: 3 }, (_, i) => (
-            <li
-              key={i}
-              className="h-20 animate-pulse rounded-large bg-content1 shadow-small"
-            />
-          ))}
-        </ul>
-      ) : allExercises.length === 0 ? (
-        <div className="rounded-large bg-content1 p-3 text-sm text-default-500 shadow-small">
-          Esta sesión no tiene ejercicios todavía.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {allExercises.map((exercise) => {
-            const exerciseId = exercise.exercise_id ?? "";
-            // Find the log for THIS slot (finalized or not); the status is
-            // derived from its finalized_at below. Same attribution rule as
-            // the `completed` count so banner and rows stay consistent.
-            const existingLog = exerciseId
-              ? logsForDate.find((log) =>
-                  logMatchesSlot(log, exercise, session.id)
-                )
-              : undefined;
-            const status: ExerciseStatus = !existingLog
-              ? "not_started"
-              : existingLog.finalized_at
-                ? "completed"
-                : "in_progress";
-
-            return (
-              <li
-                key={`${session.id}-${exercise.exercise_id ?? exercise.order}`}
-              >
-                <ExerciseRow
-                  exercise={exercise}
-                  increaseWeight={
-                    status !== "completed" &&
-                    isIncreaseWeightPending(
-                      exercise.increaseWeightAfter,
-                      scheduledDate
-                    )
-                  }
-                  status={status}
-                  onClick={() =>
-                    onLogExercise({
-                      exercise,
-                      sessionId: session.id,
-                      scheduledDate,
-                      existingLog: existingLog ?? null,
-                    })
-                  }
-                />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
-          sesiones ya completadas — el entrenamiento terminó. */}
-      {!sessionCompleted ? (
-        <Button
-          fullWidth
-          startContent={<Icon icon="solar:add-circle-linear" width={18} />}
-          variant="flat"
-          onPress={() => setIsBorrowOpen(true)}
-        >
-          Agregar ejercicio de otro día
-        </Button>
-      ) : null}
 
       {/* Completar aunque queden ejercicios sin hacer (15 Jul). Va al final
           y discreto: es la salida para cerrar la sesión, no el siguiente
@@ -487,14 +487,8 @@ export function ActiveSessionView({
           retraso): sin el botón el cliente no podría cerrar la sesión. */}
       {!sessionCompleted && total > 0 ? (
         <Button
-          fullWidth
-          className="text-default-600"
+          className="min-h-11 self-center bg-transparent text-sm font-medium text-default-500 underline decoration-default-300 underline-offset-[3px]"
           isLoading={markCompleted.isPending}
-          startContent={
-            markCompleted.isPending ? null : (
-              <Icon icon="solar:check-circle-linear" width={18} />
-            )
-          }
           variant="light"
           onPress={() => markCompleted.mutate({})}
         >
@@ -530,34 +524,22 @@ interface RowProps {
 
 const STATUS_STYLE: Record<
   ExerciseStatus,
-  {
-    container: string;
-    icon: string;
-    iconClass: string;
-    label: string;
-    labelClass: string;
-  }
+  { icon: string; className: string; label: string }
 > = {
   not_started: {
-    container: "hover:bg-default-50",
     icon: "mdi:circle-outline",
-    iconClass: "text-default-300",
+    className: "text-default-400",
     label: "Pendiente",
-    labelClass: "text-default-400",
   },
   in_progress: {
-    container: "hover:bg-default-50",
-    icon: "solar:clock-circle-bold",
-    iconClass: "text-warning-600",
+    icon: "solar:clock-circle-linear",
+    className: "text-warning-600",
     label: "En curso",
-    labelClass: "text-warning-700",
   },
   completed: {
-    container: "",
     icon: "solar:check-circle-bold",
-    iconClass: "text-success",
+    className: "text-success-700",
     label: "Hecho",
-    labelClass: "text-success",
   },
 };
 
@@ -567,10 +549,11 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
   const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
   const style = STATUS_STYLE[status];
   const borrowedFrom = exercise.borrowedFromSessionName;
+  const typeStyle = getSessionTypeStyle(isCardio ? "cardio" : "strength");
 
   return (
     <button
-      className={`flex w-full items-center gap-3 rounded-large bg-content1 p-3 text-left shadow-small transition-colors ${style.container}`}
+      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
       type="button"
       onClick={onClick}
     >
@@ -578,60 +561,66 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
-          className="h-14 w-14 shrink-0 rounded-medium bg-default-100 object-cover"
+          className="h-14 w-14 shrink-0 rounded-[14px] bg-default-100 object-cover"
           decoding="async"
           loading="lazy"
           src={exercise.imageUrl}
         />
       ) : (
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-medium bg-default-100">
-          <Icon
-            className="text-default-400"
-            icon="solar:dumbbell-linear"
-            width={22}
-          />
-        </div>
+        <span
+          aria-hidden
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] ${typeStyle.tileClass}`}
+        >
+          <Icon icon={typeStyle.icon} width={26} />
+        </span>
       )}
-      <div className="flex-1 min-w-0 space-y-0.5">
-        <p className="truncate text-sm font-heading font-semibold text-foreground">
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className="text-[15px] font-semibold leading-snug text-foreground">
           {exercise.name}
         </p>
         {stats ? (
-          <p className="truncate text-xs text-default-500">{stats}</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-default-500 tabular-nums">
+            {stats}
+          </p>
         ) : null}
-        {increaseWeight ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-1.5 py-px text-[11px] font-body font-semibold text-success-700">
-            <Icon icon="solar:arrow-up-linear" width={12} />
-            Sube peso
-          </span>
-        ) : null}
-        {borrowedFrom ? (
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-default-300 px-1.5 py-px text-[10px] text-default-500">
-            <Icon
-              className="shrink-0"
-              icon="solar:transfer-horizontal-linear"
-              width={11}
-            />
-            <span className="truncate">De: {borrowedFrom}</span>
-          </span>
-        ) : null}
-        {hasVideo ? (
-          <span className="inline-flex items-center gap-1 text-[11px] text-default-500">
-            <Icon
-              className="text-primary"
-              icon="solar:videocamera-record-bold"
-              width={12}
-            />
-            Con video
-          </span>
+        {increaseWeight || borrowedFrom || hasVideo ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {increaseWeight ? (
+              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
+                <Icon aria-hidden icon="solar:arrow-up-linear" width={14} />
+                Sube peso
+              </span>
+            ) : null}
+            {borrowedFrom ? (
+              <span className="inline-flex h-6 max-w-full items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
+                <Icon
+                  aria-hidden
+                  className="shrink-0"
+                  icon="solar:transfer-horizontal-linear"
+                  width={14}
+                />
+                <span className="truncate">De: {borrowedFrom}</span>
+              </span>
+            ) : null}
+            {hasVideo ? (
+              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
+                <Icon
+                  aria-hidden
+                  icon="solar:videocamera-record-linear"
+                  width={14}
+                />
+                Con video
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
-      <div className="shrink-0 flex flex-col items-center gap-0.5">
-        <Icon className={style.iconClass} icon={style.icon} width={26} />
-        <span className={`text-[10px] font-medium ${style.labelClass}`}>
-          {style.label}
-        </span>
-      </div>
+      <span
+        className={`flex w-[54px] shrink-0 flex-col items-center gap-[3px] pt-1.5 ${style.className}`}
+      >
+        <Icon aria-hidden icon={style.icon} width={24} />
+        <span className="text-[11px] font-semibold">{style.label}</span>
+      </span>
     </button>
   );
 }
@@ -739,16 +728,4 @@ function findExercisesForSession(
   }
 
   return [];
-}
-
-/** "Hoy" o "Mar, 29 sept" para situar la sesión sin el selector de semana. */
-function sessionDateLabel(ymd: string): string {
-  if (ymd === getLocalTodayYmd()) return "Hoy";
-  const label = new Date(`${ymd}T12:00:00`).toLocaleDateString("es-ES", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-
-  return label.charAt(0).toUpperCase() + label.slice(1);
 }

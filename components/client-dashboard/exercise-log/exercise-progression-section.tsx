@@ -9,6 +9,7 @@
 //   siendo de 2px reales; el punto final y su etiqueta son HTML absoluto
 //   (así no se deforman al escalar).
 // - Récords: chips por bucket de reps; el mejor en tinte warning (logro).
+// Vive dentro de la card plegable "Tu historial y récords" (sin card propia).
 //
 // Si hay menos de 2 puntos no renderiza nada: un punto suelto no es una
 // progresión, es ruido.
@@ -56,22 +57,18 @@ export function ExerciseProgressionSection({
   const bestBucket = pickBestBucket(data.repMaxes);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="mb-2 font-heading text-base text-foreground">
-          Tu progreso
-        </p>
-        <div className="rounded-large bg-content1 px-3 pb-2 pt-4 shadow-small">
-          <Sparkline exerciseName={exerciseName} series={series} />
-        </div>
-      </div>
+    <div>
+      <h4 className="mb-2 mt-5 text-sm font-semibold text-default-500">
+        Tu progreso
+      </h4>
+      <Sparkline exerciseName={exerciseName} series={series} />
 
       {repMaxes.length > 0 ? (
         <div>
-          <p className="mb-2 font-heading text-base text-foreground">
+          <h4 className="mb-2 mt-5 text-sm font-semibold text-default-500">
             Tus récords
-          </p>
-          <div className="flex flex-wrap gap-1.5">
+          </h4>
+          <div className="flex flex-wrap gap-2">
             {repMaxes.map((rm) => (
               <RecordChip
                 key={rm.bucket}
@@ -159,25 +156,26 @@ function Sparkline({
 
 function RecordChip({ repMax, isBest }: { repMax: RepMax; isBest: boolean }) {
   // Nomenclatura de récord (llamada 29 Jul): nº de reps + " RM" + peso.
-  const label = `${repMax.bucket} RM · ${formatKg(repMax.weightKg)} kg`;
-
   return (
     <span
-      className={
-        isBest
-          ? "inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-foreground"
-          : "inline-flex items-center gap-1 rounded-full border border-default-200 px-2.5 py-1 text-xs font-medium text-default-700"
-      }
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 tabular-nums ${
+        isBest ? "bg-warning/15" : "bg-default-100"
+      }`}
     >
       {isBest ? (
         <Icon
           aria-label="Tu mejor marca"
-          className="text-primary"
-          icon="solar:medal-ribbon-star-bold"
+          className="self-center text-warning-600"
+          icon="solar:star-bold"
           width={14}
         />
       ) : null}
-      {label}
+      <span className="text-xs font-semibold text-default-500">
+        {repMax.bucket} RM
+      </span>
+      <span className="text-sm font-bold text-foreground">
+        {formatKg(repMax.weightKg)} kg
+      </span>
     </span>
   );
 }

@@ -5,7 +5,9 @@
 //
 // Sobre la imagen flotan el botón de volver y, si hay vídeo del
 // entrenador, una pastilla "Ver vídeo" en la esquina inferior derecha que
-// abre el reproductor (antes era una fila aparte bajo el título).
+// abre el reproductor (antes era una fila aparte bajo el título). Ambos van
+// sobre una placa sólida translúcida (sin degradados): se leen sobre
+// cualquier foto.
 
 "use client";
 
@@ -38,12 +40,12 @@ export function ExerciseLogHero({
   const embed = videoUrl ? getVideoEmbed(videoUrl) : null;
 
   return (
-    <div className="relative w-full h-[33vh] min-h-[180px] max-h-[320px] overflow-hidden">
+    <div className="relative h-[33vh] max-h-[300px] min-h-[200px] w-full overflow-hidden">
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover"
           decoding="async"
           src={imageUrl}
         />
@@ -58,44 +60,39 @@ export function ExerciseLogHero({
           src={`${embed.embedUrl}#t=0.1`}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-primary/10">
+        <div
+          className={`flex h-full w-full items-center justify-center ${typeStyle.tileClass}`}
+        >
           <Icon
             aria-hidden="true"
-            className="text-primary"
+            className="opacity-80"
             icon={typeStyle.icon}
-            width={72}
+            width={96}
           />
         </div>
       )}
 
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent pointer-events-none"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent pointer-events-none"
-      />
-
       <button
         aria-label="Volver"
-        className="absolute top-3 left-3 inline-flex items-center justify-center h-9 w-9 rounded-full text-white drop-shadow-md hover:bg-white/10 transition-colors"
+        className="absolute left-3 top-[calc(env(safe-area-inset-top)+10px)] z-[3] flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white active:scale-[0.97] motion-reduce:transform-none"
         type="button"
         onClick={onClose}
       >
-        <Icon icon="solar:alt-arrow-left-linear" width={26} />
+        <Icon
+          className="-ml-0.5"
+          icon="solar:alt-arrow-left-linear"
+          width={22}
+        />
       </button>
 
       {videoUrl ? (
         <button
           aria-label="Ver vídeo de demostración del entrenador"
-          className="absolute bottom-3 right-3 inline-flex min-h-10 items-center gap-1.5 rounded-full bg-black/60 py-2 pl-2.5 pr-3.5 text-sm font-semibold text-white shadow-medium backdrop-blur transition-colors hover:bg-black/75"
+          className="absolute bottom-3.5 right-3.5 inline-flex h-10 items-center gap-1.5 rounded-full bg-black/55 pl-2.5 pr-3.5 text-sm font-semibold text-white active:scale-[0.97] motion-reduce:transform-none [@media(hover:hover)]:hover:bg-black/70"
           type="button"
           onClick={() => setIsVideoOpen(true)}
         >
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
-            <Icon aria-hidden icon="solar:play-bold" width={13} />
-          </span>
+          <Icon aria-hidden icon="solar:play-bold" width={18} />
           Ver vídeo
         </button>
       ) : null}

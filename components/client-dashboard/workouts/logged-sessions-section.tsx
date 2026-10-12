@@ -1,6 +1,6 @@
 // Sección "Tu entrenamiento del [día]". Aparece arriba de la lista de
 // templates cuando el cliente seleccionó una fecha pasada y tiene logs
-// registrados ese día. Cada card es tappable → entra a ActiveSessionView
+// registrados ese día. Cada card es tappable → abre la sesión
 // en modo edición (existingLog ya está plumbeado en el modal de log).
 
 import type { LoggedSession } from "./hooks/use-logged-sessions-for-date";
@@ -10,7 +10,8 @@ import { Icon } from "@iconify/react";
 
 import { SectionHeader } from "../client-page";
 
-import { SessionCard } from "./session-card";
+import { SessionTypeTile } from "./session-card";
+import { getSessionTypeStyle } from "./session-type-style";
 
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
@@ -53,66 +54,92 @@ export function LoggedSessionsSection({
 
   return (
     <section className="w-full">
-      <SectionHeader title={headingFor(scheduledDate, todayYmd)} />
-      <div className="space-y-3 w-full">
-        {loggedSessions.map((s) => (
-          <div
-            key={s.sessionId}
-            className="cursor-pointer"
-            role="button"
-            tabIndex={0}
-            onClick={() => !s.templateMissing && onActivate(s.sessionId)}
-            onKeyDown={(e) => {
-              if (!s.templateMissing && (e.key === "Enter" || e.key === " ")) {
-                e.preventDefault();
-                onActivate(s.sessionId);
-              }
-            }}
-          >
-            <SessionCard
-              exerciseCount={s.exercisesTotal}
-              name={s.name}
-              rightContent={
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] text-default-500 mr-1">
-                    {s.exercisesLogged}/{s.exercisesTotal}
-                  </span>
-                  {!s.templateMissing ? (
-                    <Button
-                      isIconOnly
-                      aria-label="Editar entrenamiento"
-                      size="sm"
-                      variant="light"
-                      onPress={() => onActivate(s.sessionId)}
-                    >
-                      <Icon icon="solar:pen-2-linear" width={16} />
-                    </Button>
-                  ) : null}
-                  <Button
-                    isIconOnly
-                    aria-label="Borrar entrenamiento"
-                    color="danger"
-                    size="sm"
-                    variant="light"
-                    onPress={() => {
-                      // confirmAfterPress y no window.confirm: un confirm()
-                      // síncrono dentro de onPress congela la página hasta
-                      // recargar (react-aria queda esperando el pointer-up).
-                      void confirmAfterPress(
-                        "¿Borrar todo este entrenamiento? Se eliminarán todos los registros de esta sesión en esta fecha."
-                      ).then((ok) => {
-                        if (ok) onDelete(s.sessionId);
-                      });
-                    }}
-                  >
-                    <Icon icon="solar:trash-bin-trash-linear" width={16} />
-                  </Button>
+      <SectionHeader
+        className="mb-3.5"
+        title={headingFor(scheduledDate, todayYmd)}
+      />
+      <div className="w-full space-y-2.5">
+        {loggedSessions.map((s) => {
+          const full = s.exercisesLogged >= s.exercisesTotal;
+          const body = (
+            <>
+              <SessionTypeTile sessionType={s.sessionType} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-foreground">
+                  {s.name}
+                </span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-default-500">
+                  {s.templateMissing
+                    ? "Tu entrenador quitó esta sesión del programa"
+                    : getSessionTypeStyle(s.sessionType).label}
+                </span>
+              </span>
+              <span
+                aria-label={`${s.exercisesLogged} de ${s.exercisesTotal} ejercicios`}
+                className={`flex h-[26px] min-w-10 shrink-0 items-center justify-center rounded-full px-2 text-[13px] font-bold tabular-nums ${
+                  full
+                    ? "bg-success/15 text-success-700"
+                    : "bg-default-100 text-default-500"
+                }`}
+              >
+                {s.exercisesLogged}/{s.exercisesTotal}
+              </span>
+            </>
+          );
+
+          return (
+            <div
+              key={s.sessionId}
+              className="flex items-center gap-1 rounded-large bg-content1 py-1.5 pl-3.5 pr-1.5 shadow-small"
+            >
+              {s.templateMissing ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2.5 py-1.5">
+                  {body}
                 </div>
-              }
-              sessionType={s.sessionType}
-            />
-          </div>
-        ))}
+              ) : (
+                // Tocar la card reabre la sesión (modo edición: existingLog
+                // ya viaja al modal de log).
+                <button
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-medium py-1.5 text-left active:opacity-70"
+                  type="button"
+                  onClick={() => onActivate(s.sessionId)}
+                >
+                  {body}
+                </button>
+              )}
+              {!s.templateMissing ? (
+                <button
+                  aria-label="Editar entrenamiento"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-default-500 active:bg-default-100"
+                  type="button"
+                  onClick={() => onActivate(s.sessionId)}
+                >
+                  <Icon icon="solar:pen-2-linear" width={20} />
+                </button>
+              ) : null}
+              <Button
+                isIconOnly
+                aria-label="Borrar entrenamiento"
+                className="h-11 w-11 min-w-11"
+                color="danger"
+                radius="full"
+                variant="light"
+                onPress={() => {
+                  // confirmAfterPress y no window.confirm: un confirm()
+                  // síncrono dentro de onPress congela la página hasta
+                  // recargar (react-aria queda esperando el pointer-up).
+                  void confirmAfterPress(
+                    "¿Borrar todo este entrenamiento? Se eliminarán todos los registros de esta sesión en esta fecha."
+                  ).then((ok) => {
+                    if (ok) onDelete(s.sessionId);
+                  });
+                }}
+              >
+                <Icon icon="solar:trash-bin-trash-linear" width={20} />
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

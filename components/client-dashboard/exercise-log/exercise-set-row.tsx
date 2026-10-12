@@ -1,5 +1,6 @@
-// Una fila del formulario de fuerza: número de serie · reps · peso ·
-// botón de video. El video es por SERIE — el state vive en
+// Una fila del formulario de fuerza: número de serie · peso · reps ·
+// botón de video. Sin check por serie ni temporizador de descanso (a
+// propósito: registro simple). El video es por SERIE — el state vive en
 // formData.sets[index].videoUrl|videoPath y se sube via useSetVideos.
 //
 // Los headers (Serie / Reps / Peso) viven en el padre (StrengthFields)
@@ -14,15 +15,19 @@
 
 "use client";
 
-import { Button, Input } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useRef, useState } from "react";
 
-import { type SetDraftWithTarget } from "./helpers";
+import { LOG_INPUT_CLASS, type SetDraftWithTarget } from "./helpers";
 import { SetVideoPreview } from "./set-video-preview";
 
 interface Props {
   index: number;
+  /** Grid compartido con la cabecera (StrengthFields). */
+  gridClass: string;
+  /** Última fila: el teclado muestra "Hecho" en vez de "Siguiente". */
+  isLast: boolean;
   set: SetDraftWithTarget;
   canRemove: boolean;
   isUploading: boolean;
@@ -34,6 +39,8 @@ interface Props {
 
 export function ExerciseSetRow({
   index,
+  gridClass,
+  isLast,
   set,
   canRemove,
   isUploading,
@@ -57,29 +64,33 @@ export function ExerciseSetRow({
 
   return (
     <>
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        <div className="flex items-center justify-center w-10 h-10 rounded-medium bg-default-100 text-primary text-base font-bold shrink-0">
+      <div className={gridClass}>
+        <span className="flex h-[52px] items-center justify-center rounded-xl bg-default-100 text-[15px] font-bold tabular-nums text-default-500">
           {index + 1}
-        </div>
-        <Input
-          classNames={{ input: "text-base", base: "flex-1" }}
+        </span>
+        <input
+          aria-label={`Peso de la serie ${index + 1}, en kilos`}
+          autoComplete="off"
+          className={`${LOG_INPUT_CLASS} text-center`}
+          enterKeyHint="next"
           inputMode="decimal"
-          placeholder="Peso"
-          size="md"
+          placeholder="kg"
           value={set.weight}
-          onValueChange={(value) => onUpdate("weight", value)}
+          onChange={(e) => onUpdate("weight", e.target.value)}
         />
         {/* Prescripción no numérica ("8-12") como placeholder: el input
             number no puede mostrarla como value y guardarla persistiría
             el límite inferior sin que el cliente registrara nada. */}
-        <Input
-          classNames={{ input: "text-base", base: "flex-1" }}
+        <input
+          aria-label={`Repeticiones de la serie ${index + 1}`}
+          autoComplete="off"
+          className={`${LOG_INPUT_CLASS} text-center`}
+          enterKeyHint={isLast ? "done" : "next"}
           inputMode="numeric"
           placeholder={set.repsPlaceholder ?? "Reps"}
-          size="md"
           type="number"
           value={set.reps}
-          onValueChange={(value) => onUpdate("reps", value)}
+          onChange={(e) => onUpdate("reps", e.target.value)}
         />
         <input
           ref={fileRef}
@@ -102,37 +113,37 @@ export function ExerciseSetRow({
           // Cámara en tinte de marca para invitar a grabar (37% de los
           // clientes activos lo usa); con vídeo, sólido con ▶ para ver
           // de un vistazo qué series ya lo tienen.
-          className={`shrink-0 h-10 w-10 min-w-10 ${
-            hasVideo
-              ? "bg-primary text-primary-foreground"
-              : "bg-primary/10 text-primary"
+          className={`h-11 w-11 min-w-11 justify-self-center ${
+            isUploading
+              ? "bg-default-100 text-default-500"
+              : hasVideo
+                ? "bg-primary text-primary-foreground"
+                : "bg-primary/10 text-primary"
           }`}
           isLoading={isUploading}
-          radius="md"
+          radius="full"
           variant="flat"
           onPress={handleVideoClick}
         >
           {!isUploading ? (
             <Icon
+              className={hasVideo ? "ml-0.5" : ""}
               icon={
                 hasVideo ? "solar:play-bold" : "solar:videocamera-record-linear"
               }
-              width={20}
+              width={hasVideo ? 16 : 20}
             />
           ) : null}
         </Button>
         {canRemove ? (
-          <Button
-            isIconOnly
-            aria-label="Quitar serie"
-            className="shrink-0 h-10 w-10 min-w-10"
-            color="danger"
-            radius="md"
-            variant="light"
-            onPress={onRemove}
+          <button
+            aria-label={`Quitar serie ${index + 1}`}
+            className="flex h-11 w-9 items-center justify-center rounded-[10px] text-default-500 active:bg-default-100"
+            type="button"
+            onClick={onRemove}
           >
-            <Icon icon="solar:trash-bin-minimalistic-linear" width={20} />
-          </Button>
+            <Icon icon="solar:trash-bin-minimalistic-linear" width={18} />
+          </button>
         ) : null}
       </div>
 
