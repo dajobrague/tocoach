@@ -30,6 +30,8 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onViewed?: (item: StoryItem) => void;
+  /** Nombre del entrenador para el avatar (iniciales). Sin él, icono neutro. */
+  coachName?: string;
 }
 
 export function VideoFeedbackStoryViewer({
@@ -38,6 +40,7 @@ export function VideoFeedbackStoryViewer({
   isOpen,
   onClose,
   onViewed,
+  coachName,
 }: Props) {
   const [index, setIndex] = useState(initialIndex);
   const [wasOpen, setWasOpen] = useState(isOpen);
@@ -152,6 +155,21 @@ export function VideoFeedbackStoryViewer({
   }, []);
 
   if (!isOpen || !current) return null;
+  const coachInitials = (coachName ?? "")
+    .split(/\s+/)
+    .map((w) => w.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const avatar = (
+    <span
+      aria-hidden
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 font-heading text-[13px] font-extrabold text-white"
+    >
+      {coachInitials || <Icon icon="solar:user-linear" width={18} />}
+    </span>
+  );
+
   if (typeof window === "undefined") return null;
 
   return createPortal(
@@ -230,68 +248,59 @@ export function VideoFeedbackStoryViewer({
 
         {/* Cabecera */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-3 pb-8"
+          className="pointer-events-none absolute inset-x-0 top-0 px-2.5"
           style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
         >
-          <div className="flex gap-1">
+          <div className="flex gap-1 px-0.5">
             {items.map((item, i) => (
               <span
                 key={item.notificationId ?? `${item.videoUrl}-${i}`}
-                className={`h-[2.5px] flex-1 rounded-full ${
-                  i <= index ? "bg-white" : "bg-white/35"
+                className={`h-[3px] flex-1 rounded-full ${
+                  i <= index ? "bg-white" : "bg-white/30"
                 }`}
               />
             ))}
           </div>
 
-          <div className="mt-3 flex items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[13px] font-bold text-white">
-              C
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-white">
+          <div className="mt-2.5 flex items-center gap-2.5 pl-1">
+            {avatar}
+            {/* Placa translúcida sólida (sin degradado) para leer el título
+                sobre cualquier fotograma. */}
+            <div className="min-w-0 flex-1 rounded-[10px] bg-black/35 px-2 py-1">
+              <p className="truncate text-[15px] font-semibold text-white">
                 {current.exerciseName}
               </p>
-              <p className="truncate text-[10.5px] text-white/75">
+              <p className="truncate text-[13px] tabular-nums text-white/80">
                 {formatStoryDate(current.scheduledDate)}
                 {current.setLabel ? ` · ${current.setLabel}` : ""}
               </p>
             </div>
             <button
               aria-label="Cerrar"
-              className="pointer-events-auto -mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/90"
+              className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:scale-[0.97] motion-reduce:active:scale-100"
               type="button"
               onClick={onClose}
             >
-              <Icon icon="solar:close-circle-linear" width={24} />
+              <Icon icon="solar:close-circle-linear" width={26} />
             </button>
           </div>
         </div>
 
-        {/* Comentario del coach */}
-        <div
-          className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 pt-12"
-          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
-        >
-          {current.setLabel ? (
-            <p className="mb-1.5 text-[10.5px] text-white/70">
-              {current.setLabel}
+        {/* Comentario del coach: placa negra translúcida sólida, sin
+            degradado (regla del portal: nada de degradados ni scrims). */}
+        {current.comment ? (
+          <div
+            className="absolute inset-x-3 max-h-[34dvh] overflow-y-auto overscroll-contain rounded-[18px] bg-black/60 px-3.5 py-3 text-white"
+            style={{
+              bottom: "max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))",
+            }}
+          >
+            <p className="text-[13px] font-bold text-white/75">Tu coach</p>
+            <p className="mt-1 whitespace-pre-line break-words text-[15px] leading-relaxed">
+              {current.comment}
             </p>
-          ) : null}
-          <div className="flex items-end gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-white">
-              C
-            </span>
-            <div className="max-h-[28dvh] min-w-0 flex-1 overflow-y-auto rounded-[4px_14px_14px_14px] bg-white/15 px-3 py-2 text-[13px] text-white backdrop-blur">
-              <p className="mb-0.5 text-[11px] font-bold text-emerald-300">
-                Tu coach
-              </p>
-              <p className="whitespace-pre-line break-words">
-                {current.comment}
-              </p>
-            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>,
     document.body

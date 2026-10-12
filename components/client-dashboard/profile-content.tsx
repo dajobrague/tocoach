@@ -19,7 +19,11 @@ import { useEffect, useRef, useState } from "react";
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientPage } from "@/components/client-dashboard/client-page";
-import { ClientSheet } from "@/components/client-dashboard/client-sheet";
+import {
+  ClientSheet,
+  ClientSheetGrabber,
+} from "@/components/client-dashboard/client-sheet";
+import { IconTile } from "@/components/shared/icon-tile";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import { buildInitials, thumbnailUrl } from "@/lib/utils/avatar";
 
@@ -321,7 +325,7 @@ export function ProfileContent() {
   if (isLoading) {
     return (
       <>
-        <ClientPage title="Mi perfil">
+        <ClientPage showBack title="Mi perfil">
           <div className="flex items-center justify-center py-20">
             <Spinner size="lg" />
           </div>
@@ -342,158 +346,111 @@ export function ProfileContent() {
 
   return (
     <>
-      <ClientPage title="Mi perfil">
-        <div className="space-y-4 px-4 pt-4">
-          <section className="rounded-large bg-content1 p-5 shadow-small">
-            <div className="flex items-center gap-5">
-              <button
-                aria-label={
-                  showAvatarImage ? "Cambiar foto de perfil" : "Subir foto"
-                }
-                className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-primary/10 transition-opacity active:opacity-80"
-                disabled={isUploadingAvatar}
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {showAvatarImage && avatarUrl ? (
-                  <img
-                    alt={fullName}
-                    className="h-full w-full object-cover"
-                    decoding="async"
-                    loading="lazy"
-                    sizes={`${AVATAR_DISPLAY_PX}px`}
-                    src={thumbnailUrl(avatarUrl, AVATAR_THUMB_PX)}
-                    onError={() => setAvatarFailed(true)}
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center font-heading text-2xl text-primary">
-                    {initials}
-                  </span>
-                )}
-                {isUploadingAvatar && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <Spinner color="white" size="sm" />
-                  </div>
-                )}
-              </button>
-
-              <input
-                ref={fileInputRef}
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                className="hidden"
-                type="file"
-                onChange={handleAvatarChange}
-              />
-
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate font-heading text-lg text-foreground">
-                  {fullName}
-                </h2>
-                <p className="truncate text-sm text-default-500">
-                  {clientProfile?.email}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <button
-                    className="font-semibold text-primary"
-                    disabled={isUploadingAvatar}
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Cambiar foto
-                  </button>
-                  {showAvatarImage && (
-                    <>
-                      <span aria-hidden className="text-default-300">
-                        ·
-                      </span>
-                      <button
-                        className="font-semibold text-danger disabled:opacity-50"
-                        disabled={isDeletingAvatar}
-                        type="button"
-                        onClick={openDeleteModal}
-                      >
-                        Eliminar foto
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-large bg-content1 p-5 shadow-small">
-            <dl className="space-y-3">
-              {clientProfile?.phone && (
-                <MetadataRow
-                  icon="solar:phone-bold"
-                  label="Teléfono"
-                  value={clientProfile.phone}
+      <ClientPage showBack title="Mi perfil">
+        <div className="space-y-5 px-4 pb-8 pt-2">
+          <div className="flex flex-col items-center text-center">
+            <button
+              aria-label={
+                showAvatarImage ? "Cambiar foto de perfil" : "Subir foto"
+              }
+              className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-primary/10 transition-transform active:scale-[0.97] motion-reduce:active:scale-100"
+              disabled={isUploadingAvatar}
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {showAvatarImage && avatarUrl ? (
+                <img
+                  alt={fullName}
+                  className="h-full w-full object-cover"
+                  decoding="async"
+                  loading="lazy"
+                  sizes={`${AVATAR_DISPLAY_PX}px`}
+                  src={thumbnailUrl(avatarUrl, AVATAR_THUMB_PX)}
+                  onError={() => setAvatarFailed(true)}
                 />
-              )}
-              {clientProfile?.email && (
-                <MetadataRow
-                  icon="solar:letter-bold"
-                  label="Email"
-                  value={clientProfile.email}
-                />
-              )}
-              {dobFormatted && (
-                <MetadataRow
-                  icon="solar:gift-bold"
-                  label="Fecha de nacimiento"
-                  value={dobFormatted}
-                />
-              )}
-              {clientProfile?.occupation &&
-                clientProfile.occupation !== "No especificado" && (
-                  <MetadataRow
-                    icon="solar:case-bold"
-                    label="Ocupación"
-                    value={clientProfile.occupation}
-                  />
-                )}
-              {location && (
-                <MetadataRow
-                  icon="solar:map-point-bold"
-                  label="Ubicación"
-                  value={location}
-                />
-              )}
-              {memberSince && (
-                <MetadataRow
-                  icon="solar:calendar-bold"
-                  label="Miembro desde"
-                  value={memberSince}
-                />
-              )}
-            </dl>
-          </section>
-
-          <section className="overflow-hidden rounded-large bg-content1 shadow-small">
-            {!showPasswordForm ? (
-              <button
-                className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-default-100/60 active:bg-default-200/60"
-                type="button"
-                onClick={() => setShowPasswordForm(true)}
-              >
-                <Icon
-                  className="shrink-0 text-2xl text-default-700"
-                  icon="solar:lock-password-bold"
-                />
-                <span className="flex-1 text-base font-semibold text-foreground">
-                  Cambiar contraseña
+              ) : (
+                <span className="flex h-full w-full items-center justify-center font-heading text-[32px] font-extrabold text-primary">
+                  {initials}
                 </span>
-                <Icon
-                  className="shrink-0 text-lg text-default-300"
-                  icon="solar:alt-arrow-right-linear"
+              )}
+              {isUploadingAvatar && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <Spinner color="white" size="sm" />
+                </div>
+              )}
+            </button>
+
+            <input
+              ref={fileInputRef}
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden"
+              type="file"
+              onChange={handleAvatarChange}
+            />
+
+            <h2 className="mt-2.5 max-w-full truncate font-heading text-[22px] text-foreground">
+              {fullName}
+            </h2>
+          </div>
+
+          <dl className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+            {clientProfile?.email && (
+              <MetadataRow label="Email" value={clientProfile.email} />
+            )}
+            {clientProfile?.phone && (
+              <MetadataRow label="Teléfono" value={clientProfile.phone} />
+            )}
+            {dobFormatted && (
+              <MetadataRow label="Fecha de nacimiento" value={dobFormatted} />
+            )}
+            {clientProfile?.occupation &&
+              clientProfile.occupation !== "No especificado" && (
+                <MetadataRow
+                  label="Ocupación"
+                  value={clientProfile.occupation}
                 />
-              </button>
+              )}
+            {location && <MetadataRow label="Ubicación" value={location} />}
+            {memberSince && (
+              <MetadataRow label="Miembro desde" value={memberSince} />
+            )}
+          </dl>
+
+          <div className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+            <ActionRow
+              disabled={isUploadingAvatar}
+              icon="solar:camera-linear"
+              label="Cambiar foto"
+              onPress={() => fileInputRef.current?.click()}
+            />
+            {showAvatarImage && (
+              <ActionRow
+                danger
+                disabled={isDeletingAvatar}
+                icon="solar:trash-bin-trash-linear"
+                label="Eliminar foto"
+                onPress={openDeleteModal}
+              />
+            )}
+            {!showPasswordForm ? (
+              <ActionRow
+                icon="solar:lock-password-linear"
+                label="Cambiar contraseña"
+                onPress={() => setShowPasswordForm(true)}
+              />
             ) : (
-              <div className="space-y-4 px-5 py-4">
+              <div className="space-y-4 px-4 py-4">
                 <Input
+                  autoComplete="current-password"
+                  classNames={{ input: "text-base" }}
                   endContent={
                     <button
-                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      aria-label={
+                        showCurrentPw
+                          ? "Ocultar contraseña"
+                          : "Mostrar contraseña"
+                      }
+                      className="flex h-11 w-11 items-center justify-center rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowCurrentPw(!showCurrentPw)}
                     >
@@ -515,9 +472,14 @@ export function ProfileContent() {
                   onValueChange={setCurrentPassword}
                 />
                 <Input
+                  autoComplete="new-password"
+                  classNames={{ input: "text-base" }}
                   endContent={
                     <button
-                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      aria-label={
+                        showNewPw ? "Ocultar contraseña" : "Mostrar contraseña"
+                      }
+                      className="flex h-11 w-11 items-center justify-center rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowNewPw(!showNewPw)}
                     >
@@ -537,9 +499,16 @@ export function ProfileContent() {
                   onValueChange={setNewPassword}
                 />
                 <Input
+                  autoComplete="new-password"
+                  classNames={{ input: "text-base" }}
                   endContent={
                     <button
-                      className="rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      aria-label={
+                        showConfirmPw
+                          ? "Ocultar contraseña"
+                          : "Mostrar contraseña"
+                      }
+                      className="flex h-11 w-11 items-center justify-center rounded-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       type="button"
                       onClick={() => setShowConfirmPw(!showConfirmPw)}
                     >
@@ -585,124 +554,152 @@ export function ProfileContent() {
                 </div>
               </div>
             )}
-          </section>
+          </div>
 
-          <button
-            className="flex w-full items-center gap-4 rounded-large bg-content1 px-5 py-4 shadow-small transition-colors hover:bg-default-100 active:bg-default-200"
-            type="button"
-            onClick={openLogoutModal}
-          >
-            <Icon
-              className="shrink-0 text-2xl text-danger"
-              icon="solar:logout-2-linear"
-            />
-            <span className="flex-1 text-left text-base font-semibold text-danger">
+          <div className="overflow-hidden rounded-large bg-content1 shadow-small">
+            <button
+              className="flex min-h-14 w-full items-center justify-center gap-2 px-4 text-base font-semibold text-danger transition-colors active:bg-danger/10 [@media(hover:hover)]:hover:bg-danger/5"
+              type="button"
+              onClick={openLogoutModal}
+            >
+              <Icon icon="solar:logout-2-linear" width={20} />
               Cerrar sesión
-            </span>
-          </button>
-
-          <p className="pt-2 text-center text-xs text-default-400">
-            Top Coach · v1.0.0
-          </p>
+            </button>
+          </div>
         </div>
       </ClientPage>
       <ClientBottomNav />
 
       <ClientSheet isOpen={isDeleteOpen} size="sm" onClose={closeDeleteModal}>
         <ModalContent>
-          <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
-              <Icon
-                className="text-3xl text-danger"
-                icon="solar:trash-bin-trash-bold"
-              />
-            </div>
-            <span className="font-heading text-lg">¿Eliminar foto?</span>
-          </ModalHeader>
-          <ModalBody className="px-6 pb-2 text-center">
-            <p className="text-sm text-default-500">
-              Tu foto de perfil será eliminada. Esta acción no se puede
-              deshacer.
-            </p>
-          </ModalBody>
-          <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
-            <Button
-              className="flex-1"
-              variant="flat"
-              onPress={closeDeleteModal}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1 font-semibold"
-              color="danger"
-              isLoading={isDeletingAvatar}
-              onPress={handleAvatarDelete}
-            >
-              Eliminar
-            </Button>
-          </ModalFooter>
+          {(onCloseSheet) => (
+            <>
+              <ClientSheetGrabber onClose={onCloseSheet} />
+              <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-2 sm:pt-6">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
+                  <Icon
+                    className="text-3xl text-danger"
+                    icon="solar:trash-bin-trash-bold"
+                  />
+                </div>
+                <span className="font-heading text-lg">¿Eliminar foto?</span>
+              </ModalHeader>
+              <ModalBody className="px-6 pb-2 text-center">
+                <p className="text-sm text-default-500">
+                  Tu foto de perfil será eliminada. Esta acción no se puede
+                  deshacer.
+                </p>
+              </ModalBody>
+              <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
+                <Button
+                  className="flex-1"
+                  variant="flat"
+                  onPress={closeDeleteModal}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 font-semibold"
+                  color="danger"
+                  isLoading={isDeletingAvatar}
+                  onPress={handleAvatarDelete}
+                >
+                  Eliminar
+                </Button>
+              </ModalFooter>
+            </>
+          )}
         </ModalContent>
       </ClientSheet>
 
       <ClientSheet isOpen={isLogoutOpen} size="sm" onClose={closeLogoutModal}>
         <ModalContent>
-          <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
-              <Icon
-                className="text-3xl text-danger"
-                icon="solar:logout-2-linear"
-              />
-            </div>
-            <span className="font-heading text-lg">¿Cerrar sesión?</span>
-          </ModalHeader>
-          <ModalBody className="px-6 pb-2 text-center">
-            <p className="text-sm text-default-500">
-              Tendrás que volver a ingresar tu contraseña para acceder a tu
-              cuenta.
-            </p>
-          </ModalBody>
-          <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
-            <Button
-              className="flex-1"
-              variant="flat"
-              onPress={closeLogoutModal}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1 font-semibold"
-              color="danger"
-              isLoading={isLoggingOut}
-              onPress={handleLogout}
-            >
-              Cerrar sesión
-            </Button>
-          </ModalFooter>
+          {(onCloseSheet) => (
+            <>
+              <ClientSheetGrabber onClose={onCloseSheet} />
+              <ModalHeader className="flex flex-col items-center gap-2 pb-2 pt-2 sm:pt-6">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
+                  <Icon
+                    className="text-3xl text-danger"
+                    icon="solar:logout-2-linear"
+                  />
+                </div>
+                <span className="font-heading text-lg">¿Cerrar sesión?</span>
+              </ModalHeader>
+              <ModalBody className="px-6 pb-2 text-center">
+                <p className="text-sm text-default-500">
+                  Tendrás que volver a ingresar tu contraseña para acceder a tu
+                  cuenta.
+                </p>
+              </ModalBody>
+              <ModalFooter className="flex gap-2 px-6 pb-6 pt-2">
+                <Button
+                  className="flex-1"
+                  variant="flat"
+                  onPress={closeLogoutModal}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 font-semibold"
+                  color="danger"
+                  isLoading={isLoggingOut}
+                  onPress={handleLogout}
+                >
+                  Cerrar sesión
+                </Button>
+              </ModalFooter>
+            </>
+          )}
         </ModalContent>
       </ClientSheet>
     </>
   );
 }
 
-function MetadataRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-}) {
+function MetadataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <Icon className="shrink-0 text-lg text-default-400" icon={icon} />
-      <dt className="shrink-0 whitespace-nowrap text-sm text-default-500">
+    <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+      <dt className="shrink-0 whitespace-nowrap text-[15px] text-foreground">
         {label}
       </dt>
-      <dd className="ml-auto min-w-0 text-right text-sm font-semibold text-foreground">
+      <dd className="ml-auto min-w-0 text-right text-[15px] tabular-nums text-default-500 [overflow-wrap:anywhere]">
         {value}
       </dd>
     </div>
+  );
+}
+
+function ActionRow({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+  danger = false,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-default-100 disabled:opacity-50 [@media(hover:hover)]:hover:bg-default-50"
+      disabled={disabled}
+      type="button"
+      onClick={onPress}
+    >
+      <IconTile icon={icon} size="sm" tone={danger ? "danger" : "primary"} />
+      <span
+        className={`flex-1 text-[15px] font-semibold ${danger ? "text-danger" : "text-foreground"}`}
+      >
+        {label}
+      </span>
+      <Icon
+        className="shrink-0 text-lg text-default-400"
+        icon="solar:alt-arrow-right-linear"
+      />
+    </button>
   );
 }

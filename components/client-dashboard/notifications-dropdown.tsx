@@ -11,9 +11,19 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { ClientSheet } from "@/components/client-dashboard/client-sheet";
+import { useClientData } from "@/components/client-dashboard/client-data-provider";
+import {
+  ClientSheet,
+  ClientSheetGrabber,
+} from "@/components/client-dashboard/client-sheet";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import {
   useRealtimeNotifications,
@@ -93,12 +103,14 @@ export function NotificationsDropdown({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [storyItems, setStoryItems] = useState<StoryItem[]>([]);
   const [storyIndex, setStoryIndex] = useState(0);
   const [isStoryOpen, setIsStoryOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { trainerName } = useClientData();
   const loadNotificationsRef = useRef<() => void>();
 
   const isChatOpenRef = useRef(isChatOpen);
@@ -156,9 +168,13 @@ export function NotificationsDropdown({
 
         setNotifications(data.notifications || []);
         setUnreadCount(data.unreadCount || 0);
+        setLoadError(false);
+      } else {
+        setLoadError(true);
       }
     } catch (error) {
       console.error("Error loading notifications:", error);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -268,10 +284,10 @@ export function NotificationsDropdown({
       markAsRead(notification.id);
     }
 
-    const notif = notification as any;
+    const action = metaString(notification.metadata, "action");
 
     // Chat message → open the chat panel directly
-    if (notif.metadata?.action === "open_chat") {
+    if (action === "open_chat") {
       onOpenChat?.();
       setIsOpen(false);
 
@@ -279,8 +295,8 @@ export function NotificationsDropdown({
     }
 
     // Check if it's a form notification (metadata contains form_type)
-    if (notif.metadata?.action === "open_form") {
-      const formType = notif.metadata?.form_type;
+    if (action === "open_form") {
+      const formType = metaString(notification.metadata, "form_type");
 
       if (formType === "checkins" && onOpenWeeklyForm) {
         onOpenWeeklyForm();
@@ -383,57 +399,85 @@ export function NotificationsDropdown({
           vez del desplegable de escritorio de 320px. */}
       <ClientSheet isOpen={isOpen} size="md" onClose={() => setIsOpen(false)}>
         <ModalContent>
-          <ModalHeader className="flex items-center justify-between gap-2 pr-12">
-            <span className="font-heading text-lg">Notificaciones</span>
-            {unreadCount > 0 ? (
-              <Button
-                className="text-primary"
-                size="sm"
-                variant="light"
-                onPress={markAllAsRead}
-              >
-                Marcar todas leídas
-              </Button>
-            ) : null}
-          </ModalHeader>
-          <ModalBody className="px-3 pb-4">
-            {isLoading && notifications.length === 0 ? (
-              <div className="flex justify-center py-10">
-                <Spinner color="primary" />
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-default-100">
-                  <Icon
-                    className="text-2xl text-default-400"
+          {(onClose) => (
+            <>
+              <ClientSheetGrabber onClose={onClose} />
+              <ModalHeader className="flex items-center justify-between gap-2 pb-2 pr-12 pt-1 sm:pt-4">
+                <span className="font-heading text-xl">Notificaciones</span>
+                {unreadCount > 0 && !loadError ? (
+                  <Button
+                    className="px-1 text-[15px] font-semibold text-primary"
+                    size="sm"
+                    variant="light"
+                    onPress={markAllAsRead}
+                  >
+                    Marcar todas leídas
+                  </Button>
+                ) : null}
+              </ModalHeader>
+              <ModalBody className="gap-0 px-0 pb-4 pt-0">
+                {realtimeAttempted && !realtimeConnected ? (
+                  <div
+                    className="mx-5 mb-1.5 mt-1 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2.5 text-[13px] leading-snug text-foreground"
+                    role="status"
+                  >
+                    <Icon
+                      className="mt-px shrink-0 text-warning-600"
+                      icon="solar:danger-triangle-linear"
+                      width={16}
+                    />
+                    Conexión en tiempo real perdida — usando modo respaldo
+                  </div>
+                ) : null}
+                {isLoading && notifications.length === 0 ? (
+                  <div aria-busy="true" className="flex justify-center py-16">
+                    <Spinner color="default" />
+                  </div>
+                ) : loadError && notifications.length === 0 ? (
+                  <NotificationsState
+                    icon="solar:danger-triangle-linear"
+                    text="Revisa tu conexión y vuelve a intentarlo."
+                    title="No pudimos cargar tus notificaciones"
+                  >
+                    <Button
+                      className="mt-2.5 font-semibold active:scale-[0.97] motion-reduce:active:scale-100"
+                      size="sm"
+                      variant="flat"
+                      onPress={() => void loadNotifications()}
+                    >
+                      Reintentar
+                    </Button>
+                  </NotificationsState>
+                ) : notifications.length === 0 ? (
+                  <NotificationsState
                     icon="solar:bell-off-linear"
+                    text={`Aquí verás los mensajes de ${trainerName || "tu entrenador"}, los comentarios a tus vídeos y los avisos de tus formularios.`}
+                    title="No tienes notificaciones"
                   />
-                </div>
-                <p className="text-sm text-default-500">
-                  No tienes notificaciones
-                </p>
-              </div>
-            ) : (
-              <>
-                <NotificationGroup
-                  formatTimeAgo={formatTimeAgo}
-                  items={notifications.filter((n) => !n.read_at)}
-                  title="Nuevas"
-                  onSelect={handleNotificationClick}
-                />
-                <NotificationGroup
-                  formatTimeAgo={formatTimeAgo}
-                  items={notifications.filter((n) => n.read_at)}
-                  title="Anteriores"
-                  onSelect={handleNotificationClick}
-                />
-              </>
-            )}
-          </ModalBody>
+                ) : (
+                  <>
+                    <NotificationGroup
+                      formatTimeAgo={formatTimeAgo}
+                      items={notifications.filter((n) => !n.read_at)}
+                      title="Nuevas"
+                      onSelect={handleNotificationClick}
+                    />
+                    <NotificationGroup
+                      formatTimeAgo={formatTimeAgo}
+                      items={notifications.filter((n) => n.read_at)}
+                      title="Anteriores"
+                      onSelect={handleNotificationClick}
+                    />
+                  </>
+                )}
+              </ModalBody>
+            </>
+          )}
         </ModalContent>
       </ClientSheet>
 
       <VideoFeedbackStoryViewer
+        coachName={trainerName}
         initialIndex={storyIndex}
         isOpen={isStoryOpen}
         items={storyItems}
@@ -441,6 +485,33 @@ export function NotificationsDropdown({
         onViewed={handleStoryViewed}
       />
     </>
+  );
+}
+
+function NotificationsState({
+  icon,
+  title,
+  text,
+  children,
+}: {
+  icon: string;
+  title: string;
+  text: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-8 pb-6 pt-16 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-default-100 text-default-500">
+        <Icon icon={icon} width={26} />
+      </span>
+      <p className="mt-1.5 text-[17px] font-semibold text-foreground">
+        {title}
+      </p>
+      <p className="max-w-[280px] text-sm leading-relaxed text-default-500">
+        {text}
+      </p>
+      {children}
+    </div>
   );
 }
 
@@ -458,58 +529,58 @@ function NotificationGroup({
   if (items.length === 0) return null;
 
   return (
-    <section className="mt-1">
-      <h4 className="px-2 pb-1.5 pt-2 text-xs font-semibold text-default-500">
+    <section>
+      <h4 className="mx-5 mb-1 mt-3.5 font-heading text-[15px] font-bold text-foreground">
         {title}
       </h4>
-      <ul className="space-y-1">
+      <ul>
         {items.map((n) => {
           const unread = !n.read_at;
+          const time = formatTimeAgo(n.created_at);
 
           return (
-            <li key={n.id}>
+            <li
+              key={n.id}
+              // Separador estilo iOS: arranca tras el icono (20px + 40px + 12px).
+              className="relative before:absolute before:left-[72px] before:right-0 before:top-0 before:h-px before:bg-default-200 first:before:hidden"
+            >
               <button
-                className={`flex w-full items-start gap-3 rounded-large p-2.5 text-left transition-colors ${
-                  unread
-                    ? "bg-primary/5 hover:bg-primary/10"
-                    : "hover:bg-default-100"
-                }`}
+                aria-label={`${n.title}${unread ? ", sin leer" : ""}, ${time}`}
+                className="flex w-full items-start gap-3 px-5 py-3 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
                 type="button"
                 onClick={() => onSelect(n)}
               >
                 <span
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                     unread
-                      ? "bg-primary/15 text-primary"
+                      ? "bg-primary/10 text-primary"
                       : "bg-default-100 text-default-500"
                   }`}
                 >
-                  <Icon className="text-xl" icon={n.icon} />
+                  <Icon icon={n.icon} width={22} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-start justify-between gap-2">
+                  <span className="flex items-center gap-2">
                     <span
-                      className={`text-sm leading-snug ${
-                        unread
-                          ? "font-semibold text-foreground"
-                          : "font-medium text-default-700"
+                      className={`min-w-0 flex-1 truncate text-[15px] text-foreground ${
+                        unread ? "font-bold" : "font-medium"
                       }`}
                     >
                       {/* e.g. form_weekly_available: server sets title to schedule.custom_name */}
                       {n.title}
                     </span>
-                    <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-xs text-default-400">
-                      {formatTimeAgo(n.created_at)}
-                      {unread ? (
-                        <span
-                          aria-label="Sin leer"
-                          className="h-2 w-2 rounded-full bg-primary"
-                        />
-                      ) : null}
+                    <span className="shrink-0 text-[13px] tabular-nums text-default-500">
+                      {time}
                     </span>
+                    {unread ? (
+                      <span
+                        aria-hidden
+                        className="h-[9px] w-[9px] shrink-0 rounded-full bg-primary"
+                      />
+                    ) : null}
                   </span>
                   {n.message ? (
-                    <span className="mt-0.5 line-clamp-2 block text-sm text-default-500">
+                    <span className="mt-0.5 line-clamp-2 block text-sm leading-snug text-default-500">
                       {n.message}
                     </span>
                   ) : null}
