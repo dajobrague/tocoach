@@ -22,6 +22,7 @@ import {
 import { IconTile } from "@/components/shared/icon-tile";
 import { clearClientToken } from "@/lib/auth/client-token-storage";
 import { buildInitials, thumbnailUrl } from "@/lib/utils/avatar";
+import { lockBodyScroll } from "@/lib/ui/scroll-lock";
 
 interface MorePanelProps {
   isOpen: boolean;
@@ -59,12 +60,10 @@ export function MorePanel({ isOpen, onClose }: MorePanelProps) {
   // Lock body scroll while the sheet is open.
   useEffect(() => {
     if (!isOpen) return undefined;
-    const original = document.body.style.overflow;
-
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
 
     return () => {
-      document.body.style.overflow = original;
+      unlock();
     };
   }, [isOpen]);
 

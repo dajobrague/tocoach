@@ -5,6 +5,8 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
+import { lockBodyScroll } from "@/lib/ui/scroll-lock";
+
 interface ClientScreenProps {
   isOpen: boolean;
   onClose: () => void;
@@ -52,9 +54,7 @@ export function ClientScreen({
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    const previous = document.body.style.overflow;
-
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
     const onKey = (e: KeyboardEvent) => {
       if (closeOnEscape && e.key === "Escape") onCloseRef.current();
     };
@@ -62,7 +62,7 @@ export function ClientScreen({
     window.addEventListener("keydown", onKey);
 
     return () => {
-      document.body.style.overflow = previous;
+      unlock();
       window.removeEventListener("keydown", onKey);
     };
   }, [isOpen, closeOnEscape]);

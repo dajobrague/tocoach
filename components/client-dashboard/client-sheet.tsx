@@ -25,6 +25,10 @@ export function ClientSheet({ classNames, ...props }: ModalProps) {
       {...props}
       classNames={{
         ...classNames,
+        // Above ClientScreen (z-[60]): sheets opened from a pushed screen
+        // (compartir, agregar ejercicio…) must not render behind it.
+        wrapper: `z-[70] ${classNames?.wrapper ?? ""}`,
+        backdrop: `z-[70] ${classNames?.backdrop ?? ""}`,
         base: `m-0 max-h-[90dvh] rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:m-auto sm:rounded-b-large sm:rounded-t-large sm:pb-0 ${classNames?.base ?? ""}`,
       }}
     />

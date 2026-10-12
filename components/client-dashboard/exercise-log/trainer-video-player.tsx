@@ -26,6 +26,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getVideoEmbed } from "@/lib/utils/video-url";
+import { lockBodyScroll } from "@/lib/ui/scroll-lock";
 
 interface Props {
   videoUrl: string;
@@ -50,13 +51,11 @@ export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
     };
 
     document.addEventListener("keydown", onKey, true);
-    const prevOverflow = document.body.style.overflow;
-
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
 
     return () => {
       document.removeEventListener("keydown", onKey, true);
-      document.body.style.overflow = prevOverflow;
+      unlock();
     };
   }, [onClose]);
 

@@ -15,6 +15,8 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { lockBodyScroll } from "@/lib/ui/scroll-lock";
+
 export interface StoryItem {
   videoUrl: string;
   exerciseName: string;
@@ -125,12 +127,10 @@ export function VideoFeedbackStoryViewer({
   // Bloquea el scroll del body mientras el visor está abierto.
   useEffect(() => {
     if (!isOpen) return;
-    const previous = document.body.style.overflow;
-
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
 
     return () => {
-      document.body.style.overflow = previous;
+      unlock();
     };
   }, [isOpen]);
 
