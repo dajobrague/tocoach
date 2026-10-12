@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, Form, Input, Link, addToast } from "@heroui/react";
+import { Button, addToast } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import React from "react";
 
@@ -9,18 +10,24 @@ interface ForgotPasswordFormProps {
   tenantSlug: string;
 }
 
-type FlowStep = 1 | 2 | 3 | "success";
+type FlowStep = 1 | 2 | 3;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const RATE_LIMIT_MESSAGE =
   "Demasiados intentos. Espera 15 minutos antes de intentar de nuevo.";
 
-function getSlideIndex(step: FlowStep): number {
-  if (step === "success") return 3;
+/** El código caduca a los 10 min (lib/security/otp.ts). */
+const OTP_TTL_SECONDS = 600;
 
-  return step - 1;
-}
+const PASSWORD_RULES: ReadonlyArray<{
+  key: "minLength" | "hasUpper" | "hasNumber";
+  label: string;
+}> = [
+  { key: "minLength", label: "8 caracteres o más" },
+  { key: "hasUpper", label: "Una letra mayúscula" },
+  { key: "hasNumber", label: "Un número" },
+];
 
 function validatePasswordRules(password: string) {
   return {
@@ -30,57 +37,15 @@ function validatePasswordRules(password: string) {
   };
 }
 
-function OtpDigitInput({
-  disabled,
-  index,
-  inputRef,
-  value,
-  onChange,
-  onKeyDown,
-  onPaste,
-}: {
-  disabled: boolean;
-  index: number;
-  inputRef: (el: HTMLInputElement | null) => void;
-  value: string;
-  onChange: (index: number, digit: string) => void;
-  onKeyDown: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onPaste?: (e: React.ClipboardEvent<HTMLInputElement>) => void;
-}) {
-  const pasteHandler =
-    index === 0 && onPaste ? { onPaste } : ({} as Record<string, never>);
+const fieldClass =
+  "h-[54px] w-full rounded-xl border border-default-200 bg-content1 px-4 text-[17px] text-foreground caret-primary outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-default-400 focus:border-primary focus:shadow-[0_0_0_4px_hsl(var(--heroui-primary)/0.2)]";
 
-  return (
-    <Input
-      ref={(node) => {
-        const input = node?.querySelector?.("input") ?? null;
-
-        inputRef(input);
-      }}
-      aria-label={`Dígito ${index + 1} del código`}
-      classNames={{
-        base: "w-full min-w-0 flex-1 max-w-[3.25rem] sm:max-w-[3.5rem]",
-        input: "text-center text-xl font-semibold tabular-nums px-0 font-body",
-        inputWrapper:
-          "h-12 sm:h-14 min-h-12 sm:min-h-14 justify-center rounded-xl border-2 shadow-none bg-content1 data-[hover=true]:bg-content1",
-      }}
-      inputMode="numeric"
-      isDisabled={disabled}
-      maxLength={1}
-      size="lg"
-      value={value}
-      variant="bordered"
-      {...pasteHandler}
-      onChange={(e) => {
-        const d = e.target.value.replace(/\D/g, "").slice(-1);
-
-        onChange(index, d);
-      }}
-      onKeyDown={(e) => onKeyDown(index, e)}
-    />
-  );
-}
-
+/**
+ * Recuperar contraseña en una sola pantalla, con el mismo patrón que el
+ * login: cada paso se despliega debajo del anterior (correo → código de 6
+ * cifras → contraseña nueva). Al terminar vuelve al login con el correo
+ * puesto y el aviso "Contraseña cambiada". Mismas APIs que antes.
+ */
 export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
   const router = useRouter();
   const [step, setStep] = React.useState<FlowStep>(1);
@@ -101,89 +66,47 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
   const [error, setError] = React.useState("");
   const [resetTokenExpired, setResetTokenExpired] = React.useState(false);
   const [resendCooldown, setResendCooldown] = React.useState(0);
+  const [expiresIn, setExpiresIn] = React.useState(0);
+  const [codeFocused, setCodeFocused] = React.useState(false);
 
+  const codeInputRef = React.useRef<HTMLInputElement>(null);
+  const newPasswordRef = React.useRef<HTMLInputElement>(null);
+  // Kept for the shared handlers below (resend focuses the first cell).
   const otpInputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
 
   React.useEffect(() => {
-    if (step !== 2) return undefined;
-    const t = requestAnimationFrame(() => {
-      otpInputRefs.current[0]?.focus();
-    });
+    otpInputRefs.current = [codeInputRef.current];
+  });
 
-    return () => cancelAnimationFrame(t);
+  // Prefill from the login screen ("¿Olvidaste tu contraseña?" passes ?email=).
+  React.useEffect(() => {
+    const fromQuery = new URLSearchParams(window.location.search).get("email");
+
+    if (fromQuery) setEmailInput(fromQuery);
+  }, []);
+
+  React.useEffect(() => {
+    const target =
+      step === 2 ? codeInputRef : step === 3 ? newPasswordRef : null;
+
+    if (!target) return undefined;
+    const id = window.setTimeout(
+      () => target.current?.focus({ preventScroll: true }),
+      200
+    );
+
+    return () => clearTimeout(id);
   }, [step]);
 
   React.useEffect(() => {
-    if (resendCooldown <= 0) return;
+    if (resendCooldown <= 0 && expiresIn <= 0) return undefined;
     const id = window.setInterval(() => {
       setResendCooldown((s) => Math.max(0, s - 1));
+      setExpiresIn((s) => Math.max(0, s - 1));
     }, 1000);
 
     return () => clearInterval(id);
-  }, [resendCooldown]);
-
-  React.useEffect(() => {
-    if (step !== "success") return;
-    const id = window.setTimeout(() => {
-      router.push(`/${tenantSlug}/login`);
-    }, 3000);
-
-    return () => clearTimeout(id);
-  }, [step, router, tenantSlug]);
-
-  const setOtpDigit = React.useCallback((index: number, digit: string) => {
-    setOtp((prev) => {
-      const next = [...prev];
-
-      next[index] = digit;
-
-      return next;
-    });
-    if (digit && index < 5) {
-      requestAnimationFrame(() => {
-        otpInputRefs.current[index + 1]?.focus();
-      });
-    }
-  }, []);
-
-  const handleOtpKeyDown = React.useCallback(
-    (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Backspace" && !otp[index] && index > 0) {
-        e.preventDefault();
-        otpInputRefs.current[index - 1]?.focus();
-      }
-    },
-    [otp]
-  );
-
-  const handleOtpPaste = React.useCallback(
-    (e: React.ClipboardEvent<HTMLInputElement>) => {
-      e.preventDefault();
-      const text = e.clipboardData
-        .getData("text")
-        .replace(/\D/g, "")
-        .slice(0, 6);
-
-      if (!text) return;
-      const chars = text.split("");
-
-      setOtp((prev) => {
-        const next = [...prev];
-
-        for (let i = 0; i < 6; i++) {
-          next[i] = chars[i] ?? "";
-        }
-
-        return next;
-      });
-      const focusIndex = Math.min(chars.length, 5);
-
-      requestAnimationFrame(() => {
-        otpInputRefs.current[focusIndex]?.focus();
-      });
-    },
-    []
-  );
+  }, [resendCooldown, expiresIn]);
 
   const postForgotPassword = async (emailToSend: string) => {
     const res = await fetch("/api/auth/client-forgot-password", {
@@ -233,6 +156,7 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
       setStep(2);
       setOtp(["", "", "", "", "", ""]);
       setResendCooldown(60);
+      setExpiresIn(OTP_TTL_SECONDS);
       addToast({
         title: "Código enviado",
         description: "Te enviamos un código a tu correo",
@@ -272,6 +196,7 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
 
       setOtp(["", "", "", "", "", ""]);
       setResendCooldown(60);
+      setExpiresIn(OTP_TTL_SECONDS);
       addToast({
         title: "Código reenviado",
         description: "Revisa tu bandeja de entrada",
@@ -287,10 +212,13 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyOtp = async (
+    e?: React.FormEvent,
+    codeOverride?: string
+  ) => {
+    e?.preventDefault();
     setError("");
-    const code = otp.join("");
+    const code = codeOverride ?? otp.join("");
 
     if (code.length !== 6) {
       setError("Ingresa el código de 6 dígitos");
@@ -332,8 +260,8 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleResetPassword = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setError("");
 
     if (newPassword !== confirmPassword) {
@@ -383,7 +311,11 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
         return;
       }
 
-      setStep("success");
+      // Igual que antes, se vuelve al login; ahora con el correo puesto y el
+      // aviso de contraseña cambiada.
+      router.push(
+        `/${tenantSlug}/login?reset=1&email=${encodeURIComponent(email)}`
+      );
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
     } finally {
@@ -400,340 +332,357 @@ export function ForgotPasswordForm({ tenantSlug }: ForgotPasswordFormProps) {
     setNewPassword("");
     setConfirmPassword("");
     setResendCooldown(0);
+    setExpiresIn(0);
   };
 
   const strength = validatePasswordRules(newPassword);
-  const slideIndex = getSlideIndex(step);
   const busy =
     isLoadingStep1 || isLoadingStep2 || isLoadingStep3 || isResending;
+  const code = otp.join("");
+  const confirmMismatch =
+    confirmPassword.length > 0 && !newPassword.startsWith(confirmPassword);
+  const passwordReady =
+    strength.minLength &&
+    strength.hasUpper &&
+    strength.hasNumber &&
+    confirmPassword === newPassword;
+
+  const title =
+    step === 1
+      ? "Recupera tu contraseña"
+      : step === 2
+        ? "Revisa tu correo"
+        : "Crea una contraseña nueva";
+  const lede =
+    step === 1
+      ? "Te enviamos un código de 6 cifras a tu correo."
+      : step === 2
+        ? `Escribe el código que enviamos a ${email}. Mira también en spam.`
+        : "La usarás desde ahora para entrar.";
+  const ctaLabel =
+    step === 1
+      ? "Enviar código"
+      : step === 2
+        ? "Verificar"
+        : "Guardar contraseña";
+
+  const onCodeChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 6);
+
+    setOtp(Array.from({ length: 6 }, (_, i) => digits[i] ?? ""));
+    if (error) setError("");
+    // Al completar el código se verifica solo.
+    if (digits.length === 6 && !isLoadingStep2)
+      void handleVerifyOtp(undefined, digits);
+  };
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    if (step === 1) return void handleStep1Submit(e);
+    if (step === 2) return void handleVerifyOtp(e);
+    e.preventDefault();
+    if (passwordReady) void handleResetPassword();
+  };
+
+  const minutes = Math.floor(expiresIn / 60);
+  const seconds = String(expiresIn % 60).padStart(2, "0");
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl bg-content1 shadow-medium ring-1 ring-default-100">
-      <div
-        className="flex w-[400%] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-        style={{ transform: `translateX(-${slideIndex * 25}%)` }}
+    <form noValidate className="flex w-full flex-col gap-5" onSubmit={onSubmit}>
+      <NextLink
+        className="-ml-2 -mt-2 flex h-10 items-center gap-0.5 self-start rounded-[10px] pl-1 pr-3 text-[15px] font-medium text-foreground active:bg-default-100"
+        href={`/${tenantSlug}/login`}
       >
-        {/* Step 1 — Email */}
-        <div className="w-1/4 shrink-0 px-5 py-7 sm:px-8 sm:py-9">
-          {error && step === 1 && (
-            <div className="mb-4 rounded-xl border border-danger-200 bg-danger-50 p-3">
-              <p className="font-body text-sm text-danger">{error}</p>
-            </div>
-          )}
+        <Icon className="text-xl" icon="solar:alt-arrow-left-linear" />
+        Volver
+      </NextLink>
 
-          <Form
-            className="flex flex-col gap-5"
-            validationBehavior="native"
-            onSubmit={handleStep1Submit}
-          >
-            <Input
-              isRequired
-              autoComplete="email"
-              className="font-body"
-              label="Correo electrónico"
-              name="email"
-              placeholder="tu@correo.com"
-              type="email"
-              value={emailInput}
-              variant="bordered"
-              onValueChange={setEmailInput}
-            />
+      <div className="flex flex-col gap-2">
+        <h2 className="font-heading text-[30px] leading-[1.08] tracking-[-0.025em] text-foreground [text-wrap:balance]">
+          {title}
+        </h2>
+        <p className="text-base leading-snug text-default-500">{lede}</p>
+      </div>
 
-            <Button
-              className="h-12 w-full font-body text-base font-semibold sm:h-14"
-              color="primary"
-              disabled={busy}
-              isLoading={isLoadingStep1}
-              radius="lg"
-              size="lg"
-              type="submit"
-            >
-              Enviar código de verificación
-            </Button>
-          </Form>
-
-          <div className="mt-6 text-center">
-            <Link
-              className="font-body text-sm text-default-500"
-              href={`/${tenantSlug}/login`}
-              size="sm"
-            >
-              Volver al inicio de sesión
-            </Link>
-          </div>
-        </div>
-
-        {/* Step 2 — OTP */}
-        <div className="w-1/4 shrink-0 px-5 py-7 sm:px-8 sm:py-9">
-          {error && step === 2 && (
-            <div className="mb-4 rounded-xl border border-danger-200 bg-danger-50 p-3">
-              <p className="font-body text-sm text-danger">{error}</p>
-            </div>
-          )}
-
-          <p className="mb-6 text-center font-body text-sm leading-relaxed text-default-600 sm:text-base">
-            Ingresa el código de 6 dígitos que enviamos a{" "}
-            <span className="font-semibold text-foreground">{email}</span>
-          </p>
-
-          <form className="flex flex-col gap-6" onSubmit={handleVerifyOtp}>
-            <div className="flex justify-center gap-1.5 sm:gap-2.5">
-              {otp.map((digit, i) => (
-                <OtpDigitInput
-                  key={i}
-                  disabled={busy}
-                  index={i}
-                  inputRef={(el) => {
-                    otpInputRefs.current[i] = el;
-                  }}
-                  value={digit}
-                  onChange={setOtpDigit}
-                  onKeyDown={handleOtpKeyDown}
-                  onPaste={handleOtpPaste}
-                />
-              ))}
-            </div>
-
-            <Button
-              className="h-12 w-full font-body text-base font-semibold sm:h-14"
-              color="primary"
-              disabled={busy}
-              isLoading={isLoadingStep2}
-              radius="lg"
-              size="lg"
-              type="submit"
-            >
-              Verificar código
-            </Button>
-          </form>
-
-          <div className="mt-6 flex flex-col items-center gap-3 border-t border-default-100 pt-6">
-            {resendCooldown > 0 ? (
-              <p className="font-body text-sm text-default-400">
-                Reenviar código en{" "}
-                <span className="tabular-nums font-semibold text-default-600">
-                  {resendCooldown}s
-                </span>
-              </p>
-            ) : (
-              <button
-                className="font-body text-sm font-semibold text-primary underline-offset-4 transition-opacity hover:opacity-80 disabled:opacity-40"
-                disabled={busy}
-                type="button"
-                onClick={handleResend}
-              >
-                {isResending ? "Enviando…" : "Reenviar código"}
-              </button>
-            )}
+      <div className="flex flex-col gap-2">
+        <label
+          className="text-[13px] font-semibold text-default-500"
+          htmlFor="forgot-email"
+        >
+          Correo
+        </label>
+        <div className="relative">
+          <input
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect="off"
+            className={`${fieldClass} ${step !== 1 ? "bg-transparent pr-28" : ""} ${error && step === 1 ? "border-danger" : ""}`}
+            enterKeyHint="send"
+            id="forgot-email"
+            inputMode="email"
+            placeholder="nombre@correo.com"
+            readOnly={step !== 1}
+            spellCheck={false}
+            type="email"
+            value={step === 1 ? emailInput : email}
+            onChange={(e) => {
+              setEmailInput(e.target.value);
+              if (error) setError("");
+            }}
+          />
+          {step !== 1 ? (
             <button
-              className="font-body text-sm text-default-500 underline-offset-4 transition-colors hover:text-default-700"
+              className="absolute right-1.5 top-1.5 h-[42px] select-none rounded-[10px] px-3 text-[15px] font-semibold text-foreground active:bg-default-100"
               type="button"
               onClick={goBackToEmail}
             >
-              Cambiar correo
+              Cambiar
             </button>
+          ) : null}
+        </div>
+        {error && step === 1 ? (
+          <p className="text-sm leading-snug text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+
+      <Reveal open={step === 2}>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="forgot-code"
+          >
+            Código
+          </label>
+          {/* Un solo input (pegar y autorrelleno del código funcionan) pintado
+              como 6 casillas. */}
+          <div className="relative grid grid-cols-6 gap-2">
+            {Array.from({ length: 6 }, (_, i) => {
+              const current = codeFocused && i === Math.min(code.length, 5);
+
+              return (
+                <div
+                  key={i}
+                  aria-hidden
+                  className={`grid h-[58px] place-items-center rounded-xl border bg-content1 font-heading text-2xl tabular-nums text-foreground transition-[border-color,box-shadow] duration-150 ${
+                    error && step === 2
+                      ? "border-danger"
+                      : current
+                        ? "border-primary shadow-[0_0_0_4px_hsl(var(--heroui-primary)/0.2)]"
+                        : "border-default-200"
+                  }`}
+                >
+                  {otp[i] ||
+                    (current ? (
+                      <span className="h-6 w-0.5 animate-pulse bg-primary" />
+                    ) : null)}
+                </div>
+              );
+            })}
+            <input
+              ref={codeInputRef}
+              aria-label="Código de 6 cifras"
+              autoComplete="one-time-code"
+              className="absolute inset-0 h-full w-full cursor-text bg-transparent text-base text-transparent caret-transparent opacity-0"
+              disabled={isLoadingStep2}
+              enterKeyHint="done"
+              id="forgot-code"
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
+              value={code}
+              onBlur={() => setCodeFocused(false)}
+              onChange={(e) => onCodeChange(e.target.value)}
+              onFocus={() => setCodeFocused(true)}
+            />
+          </div>
+          {error && step === 2 ? (
+            <p className="text-sm leading-snug text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="-mt-2 flex items-center justify-between gap-3 text-sm text-default-500">
+          <span className="tabular-nums">
+            {expiresIn > 0
+              ? `Caduca en ${minutes}:${seconds}`
+              : "El código caducó. Pide otro."}
+          </span>
+          <button
+            className="py-1.5 text-sm font-semibold text-foreground disabled:font-medium disabled:text-default-500"
+            disabled={resendCooldown > 0 || busy}
+            type="button"
+            onClick={() => void handleResend()}
+          >
+            {isResending
+              ? "Enviando…"
+              : resendCooldown > 0
+                ? `Reenviar en ${resendCooldown} s`
+                : "Reenviar código"}
+          </button>
+        </div>
+      </Reveal>
+
+      <Reveal open={step === 3}>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="forgot-new"
+          >
+            Nueva contraseña
+          </label>
+          <div className="relative">
+            <input
+              ref={newPasswordRef}
+              autoComplete="new-password"
+              className={`${fieldClass} pr-14`}
+              enterKeyHint="next"
+              id="forgot-new"
+              type={showPassword ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (error) setError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  document.getElementById("forgot-confirm")?.focus();
+                }
+              }}
+            />
+            <EyeButton
+              visible={showPassword}
+              onToggle={() => setShowPassword((v) => !v)}
+            />
           </div>
         </div>
-
-        {/* Step 3 — New password */}
-        <div className="w-1/4 shrink-0 px-5 py-7 sm:px-8 sm:py-9">
-          {error && step === 3 && (
-            <div className="mb-4 rounded-xl border border-danger-200 bg-danger-50 p-3">
-              <p className="font-body text-sm text-danger">{error}</p>
-              {resetTokenExpired && (
+        <ul className="-mt-1 grid gap-1.5 text-sm text-default-500">
+          {PASSWORD_RULES.map((rule) => (
+            <li
+              key={rule.key}
+              className={`flex items-center gap-2 ${strength[rule.key] ? "text-foreground" : ""}`}
+            >
+              <Icon
+                className={`text-base ${strength[rule.key] ? "text-success" : "text-default-300"}`}
+                icon={
+                  strength[rule.key]
+                    ? "solar:check-circle-bold"
+                    : "solar:record-circle-linear"
+                }
+              />
+              {rule.label}
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="forgot-confirm"
+          >
+            Repítela
+          </label>
+          <div className="relative">
+            <input
+              autoComplete="new-password"
+              className={`${fieldClass} pr-14 ${confirmMismatch ? "border-danger" : ""}`}
+              enterKeyHint="go"
+              id="forgot-confirm"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            <EyeButton
+              visible={showConfirm}
+              onToggle={() => setShowConfirm((v) => !v)}
+            />
+          </div>
+          {confirmMismatch ? (
+            <p className="text-sm text-danger">No coincide con la de arriba.</p>
+          ) : null}
+          {error && step === 3 ? (
+            <div className="flex flex-col items-start gap-1" role="alert">
+              <p className="text-sm leading-snug text-danger">{error}</p>
+              {resetTokenExpired ? (
                 <button
-                  className="mt-3 font-body text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                  className="py-1 text-sm font-semibold text-primary"
                   type="button"
                   onClick={goBackToEmail}
                 >
-                  Volver al inicio y solicitar nuevo código
+                  Pedir un código nuevo
                 </button>
-              )}
+              ) : null}
             </div>
-          )}
-
-          <h2 className="mb-1 text-center font-heading text-lg font-bold text-foreground sm:text-xl">
-            Nueva contraseña
-          </h2>
-          <p className="mb-6 text-center font-body text-sm text-default-500">
-            Elige una contraseña segura para tu cuenta
-          </p>
-
-          <form className="flex flex-col gap-5" onSubmit={handleResetPassword}>
-            <Input
-              isRequired
-              autoComplete="new-password"
-              className="font-body"
-              endContent={
-                <button
-                  aria-label={
-                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-                  }
-                  className="focus:outline-none"
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                >
-                  <Icon
-                    className="pointer-events-none text-2xl text-default-400"
-                    icon={
-                      showPassword
-                        ? "solar:eye-closed-linear"
-                        : "solar:eye-bold"
-                    }
-                  />
-                </button>
-              }
-              label="Contraseña"
-              placeholder="••••••••"
-              type={showPassword ? "text" : "password"}
-              value={newPassword}
-              variant="bordered"
-              onValueChange={setNewPassword}
-            />
-
-            <Input
-              isRequired
-              autoComplete="new-password"
-              className="font-body"
-              endContent={
-                <button
-                  aria-label={
-                    showConfirm ? "Ocultar contraseña" : "Mostrar contraseña"
-                  }
-                  className="focus:outline-none"
-                  type="button"
-                  onClick={() => setShowConfirm((v) => !v)}
-                >
-                  <Icon
-                    className="pointer-events-none text-2xl text-default-400"
-                    icon={
-                      showConfirm ? "solar:eye-closed-linear" : "solar:eye-bold"
-                    }
-                  />
-                </button>
-              }
-              label="Confirmar contraseña"
-              placeholder="••••••••"
-              type={showConfirm ? "text" : "password"}
-              value={confirmPassword}
-              variant="bordered"
-              onValueChange={setConfirmPassword}
-            />
-
-            <div className="rounded-xl border border-default-200 bg-default-50/80 p-4">
-              <p className="mb-3 font-body text-xs font-semibold uppercase tracking-wide text-default-500">
-                Requisitos
-              </p>
-              <ul className="flex flex-col gap-2 font-body text-sm">
-                <li className="flex items-center gap-2">
-                  <Icon
-                    className={
-                      strength.minLength
-                        ? "text-success shrink-0 text-xl"
-                        : "text-default-300 shrink-0 text-xl"
-                    }
-                    icon={
-                      strength.minLength
-                        ? "solar:check-circle-bold"
-                        : "solar:close-circle-linear"
-                    }
-                  />
-                  <span
-                    className={
-                      strength.minLength
-                        ? "text-default-700"
-                        : "text-default-500"
-                    }
-                  >
-                    Mínimo 8 caracteres
-                  </span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Icon
-                    className={
-                      strength.hasUpper
-                        ? "text-success shrink-0 text-xl"
-                        : "text-default-300 shrink-0 text-xl"
-                    }
-                    icon={
-                      strength.hasUpper
-                        ? "solar:check-circle-bold"
-                        : "solar:close-circle-linear"
-                    }
-                  />
-                  <span
-                    className={
-                      strength.hasUpper
-                        ? "text-default-700"
-                        : "text-default-500"
-                    }
-                  >
-                    Al menos 1 letra mayúscula
-                  </span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Icon
-                    className={
-                      strength.hasNumber
-                        ? "text-success shrink-0 text-xl"
-                        : "text-default-300 shrink-0 text-xl"
-                    }
-                    icon={
-                      strength.hasNumber
-                        ? "solar:check-circle-bold"
-                        : "solar:close-circle-linear"
-                    }
-                  />
-                  <span
-                    className={
-                      strength.hasNumber
-                        ? "text-default-700"
-                        : "text-default-500"
-                    }
-                  >
-                    Al menos 1 número
-                  </span>
-                </li>
-              </ul>
-            </div>
-
-            <Button
-              className="h-12 w-full font-body text-base font-semibold sm:h-14"
-              color="primary"
-              disabled={busy}
-              isLoading={isLoadingStep3}
-              radius="lg"
-              size="lg"
-              type="submit"
-            >
-              Cambiar contraseña
-            </Button>
-          </form>
+          ) : null}
         </div>
+      </Reveal>
 
-        {/* Success */}
-        <div className="flex w-1/4 shrink-0 flex-col items-center justify-center px-5 py-12 sm:px-8 sm:py-16">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success-100 text-success sm:h-24 sm:w-24">
-            <Icon
-              className="text-5xl sm:text-6xl"
-              icon="solar:check-circle-bold"
-            />
-          </div>
-          <h2 className="mt-6 text-center font-heading text-xl font-bold sm:text-2xl">
-            ¡Contraseña actualizada!
-          </h2>
-          <p className="mt-2 max-w-xs text-center font-body text-sm text-default-500">
-            Redirigiendo al inicio de sesión en unos segundos…
-          </p>
-          <Link
-            className="mt-8 font-body text-sm font-semibold text-primary"
-            href={`/${tenantSlug}/login`}
-            size="sm"
-          >
-            Ir al inicio de sesión ahora
-          </Link>
-        </div>
+      <Button
+        className="mt-1 h-[54px] w-full text-[17px] font-semibold"
+        color="primary"
+        isDisabled={
+          (step === 2 && code.length !== 6) || (step === 3 && !passwordReady)
+        }
+        isLoading={isLoadingStep1 || isLoadingStep2 || isLoadingStep3}
+        radius="lg"
+        type="submit"
+      >
+        {ctaLabel}
+      </Button>
+    </form>
+  );
+}
+
+/** Despliega su contenido en su sitio (alto desde 0) sin sacarlo del DOM. */
+function Reveal({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // React 18 doesn't forward a boolean `inert`.
+  React.useEffect(() => {
+    ref.current?.toggleAttribute("inert", !open);
+  }, [open]);
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden={!open}
+      className={`grid transition-[grid-template-rows,opacity,margin] duration-[420ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-opacity ${
+        open
+          ? "mt-0 grid-rows-[1fr] opacity-100"
+          : "-mt-5 grid-rows-[0fr] opacity-0"
+      }`}
+    >
+      <div className="-m-1 flex min-h-0 flex-col gap-5 overflow-hidden p-1">
+        {children}
       </div>
     </div>
+  );
+}
+
+function EyeButton({
+  visible,
+  onToggle,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+      className="absolute right-1 top-1 grid h-[46px] w-[46px] place-items-center rounded-[10px] text-default-500 active:bg-default-100"
+      type="button"
+      onClick={onToggle}
+    >
+      <Icon
+        className="text-[22px]"
+        icon={visible ? "solar:eye-closed-linear" : "solar:eye-linear"}
+      />
+    </button>
   );
 }

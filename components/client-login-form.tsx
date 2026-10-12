@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, Form, Input, Link, Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import NextLink from "next/link";
 import React from "react";
 
 import {
@@ -12,9 +13,25 @@ import {
 
 interface ClientLoginFormProps {
   tenantSlug: string;
+  /** Nombre del entrenador para el mensaje de "correo no encontrado". */
+  trainerName?: string;
 }
 
 type LoginStep = "email" | "password" | "setup-password";
+
+const PASSWORD_RULES: ReadonlyArray<{
+  label: string;
+  test: (v: string) => boolean;
+}> = [
+  { label: "8 caracteres o más", test: (v) => v.length >= 8 },
+  { label: "Una letra mayúscula", test: (v) => /[A-ZÁÉÍÓÚÑ]/.test(v) },
+  { label: "Un número", test: (v) => /\d/.test(v) },
+];
+
+/** Primer nombre para el saludo ("Hola de nuevo, Marta"). */
+function firstNameOf(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] ?? "";
+}
 
 // Guard against an infinite recovery loop: if the browser keeps stripping
 // the cookie immediately after we re-set it (hard cookie blocking), we'd
@@ -71,6 +88,9 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
   const [email, setEmail] = React.useState("");
   const [clientId, setClientId] = React.useState("");
   const [fullName, setFullName] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
   const [isVisible, setIsVisible] = React.useState(false);
   const [isConfirmVisible, setIsConfirmVisible] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -79,9 +99,13 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
   // it to `false` synchronously on the first client render when there's
   // nothing to recover.
   const [isRecoveringSession, setIsRecoveringSession] = React.useState(true);
+  // Llegada desde "Recuperar contraseña": correo puesto + aviso.
+  const [justReset, setJustReset] = React.useState(false);
+  const autoCheckedRef = React.useRef(false);
 
-  const toggleVisibility = () => setIsVisible(!isVisible);
-  const toggleConfirmVisibility = () => setIsConfirmVisible(!isConfirmVisible);
+  const emailRef = React.useRef<HTMLInputElement>(null);
+  const passwordRef = React.useRef<HTMLInputElement>(null);
+  const newPasswordRef = React.useRef<HTMLInputElement>(null);
 
   // On mount: if the user has a valid JWT in localStorage (from a prior
   // login) but no cookie (middleware bounced them here), POST the token to
@@ -167,364 +191,482 @@ export function ClientLoginForm({ tenantSlug }: ClientLoginFormProps) {
     };
   }, [tenantSlug]);
 
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError("");
-
-    const formData = new FormData(event.currentTarget);
-    const emailValue = formData.get("email") as string;
-
-    try {
-      const response = await fetch("/api/auth/check-client-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailValue, tenantHost: tenantSlug }),
+  // When a step reveals its password field, move the caret there.
+  React.useEffect(() => {
+    if (step === "email") return undefined;
+    const id = window.setTimeout(() => {
+      (step === "password" ? passwordRef : newPasswordRef).current?.focus({
+        preventScroll: true,
       });
+    }, 200);
 
-      const result = await response.json();
+    return () => clearTimeout(id);
+  }, [step]);
 
-      if (!response.ok || !result.exists) {
-        throw new Error(result.message || "No user found with that email");
-      }
+  React.useEffect(() => {
+    if (isRecoveringSession || autoCheckedRef.current) return;
+    autoCheckedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("email");
 
-      setEmail(emailValue);
-      setClientId(result.clientId);
-      setFullName(result.fullName);
-
-      // Determine next step based on whether password is set
-      setStep(result.hasPassword ? "password" : "setup-password");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error checking email");
-    } finally {
-      setIsLoading(false);
+    if (!fromQuery) return;
+    setEmail(fromQuery);
+    if (params.get("reset") === "1") {
+      setJustReset(true);
+      // Pasa directo al campo de contraseña con el correo ya comprobado.
+      window.setTimeout(() => {
+        document
+          .getElementById("client-login-form")
+          ?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true })
+          );
+      }, 0);
     }
+  }, [isRecoveringSession]);
+
+  const finishLogin = (token: unknown) => {
+    // Persist the JWT as a cookie fallback (used as `Authorization:
+    // Bearer` on writes when the httpOnly cookie is blocked by
+    // Safari ITP / third-party cookie restrictions / in-app browsers).
+    if (typeof token === "string" && token) {
+      storeClientToken(token);
+    }
+
+    // Full page navigation so the TanStack Query cache is reset and the
+    // bootstrap query fetches fresh auth data.
+    window.location.href = `/${tenantSlug}/dashboard`;
   };
 
-  const handlePasswordSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError("");
+  const submitPassword = async (value: string) => {
+    const response = await fetch("/api/auth/client-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, password: value, tenantSlug }),
+    });
+    const result = await response.json();
 
-    const formData = new FormData(event.currentTarget);
-    const password = formData.get("password") as string;
-
-    try {
-      const response = await fetch("/api/auth/client-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, password, tenantSlug }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Invalid password");
-      }
-
-      // Persist the JWT as a cookie fallback (used as `Authorization:
-      // Bearer` on writes when the httpOnly cookie is blocked by
-      // Safari ITP / third-party cookie restrictions / in-app browsers).
-      if (typeof result.token === "string" && result.token) {
-        storeClientToken(result.token);
-      }
-
-      // Login successful — full page navigation so the TanStack Query
-      // cache is reset and the bootstrap query fetches fresh auth data.
-      window.location.href = `/${tenantSlug}/dashboard`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
-      setIsLoading(false);
+    if (!response.ok) {
+      throw new Error(result.error || "Contraseña incorrecta");
     }
+    finishLogin(result.token);
   };
 
-  const handleSetupPasswordSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError("");
+  const handleEmailStep = async () => {
+    const emailValue = email.trim();
 
-    const formData = new FormData(event.currentTarget);
-    const password = formData.get("password") as string;
-    const confirmPassword = formData.get("confirmPassword") as string;
+    if (!/^\S+@\S+\.\S+$/.test(emailValue)) {
+      setError("Escribe un correo completo, como nombre@correo.com.");
 
-    try {
-      const response = await fetch("/api/auth/setup-client-password", {
+      return;
+    }
+
+    const response = await fetch("/api/auth/check-client-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailValue, tenantHost: tenantSlug }),
+    });
+    const result = await response.json();
+
+    if (!response.ok || !result.exists) {
+      throw new Error(
+        result.message ||
+          "No se encontró una cuenta con ese correo. Contacta a tu entrenador."
+      );
+    }
+
+    setEmail(emailValue);
+    setClientId(result.clientId);
+    setFullName(result.fullName);
+
+    // Password managers often fill the (collapsed) password field together
+    // with the email: log straight in instead of asking for another tap.
+    const autofilled = passwordRef.current?.value ?? "";
+
+    if (result.hasPassword && autofilled) {
+      const response2 = await fetch("/api/auth/client-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
-          password,
-          confirmPassword,
+          clientId: result.clientId,
+          password: autofilled,
           tenantSlug,
         }),
       });
+      const result2 = await response2.json();
 
-      const result = await response.json();
+      if (response2.ok) {
+        finishLogin(result2.token);
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to set password");
+        return;
       }
+      setPassword("");
+    }
 
-      // Persist the JWT as a cookie fallback — see note in
-      // `handlePasswordSubmit` above.
-      if (typeof result.token === "string" && result.token) {
-        storeClientToken(result.token);
-      }
+    setStep(result.hasPassword ? "password" : "setup-password");
+  };
 
-      // Password set — full page navigation so the TanStack Query
-      // cache is reset and the bootstrap query fetches fresh auth data.
-      window.location.href = `/${tenantSlug}/dashboard`;
+  const handleSetupPassword = async () => {
+    const response = await fetch("/api/auth/setup-client-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId,
+        password: newPassword,
+        confirmPassword,
+        tenantSlug,
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "No se pudo crear la contraseña");
+    }
+    finishLogin(result.token);
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isLoading) return;
+    setError("");
+    setIsLoading(true);
+
+    try {
+      if (step === "email") await handleEmailStep();
+      else if (step === "password") {
+        if (!password) throw new Error("Escribe tu contraseña.");
+        await submitPassword(password);
+      } else await handleSetupPassword();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set password");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Algo salió mal. Inténtalo de nuevo."
+      );
+      if (step === "password") passwordRef.current?.select();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleBack = () => {
+  const handleChangeEmail = () => {
+    setJustReset(false);
     setStep("email");
     setError("");
+    setPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    window.setTimeout(() => emailRef.current?.select(), 0);
   };
+
+  const rulesPassed = PASSWORD_RULES.map((r) => r.test(newPassword));
+  const confirmMismatch =
+    confirmPassword.length > 0 && !newPassword.startsWith(confirmPassword);
+  const setupReady =
+    rulesPassed.every(Boolean) && confirmPassword === newPassword;
+
+  const name = firstNameOf(fullName);
+  const title =
+    step === "password"
+      ? `Hola de nuevo${name ? `, ${name}` : ""}`
+      : step === "setup-password"
+        ? `Bienvenido${name ? `, ${name}` : ""}`
+        : "Entra en tu cuenta";
+  const lede =
+    step === "password"
+      ? "Escribe tu contraseña para entrar."
+      : step === "setup-password"
+        ? "Es tu primera vez. Crea una contraseña para entrar desde ahora."
+        : "Usa el correo que le diste a tu entrenador.";
+  const ctaLabel =
+    step === "password"
+      ? "Entrar"
+      : step === "setup-password"
+        ? "Crear y entrar"
+        : "Continuar";
+
+  const fieldClass =
+    "h-[54px] w-full rounded-xl border border-default-200 bg-content1 px-4 text-[17px] text-foreground caret-primary outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-default-400 focus:border-primary focus:shadow-[0_0_0_4px_hsl(var(--heroui-primary)/0.2)]";
+  const errorFieldClass =
+    "border-danger shadow-[0_0_0_4px_hsl(var(--heroui-danger)/0.15)]";
 
   if (isRecoveringSession) {
     return (
-      <div className="rounded-large bg-content1 shadow-small flex w-full flex-col items-center gap-4 px-8 py-12">
+      <div className="flex w-full flex-col items-center gap-3 py-12">
         <Spinner color="primary" size="lg" />
-        <p className="text-sm text-default-600 font-body">
-          Verificando sesión...
-        </p>
+        <p className="text-[15px] text-default-500">Abriendo tu cuenta…</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-large bg-content1 shadow-small flex w-full flex-col gap-6 px-8 py-8">
-      {error && (
-        <div className="bg-danger-50 border border-danger-200 rounded-lg p-3">
-          <p className="text-danger text-sm font-body">{error}</p>
-        </div>
-      )}
-
-      {/* Step 1: Email */}
-      {step === "email" && (
-        <Form
-          className="flex flex-col gap-4"
-          validationBehavior="native"
-          onSubmit={handleEmailSubmit}
+    <form
+      noValidate
+      className="flex w-full flex-col gap-5"
+      id="client-login-form"
+      onSubmit={handleSubmit}
+    >
+      {justReset ? (
+        <p
+          className="flex items-start gap-2.5 rounded-xl bg-content1 px-3.5 py-3 text-[15px] leading-snug text-foreground shadow-small"
+          role="status"
         >
-          <Input
-            isRequired
-            autoComplete="email"
-            className="font-body"
-            label="Correo Electrónico"
-            name="email"
-            placeholder="Ingresa tu correo"
-            type="email"
-            variant="bordered"
+          <Icon
+            className="mt-0.5 shrink-0 text-xl text-success"
+            icon="solar:check-circle-linear"
           />
+          Contraseña cambiada. Entra con la nueva.
+        </p>
+      ) : null}
+      <div className="flex flex-col items-center gap-2 text-center">
+        <h2 className="font-heading text-[30px] leading-[1.08] tracking-[-0.025em] text-foreground [text-wrap:balance]">
+          {title}
+        </h2>
+        <p className="text-base leading-snug text-default-500">{lede}</p>
+      </div>
 
-          <Button
-            className="w-full font-body mt-2"
-            color="primary"
-            disabled={isLoading}
-            isLoading={isLoading}
-            size="lg"
-            type="submit"
-          >
-            {isLoading ? "Verificando..." : "Continuar"}
-          </Button>
-        </Form>
-      )}
-
-      {/* Step 2: Enter Password */}
-      {step === "password" && (
-        <>
-          <div className="text-center">
-            <p className="text-sm text-default-600 font-body">
-              Bienvenido de vuelta, {fullName}
-            </p>
-            <p className="text-xs text-default-400 font-body mt-1">{email}</p>
-          </div>
-
-          <Form
-            className="flex flex-col gap-4"
-            validationBehavior="native"
-            onSubmit={handlePasswordSubmit}
-          >
-            <Input
-              isRequired
-              autoComplete="current-password"
-              className="font-body"
-              endContent={
-                <button type="button" onClick={toggleVisibility}>
-                  <Icon
-                    className="text-default-400 pointer-events-none text-2xl"
-                    icon={
-                      isVisible ? "solar:eye-closed-linear" : "solar:eye-bold"
-                    }
-                  />
-                </button>
-              }
-              label="Contraseña"
-              name="password"
-              placeholder="Ingresa tu contraseña"
-              type={isVisible ? "text" : "password"}
-              variant="bordered"
-            />
-
-            <div className="flex justify-end">
-              <Link
-                className="font-body text-sm text-primary"
-                href={`/${tenantSlug}/forgot-password`}
-                size="sm"
-              >
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-
-            <div className="flex gap-2 w-full">
-              <Button
-                className="flex-1 font-body"
-                size="lg"
-                variant="bordered"
-                onPress={handleBack}
-              >
-                Atrás
-              </Button>
-              <Button
-                className="flex-[2] font-body"
-                color="primary"
-                disabled={isLoading}
-                isLoading={isLoading}
-                size="lg"
-                type="submit"
-              >
-                {isLoading ? "Iniciando..." : "Iniciar Sesión"}
-              </Button>
-            </div>
-          </Form>
-        </>
-      )}
-
-      {/* Step 3: Setup Password */}
-      {step === "setup-password" && (
-        <>
-          <div className="text-center">
-            <h3 className="text-lg font-heading font-semibold mb-2">
-              Configura Tu Contraseña
-            </h3>
-            <p className="text-sm text-default-600 font-body">
-              Hola, {fullName}
-            </p>
-            <p className="text-xs text-primary font-body mt-1 font-semibold">
-              {email}
-            </p>
-          </div>
-
-          <div className="bg-primary border border-primary rounded-lg p-3">
-            <p className="text-xs text-primary-foreground font-body">
-              <strong>Requisitos de Contraseña:</strong>
-            </p>
-            <ul className="text-xs text-primary-foreground font-body mt-2 space-y-1 ml-4 list-disc">
-              <li>Mínimo 8 caracteres</li>
-              <li>Al menos una letra mayúscula</li>
-              <li>Al menos un número</li>
-            </ul>
-          </div>
-
-          <Form
-            className="flex flex-col gap-4"
-            validationBehavior="native"
-            onSubmit={handleSetupPasswordSubmit}
-          >
-            <Input
-              isRequired
-              autoComplete="new-password"
-              className="font-body"
-              endContent={
-                <button type="button" onClick={toggleVisibility}>
-                  <Icon
-                    className="text-default-400 pointer-events-none text-2xl"
-                    icon={
-                      isVisible ? "solar:eye-closed-linear" : "solar:eye-bold"
-                    }
-                  />
-                </button>
-              }
-              label="Nueva Contraseña"
-              minLength={8}
-              name="password"
-              placeholder="Crea una contraseña"
-              type={isVisible ? "text" : "password"}
-              variant="bordered"
-            />
-
-            <Input
-              isRequired
-              autoComplete="new-password"
-              className="font-body"
-              endContent={
-                <button type="button" onClick={toggleConfirmVisibility}>
-                  <Icon
-                    className="text-default-400 pointer-events-none text-2xl"
-                    icon={
-                      isConfirmVisible
-                        ? "solar:eye-closed-linear"
-                        : "solar:eye-bold"
-                    }
-                  />
-                </button>
-              }
-              label="Confirmar Contraseña"
-              minLength={8}
-              name="confirmPassword"
-              placeholder="Confirma tu contraseña"
-              type={isConfirmVisible ? "text" : "password"}
-              variant="bordered"
-            />
-
-            <div className="flex gap-2 w-full">
-              <Button
-                className="flex-1 font-body"
-                size="lg"
-                variant="bordered"
-                onPress={handleBack}
-              >
-                Atrás
-              </Button>
-              <Button
-                className="flex-[2] font-body"
-                color="primary"
-                disabled={isLoading}
-                isLoading={isLoading}
-                size="lg"
-                type="submit"
-              >
-                {isLoading ? "Configurando..." : "Configurar y Entrar"}
-              </Button>
-            </div>
-          </Form>
-        </>
-      )}
-
-      <div className="mt-4 w-full">
-        <div className="bg-default-50 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Icon className="text-primary text-lg" icon="ph:info-duotone" />
-            <h4 className="text-sm font-semibold font-heading">
-              Acceso de Clientes
-            </h4>
-          </div>
-          <p className="text-xs text-default-600 font-body">
-            ¿No tienes cuenta? Tu entrenador creará una para ti.
-          </p>
+      <div className="flex flex-col gap-2">
+        <label
+          className="text-[13px] font-semibold text-default-500"
+          htmlFor="client-login-email"
+        >
+          Correo
+        </label>
+        <div className="relative">
+          <input
+            ref={emailRef}
+            required
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect="off"
+            className={`${fieldClass} ${step !== "email" ? "bg-transparent pr-28" : ""} ${error && step === "email" ? errorFieldClass : ""}`}
+            enterKeyHint="next"
+            id="client-login-email"
+            inputMode="email"
+            name="email"
+            placeholder="nombre@correo.com"
+            readOnly={step !== "email"}
+            spellCheck={false}
+            type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (error) setError("");
+            }}
+          />
+          {step !== "email" ? (
+            <button
+              className="absolute right-1.5 top-1.5 h-[42px] select-none rounded-[10px] px-3 text-[15px] font-semibold text-foreground active:bg-default-100"
+              type="button"
+              onClick={handleChangeEmail}
+            >
+              Cambiar
+            </button>
+          ) : null}
         </div>
+        {error && step === "email" ? (
+          <p className="text-sm leading-snug text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+
+      {/* Contraseña: siempre en el DOM (plegada) para que los gestores de
+          contraseñas rellenen correo y contraseña a la vez. */}
+      <Reveal open={step === "password"}>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="client-login-password"
+          >
+            Contraseña
+          </label>
+          <div className="relative">
+            <input
+              ref={passwordRef}
+              autoComplete="current-password"
+              className={`${fieldClass} pr-14 ${error && step === "password" ? errorFieldClass : ""}`}
+              enterKeyHint="go"
+              id="client-login-password"
+              name="password"
+              type={isVisible ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+            />
+            <EyeButton
+              visible={isVisible}
+              onToggle={() => setIsVisible((v) => !v)}
+            />
+          </div>
+          {error && step === "password" ? (
+            <p className="text-sm leading-snug text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <NextLink
+          className="-mt-2 self-start py-1.5 text-[15px] font-medium text-foreground underline decoration-default-300 underline-offset-[3px]"
+          href={`/${tenantSlug}/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+        >
+          ¿Olvidaste tu contraseña?
+        </NextLink>
+      </Reveal>
+
+      <Reveal open={step === "setup-password"}>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="client-login-new-password"
+          >
+            Crea una contraseña
+          </label>
+          <div className="relative">
+            <input
+              ref={newPasswordRef}
+              autoComplete="new-password"
+              className={`${fieldClass} pr-14`}
+              enterKeyHint="next"
+              id="client-login-new-password"
+              minLength={8}
+              name="newPassword"
+              type={isVisible ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (error) setError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  document.getElementById("client-login-confirm")?.focus();
+                }
+              }}
+            />
+            <EyeButton
+              visible={isVisible}
+              onToggle={() => setIsVisible((v) => !v)}
+            />
+          </div>
+        </div>
+        <ul className="-mt-1 grid gap-1.5 text-sm text-default-500">
+          {PASSWORD_RULES.map((rule, i) => (
+            <li
+              key={rule.label}
+              className={`flex items-center gap-2 transition-colors ${rulesPassed[i] ? "text-foreground" : ""}`}
+            >
+              <Icon
+                className={`text-base ${rulesPassed[i] ? "text-success" : "text-default-300"}`}
+                icon={
+                  rulesPassed[i]
+                    ? "solar:check-circle-bold"
+                    : "solar:record-circle-linear"
+                }
+              />
+              {rule.label}
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-col gap-2">
+          <label
+            className="text-[13px] font-semibold text-default-500"
+            htmlFor="client-login-confirm"
+          >
+            Repítela
+          </label>
+          <div className="relative">
+            <input
+              autoComplete="new-password"
+              className={`${fieldClass} pr-14 ${confirmMismatch ? errorFieldClass : ""}`}
+              enterKeyHint="go"
+              id="client-login-confirm"
+              name="confirmPassword"
+              type={isConfirmVisible ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            <EyeButton
+              visible={isConfirmVisible}
+              onToggle={() => setIsConfirmVisible((v) => !v)}
+            />
+          </div>
+          {confirmMismatch ? (
+            <p className="text-sm text-danger">No coincide con la de arriba.</p>
+          ) : null}
+          {error && step === "setup-password" ? (
+            <p className="text-sm leading-snug text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </Reveal>
+
+      <Button
+        className="mt-1 h-[54px] w-full text-[17px] font-semibold"
+        color="primary"
+        isDisabled={step === "setup-password" && !setupReady}
+        isLoading={isLoading}
+        radius="lg"
+        type="submit"
+      >
+        {ctaLabel}
+      </Button>
+    </form>
+  );
+}
+
+/** Despliega su contenido en su sitio (alto desde 0) sin sacarlo del DOM. */
+function Reveal({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // React 18 doesn't forward a boolean `inert`; set the attribute directly so
+  // the folded fields can't be tabbed into.
+  React.useEffect(() => {
+    ref.current?.toggleAttribute("inert", !open);
+  }, [open]);
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden={!open}
+      className={`grid transition-[grid-template-rows,opacity,margin] duration-[420ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-opacity ${
+        open
+          ? "mt-0 grid-rows-[1fr] opacity-100"
+          : "-mt-5 grid-rows-[0fr] opacity-0"
+      }`}
+    >
+      <div className="-m-1 flex min-h-0 flex-col gap-5 overflow-hidden p-1">
+        {children}
       </div>
     </div>
+  );
+}
+
+function EyeButton({
+  visible,
+  onToggle,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+      className="absolute right-1 top-1 grid h-[46px] w-[46px] place-items-center rounded-[10px] text-default-500 active:bg-default-100"
+      type="button"
+      onClick={onToggle}
+    >
+      <Icon
+        className="text-[22px]"
+        icon={visible ? "solar:eye-closed-linear" : "solar:eye-linear"}
+      />
+    </button>
   );
 }

@@ -14,25 +14,33 @@ export default async function ForgotPasswordPage({
   const logoUrl = tenantContext?.logo_url || "";
 
   return (
-    <div className="flex h-full w-full items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center pb-8">
-          {logoUrl && (
-            <TenantLogo
-              alt={trainerName}
-              className="h-16 w-auto mb-4 object-contain"
-              height={64}
-              src={logoUrl}
-              width={128}
-            />
-          )}
-          <h1 className="text-3xl font-heading font-bold mb-4">
-            Recuperar contraseña
-          </h1>
-          <p className="text-default-500 font-body text-center text-sm sm:text-base max-w-sm mx-auto leading-relaxed">
-            Te enviaremos un código de verificación a tu correo para que puedas
-            crear una nueva contraseña de forma segura
-          </p>
+    <div className="flex min-h-[100dvh] w-full justify-center bg-background px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+2rem)]">
+      <div className="flex w-full max-w-sm flex-col">
+        {/* Marca compacta: en el login el logo saluda grande; aquí se retira. */}
+        <div className="mb-9 flex items-center gap-3">
+          <div className="flex h-11 min-w-11 items-center justify-center rounded-xl bg-content1 px-2 shadow-small ring-1 ring-default-200">
+            {logoUrl ? (
+              <TenantLogo
+                alt={trainerName}
+                className="h-7 w-auto max-w-[96px] object-contain"
+                height={28}
+                src={logoUrl}
+                width={96}
+              />
+            ) : (
+              <span className="font-heading text-base text-foreground">
+                {trainerName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-heading text-base text-foreground">
+              {trainerName}
+            </p>
+            <p className="text-[13px] text-default-500">
+              Tu espacio de entrenamiento
+            </p>
+          </div>
         </div>
 
         <ForgotPasswordForm tenantSlug={slug} />

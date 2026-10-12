@@ -47,31 +47,41 @@ export default async function ClientLoginPage({
   const logoUrl = tenantContext.logo_url || "";
 
   return (
-    <div className="flex h-full w-full items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md">
-        {/* Branded Header */}
-        <div className="flex flex-col items-center pb-8">
-          {logoUrl && (
-            <TenantLogo
-              alt={trainerName}
-              className="h-16 w-auto mb-4 object-contain"
-              height={64}
-              src={logoUrl}
-              width={128}
-            />
-          )}
-          <h1 className="text-3xl font-heading font-bold mb-4">
-            {trainerName}
-          </h1>
-          <h2 className="text-xl font-medium font-heading mb-2">
-            Portal de Clientes
-          </h2>
-          <p className="text-default-500 font-body text-center">
-            Inicia sesión para acceder a tus programas de entrenamiento
-          </p>
+    <div className="flex min-h-[100dvh] w-full justify-center bg-background px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+3rem)]">
+      <div className="flex w-full max-w-sm flex-col">
+        {/* Marca del entrenador: grande y centrada. El logo va siempre sobre
+            una superficie neutra (nunca directo sobre el color de marca). */}
+        <div className="mb-10 flex flex-col items-center gap-3.5 text-center">
+          <div className="flex h-28 min-w-28 items-center justify-center rounded-3xl bg-content1 px-6 shadow-small ring-1 ring-default-200">
+            {logoUrl ? (
+              <TenantLogo
+                alt={trainerName}
+                className="h-16 w-auto max-w-[200px] object-contain"
+                height={64}
+                src={logoUrl}
+                width={200}
+              />
+            ) : (
+              <span className="font-heading text-4xl text-foreground">
+                {trainerName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div>
+            <p className="font-heading text-xl text-foreground">
+              {trainerName}
+            </p>
+            <p className="mt-0.5 text-sm text-default-500">
+              Tu espacio de entrenamiento
+            </p>
+          </div>
         </div>
 
-        <ClientLoginForm tenantSlug={slug} />
+        <ClientLoginForm tenantSlug={slug} trainerName={trainerName} />
+
+        <p className="mt-auto pt-7 text-center text-[13px] leading-normal text-default-500">
+          ¿No tienes cuenta? Tu entrenador te la crea.
+        </p>
       </div>
     </div>
   );
