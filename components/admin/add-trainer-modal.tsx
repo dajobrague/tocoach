@@ -1,251 +1,328 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import {
-  Button,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-} from "@heroui/react";
+import { Modal, ModalContent } from "@heroui/react";
 import React from "react";
+
+import {
+  CopyButton,
+  DialogHeader,
+  Field,
+  KeyValueList,
+  SuccessHeader,
+  buttonClasses,
+  dialogClassNames,
+  fieldTone,
+  inputClass,
+} from "@/components/admin/admin-ui";
+import { slugFormatError, slugify } from "@/lib/tenant/slug";
 
 interface AddTrainerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  /** Called right after the trainer is created, so the list can refresh. */
+  onCreated: () => void;
+  /** Slugs/hosts and emails already in use — checked instantly while typing. */
+  takenSlugs: Set<string>;
+  takenEmails: Set<string>;
+}
+
+interface Created {
+  fullName: string;
+  email: string;
+  slug: string;
+  tempPassword: string;
+}
+
+const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "app.topcoach.io";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function credentialsText(c: Created) {
+  return [
+    `Hola ${c.fullName.split(" ")[0]}, ya tienes tu cuenta en TopCoach:`,
+    "",
+    `Acceso: https://${APP_DOMAIN}/trainer/login`,
+    `Email: ${c.email}`,
+    `Contraseña temporal: ${c.tempPassword}`,
+    "",
+    "Al entrar por primera vez te pedirá crear tu propia contraseña.",
+    `Tus clientes entrarán en https://${APP_DOMAIN}/${c.slug}`,
+  ].join("\n");
 }
 
 export default function AddTrainerModal({
   isOpen,
   onClose,
-  onSuccess,
+  onCreated,
+  takenSlugs,
+  takenEmails,
 }: AddTrainerModalProps) {
   const [fullName, setFullName] = React.useState("");
   const [email, setEmail] = React.useState("");
-  const [tenantHost, setTenantHost] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const [successMessage, setSuccessMessage] = React.useState("");
+  const [emailTouched, setEmailTouched] = React.useState(false);
+  const [slug, setSlug] = React.useState("");
+  // The slug follows the name until the admin edits it by hand.
+  const [slugEdited, setSlugEdited] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [serverError, setServerError] = React.useState<{
+    field?: "email" | "slug";
+    message: string;
+  } | null>(null);
+  const [created, setCreated] = React.useState<Created | null>(null);
 
-  const handleClose = () => {
+  const reset = () => {
     setFullName("");
     setEmail("");
-    setTenantHost("");
-    setError("");
-    setSuccessMessage("");
+    setEmailTouched(false);
+    setSlug("");
+    setSlugEdited(false);
+    setServerError(null);
+    setCreated(null);
+  };
+
+  const handleClose = () => {
+    if (isSubmitting) return;
+    reset();
     onClose();
   };
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailError =
+    normalizedEmail && !EMAIL_RE.test(normalizedEmail)
+      ? emailTouched
+        ? "Revisa el formato del correo."
+        : null
+      : takenEmails.has(normalizedEmail)
+        ? "Ya hay un entrenador con este correo."
+        : serverError?.field === "email"
+          ? serverError.message
+          : null;
+
+  const slugError = !slug
+    ? null
+    : (slugFormatError(slug) ??
+      (takenSlugs.has(slug)
+        ? "Esta dirección ya está en uso."
+        : serverError?.field === "slug"
+          ? serverError.message
+          : null));
+
+  const canSubmit =
+    fullName.trim().length > 1 &&
+    EMAIL_RE.test(normalizedEmail) &&
+    !emailError &&
+    slug.length > 0 &&
+    !slugError &&
+    !isSubmitting;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError("");
-    setSuccessMessage("");
+    if (!canSubmit) return;
+    setIsSubmitting(true);
+    setServerError(null);
 
     try {
       const response = await fetch("/api/admin/trainers", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          fullName,
-          email,
-          tenantHost,
+          fullName: fullName.trim(),
+          email: normalizedEmail,
+          tenantHost: slug,
         }),
       });
-
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Error al crear entrenador");
+        setServerError({
+          field: data.field,
+          message: data.error || "No se pudo crear el entrenador.",
+        });
+
+        return;
       }
 
-      setSuccessMessage(data.message);
-
-      // Wait a bit to show success message, then close and refresh
-      setTimeout(() => {
-        handleClose();
-        onSuccess();
-      }, 3000);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al crear entrenador"
-      );
+      setCreated({
+        fullName: fullName.trim(),
+        email: normalizedEmail,
+        slug,
+        tempPassword: data.tempPassword,
+      });
+      onCreated();
+    } catch {
+      setServerError({ message: "Error de conexión. Inténtalo de nuevo." });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  // Auto-generate tenant host from full name
-  React.useEffect(() => {
-    if (fullName && !tenantHost) {
-      const slug = fullName
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .slice(0, 30);
-
-      setTenantHost(slug);
-    }
-  }, [fullName, tenantHost]);
-
   return (
     <Modal
+      hideCloseButton
+      classNames={dialogClassNames}
+      isDismissable={!isSubmitting}
       isOpen={isOpen}
-      scrollBehavior="inside"
-      size="2xl"
+      size="lg"
       onClose={handleClose}
     >
       <ModalContent>
-        <form onSubmit={handleSubmit}>
-          <ModalHeader className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Icon
-                className="text-2xl text-black"
-                icon="solar:user-plus-bold-duotone"
+        {created ? (
+          <div className="admin-swap-in p-6">
+            <SuccessHeader
+              subtitle="Envíale estas credenciales. No se manda ningún correo automático."
+              title={`${created.fullName} ya tiene cuenta`}
+            />
+            <div className="mt-5">
+              <KeyValueList
+                rows={[
+                  ["Acceso", `${APP_DOMAIN}/trainer/login`],
+                  ["Email", created.email],
+                  ["Contraseña temporal", created.tempPassword],
+                  ["Portal de clientes", `${APP_DOMAIN}/${created.slug}`],
+                ]}
               />
-              <h2 className="text-xl font-heading font-bold">
-                Agregar Nuevo Entrenador
-              </h2>
             </div>
-            <p className="text-sm text-slate-500 font-body font-normal">
-              Crea una cuenta de entrenador. Se le enviará un email para
-              configurar su contraseña.
+            <p className="mt-2 text-[12px] text-slate-400">
+              Al entrar por primera vez elegirá su propia contraseña.
             </p>
-          </ModalHeader>
-
-          <ModalBody>
-            {error && (
-              <div className="bg-danger-50 border border-danger-200 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <Icon
-                    className="text-danger"
-                    icon="solar:danger-circle-bold"
-                  />
-                  <p className="text-danger text-sm font-body">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="bg-success-50 border border-success-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Icon
-                    className="text-success text-xl mt-0.5"
-                    icon="solar:check-circle-bold"
-                  />
-                  <div>
-                    <p className="text-success font-semibold font-body mb-1">
-                      ¡Entrenador creado exitosamente!
-                    </p>
-                    <p className="text-sm text-success-700 font-body">
-                      {successMessage}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <Input
-                isRequired
-                className="font-body"
-                label="Nombre completo"
-                placeholder="Ej: Juan Pérez"
-                startContent={<Icon icon="solar:user-bold-duotone" />}
-                value={fullName}
-                variant="bordered"
-                onValueChange={setFullName}
-              />
-
-              <Input
-                isRequired
-                className="font-body"
-                description="El entrenador usará este correo para iniciar sesión"
-                label="Correo electrónico"
-                placeholder="Ej: juan@example.com"
-                startContent={<Icon icon="solar:letter-bold-duotone" />}
-                type="email"
-                value={email}
-                variant="bordered"
-                onValueChange={setEmail}
-              />
-
-              <Input
-                isRequired
-                className="font-body"
-                description="URL única para el entrenador (solo letras, números y guiones)"
-                label="Subdominio / Tenant Host"
-                placeholder="Ej: juan-perez"
-                startContent={<Icon icon="solar:link-bold-duotone" />}
-                value={tenantHost}
-                variant="bordered"
-                onValueChange={setTenantHost}
-              />
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Icon
-                    className="text-blue-600 text-xl mt-0.5"
-                    icon="solar:info-circle-bold"
-                  />
-                  <div className="text-sm font-body text-blue-900">
-                    <p className="font-semibold mb-2">
-                      Instrucciones para el entrenador:
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1 text-blue-800">
-                      <li>
-                        Ir a{" "}
-                        <code className="bg-blue-100 px-1 rounded">
-                          /trainer/login
-                        </code>
-                      </li>
-                      <li>
-                        Iniciar sesión con su correo y contraseña temporal:{" "}
-                        <code className="bg-blue-100 px-2 py-0.5 rounded font-semibold">
-                          TopCoach2026!
-                        </code>{" "}
-                        (siempre es la misma)
-                      </li>
-                      <li>
-                        El sistema detectará que no tiene contraseña
-                        personalizada
-                      </li>
-                      <li>Se le pedirá que configure su propia contraseña</li>
-                      <li>Luego podrá acceder a su dashboard</li>
-                    </ol>
-                  </div>
-                </div>
+            <div className="mt-6 flex items-center justify-between">
+              <button
+                className={buttonClasses.ghost}
+                type="button"
+                onClick={reset}
+              >
+                Crear otro
+              </button>
+              <div className="flex gap-2">
+                <button
+                  className={buttonClasses.secondary}
+                  type="button"
+                  onClick={handleClose}
+                >
+                  Cerrar
+                </button>
+                <CopyButton
+                  label="Copiar credenciales"
+                  text={credentialsText(created)}
+                />
               </div>
             </div>
-          </ModalBody>
+          </div>
+        ) : (
+          <form noValidate onSubmit={handleSubmit}>
+            <div className="px-6 pt-6">
+              <DialogHeader
+                subtitle="Crea su cuenta y su portal de clientes."
+                title="Nuevo entrenador"
+              />
+            </div>
 
-          <ModalFooter>
-            <Button
-              color="default"
-              disabled={isLoading}
-              variant="light"
-              onPress={handleClose}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="bg-black text-white"
-              color="primary"
-              disabled={isLoading || !!successMessage}
-              isLoading={isLoading}
-              type="submit"
-            >
-              {isLoading ? "Creando..." : "Crear Entrenador"}
-            </Button>
-          </ModalFooter>
-        </form>
+            <div className="space-y-1 px-6 pt-5">
+              <Field htmlFor="trainer-name" label="Nombre completo">
+                <input
+                  className={`${inputClass} ${fieldTone(false)}`}
+                  id="trainer-name"
+                  placeholder="Juan Pérez"
+                  value={fullName}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    if (!slugEdited) setSlug(slugify(e.target.value));
+                  }}
+                />
+              </Field>
+
+              <Field
+                error={emailError}
+                hint="Con este correo iniciará sesión."
+                htmlFor="trainer-email"
+                label="Correo electrónico"
+              >
+                <input
+                  autoComplete="off"
+                  className={`${inputClass} ${fieldTone(!!emailError)}`}
+                  id="trainer-email"
+                  placeholder="juan@ejemplo.com"
+                  type="email"
+                  value={email}
+                  onBlur={() => setEmailTouched(true)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (serverError?.field === "email") setServerError(null);
+                  }}
+                />
+              </Field>
+
+              <Field
+                hint={
+                  slugError ? (
+                    <span className="text-red-600">{slugError}</span>
+                  ) : slug ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <Icon icon="solar:check-circle-linear" width={13} />
+                      Disponible
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">
+                      Se genera a partir del nombre.
+                    </span>
+                  )
+                }
+                htmlFor="trainer-slug"
+                label="Dirección del portal"
+              >
+                <div
+                  className={`flex h-9 items-center rounded-lg border bg-white text-[14px] transition-[border-color,box-shadow] focus-within:ring-2 ${
+                    slugError
+                      ? "border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10"
+                      : "border-slate-200 focus-within:border-slate-400 focus-within:ring-slate-900/5"
+                  }`}
+                >
+                  <span className="select-none pl-3 text-slate-400">
+                    {APP_DOMAIN}/
+                  </span>
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent pr-3 font-mono text-[13px] text-slate-900 outline-none"
+                    id="trainer-slug"
+                    spellCheck={false}
+                    value={slug}
+                    onChange={(e) => {
+                      setSlugEdited(true);
+                      setSlug(
+                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
+                      );
+                      if (serverError?.field === "slug") setServerError(null);
+                    }}
+                  />
+                </div>
+              </Field>
+            </div>
+
+            {serverError && !serverError.field ? (
+              <p className="mx-6 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                {serverError.message}
+              </p>
+            ) : null}
+
+            <div className="mt-2 flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+              <button
+                className={buttonClasses.ghost}
+                disabled={isSubmitting}
+                type="button"
+                onClick={handleClose}
+              >
+                Cancelar
+              </button>
+              <button
+                className={`${buttonClasses.primary} min-w-[140px]`}
+                disabled={!canSubmit}
+                type="submit"
+              >
+                {isSubmitting ? "Creando…" : "Crear entrenador"}
+              </button>
+            </div>
+          </form>
+        )}
       </ModalContent>
     </Modal>
   );

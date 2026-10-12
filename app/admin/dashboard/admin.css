@@ -1,0 +1,151 @@
+/*
+ * Admin-only theme + motion. The admin is styled with plain Tailwind slate /
+ * white utilities, which Tailwind v4 compiles to var(--color-*) — so dark mode
+ * is a remap of those variables on <html> (set by the admin layout only while
+ * it is mounted). Being on <html> also reaches HeroUI portals (menus, modals,
+ * toasts), whose own --heroui-* HSL triples are remapped below (html:root
+ * outranks HeroUI's `html:not(.dark)` light block). The rest of
+ * the app forces light theme via next-themes and is untouched.
+ */
+
+html:root[data-admin-theme="dark"] {
+  color-scheme: dark;
+
+  /* Neutrals: inverted, Apple-style warm grays rather than blue slate. */
+  --color-white: #18181b;
+  --color-slate-50: #1f1f23;
+  --color-slate-100: #28282d;
+  --color-slate-200: #34343a;
+  --color-slate-300: #4a4a51;
+  --color-slate-400: #7c7c85;
+  --color-slate-500: #9d9da6;
+  --color-slate-600: #babac2;
+  --color-slate-700: #d5d5db;
+  --color-slate-800: #e9e9ed;
+  --color-slate-900: #f5f5f7;
+  --color-slate-950: #ffffff;
+
+  /* Tints: backgrounds become translucent, text/marks get lighter. */
+  --color-emerald-50: rgb(16 185 129 / 0.14);
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-amber-50: rgb(245 158 11 / 0.14);
+  --color-amber-700: #fcd34d;
+  --color-red-50: rgb(239 68 68 / 0.14);
+  --color-red-200: rgb(239 68 68 / 0.35);
+  --color-red-300: #f87171;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+
+  /* Tenant brand tokens that body text / portals inherit from. */
+  --color-text-primary: #f5f5f7 !important;
+  --color-text-secondary: #9d9da6 !important;
+  --color-surface-1: #18181b !important;
+  --color-surface-2: #1f1f23 !important;
+  --color-border: #34343a !important;
+  --color-fill: #28282d !important;
+
+  /* HeroUI (dropdowns, modals, toasts). !important because the tenant
+     brand stylesheet (/brands/[slug]/styles.css) sets these with !important. */
+  --heroui-background: 240 4% 9% !important;
+  --heroui-foreground: 240 5% 96% !important;
+  --heroui-content1: 240 4% 10% !important;
+  --heroui-content1-foreground: 240 5% 96% !important;
+  --heroui-content2: 240 4% 14% !important;
+  --heroui-content3: 240 4% 18% !important;
+  --heroui-content4: 240 4% 22% !important;
+  --heroui-default-50: 240 4% 12% !important;
+  --heroui-default-100: 240 4% 17% !important;
+  --heroui-default-200: 240 4% 22% !important;
+  --heroui-default-300: 240 4% 30% !important;
+  --heroui-default-400: 240 4% 46% !important;
+  --heroui-default-500: 240 4% 62% !important;
+  --heroui-default-foreground: 240 5% 96% !important;
+  --heroui-divider: 0 0% 100% !important;
+  --heroui-divider-opacity: 0.12 !important;
+}
+
+/* The tenant brand sheet pins `html .text-foreground` (on <body>, inherited
+   by HeroUI portals) to a dark ink with !important. */
+html:root[data-admin-theme="dark"] body,
+html:root[data-admin-theme="dark"] .text-foreground {
+  color: var(--color-slate-900) !important;
+}
+
+html:root[data-admin-theme="dark"] body {
+  background-color: var(--color-white);
+}
+
+/* The app-wide 44px mobile touch-target rule (globals) stretched every admin
+   button and overflowed chart columns — desktop-only, so give buttons back
+   their own sizing. revert-layer rolls back to the Tailwind utilities. */
+html:root[data-admin-theme]
+  :is(
+    button,
+    [role="button"],
+    input[type="checkbox"],
+    input[type="radio"],
+    select
+  ) {
+  min-height: revert-layer;
+  min-width: revert-layer;
+}
+
+/* A white/20 scrim would light the page up in dark mode. */
+html[data-admin-theme="dark"] .admin-backdrop {
+  background-color: rgb(0 0 0 / 0.55);
+}
+
+/* Selected sidebar row reads as raised (lighter), not sunken, in dark. */
+html[data-admin-theme="dark"] .admin-nav-active {
+  background-color: var(--color-slate-100);
+}
+
+/* Theme switch: ease the whole page between modes instead of a flash. */
+html.admin-theme-transition,
+html.admin-theme-transition * {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease !important;
+}
+
+/* ---- Motion ------------------------------------------------------------ */
+
+:root {
+  --admin-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Data replacing a skeleton: a short fade so the swap doesn't snap. */
+@keyframes admin-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.admin-fade-in {
+  animation: admin-fade-in 180ms ease-out;
+}
+
+/* A dialog swapping to its success view. */
+@keyframes admin-swap-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.admin-swap-in {
+  animation: admin-swap-in 220ms var(--admin-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-swap-in {
+    animation-name: admin-fade-in;
+  }
+
+  html.admin-theme-transition,
+  html.admin-theme-transition * {
+    transition: none !important;
+  }
+}

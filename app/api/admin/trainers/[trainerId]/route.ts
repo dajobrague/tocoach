@@ -46,22 +46,37 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ trainerId: string }> }
 ) {
-  const { isAdmin } = await verifyAdminAuth(request);
+  const supabase = createSupabaseClient();
+  const { trainerId } = await params;
+
+  // Admin check and reads run concurrently (DB is a transatlantic round
+  // trip); reads have no side effects and nothing returns unless it passes.
+  const authP = verifyAdminAuth(request);
+  const dataP = Promise.all([
+    supabase.from("trainers").select("*").eq("id", trainerId).single(),
+    // clients.tenant holds the trainer's UUID (legacy column name).
+    supabase
+      .from("clients")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant", trainerId),
+    supabase
+      .from("tenants")
+      .select("slug, status, onboarding_completed, nutrition_v2_enabled")
+      .eq("trainer_id", trainerId)
+      .maybeSingle(),
+  ]);
+
+  dataP.catch(() => undefined);
+
+  const { isAdmin } = await authP;
 
   if (!isAdmin) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const supabase = createSupabaseClient();
-  const { trainerId } = await params;
-
   try {
-    // Get trainer data
-    const { data: trainer, error } = await supabase
-      .from("trainers")
-      .select("*")
-      .eq("id", trainerId)
-      .single();
+    const [{ data: trainer, error }, { count: clientCount }, { data: tenant }] =
+      await dataP;
 
     if (error || !trainer) {
       return NextResponse.json(
@@ -70,16 +85,14 @@ export async function GET(
       );
     }
 
-    // Get client count
-    const { count: clientCount } = await supabase
-      .from("clients")
-      .select("id", { count: "exact", head: true })
-      .eq("trainer_id", trainerId);
-
     return NextResponse.json(
       {
         trainer: {
           ...trainer,
+          tenant_slug: tenant?.slug ?? null,
+          tenant_status: tenant?.status ?? null,
+          onboarding_completed: tenant?.onboarding_completed === true,
+          nutrition_v2_enabled: tenant?.nutrition_v2_enabled === true,
           clientCount: clientCount || 0,
         },
       },

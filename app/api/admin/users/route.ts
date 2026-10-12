@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { JWT_SECRET_BYTES } from "@/lib/auth/jwt-secret";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { TEMP_PASSWORD_ADMIN } from "@/lib/constants/auth";
 
 // Helper to verify admin authentication and get role
 async function verifyAdminAuth(request: NextRequest) {
@@ -143,14 +144,17 @@ export async function POST(request: NextRequest) {
 
     if (existingAdmin) {
       return NextResponse.json(
-        { error: "Este correo electrónico ya está registrado como admin" },
+        {
+          error: "Este correo electrónico ya está registrado como admin",
+          field: "email",
+        },
         { status: 400 }
       );
     }
 
     // Create Supabase auth user
     // Email will be auto-confirmed by database trigger
-    const tempPassword = "TopCoachAdmin2026!";
+    const tempPassword = TEMP_PASSWORD_ADMIN;
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
       password: tempPassword,
@@ -219,7 +223,8 @@ export async function POST(request: NextRequest) {
           fullName: fullName.trim(),
           role: newUserRole,
         },
-        message: `Usuario admin creado exitosamente.\n\nEmail: ${email}\nContraseña temporal: TopCoachAdmin2026!\n\nEl usuario debe cambiar su contraseña en el primer inicio de sesión.`,
+        tempPassword,
+        message: `Usuario admin creado exitosamente.\n\nEmail: ${email}\nContraseña temporal: ${tempPassword}\n\nEl usuario debe cambiar su contraseña en el primer inicio de sesión.`,
       },
       { status: 201 }
     );
