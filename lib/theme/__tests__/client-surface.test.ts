@@ -33,7 +33,7 @@ function palette(
 const ratio = getContrastRatio;
 
 describe("resolveClientSurface", () => {
-  it("respeta una paleta sana tal cual (david-train)", () => {
+  it("paleta sana: tarjetas = lienzo, página gris y rellenos neutros (david-train)", () => {
     const s = resolveClientSurface(
       palette({
         s1: "#ffffff",
@@ -45,12 +45,15 @@ describe("resolveClientSurface", () => {
       })
     );
 
-    expect(s.background).toBe("#ffffff");
+    expect(s.c1).toBe("#ffffff");
+    expect(s.background).not.toBe("#ffffff");
+    expect(ratio(s.background, s.c1)).toBeGreaterThan(1.05);
     expect(s.foreground).toBe("#1f2937");
-    expect(s.d100).toBe("#f0fdfa");
-    expect(s.d200).toBe("#ccfbf1");
+    // El relleno teñido de marca no se usa como gris.
+    expect(s.d100).not.toBe("#f0fdfa");
+    expect(s.d200).not.toBe("#ccfbf1");
     expect(s.d300).toBe("#9ca3af");
-    expect(s.d500).toBe("#6b7280");
+    expect(ratio(s.d500, s.background)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("un fill saturado no se cuela como 'gris' (emicoach10 #08415c)", () => {
@@ -101,6 +104,8 @@ describe("resolveClientSurface", () => {
     );
 
     expect(s.foreground).toBe("#ffffff");
+    expect(s.background).toBe("#161516");
+    expect(s.c1).not.toBe("#161516");
     expect(s.d100).toBe("#333232");
     expect(s.d500).toBe("#e4e3e3");
   });

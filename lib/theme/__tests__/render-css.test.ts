@@ -39,7 +39,8 @@ describe("generateThemeCSS sin scope (portal de cliente)", () => {
   it("marca legible: sin regla de tinta para .text-primary", () => {
     const blue = structuredClone(defaultTheme);
 
-    blue.colors.brand = "#0070f3";
+    // Llega a 4.5:1 también sobre la página gris agrupada.
+    blue.colors.brand = "#0060d0";
 
     expect(generateThemeCSS(blue)).not.toContain(".text-primary {");
   });

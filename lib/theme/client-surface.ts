@@ -53,6 +53,8 @@ const isDarkHex = (hex: string) =>
   getContrastRatio(hex, "#ffffff") > getContrastRatio(hex, "#000000");
 
 export interface ClientSurface {
+  /** Lienzo oscuro: las tarjetas se aclaran en vez de oscurecer la página. */
+  dark: boolean;
   background: string;
   foreground: string;
   c1: string;
@@ -76,23 +78,35 @@ export interface ClientSurface {
 export function resolveClientSurface(
   colors: ThemeConfig["colors"]
 ): ClientSurface {
-  const bg = isHex(colors.surface["1"]) ? colors.surface["1"] : "#ffffff";
-  const darkBg = isDarkHex(bg);
+  const canvas = isHex(colors.surface["1"]) ? colors.surface["1"] : "#ffffff";
+  const darkBg = isDarkHex(canvas);
   const fg =
     isHex(colors.text.primary) &&
-    getContrastRatio(colors.text.primary, bg) >= 4.5
+    getContrastRatio(colors.text.primary, canvas) >= 4.5
       ? colors.text.primary
       : darkBg
         ? "#FAFAFA"
         : "#11181C";
+  // Agrupado estilo iOS: la página y las tarjetas nunca son del mismo color.
+  // Claro → página gris neutro y tarjetas con el lienzo del trainer (blanco);
+  // oscuro → página = lienzo y tarjetas un punto más claras.
+  const page = darkBg ? canvas : mixHex(canvas, fg, 0.045);
+  const card = darkBg ? mixHex(canvas, fg, 0.07) : canvas;
+  // Contraste contra la superficie menos favorable de las dos.
+  const bg = darkBg ? card : page;
 
   const subtle = (hex: unknown, max: number, fallbackT: number) =>
     isHex(hex) && getContrastRatio(hex, bg) <= max
       ? hex
       : mixHex(bg, fg, fallbackT);
 
-  const d100 = subtle(colors.surface["2"], 1.6, 0.05);
-  const d200 = subtle(colors.fill, 1.6, 0.1);
+  // Rellenos neutros en claro (segmentados, chips, campos): el fill/surface.2
+  // del trainer suele ir teñido de marca y pintaba "pastillas menta". La marca
+  // queda para acciones y "hoy".
+  const d100 = darkBg
+    ? subtle(colors.surface["2"], 1.6, 0.05)
+    : mixHex(page, fg, 0.05);
+  const d200 = darkBg ? subtle(colors.fill, 1.6, 0.1) : mixHex(page, fg, 0.09);
   // Borde: visible pero sin competir con el texto.
   const border = colors.border;
   const d300 =
@@ -110,9 +124,10 @@ export function resolveClientSurface(
       : mixUntil(bg, fg, bg, 4.5, 0.5);
 
   return {
-    background: bg,
+    dark: darkBg,
+    background: page,
     foreground: fg,
-    c1: bg,
+    c1: card,
     c2: d100,
     c3: d200,
     c4: d300,

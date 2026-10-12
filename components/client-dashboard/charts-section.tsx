@@ -31,6 +31,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChartCard } from "@/components/charts/chart-card";
 import { iconForChartType, isBucketsEmpty } from "@/components/charts/utils";
 import { IconTile } from "@/components/shared/icon-tile";
+import { sentenceCaseIfShouting } from "@/lib/utils";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { resolveAdapter } from "@/lib/charts/registry";
 
@@ -264,7 +265,7 @@ function PendingChartsCard({ charts, period }: PendingChartsCardProps) {
                 size="sm"
               />
               <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground">
-                {chart.label}
+                {sentenceCaseIfShouting(chart.label)}
               </p>
               <p className="flex-shrink-0 text-[13px] tabular-nums text-default-500">
                 Sin datos · {period}

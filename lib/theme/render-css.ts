@@ -170,6 +170,7 @@ export function generateThemeCSS(
   // El tenant nunca pinta el lienzo del trainer: solo el acento.
   const surface = scope
     ? {
+        dark: false,
         default: TRAINER_SURFACES.default,
         d50: TRAINER_SURFACES.default50,
         d100: TRAINER_SURFACES.default100,
@@ -294,7 +295,15 @@ ${surfaceVars}
   --heroui-radius-small: ${theme.radius.sm}px !important;
   --heroui-radius-medium: ${theme.radius.md}px !important;
   --heroui-radius-large: ${theme.radius.lg}px !important;
-  --heroui-box-shadow-small: ${theme.shadow.e1} !important;
+  --heroui-box-shadow-small: ${
+    scope
+      ? theme.shadow.e1
+      : // Tarjetas del portal: sombra neutra del prototipo (la del tema va
+        // teñida de marca y no separa la tarjeta del fondo).
+        surface.dark
+        ? "0 0 0 1px rgba(255,255,255,0.05)"
+        : "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px -8px rgba(0,0,0,0.10)"
+  } !important;
   --heroui-box-shadow-medium: ${theme.shadow.e2} !important;
   --heroui-box-shadow-large: ${theme.shadow.e2} !important;`;
 

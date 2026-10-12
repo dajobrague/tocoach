@@ -41,6 +41,7 @@ import { useHeaderStatPref } from "./use-header-stat-pref";
 import { iconForChartType, isBucketsEmpty, formatNumber } from "./utils";
 
 import { IconTile } from "@/components/shared/icon-tile";
+import { sentenceCaseIfShouting } from "@/lib/utils";
 import { RATING_MAX } from "@/lib/forms/types";
 import { resolveColor } from "@/lib/charts/palette";
 
@@ -350,7 +351,7 @@ export function ChartCard({
             size="sm"
           />
           <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
-            {config.label}
+            {sentenceCaseIfShouting(config.label)}
           </p>
           {showStatToggle ? (
             <HeaderStatToggle client mode={statMode} onChange={setStatMode} />
