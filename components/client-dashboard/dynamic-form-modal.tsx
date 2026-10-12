@@ -1,22 +1,26 @@
 "use client";
 
-import {
-  Button,
-  Card,
-  CardBody,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Textarea,
-  addToast,
-} from "@heroui/react";
+import { Button, ModalContent, ModalFooter, addToast } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  BigNumberInput,
+  BooleanInput,
+  ChoiceTiles,
+  FIELD_ATTR,
+  FieldError,
+  FieldHint,
+  NumberRow,
+  PhotoTile,
+  RatingInput,
+  TextInput,
+} from "@/components/client-dashboard/dynamic-form-fields";
+import {
+  ClientSheet,
+  ClientSheetGrabber,
+} from "@/components/client-dashboard/client-sheet";
 import { IconTile } from "@/components/shared/icon-tile";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import {
@@ -72,6 +76,9 @@ export function DynamicFormModal({
   targetDate,
 }: DynamicFormModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
+  // Sentido de la última navegación entre pasos: adelante desliza la
+  // página hacia la izquierda, atrás hacia la derecha.
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [questions, setQuestions] = useState<QuestionConfig[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -84,12 +91,20 @@ export function DynamicFormModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isEditingExisting, setIsEditingExisting] = useState(false);
-  const [existingResponseDate, setExistingResponseDate] = useState<string>("");
+  const [, setExistingResponseDate] = useState<string>("");
   const [hasNeatCards, setHasNeatCards] = useState(true);
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(
     new Set()
   );
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // "Guardado" en la barra superior: el borrador local (sessionStorage) ya
+  // tiene lo que el cliente tocó. Solo aplica a respuestas nuevas — al
+  // editar una enviada no hay borrador.
+  const [hasLocalDraft, setHasLocalDraft] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Solo la validación al pulsar Siguiente/Enviar lleva el scroll al primer
+  // campo con error; limpiar un error mientras se escribe no debe moverlo.
+  const scrollToErrorRef = useRef(false);
 
   // Upload a photo for a question and store the URL in answers.
   //
@@ -142,6 +157,7 @@ export function DynamicFormModal({
               ...(existing?.answers ?? {}),
               [questionId]: data.url,
             });
+            setHasLocalDraft(true);
           }
           setAnswers((prev) => ({ ...prev, [questionId]: data.url }));
           // Clear any error
@@ -558,7 +574,6 @@ export function DynamicFormModal({
     questions: [],
   };
   const totalSteps = sections.length;
-  const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0;
 
   /**
    * Valida una sección y retorna el mapa de errores. Extraído para que
@@ -600,6 +615,27 @@ export function DynamicFormModal({
     return sectionErrors;
   };
 
+  const goToStep = (step: number) => {
+    setDirection(step >= currentStep ? 1 : -1);
+    setCurrentStep(step);
+  };
+
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (!scrollToErrorRef.current) return;
+    scrollToErrorRef.current = false;
+    const raf = requestAnimationFrame(() => {
+      bodyRef.current
+        ?.querySelector(`[data-form-page="${currentStep}"] [data-invalid]`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [errors, currentStep]);
+
   const handleNext = () => {
     // Avance entre páginas: solo validamos la sección actual. Si pasa,
     // pasamos a la siguiente.
@@ -607,12 +643,13 @@ export function DynamicFormModal({
       const stepErrors = validateSection(currentSection);
 
       if (Object.keys(stepErrors).length > 0) {
+        scrollToErrorRef.current = true;
         setErrors(stepErrors);
 
         return;
       }
       setErrors({});
-      setCurrentStep(currentStep + 1);
+      goToStep(currentStep + 1);
 
       return;
     }
@@ -636,8 +673,9 @@ export function DynamicFormModal({
     });
 
     if (firstErrorStep >= 0) {
+      scrollToErrorRef.current = true;
       setErrors(allErrors);
-      setCurrentStep(firstErrorStep);
+      goToStep(firstErrorStep);
       addToast({
         title: "Faltan campos por completar",
         description:
@@ -656,7 +694,7 @@ export function DynamicFormModal({
 
   const handleBack = () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      goToStep(currentStep - 1);
     }
   };
 
@@ -773,6 +811,7 @@ export function DynamicFormModal({
         }
 
         if (Object.keys(serverErrors).length > 0) {
+          scrollToErrorRef.current = true;
           setErrors(serverErrors);
 
           // Saltar a la primera sección que contenga un error
@@ -790,7 +829,7 @@ export function DynamicFormModal({
           );
 
           if (firstStepWithError >= 0 && firstStepWithError !== currentStep) {
-            setCurrentStep(firstStepWithError);
+            goToStep(firstStepWithError);
           }
 
           // Errores sobre campos que NO están renderizados (p.ej. una
@@ -867,6 +906,7 @@ export function DynamicFormModal({
   const handleAnswerChange = (id: string, value: any) => {
     if (isViewMode) return;
     setAnswers((prev) => ({ ...prev, [id]: value }));
+    if (!isEditingExisting) setHasLocalDraft(true);
     if (submitError) setSubmitError(null);
     // Clear error on change
     if (errors[id]) {
@@ -880,577 +920,96 @@ export function DynamicFormModal({
     }
   };
 
-  // ── Render a single question input ────────────────────────────────
-  const renderQuestionInput = (question: QuestionConfig) => {
+  // ── Render ────────────────────────────────────────────────────────
+  const fileInput = (id: string) => (
+    <input
+      ref={(el) => {
+        fileInputRefs.current[id] = el;
+      }}
+      accept="image/*"
+      className="hidden"
+      type="file"
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+
+        if (f) handlePhotoUpload(id, f);
+        e.target.value = ""; // Reset so same file can be re-selected
+      }}
+    />
+  );
+
+  /** Input de una pregunta (o subpregunta, `compact`) que no es grupo. */
+  const renderInput = (question: QuestionConfig, compact: boolean) => {
     const value = answers[question.id];
-    const error = errors[question.id];
+    const invalid = Boolean(errors[question.id]);
+    const set = (v: unknown) => handleAnswerChange(question.id, v);
 
     switch (question.type) {
       case "rating":
         return (
-          <div className="space-y-2">
-            <div className="flex justify-center gap-2 py-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <button
-                  key={rating}
-                  className="p-2 rounded-xl hover:bg-default-100 transition-all transform hover:scale-110"
-                  disabled={isViewMode}
-                  type="button"
-                  onClick={() => handleAnswerChange(question.id, rating)}
-                >
-                  <Icon
-                    className={`text-3xl transition-colors ${
-                      value >= rating ? "text-warning" : "text-default-300"
-                    }`}
-                    icon="solar:star-bold"
-                  />
-                </button>
-              ))}
-            </div>
-            {value && (
-              <p className="text-center text-sm text-foreground/60 font-body">
-                {value} de 5 estrellas
-              </p>
-            )}
-          </div>
+          <RatingInput
+            compact={compact}
+            disabled={isViewMode}
+            label={question.label}
+            showHint={!isViewMode && !compact}
+            value={value}
+            onChange={set}
+          />
         );
 
       case "number":
         return (
-          <Input
-            classNames={{
-              input: "text-lg font-body",
-              inputWrapper: error
-                ? "border-2 border-danger h-14"
-                : "border-2 border-default-200 hover:border-primary/50 h-14",
-            }}
-            endContent={
-              question.unit && (
-                <span className="text-sm text-foreground/60 font-semibold">
-                  {question.unit}
-                </span>
-              )
-            }
-            errorMessage={error}
-            isInvalid={!!error}
-            isReadOnly={isViewMode}
-            placeholder="Ingresa el valor"
-            step="0.1"
-            type="number"
-            value={value?.toString() || ""}
-            onValueChange={(v) =>
-              handleAnswerChange(question.id, v ? parseFloat(v) || v : "")
-            }
+          <BigNumberInput
+            integer={isStepsQuestion(question)}
+            invalid={invalid}
+            label={question.label}
+            readOnly={isViewMode}
+            unit={question.unit}
+            value={value}
+            onChange={set}
           />
         );
 
       case "boolean":
         return (
-          <div className="flex gap-3">
-            <Button
-              className={`flex-1 h-16 ${
-                value === true
-                  ? "bg-success text-success-foreground"
-                  : "bg-default-100 text-foreground"
-              }`}
-              isDisabled={isViewMode}
-              size="lg"
-              startContent={
-                <Icon className="text-2xl" icon="solar:check-circle-bold" />
-              }
-              onPress={() => handleAnswerChange(question.id, true)}
-            >
-              <span className="text-lg font-semibold">Sí</span>
-            </Button>
-            <Button
-              className={`flex-1 h-16 ${
-                value === false
-                  ? "bg-danger text-danger-foreground"
-                  : "bg-default-100 text-foreground"
-              }`}
-              isDisabled={isViewMode}
-              size="lg"
-              startContent={
-                <Icon className="text-2xl" icon="solar:close-circle-bold" />
-              }
-              onPress={() => handleAnswerChange(question.id, false)}
-            >
-              <span className="text-lg font-semibold">No</span>
-            </Button>
-          </div>
+          <BooleanInput
+            compact={compact}
+            disabled={isViewMode}
+            value={value}
+            onChange={set}
+          />
         );
 
       case "text":
         return (
-          <Textarea
-            classNames={{
-              input: "text-base font-body",
-              inputWrapper: error
-                ? "border-2 border-danger"
-                : "border-2 border-default-200 hover:border-primary/50",
-            }}
-            errorMessage={error}
-            isInvalid={!!error}
-            isReadOnly={isViewMode}
-            minRows={3}
-            placeholder="Escribe tu respuesta..."
-            value={value || ""}
-            onValueChange={(v) => handleAnswerChange(question.id, v)}
+          <TextInput
+            compact={compact}
+            invalid={invalid}
+            label={question.label}
+            placeholder={
+              compact ? "Escribe aquí..." : "Escribe tu respuesta..."
+            }
+            readOnly={isViewMode}
+            value={value}
+            onChange={set}
           />
         );
 
-      case "photo": {
-        const photoUrl = value as string | undefined;
-        const isUploading = uploadingPhotos.has(question.id);
-
+      case "photo":
         return (
-          <div className="space-y-3">
-            {/* Hidden file input */}
-            <input
-              ref={(el) => {
-                fileInputRefs.current[question.id] = el;
-              }}
-              accept="image/*"
-              className="hidden"
-              type="file"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-
-                if (f) handlePhotoUpload(question.id, f);
-                e.target.value = ""; // Reset so same file can be re-selected
-              }}
+          <>
+            {fileInput(question.id)}
+            <PhotoTile
+              aspect={compact ? "aspect-[4/5]" : "aspect-[4/3]"}
+              compact={compact}
+              disabled={isViewMode}
+              invalid={invalid}
+              label={question.label}
+              uploading={uploadingPhotos.has(question.id)}
+              url={typeof value === "string" && value ? value : undefined}
+              onPick={() => triggerFileInput(question.id)}
             />
-
-            {/* Photo preview or upload area */}
-            {photoUrl ? (
-              <div className="relative rounded-xl overflow-hidden border-2 border-default-200">
-                <Image
-                  alt={question.label}
-                  className="w-full h-48 object-cover"
-                  height={192}
-                  src={photoUrl}
-                  width={384}
-                />
-                {!isViewMode && (
-                  <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-                    <Button
-                      className="text-white"
-                      size="sm"
-                      variant="flat"
-                      onPress={() => triggerFileInput(question.id)}
-                    >
-                      <Icon icon="solar:camera-bold" width={16} />
-                      Cambiar foto
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                className="w-full border-2 border-dashed border-default-300 rounded-xl p-8 text-center hover:border-primary/50 hover:bg-default-50 transition-all disabled:opacity-50"
-                disabled={isViewMode || isUploading}
-                type="button"
-                onClick={() => triggerFileInput(question.id)}
-              >
-                {isUploading ? (
-                  <>
-                    <Icon
-                      className="text-primary mx-auto mb-3 animate-spin"
-                      icon="solar:refresh-linear"
-                      width={40}
-                    />
-                    <p className="text-sm font-semibold text-foreground/60 font-body">
-                      Subiendo foto...
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Icon
-                      className="text-default-400 mx-auto mb-3"
-                      icon="solar:camera-bold"
-                      width={40}
-                    />
-                    <p className="text-sm font-semibold text-foreground font-body mb-1">
-                      Toca para tomar o subir una foto
-                    </p>
-                    <p className="text-xs text-foreground/60 font-body">
-                      PNG, JPG, WebP, HEIC o HEIF · Máx. 10MB
-                    </p>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        );
-      }
-
-      case "group":
-        return (
-          <div className="space-y-3">
-            {question.subQuestions
-              ?.filter((sq) => sq.enabled)
-              .map((sub) => {
-                if (!shouldShowQuestion(sub)) return null;
-                const subValue = answers[sub.id];
-                const subError = errors[sub.id];
-
-                return (
-                  <div
-                    key={sub.id}
-                    className="bg-default-50 border border-default-200 rounded-xl p-4"
-                  >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="bg-primary/10 p-1.5 rounded-lg flex-shrink-0">
-                        <Icon
-                          className="text-primary"
-                          icon={sub.icon}
-                          width={16}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground font-heading leading-relaxed break-words">
-                          {sub.label}
-                          {sub.required && !isViewMode && (
-                            <span className="text-danger ml-1">*</span>
-                          )}
-                        </p>
-                        {sub.fullQuestion && sub.fullQuestion !== sub.label && (
-                          <p className="text-xs text-foreground/60 font-body mt-0.5 break-words">
-                            {sub.fullQuestion}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Sub-question input */}
-                    {sub.type === "number" && (
-                      <Input
-                        classNames={{
-                          input: "text-base font-body",
-                          inputWrapper: subError
-                            ? "border-2 border-danger"
-                            : "border-2 border-default-200 hover:border-primary/50",
-                        }}
-                        endContent={
-                          sub.unit && (
-                            <span className="text-xs text-foreground/60 font-semibold">
-                              {sub.unit}
-                            </span>
-                          )
-                        }
-                        errorMessage={subError}
-                        isInvalid={!!subError}
-                        isReadOnly={isViewMode}
-                        placeholder="0"
-                        step="0.1"
-                        type="number"
-                        value={subValue?.toString() || ""}
-                        onValueChange={(v) =>
-                          handleAnswerChange(
-                            sub.id,
-                            v ? parseFloat(v) || v : ""
-                          )
-                        }
-                      />
-                    )}
-                    {sub.type === "text" && (
-                      <Textarea
-                        classNames={{
-                          input: "text-sm font-body",
-                          inputWrapper: subError
-                            ? "border-2 border-danger"
-                            : "border-2 border-default-200 hover:border-primary/50",
-                        }}
-                        errorMessage={subError}
-                        isInvalid={!!subError}
-                        isReadOnly={isViewMode}
-                        minRows={2}
-                        placeholder="Escribe aquí..."
-                        value={subValue || ""}
-                        onValueChange={(v) => handleAnswerChange(sub.id, v)}
-                      />
-                    )}
-                    {sub.type === "boolean" && (
-                      <div className="flex gap-2">
-                        <Button
-                          className={`flex-1 ${
-                            subValue === true
-                              ? "bg-success text-success-foreground"
-                              : "bg-default-100 text-foreground"
-                          }`}
-                          isDisabled={isViewMode}
-                          size="sm"
-                          onPress={() => handleAnswerChange(sub.id, true)}
-                        >
-                          Sí
-                        </Button>
-                        <Button
-                          className={`flex-1 ${
-                            subValue === false
-                              ? "bg-danger text-danger-foreground"
-                              : "bg-default-100 text-foreground"
-                          }`}
-                          isDisabled={isViewMode}
-                          size="sm"
-                          onPress={() => handleAnswerChange(sub.id, false)}
-                        >
-                          No
-                        </Button>
-                      </div>
-                    )}
-                    {sub.type === "rating" && (
-                      <div className="flex justify-center gap-1.5">
-                        {[1, 2, 3, 4, 5].map((r) => (
-                          <button
-                            key={r}
-                            className="p-1.5 rounded-lg hover:bg-default-100 transition-all"
-                            disabled={isViewMode}
-                            type="button"
-                            onClick={() => handleAnswerChange(sub.id, r)}
-                          >
-                            <Icon
-                              className={`text-xl ${
-                                subValue >= r
-                                  ? "text-warning"
-                                  : "text-default-300"
-                              }`}
-                              icon="solar:star-bold"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {sub.type === "choice" &&
-                      (() => {
-                        const subChoices = sub.choices ?? [];
-                        const subSelectedId =
-                          typeof subValue === "string" ? subValue : null;
-                        const subSelectedExists =
-                          subSelectedId !== null &&
-                          subChoices.some((c) => c.id === subSelectedId);
-
-                        return (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              {subChoices.map((choice) => {
-                                const isSelected = subSelectedId === choice.id;
-
-                                return (
-                                  <button
-                                    key={choice.id}
-                                    className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body ${
-                                      isSelected
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
-                                    } ${isViewMode ? "cursor-default" : ""}`}
-                                    disabled={isViewMode}
-                                    type="button"
-                                    onClick={() =>
-                                      handleAnswerChange(sub.id, choice.id)
-                                    }
-                                  >
-                                    {choice.icon && (
-                                      <Icon
-                                        className={`text-lg ${
-                                          isSelected
-                                            ? "text-primary-foreground"
-                                            : "text-primary"
-                                        }`}
-                                        icon={choice.icon}
-                                      />
-                                    )}
-                                    <span className="text-center leading-tight">
-                                      {choice.label}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {subSelectedId !== null && !subSelectedExists && (
-                              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-2 py-1.5">
-                                <Icon
-                                  icon="solar:info-circle-linear"
-                                  width={12}
-                                />
-                                <span>
-                                  Respuesta original:{" "}
-                                  <strong>opción eliminada</strong>
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    {sub.type === "multi_choice" &&
-                      (() => {
-                        const subChoices = sub.choices ?? [];
-                        const subSelectedIds: string[] = Array.isArray(subValue)
-                          ? subValue
-                          : [];
-                        const subMissingIds = subSelectedIds.filter(
-                          (id) => !subChoices.some((c) => c.id === id)
-                        );
-
-                        return (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              {subChoices.map((choice) => {
-                                const isSelected = subSelectedIds.includes(
-                                  choice.id
-                                );
-
-                                return (
-                                  <button
-                                    key={choice.id}
-                                    className={`min-h-12 rounded-lg border-2 px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-semibold font-body relative ${
-                                      isSelected
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
-                                    } ${isViewMode ? "cursor-default" : ""}`}
-                                    disabled={isViewMode}
-                                    type="button"
-                                    onClick={() => {
-                                      if (isViewMode) return;
-                                      const next = isSelected
-                                        ? subSelectedIds.filter(
-                                            (id) => id !== choice.id
-                                          )
-                                        : [...subSelectedIds, choice.id];
-
-                                      handleAnswerChange(sub.id, next);
-                                    }}
-                                  >
-                                    {isSelected && (
-                                      <Icon
-                                        className="absolute top-0.5 right-0.5 text-primary-foreground"
-                                        icon="solar:check-circle-bold"
-                                        width={12}
-                                      />
-                                    )}
-                                    {choice.icon && (
-                                      <Icon
-                                        className={`text-lg ${
-                                          isSelected
-                                            ? "text-primary-foreground"
-                                            : "text-primary"
-                                        }`}
-                                        icon={choice.icon}
-                                      />
-                                    )}
-                                    <span className="text-center leading-tight">
-                                      {choice.label}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {subMissingIds.length > 0 && (
-                              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-2 py-1.5">
-                                <Icon
-                                  icon="solar:info-circle-linear"
-                                  width={12}
-                                />
-                                <span>
-                                  {subMissingIds.length === 1
-                                    ? "1 opción previamente seleccionada fue eliminada"
-                                    : `${subMissingIds.length} opciones previamente seleccionadas fueron eliminadas`}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    {sub.type === "photo" &&
-                      (() => {
-                        const subPhotoUrl = subValue as string | undefined;
-                        const subIsUploading = uploadingPhotos.has(sub.id);
-
-                        return (
-                          <div className="space-y-2">
-                            <input
-                              ref={(el) => {
-                                fileInputRefs.current[sub.id] = el;
-                              }}
-                              accept="image/*"
-                              className="hidden"
-                              type="file"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-
-                                if (f) handlePhotoUpload(sub.id, f);
-                                e.target.value = "";
-                              }}
-                            />
-                            {subPhotoUrl ? (
-                              <div className="relative rounded-lg overflow-hidden border border-default-200">
-                                <Image
-                                  alt={sub.label}
-                                  className="w-full h-32 object-cover"
-                                  height={128}
-                                  src={subPhotoUrl}
-                                  width={384}
-                                />
-                                {!isViewMode && (
-                                  <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-                                    <Button
-                                      className="text-white"
-                                      size="sm"
-                                      variant="flat"
-                                      onPress={() => triggerFileInput(sub.id)}
-                                    >
-                                      <Icon
-                                        icon="solar:camera-bold"
-                                        width={14}
-                                      />
-                                      Cambiar
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <button
-                                className="w-full border-2 border-dashed border-default-300 rounded-lg p-4 text-center hover:border-primary/50 hover:bg-default-50 transition-all disabled:opacity-50"
-                                disabled={isViewMode || subIsUploading}
-                                type="button"
-                                onClick={() => triggerFileInput(sub.id)}
-                              >
-                                {subIsUploading ? (
-                                  <Icon
-                                    className="text-primary mx-auto animate-spin"
-                                    icon="solar:refresh-linear"
-                                    width={24}
-                                  />
-                                ) : (
-                                  <>
-                                    <Icon
-                                      className="text-default-400 mx-auto mb-1"
-                                      icon="solar:camera-bold"
-                                      width={28}
-                                    />
-                                    <p className="text-xs text-foreground/60 font-body">
-                                      Tomar o subir foto
-                                    </p>
-                                  </>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                    {subError && (
-                      <p className="text-sm text-danger flex items-center gap-1 mt-1">
-                        <Icon
-                          className="text-base"
-                          icon="solar:info-circle-bold"
-                        />
-                        {subError}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
+          </>
         );
 
       case "choice": {
@@ -1461,47 +1020,18 @@ export function DynamicFormModal({
 
         return (
           <div className="space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {choices.map((choice) => {
-                const isSelected = selectedId === choice.id;
-
-                return (
-                  <button
-                    key={choice.id}
-                    className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body ${
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
-                    } ${isViewMode ? "cursor-default" : ""}`}
-                    disabled={isViewMode}
-                    type="button"
-                    onClick={() => handleAnswerChange(question.id, choice.id)}
-                  >
-                    {choice.icon && (
-                      <Icon
-                        className={`text-xl ${
-                          isSelected
-                            ? "text-primary-foreground"
-                            : "text-primary"
-                        }`}
-                        icon={choice.icon}
-                      />
-                    )}
-                    <span className="text-center leading-tight">
-                      {choice.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <ChoiceTiles
+              choices={choices}
+              disabled={isViewMode}
+              isSelected={(id) => selectedId === id}
+              multi={false}
+              onToggle={set}
+            />
             {/* Historic fallback: stored id no longer exists in choices. */}
             {selectedId !== null && !selectedExists && (
-              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-3 py-2">
-                <Icon icon="solar:info-circle-linear" width={14} />
-                <span>
-                  Respuesta original: <strong>opción eliminada</strong>
-                </span>
-              </div>
+              <FieldHint>
+                Respuesta original: <strong>opción eliminada</strong>
+              </FieldHint>
             )}
           </div>
         );
@@ -1516,62 +1046,26 @@ export function DynamicFormModal({
 
         return (
           <div className="space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {choices.map((choice) => {
-                const isSelected = selectedIds.includes(choice.id);
-
-                return (
-                  <button
-                    key={choice.id}
-                    className={`min-h-14 rounded-xl border-2 px-3 py-2 flex flex-col items-center justify-center gap-1 transition-all text-sm font-semibold font-body relative ${
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-default-200 bg-background text-foreground hover:border-primary/50"
-                    } ${isViewMode ? "cursor-default" : ""}`}
-                    disabled={isViewMode}
-                    type="button"
-                    onClick={() => {
-                      if (isViewMode) return;
-                      const next = isSelected
-                        ? selectedIds.filter((id) => id !== choice.id)
-                        : [...selectedIds, choice.id];
-
-                      handleAnswerChange(question.id, next);
-                    }}
-                  >
-                    {isSelected && (
-                      <Icon
-                        className="absolute top-1 right-1 text-primary-foreground"
-                        icon="solar:check-circle-bold"
-                        width={14}
-                      />
-                    )}
-                    {choice.icon && (
-                      <Icon
-                        className={`text-xl ${
-                          isSelected
-                            ? "text-primary-foreground"
-                            : "text-primary"
-                        }`}
-                        icon={choice.icon}
-                      />
-                    )}
-                    <span className="text-center leading-tight">
-                      {choice.label}
-                    </span>
-                  </button>
+            <ChoiceTiles
+              multi
+              choices={choices}
+              disabled={isViewMode}
+              isSelected={(id) => selectedIds.includes(id)}
+              onToggle={(id) => {
+                if (isViewMode) return;
+                set(
+                  selectedIds.includes(id)
+                    ? selectedIds.filter((x) => x !== id)
+                    : [...selectedIds, id]
                 );
-              })}
-            </div>
+              }}
+            />
             {missingIds.length > 0 && (
-              <div className="flex items-center gap-2 text-xs text-foreground/60 bg-default-100 rounded-lg px-3 py-2">
-                <Icon icon="solar:info-circle-linear" width={14} />
-                <span>
-                  {missingIds.length === 1
-                    ? "1 opción previamente seleccionada fue eliminada"
-                    : `${missingIds.length} opciones previamente seleccionadas fueron eliminadas`}
-                </span>
-              </div>
+              <FieldHint>
+                {missingIds.length === 1
+                  ? "1 opción previamente seleccionada fue eliminada"
+                  : `${missingIds.length} opciones previamente seleccionadas fueron eliminadas`}
+              </FieldHint>
             )}
           </div>
         );
@@ -1579,284 +1073,521 @@ export function DynamicFormModal({
 
       default:
         return (
-          <p className="text-sm text-foreground/60 font-body">
+          <p className="text-sm text-default-500">
             Tipo de pregunta no soportado
           </p>
         );
     }
   };
 
-  // ── Main render ───────────────────────────────────────────────────
+  const requiredMark = (q: QuestionConfig) =>
+    q.required && !isViewMode ? <span className="text-danger"> *</span> : null;
+
+  /**
+   * Grupo: números consecutivos en filas compactas (Medidas), fotos
+   * consecutivas en una rejilla de 2, el resto como mini-bloques con su
+   * etiqueta. Se respeta el orden del trainer.
+   */
+  const renderGroup = (question: QuestionConfig) => {
+    const subs = (question.subQuestions ?? []).filter(
+      (sq) => sq.enabled && shouldShowQuestion(sq)
+    );
+    const runs: Array<{ kind: string; items: QuestionConfig[] }> = [];
+
+    for (const sq of subs) {
+      const kind =
+        sq.type === "number" || sq.type === "photo" ? sq.type : sq.id;
+      const last = runs[runs.length - 1];
+
+      if (last && last.kind === kind) last.items.push(sq);
+      else runs.push({ kind, items: [sq] });
+    }
+
+    return (
+      <div className="space-y-3">
+        {runs.map(({ kind, items }) => {
+          const key = items[0]?.id ?? kind;
+
+          if (kind === "number") {
+            return (
+              <div
+                key={key}
+                className="divide-y divide-default-200 overflow-hidden rounded-xl bg-default-100"
+              >
+                {items.map((sq) => (
+                  <NumberRow
+                    key={sq.id}
+                    integer={isStepsQuestion(sq)}
+                    invalid={Boolean(errors[sq.id])}
+                    label={sq.label}
+                    readOnly={isViewMode}
+                    required={sq.required}
+                    sublabel={
+                      sq.fullQuestion && sq.fullQuestion !== sq.label
+                        ? sq.fullQuestion
+                        : undefined
+                    }
+                    unit={sq.unit}
+                    value={answers[sq.id]}
+                    onChange={(v) => handleAnswerChange(sq.id, v)}
+                  />
+                ))}
+              </div>
+            );
+          }
+
+          if (kind === "photo") {
+            return (
+              <div key={key} className="grid grid-cols-2 gap-2.5">
+                {items.map((sq) => (
+                  <div key={sq.id} className="flex flex-col gap-1.5">
+                    {renderInput(sq, true)}
+                    <span
+                      className={`text-center text-[13px] font-semibold ${errors[sq.id] ? "text-danger" : "text-default-500"}`}
+                    >
+                      {sq.label}
+                      {requiredMark(sq)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+
+          return items.map((sq) => (
+            <div key={sq.id} className="space-y-2">
+              <div>
+                <p
+                  className={`break-words text-[15px] font-semibold ${errors[sq.id] ? "text-danger" : "text-foreground"}`}
+                >
+                  {sq.label}
+                  {requiredMark(sq)}
+                </p>
+                {sq.fullQuestion && sq.fullQuestion !== sq.label && (
+                  <p className="break-words text-[13px] text-default-500">
+                    {sq.fullQuestion}
+                  </p>
+                )}
+              </div>
+              {renderInput(sq, true)}
+            </div>
+          ));
+        })}
+      </div>
+    );
+  };
+
+  const renderQuestionCard = (question: QuestionConfig) => {
+    const isGroup = question.type === "group";
+    const enabledSubs = (question.subQuestions ?? []).filter(
+      (sq) => sq.enabled
+    );
+    const ownError = errors[question.id];
+    // En grupos los errores van por subpregunta; se muestran una sola vez
+    // al pie de la tarjeta y la fila/foto afectada se marca en rojo.
+    const messages = isGroup
+      ? [
+          ...new Set(
+            enabledSubs.flatMap((sq) => {
+              const m = errors[sq.id];
+
+              return m ? [m] : [];
+            })
+          ),
+        ]
+      : ownError
+        ? [ownError]
+        : [];
+    const invalid = messages.length > 0;
+
+    return (
+      <div
+        className={`flex flex-col gap-3.5 rounded-large bg-content1 p-4 shadow-small ${
+          invalid ? "outline outline-[1.5px] outline-danger" : ""
+        }`}
+        data-invalid={invalid || undefined}
+      >
+        <div className="flex items-start gap-3">
+          <IconTile icon={question.icon} size="sm" />
+          <div className="min-w-0 flex-1 pt-1.5">
+            <h3 className="break-words text-base font-semibold leading-snug text-foreground">
+              {question.label}
+              {requiredMark(question)}
+            </h3>
+            {question.fullQuestion &&
+              question.fullQuestion !== question.label && (
+                <p className="mt-0.5 break-words text-sm leading-snug text-default-500">
+                  {question.fullQuestion}
+                </p>
+              )}
+            {!isViewMode && isGroup && (
+              <p className="mt-0.5 text-sm text-default-500">
+                {enabledSubs.length} campos a completar
+              </p>
+            )}
+          </div>
+        </div>
+        {isGroup ? renderGroup(question) : renderInput(question, false)}
+        <FieldError messages={messages} />
+      </div>
+    );
+  };
+
+  // Enter en un campo de una línea pasa al siguiente; en el último avanza
+  // de paso (o envía), como el botón principal.
+  const handleFieldEnter = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const t = e.target;
+
+    if (
+      e.key !== "Enter" ||
+      e.nativeEvent.isComposing ||
+      !(t instanceof HTMLInputElement) ||
+      !t.hasAttribute(FIELD_ATTR)
+    ) {
+      return;
+    }
+    e.preventDefault();
+    const page = t.closest("[data-form-page]");
+    const fields = Array.from(
+      page?.querySelectorAll<HTMLElement>(`[${FIELD_ATTR}]`) ?? []
+    );
+    const next = fields[fields.indexOf(t) + 1];
+
+    if (next) {
+      next.focus();
+
+      return;
+    }
+    t.blur();
+    if (!isSubmitting && uploadingPhotos.size === 0) handleNext();
+  };
+
+  const formName =
+    formType === "checkins"
+      ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
+      : "Registro diario";
+  const dateFor = (ymd: string) =>
+    new Date(`${ymd}T12:00:00`).toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "long",
+    });
+  const dateLabel = targetDate
+    ? dateFor(targetDate)
+    : formType === "habits"
+      ? dateFor(getLocalTodayYmd())
+      : "";
+  const dialogLabel = targetDate
+    ? `${formType === "checkins" ? formName : "Registro"} del ${dateLabel}`
+    : formName;
+  const showSteps = !isLoading && !configError && !isViewMode;
+  const isLastStep = currentStep >= totalSteps - 1;
+  const busy = isSubmitting || uploadingPhotos.size > 0;
+  const primaryLabel =
+    uploadingPhotos.size > 0
+      ? isLastStep
+        ? "Espera, subiendo fotos..."
+        : "Subiendo fotos..."
+      : !isLastStep
+        ? "Siguiente"
+        : isSubmitting
+          ? isEditingExisting
+            ? "Actualizando..."
+            : "Enviando..."
+          : isEditingExisting
+            ? "Actualizar"
+            : "Enviar";
+
   return (
-    <Modal
+    <ClientSheet
+      hideCloseButton
       classNames={{
-        base: "max-h-[100vh] m-0",
-        wrapper: "items-end sm:items-center",
-        backdrop: "bg-black/80",
+        base: "h-[94dvh] max-h-[94dvh]! bg-background sm:h-[min(880px,90dvh)] sm:max-h-[90dvh]!",
       }}
-      hideCloseButton={isSubmitting}
       isDismissable={!isSubmitting}
       isOpen={isOpen}
-      scrollBehavior="inside"
-      size="full"
+      size="xl"
       onClose={onClose}
     >
-      <ModalContent>
+      <ModalContent aria-label={dialogLabel}>
         {(onModalClose) => (
-          <>
-            <ModalHeader className="flex flex-col gap-1 border-b border-default-200">
-              <div className="flex items-center gap-3">
-                <IconTile
-                  icon={
-                    currentSection.icon ||
-                    (formType === "checkins"
-                      ? "solar:clipboard-check-bold"
-                      : "solar:calendar-mark-bold")
-                  }
-                  size="lg"
-                />
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold font-heading text-foreground">
-                    {isViewMode
-                      ? formType === "checkins"
-                        ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
-                        : "Registro Diario"
-                      : targetDate
-                        ? `${formType === "checkins" ? (effectiveCheckinSchedule?.custom_name ?? "Check-in") : "Registro"} del ${new Date(targetDate + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`
-                        : currentSection.title || "Formulario"}
-                    {isViewMode && <span className="text-success"> ✓</span>}
-                  </h2>
-                  <p className="text-sm text-foreground/60 font-normal font-body">
-                    {isViewMode
-                      ? `Enviado el ${new Date(existingResponseDate).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}`
-                      : isEditingExisting
-                        ? "Editando registro enviado"
-                        : `Paso ${currentStep + 1} de ${totalSteps}`}
-                  </p>
-                </div>
-              </div>
+          <MotionConfig reducedMotion="user">
+            {/* Mientras se envía no se puede cerrar (el padre espera a
+                onSuccess antes de cerrar): sin asa arrastrable. */}
+            {isSubmitting ? (
+              <div aria-hidden className="h-6 shrink-0 sm:hidden" />
+            ) : (
+              <ClientSheetGrabber onClose={onModalClose} />
+            )}
 
-              {/* Progress bar */}
-              {totalSteps > 1 && !isViewMode && (
-                <div className="w-full h-1.5 bg-default-100 rounded-full overflow-hidden mt-4">
-                  <div
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
+            {/* Barra superior: Cancelar · nombre + fecha · Guardado */}
+            <div className="shrink-0 px-2 pb-3 sm:pt-3">
+              <div className="grid min-h-11 grid-cols-[1fr_auto_1fr] items-center">
+                <button
+                  className="min-h-11 justify-self-start px-2 text-[17px] text-primary transition-opacity active:opacity-60 disabled:opacity-40"
+                  disabled={isSubmitting}
+                  type="button"
+                  onClick={onModalClose}
+                >
+                  Cancelar
+                </button>
+                <div className="min-w-0 max-w-[200px] text-center">
+                  <p className="truncate text-base font-semibold text-foreground">
+                    {formName}
+                  </p>
+                  {dateLabel && (
+                    <p className="mt-px text-xs text-default-500">
+                      {dateLabel}
+                    </p>
+                  )}
+                </div>
+                <span
+                  aria-hidden={!hasLocalDraft || isEditingExisting}
+                  className={`inline-flex items-center gap-1 justify-self-end pr-2 text-xs font-semibold text-default-500 transition-opacity duration-300 ${
+                    hasLocalDraft && !isEditingExisting
+                      ? "opacity-100"
+                      : "opacity-0"
+                  }`}
+                >
+                  <Icon icon="solar:cloud-check-linear" width={18} />
+                  Guardado
+                </span>
+              </div>
+              {showSteps && totalSteps > 1 && (
+                <div
+                  aria-label="Progreso"
+                  aria-valuemax={totalSteps}
+                  aria-valuemin={1}
+                  aria-valuenow={currentStep + 1}
+                  className="flex gap-1 px-2 pt-2.5"
+                  role="progressbar"
+                >
+                  {sections.map((s, i) => (
+                    <span
+                      key={`${s.title}-${i}`}
+                      className={`h-1 flex-1 rounded-sm transition-colors duration-300 ${
+                        i <= currentStep ? "bg-primary" : "bg-default-200"
+                      }`}
+                    />
+                  ))}
                 </div>
               )}
-            </ModalHeader>
+            </div>
 
-            <ModalBody className="py-6">
+            <div
+              ref={bodyRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-7"
+            >
               {isLoading ? (
-                <div className="flex justify-center items-center p-12">
-                  <div className="text-center">
-                    <Icon
-                      className="text-primary text-4xl animate-spin mx-auto mb-3"
-                      icon="solar:refresh-linear"
-                      width={48}
-                    />
-                    <p className="text-sm text-foreground/60 font-body">
-                      Cargando formulario...
-                    </p>
+                <div
+                  aria-busy
+                  className="flex flex-col items-center gap-3 pt-14"
+                >
+                  <Icon
+                    className="animate-spin text-default-400 motion-reduce:animate-none"
+                    icon="solar:refresh-linear"
+                    width={30}
+                  />
+                  <p className="text-[15px] text-default-500">
+                    Cargando formulario...
+                  </p>
+                  <div className="mt-6 w-full space-y-3">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="h-[120px] animate-pulse rounded-large bg-content1 shadow-small motion-reduce:animate-none"
+                      />
+                    ))}
                   </div>
                 </div>
               ) : configError ? (
-                <div className="flex flex-col items-center justify-center p-8 text-center">
-                  <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mb-4">
-                    <Icon
-                      className="text-warning text-3xl"
-                      icon="solar:info-circle-bold"
-                    />
-                  </div>
-                  <p className="text-sm text-foreground/60 font-body max-w-xs">
+                <div className="flex flex-col items-center gap-3 px-2 pt-14 text-center">
+                  <IconTile
+                    icon="solar:clipboard-remove-linear"
+                    size="lg"
+                    tone="warning"
+                  />
+                  <p className="max-w-[280px] text-[15px] leading-relaxed text-default-500">
                     {configError}
                   </p>
                 </div>
+              ) : isViewMode ? (
+                <div className="space-y-3 pt-1.5">
+                  {visibleQuestions.map((q) => (
+                    <div key={q.id}>{renderQuestionCard(q)}</div>
+                  ))}
+                </div>
               ) : (
-                <div className="max-w-2xl mx-auto w-full space-y-6">
-                  {(isViewMode
-                    ? visibleQuestions
-                    : currentSection.questions
-                  ).map((question) => {
-                    if (!shouldShowQuestion(question)) return null;
+                // Enter burbujea desde los inputs del paso (ver handleFieldEnter).
+                // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+                <div
+                  className="relative overflow-x-clip"
+                  onKeyDown={handleFieldEnter}
+                >
+                  <AnimatePresence
+                    custom={direction}
+                    initial={false}
+                    mode="popLayout"
+                  >
+                    <motion.div
+                      key={currentStep}
+                      animate="center"
+                      custom={direction}
+                      data-form-page={currentStep}
+                      exit="exit"
+                      initial="enter"
+                      transition={{
+                        x: { duration: 0.42, ease: EASE },
+                        opacity: { duration: 0.28, ease: "easeOut" },
+                      }}
+                      variants={PAGE_VARIANTS}
+                    >
+                      <header className="mb-1 mt-1.5 flex items-center gap-3">
+                        <IconTile
+                          icon={
+                            currentSection.icon ||
+                            (formType === "checkins"
+                              ? "solar:clipboard-check-linear"
+                              : "solar:calendar-mark-linear")
+                          }
+                        />
+                        <div className="min-w-0">
+                          <h2 className="break-words font-heading text-[26px] leading-tight tracking-[-0.02em] text-foreground">
+                            {currentSection.title || formName}
+                          </h2>
+                          {(totalSteps > 1 || isEditingExisting) && (
+                            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-default-500">
+                              {totalSteps > 1 && (
+                                <span>
+                                  Paso {currentStep + 1} de {totalSteps}
+                                </span>
+                              )}
+                              {isEditingExisting && (
+                                <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+                                  <Icon icon="solar:pen-2-linear" width={14} />
+                                  Editando registro enviado
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </header>
 
-                    return (
-                      <Card key={question.id} shadow="sm">
-                        <CardBody className="p-6">
-                          <div className="flex items-start gap-4 mb-4">
-                            <IconTile icon={question.icon} size="lg" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start gap-2 mb-1">
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="text-base font-bold text-foreground font-heading leading-relaxed break-words">
-                                    {question.label}
-                                    {question.required && !isViewMode && (
-                                      <span className="text-danger ml-1">
-                                        *
-                                      </span>
-                                    )}
-                                  </h3>
-                                  {question.fullQuestion &&
-                                    question.fullQuestion !==
-                                      question.label && (
-                                      <p className="text-xs text-foreground/60 font-body mt-0.5 break-words">
-                                        {question.fullQuestion}
-                                      </p>
-                                    )}
-                                </div>
+                      <AnimatePresence initial={false}>
+                        {currentSection.questions.map((question) =>
+                          question.conditionalOn ? (
+                            // Pregunta condicional: crece en su sitio al
+                            // cumplirse la condición.
+                            <motion.div
+                              key={question.id}
+                              animate={{
+                                height: "auto",
+                                opacity: 1,
+                                transitionEnd: { overflow: "visible" },
+                              }}
+                              exit={{
+                                height: 0,
+                                opacity: 0,
+                                overflow: "hidden",
+                              }}
+                              initial={{
+                                height: 0,
+                                opacity: 0,
+                                overflow: "hidden",
+                              }}
+                              transition={{ duration: 0.36, ease: EASE }}
+                            >
+                              <div className="pt-3">
+                                {renderQuestionCard(question)}
                               </div>
-                              {!isViewMode &&
-                                question.type !== "group" &&
-                                (question.type === "rating" ||
-                                  question.type === "number" ||
-                                  question.type === "boolean") && (
-                                  <p className="text-xs text-foreground/60 font-body">
-                                    {question.type === "rating" &&
-                                      "Califica del 1 al 5"}
-                                    {question.type === "number" &&
-                                      `Ingresa el valor${question.unit ? ` en ${question.unit}` : ""}`}
-                                    {question.type === "boolean" &&
-                                      "Selecciona una opción"}
-                                  </p>
-                                )}
-                              {!isViewMode && question.type === "group" && (
-                                <p className="text-xs text-foreground/60 font-body">
-                                  {question.subQuestions?.filter(
-                                    (sq) => sq.enabled
-                                  ).length || 0}{" "}
-                                  campos a completar
-                                </p>
-                              )}
+                            </motion.div>
+                          ) : (
+                            <div key={question.id} className="pt-3">
+                              {renderQuestionCard(question)}
                             </div>
-                          </div>
+                          )
+                        )}
+                      </AnimatePresence>
 
-                          <div className="space-y-2">
-                            {renderQuestionInput(question)}
-
-                            {/* number/text ya pintan el error como
-                                errorMessage del propio input. */}
-                            {errors[question.id] &&
-                              question.type !== "number" &&
-                              question.type !== "text" && (
-                                <p className="text-sm text-danger flex items-center gap-1 mt-1">
-                                  <Icon
-                                    className="text-base"
-                                    icon="solar:info-circle-bold"
-                                  />
-                                  {errors[question.id]}
-                                </p>
-                              )}
-                          </div>
-                        </CardBody>
-                      </Card>
-                    );
-                  })}
-
-                  {currentSection.questions.length === 0 && !isViewMode && (
-                    <div className="text-center p-6">
-                      <Icon
-                        className="text-success text-5xl mx-auto mb-3"
-                        icon="solar:check-circle-bold"
-                        width={64}
-                      />
-                      <p className="text-foreground/60 font-body">
-                        ¡Todas las preguntas contestadas!
-                      </p>
-                    </div>
-                  )}
+                      {currentSection.questions.length === 0 && (
+                        <div className="mt-3 flex flex-col items-center gap-2.5 rounded-large bg-content1 px-5 py-7 text-center shadow-small">
+                          <IconTile
+                            className="rounded-full"
+                            icon="solar:check-circle-linear"
+                            tone="success"
+                          />
+                          <p className="text-[17px] font-semibold text-foreground">
+                            ¡Todas las preguntas contestadas!
+                          </p>
+                        </div>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               )}
-            </ModalBody>
+            </div>
 
-            <ModalFooter className="border-t border-default-200 flex-col gap-2">
-              {!isViewMode && submitError && (
-                <div className="w-full rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger flex items-start gap-2">
+            <ModalFooter className="flex-col gap-3 bg-background px-4 pb-4 pt-3 shadow-[0_-1px_0_hsl(var(--heroui-default-200))]">
+              {showSteps && submitError && (
+                <div
+                  className="flex w-full items-start gap-2.5 rounded-xl bg-danger/10 px-3.5 py-3 text-sm leading-snug text-foreground"
+                  role="alert"
+                >
                   <Icon
-                    className="text-base mt-0.5 shrink-0"
-                    icon="solar:danger-triangle-bold"
+                    className="mt-px shrink-0 text-danger"
+                    icon="solar:danger-triangle-linear"
+                    width={20}
                   />
                   <span>{submitError}</span>
                 </div>
               )}
-              {isViewMode ? (
-                <div className="flex justify-end w-full">
-                  <Button color="primary" onPress={onModalClose}>
-                    Cerrar
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-3 w-full">
+              {showSteps ? (
+                <div className="flex w-full gap-2.5">
                   {currentStep > 0 && (
                     <Button
-                      className="flex-1"
+                      className="h-[52px] min-w-32 shrink-0 bg-default-100 text-base font-semibold text-foreground"
                       isDisabled={isSubmitting}
-                      size="lg"
-                      startContent={
-                        <Icon
-                          className="text-xl"
-                          icon="solar:alt-arrow-left-bold"
-                        />
-                      }
-                      variant="bordered"
+                      radius="lg"
                       onPress={handleBack}
                     >
                       Anterior
                     </Button>
                   )}
-                  {currentStep < totalSteps - 1 ? (
-                    <Button
-                      className="flex-1"
-                      color="primary"
-                      endContent={
-                        <Icon
-                          className="text-xl"
-                          icon="solar:alt-arrow-right-bold"
-                        />
-                      }
-                      isDisabled={isSubmitting || uploadingPhotos.size > 0}
-                      size="lg"
-                      onPress={handleNext}
-                    >
-                      {uploadingPhotos.size > 0
-                        ? "Subiendo fotos..."
-                        : "Siguiente"}
-                    </Button>
-                  ) : (
-                    <Button
-                      className="flex-1"
-                      color="primary"
-                      endContent={
-                        !isSubmitting &&
-                        uploadingPhotos.size === 0 && (
-                          <Icon
-                            className="text-xl"
-                            icon="solar:check-circle-bold"
-                          />
-                        )
-                      }
-                      isDisabled={isSubmitting || uploadingPhotos.size > 0}
-                      isLoading={isSubmitting}
-                      size="lg"
-                      onPress={handleNext}
-                    >
-                      {uploadingPhotos.size > 0
-                        ? "Espera, subiendo fotos..."
-                        : isSubmitting
-                          ? isEditingExisting
-                            ? "Actualizando..."
-                            : "Enviando..."
-                          : isEditingExisting
-                            ? "Actualizar"
-                            : "Enviar"}
-                    </Button>
-                  )}
+                  <Button
+                    className="h-[52px] flex-1 text-base font-semibold"
+                    color="primary"
+                    isDisabled={busy}
+                    isLoading={isSubmitting}
+                    radius="lg"
+                    onPress={handleNext}
+                  >
+                    {primaryLabel}
+                  </Button>
                 </div>
+              ) : (
+                <Button
+                  fullWidth
+                  className="h-[52px] bg-default-100 text-base font-semibold text-foreground"
+                  radius="lg"
+                  onPress={onModalClose}
+                >
+                  Cerrar
+                </Button>
               )}
             </ModalFooter>
-          </>
+          </MotionConfig>
         )}
       </ModalContent>
-    </Modal>
+    </ClientSheet>
   );
 }
+
+const EASE = [0.32, 0.72, 0, 1] as const;
+
+// Adelante: la página nueva entra por la derecha y la vieja sale por la
+// izquierda; atrás, al revés. MotionConfig reducedMotion="user" deja solo
+// el fundido.
+const PAGE_VARIANTS = {
+  enter: (dir: 1 | -1) => ({ x: `${dir * 40}%`, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir: 1 | -1) => ({ x: `${dir * -30}%`, opacity: 0 }),
+};
