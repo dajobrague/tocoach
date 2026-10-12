@@ -2,7 +2,8 @@
 
 import { Badge, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { type ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { ChatPanel } from "./chat-panel";
 import { useClientData } from "./client-data-provider";
@@ -13,35 +14,61 @@ import { clientFetch } from "@/lib/auth/client-token-storage";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 
 interface ClientHeaderProps {
-  /** Título de la pestaña: barra compacta. Sin título: banda de marca (Inicio). */
+  /** Título de la pantalla. Con `collapsing`, se muestra pequeño solo al hacer scroll. */
   title?: string | undefined;
   /**
-   * Solo Inicio: contenido que prolonga la banda de marca hacia abajo (p. ej.
-   * el check-in pendiente). La fila del saludo sigue fija; la extensión hace
-   * scroll por debajo y, al ser del mismo color, se lee como una sola pieza.
+   * La página pinta su propio título grande debajo (ClientPage): la barra
+   * empieza transparente y muestra el título pequeño cuando el grande sale
+   * de pantalla. Sin `collapsing` (p. ej. Comunidad) la barra es sólida y el
+   * título siempre visible.
    */
-  heroExtension?: ReactNode;
+  collapsing?: boolean;
+  /** Pantallas a las que se llega desde "Más": botón Atrás en lugar del logo. */
+  showBack?: boolean;
   onOpenWeeklyForm?: () => void;
   onOpenDailyForm?: () => void;
 }
 
+/** true cuando el scroll de la ventana pasa `threshold` px. */
+function useScrolledPast(threshold: number): boolean {
+  const [past, setPast] = useState(false);
+
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      setPast(window.scrollY > threshold);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [threshold]);
+
+  return past;
+}
+
 /**
- * Marco superior del portal de cliente. Dos formas, una sola pieza:
- * - Inicio (sin `title`): la misma barra de una fila, rellena con el color
- *   del entrenador — el único sitio donde la marca llena una región.
- *   Saludo + fecha de hoy junto al logo.
- * - Resto de pestañas: barra neutra con logo, título y acciones.
- * El foreground sobre la marca es `primary-foreground` (calculado por
- * contraste en render-css), nunca blanco fijo.
+ * Barra superior del portal (estilo iOS): logo del entrenador a la izquierda,
+ * chat y avisos a la derecha. En modo `collapsing` es transparente sobre el
+ * título grande de la página y se vuelve material translúcido con el título
+ * pequeño al hacer scroll. Nunca rellena una región con la marca.
  */
 export function ClientHeader({
   title,
-  heroExtension,
+  collapsing = false,
+  showBack = false,
   onOpenWeeklyForm,
   onOpenDailyForm,
 }: ClientHeaderProps) {
-  const { firstName, logoUrl, trainerName, clientId, tenantSlug } =
-    useClientData();
+  const { logoUrl, trainerName, clientId, tenantSlug } = useClientData();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -110,25 +137,33 @@ export function ClientHeader({
     loadUnreadCount();
   };
 
-  const isHero = !title;
-  const actionTone = isHero ? "text-primary-foreground" : "text-default-600";
+  const router = useRouter();
+  const scrolledPast = useScrolledPast(44);
+  const solid = !collapsing || scrolledPast;
 
-  const logo = (
-    <div
-      className={
-        isHero
-          ? "flex h-10 min-w-10 shrink-0 items-center justify-center rounded-medium bg-content1 px-1"
-          : "flex h-9 min-w-9 shrink-0 items-center justify-center"
+  const leading = showBack ? (
+    <button
+      className="-ml-2 flex h-11 items-center gap-0.5 justify-self-start rounded-medium pr-2 text-base font-medium text-primary active:opacity-60"
+      type="button"
+      onClick={() =>
+        window.history.length > 1
+          ? router.back()
+          : router.push(`/${tenantSlug}/dashboard`)
       }
     >
+      <Icon className="text-2xl" icon="solar:alt-arrow-left-linear" />
+      Atrás
+    </button>
+  ) : (
+    <div className="flex h-9 min-w-9 shrink-0 items-center justify-center justify-self-start rounded-medium bg-content1 px-1.5 shadow-small">
       {logoUrl ? (
         <TenantLogo
           priority
           alt={trainerName}
-          className="h-8 w-auto object-contain"
-          height={32}
+          className="h-6 w-auto object-contain"
+          height={24}
           src={logoUrl}
-          width={80}
+          width={72}
         />
       ) : (
         <Icon className="text-primary text-xl" icon="solar:dumbbell-bold" />
@@ -137,7 +172,7 @@ export function ClientHeader({
   );
 
   const actions = (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 items-center justify-self-end">
       <Badge
         color="danger"
         content={totalUnread}
@@ -150,7 +185,8 @@ export function ClientHeader({
           aria-label={
             totalUnread > 0 ? `Mensajes (${totalUnread} sin leer)` : "Mensajes"
           }
-          className={actionTone}
+          className="text-foreground"
+          radius="full"
           variant="light"
           onPress={() => setIsChatOpen(true)}
         >
@@ -161,7 +197,7 @@ export function ClientHeader({
         clientId={clientId}
         isChatOpen={isChatOpen}
         tenantSlug={tenantSlug}
-        triggerClassName={actionTone}
+        triggerClassName="text-foreground"
         onOpenChat={() => setIsChatOpen(true)}
         {...(onOpenWeeklyForm ? { onOpenWeeklyForm } : {})}
         {...(onOpenDailyForm ? { onOpenDailyForm } : {})}
@@ -171,41 +207,26 @@ export function ClientHeader({
 
   return (
     <>
-      {isHero ? (
-        <>
-          <header
-            className={`sticky top-0 z-30 bg-primary pt-[env(safe-area-inset-top)] text-primary-foreground ${heroExtension ? "" : "mb-4"}`}
+      <header
+        className={`sticky top-0 z-30 pt-[env(safe-area-inset-top)] transition-[background-color,box-shadow] duration-200 ${
+          solid
+            ? "bg-background/80 shadow-[0_1px_0_hsl(var(--heroui-default-200))] backdrop-blur-xl backdrop-saturate-150"
+            : "bg-transparent"
+        }`}
+      >
+        <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 pl-4 pr-2">
+          {leading}
+          <p
+            aria-hidden={collapsing}
+            className={`max-w-[12rem] truncate font-heading text-[17px] text-foreground transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+              solid ? "translate-y-0 opacity-100" : "translate-y-1.5 opacity-0"
+            }`}
           >
-            <div className="flex h-16 items-center gap-3 px-4">
-              {logo}
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate font-heading text-lg leading-tight text-primary-foreground">
-                  Hola, {firstName}
-                </h1>
-                <p className="truncate text-xs text-primary-foreground/80">
-                  {todayLabel()}
-                </p>
-              </div>
-              {actions}
-            </div>
-          </header>
-          {heroExtension ? (
-            <div className="mb-4 rounded-b-[1.75rem] bg-primary px-4 pb-5 pt-1 text-primary-foreground">
-              {heroExtension}
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <header className="sticky top-0 z-30 border-b border-default-200 bg-background pt-[env(safe-area-inset-top)]">
-          <div className="flex h-14 items-center gap-3 px-4">
-            {logo}
-            <h1 className="min-w-0 flex-1 truncate font-heading text-lg text-foreground">
-              {title}
-            </h1>
-            {actions}
-          </div>
-        </header>
-      )}
+            {title}
+          </p>
+          {actions}
+        </div>
+      </header>
 
       {/* Chat Panel */}
       <ChatPanel
@@ -217,14 +238,4 @@ export function ClientHeader({
       />
     </>
   );
-}
-
-function todayLabel(): string {
-  const label = new Date().toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-  });
-
-  return label.charAt(0).toUpperCase() + label.slice(1);
 }
