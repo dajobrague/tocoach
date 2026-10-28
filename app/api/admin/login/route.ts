@@ -78,11 +78,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last login timestamp (non-blocking, fire and forget)
-    void supabase
+    // Update last login timestamp. Supabase builders are lazy — without
+    // await/.then the request is never sent (it silently never ran before).
+    const { error: lastLoginError } = await supabase
       .from("admin_users")
       .update({ last_login_at: new Date().toISOString() })
       .eq("id", authData.user.id);
+
+    if (lastLoginError) {
+      console.error(
+        "[AdminLogin] last_login_at update failed:",
+        lastLoginError
+      );
+    }
 
     // Create session and set cookie
     const response = NextResponse.json(

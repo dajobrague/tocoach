@@ -9,6 +9,7 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 export interface AdminAuthResult {
   isAdmin: boolean;
   adminId: string | null;
+  role?: string | null;
 }
 
 /**
@@ -41,7 +42,7 @@ export async function verifyAdminRequest(
     const supabase = createSupabaseClient();
     const { data, error } = await supabase
       .from("admin_users")
-      .select("id, status")
+      .select("id, status, role")
       .eq("id", userId)
       .eq("status", "active")
       .single();
@@ -50,7 +51,9 @@ export async function verifyAdminRequest(
       return { isAdmin: false, adminId: null };
     }
 
-    return { isAdmin: true, adminId: (data as { id: string }).id };
+    const row = data as { id: string; role: string | null };
+
+    return { isAdmin: true, adminId: row.id, role: row.role };
   } catch {
     return { isAdmin: false, adminId: null };
   }

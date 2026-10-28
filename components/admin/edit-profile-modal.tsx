@@ -1,17 +1,17 @@
 "use client";
 
-import { Icon } from "@iconify/react";
-import {
-  Button,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-} from "@heroui/react";
+import { Modal, ModalContent } from "@heroui/react";
 import React from "react";
 import { createClient } from "@supabase/supabase-js";
+
+import {
+  DialogHeader,
+  Field,
+  buttonClasses,
+  dialogClassNames,
+  fieldTone,
+  inputClass,
+} from "@/components/admin/admin-ui";
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -38,6 +38,7 @@ export default function EditProfileModal({
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [successMessage, setSuccessMessage] = React.useState("");
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -48,6 +49,7 @@ export default function EditProfileModal({
       setConfirmPassword("");
       setError("");
       setSuccessMessage("");
+      setPasswordOpen(false);
     }
   }, [isOpen, currentName, currentEmail]);
 
@@ -202,176 +204,156 @@ export default function EditProfileModal({
     }
   };
 
+  const emailChanged =
+    email.toLowerCase().trim() !== currentEmail.toLowerCase().trim();
+  const showPasswords = passwordOpen || emailChanged;
+
   return (
     <Modal
+      hideCloseButton
+      classNames={dialogClassNames}
+      isDismissable={!isLoading}
       isOpen={isOpen}
-      scrollBehavior="inside"
-      size="2xl"
+      size="lg"
       onClose={handleClose}
     >
       <ModalContent>
-        <form onSubmit={handleSubmit}>
-          <ModalHeader className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Icon
-                className="text-2xl text-black"
-                icon="solar:user-circle-bold-duotone"
+        <form noValidate onSubmit={handleSubmit}>
+          <div className="px-6 pt-6">
+            <DialogHeader
+              subtitle="Tu nombre, correo y contraseña."
+              title="Editar perfil"
+            />
+          </div>
+
+          <div className="space-y-1 px-6 pt-5">
+            <Field htmlFor="profile-name" label="Nombre completo">
+              <input
+                className={`${inputClass} ${fieldTone(false)}`}
+                id="profile-name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
               />
-              <h2 className="text-xl font-heading font-bold">
-                Editar Mi Perfil
-              </h2>
-            </div>
-            <p className="text-sm text-slate-500 font-body font-normal">
-              Actualiza tu información personal
-            </p>
-          </ModalHeader>
+            </Field>
+            <Field
+              hint={
+                emailChanged
+                  ? "Para cambiar el correo confirma tu contraseña actual."
+                  : undefined
+              }
+              htmlFor="profile-email"
+              label="Correo electrónico"
+            >
+              <input
+                className={`${inputClass} ${fieldTone(false)}`}
+                id="profile-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
 
-          <ModalBody>
-            {error && (
-              <div className="bg-danger-50 border border-danger-200 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <Icon
-                    className="text-danger"
-                    icon="solar:danger-circle-bold"
+            {showPasswords ? (
+              <div className="space-y-1 border-t border-slate-100 pt-4">
+                <Field htmlFor="profile-current" label="Contraseña actual">
+                  <input
+                    autoComplete="current-password"
+                    className={`${inputClass} ${fieldTone(false)}`}
+                    id="profile-current"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
                   />
-                  <p className="text-danger text-sm font-body">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="bg-success-50 border border-success-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Icon
-                    className="text-success text-xl mt-0.5"
-                    icon="solar:check-circle-bold"
-                  />
-                  <p className="text-success font-semibold font-body">
-                    {successMessage}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700 font-body">
-                  Información Personal
-                </h3>
-                <Input
-                  isRequired
-                  className="font-body"
-                  label="Nombre completo"
-                  placeholder="Ej: Juan Pérez"
-                  startContent={<Icon icon="solar:user-bold-duotone" />}
-                  value={fullName}
-                  variant="bordered"
-                  onValueChange={setFullName}
-                />
-
-                <Input
-                  isRequired
-                  className="font-body"
-                  label="Correo electrónico"
-                  placeholder="Ej: admin@example.com"
-                  startContent={<Icon icon="solar:letter-bold-duotone" />}
-                  type="email"
-                  value={email}
-                  variant="bordered"
-                  onValueChange={setEmail}
-                />
-              </div>
-
-              <div className="border-t border-slate-200 pt-4 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700 font-body">
-                  Cambiar Contraseña (Opcional)
-                </h3>
-                <p className="text-xs text-slate-500 font-body">
-                  Deja estos campos vacíos si no deseas cambiar tu contraseña.
-                  Si cambias tu email, también necesitarás ingresar tu
-                  contraseña actual.
-                </p>
-
-                <Input
-                  className="font-body"
-                  label="Contraseña actual"
-                  placeholder="Ingresa tu contraseña actual"
-                  startContent={
-                    <Icon icon="solar:lock-password-bold-duotone" />
-                  }
-                  type="password"
-                  value={currentPassword}
-                  variant="bordered"
-                  onValueChange={setCurrentPassword}
-                />
-
-                <Input
-                  className="font-body"
-                  label="Nueva contraseña"
-                  placeholder="Mínimo 8 caracteres"
-                  startContent={<Icon icon="solar:lock-keyhole-bold-duotone" />}
-                  type="password"
-                  value={newPassword}
-                  variant="bordered"
-                  onValueChange={setNewPassword}
-                />
-
-                <Input
-                  className="font-body"
-                  label="Confirmar nueva contraseña"
-                  placeholder="Repite la nueva contraseña"
-                  startContent={<Icon icon="solar:lock-keyhole-bold-duotone" />}
-                  type="password"
-                  value={confirmPassword}
-                  variant="bordered"
-                  onValueChange={setConfirmPassword}
-                />
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Icon
-                    className="text-blue-600 text-xl mt-0.5"
-                    icon="solar:info-circle-bold"
-                  />
-                  <div className="text-sm font-body text-blue-900">
-                    <p className="font-semibold mb-1">Nota importante:</p>
-                    <ul className="list-disc list-inside space-y-1 text-blue-800">
-                      <li>
-                        Si cambias tu email o contraseña, deberás iniciar sesión
-                        nuevamente
-                      </li>
-                      <li>
-                        Para cambiar el email, es obligatorio ingresar tu
-                        contraseña actual
-                      </li>
-                      <li>Asegúrate de recordar tus nuevas credenciales</li>
-                    </ul>
+                </Field>
+                {passwordOpen ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field
+                      hint="Mínimo 8 caracteres."
+                      htmlFor="profile-new"
+                      label="Nueva contraseña"
+                    >
+                      <input
+                        autoComplete="new-password"
+                        className={`${inputClass} ${fieldTone(false)}`}
+                        id="profile-new"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </Field>
+                    <Field
+                      error={
+                        confirmPassword && confirmPassword !== newPassword
+                          ? "No coincide."
+                          : null
+                      }
+                      htmlFor="profile-confirm"
+                      label="Repetir contraseña"
+                    >
+                      <input
+                        autoComplete="new-password"
+                        className={`${inputClass} ${fieldTone(
+                          !!confirmPassword && confirmPassword !== newPassword
+                        )}`}
+                        id="profile-confirm"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                      />
+                    </Field>
                   </div>
-                </div>
+                ) : null}
               </div>
-            </div>
-          </ModalBody>
+            ) : null}
 
-          <ModalFooter>
-            <Button
-              color="default"
-              disabled={isLoading}
-              variant="light"
-              onPress={handleClose}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="bg-black text-white"
-              color="primary"
-              disabled={isLoading || !!successMessage}
-              isLoading={isLoading}
-              type="submit"
-            >
-              {isLoading ? "Guardando..." : "Guardar Cambios"}
-            </Button>
-          </ModalFooter>
+            {!passwordOpen ? (
+              <button
+                className="mb-4 text-[13px] font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+                type="button"
+                onClick={() => setPasswordOpen(true)}
+              >
+                Cambiar contraseña
+              </button>
+            ) : null}
+          </div>
+
+          {error ? (
+            <p className="mx-6 mb-2 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+              {error}
+            </p>
+          ) : null}
+          {successMessage ? (
+            <p className="mx-6 mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-[13px] text-emerald-700">
+              {successMessage}
+            </p>
+          ) : null}
+
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-6 py-4">
+            <p className="text-[12px] text-slate-400">
+              {emailChanged || newPassword
+                ? "Tendrás que volver a iniciar sesión."
+                : ""}
+            </p>
+            <div className="flex gap-2">
+              <button
+                className={buttonClasses.ghost}
+                disabled={isLoading}
+                type="button"
+                onClick={handleClose}
+              >
+                Cancelar
+              </button>
+              <button
+                className={`${buttonClasses.primary} min-w-[130px]`}
+                disabled={
+                  isLoading || !!successMessage || fullName.trim().length < 2
+                }
+                type="submit"
+              >
+                {isLoading ? "Guardando…" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
         </form>
       </ModalContent>
     </Modal>

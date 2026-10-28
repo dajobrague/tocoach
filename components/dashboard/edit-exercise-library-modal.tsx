@@ -18,6 +18,10 @@ import {
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 
+import {
+  MUSCLE_PICKER_ID,
+  MusclePicker,
+} from "@/features/trainer/library/muscle-picker";
 import { TagsField } from "@/features/trainer/library/tags-field";
 import {
   deleteExerciseVideo,
@@ -27,6 +31,7 @@ import {
   validateExerciseLibraryForm,
 } from "@/lib/utils/exercise-utils";
 import { isUnsupportedExternalUrl } from "@/lib/utils/video-url";
+import { primaryMuscleRequired, type MuscleId } from "@/lib/training/muscles";
 
 interface EditExerciseLibraryModalProps {
   isOpen: boolean;
@@ -45,7 +50,8 @@ export default function EditExerciseLibraryModal({
     name: "",
     description: "",
     category: "",
-    muscle_groups: [] as string[],
+    primary_muscles: [] as MuscleId[],
+    secondary_muscles: [] as MuscleId[],
     equipment: [] as string[],
     movement_pattern: "",
     video_url: "",
@@ -56,7 +62,7 @@ export default function EditExerciseLibraryModal({
     cardio_type: "",
     tags: [] as string[],
   });
-  const [muscleGroupInput, setMuscleGroupInput] = useState("");
+  const [muscleError, setMuscleError] = useState(false);
   const [equipmentInput, setEquipmentInput] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -71,7 +77,8 @@ export default function EditExerciseLibraryModal({
         name: exercise.name || "",
         description: exercise.description || "",
         category: exercise.category || "",
-        muscle_groups: exercise.muscle_groups || [],
+        primary_muscles: exercise.primary_muscles ?? [],
+        secondary_muscles: exercise.secondary_muscles ?? [],
         equipment: exercise.equipment || [],
         movement_pattern: exercise.movement_pattern || "",
         video_url: exercise.video_url || "",
@@ -85,6 +92,7 @@ export default function EditExerciseLibraryModal({
           (exercise as any).default_training_system ??
           "",
       });
+      setMuscleError(false);
       setImagePreview(exercise.image_url || null);
       setVideoPreview(exercise.uploaded_video_url || null);
     }
@@ -210,26 +218,6 @@ export default function EditExerciseLibraryModal({
     setVideoPreview(null);
   };
 
-  const handleAddMuscleGroup = () => {
-    if (
-      muscleGroupInput.trim() &&
-      !formData.muscle_groups.includes(muscleGroupInput.trim())
-    ) {
-      setFormData((prev) => ({
-        ...prev,
-        muscle_groups: [...prev.muscle_groups, muscleGroupInput.trim()],
-      }));
-      setMuscleGroupInput("");
-    }
-  };
-
-  const handleRemoveMuscleGroup = (group: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      muscle_groups: prev.muscle_groups.filter((g) => g !== group),
-    }));
-  };
-
   const handleAddEquipment = () => {
     if (
       equipmentInput.trim() &&
@@ -256,6 +244,18 @@ export default function EditExerciseLibraryModal({
 
     if (!validation.valid) {
       alert(validation.errors.join("\n"));
+
+      return;
+    }
+
+    if (
+      primaryMuscleRequired(formData.category) &&
+      formData.primary_muscles.length === 0
+    ) {
+      setMuscleError(true);
+      document
+        .getElementById(MUSCLE_PICKER_ID)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
       return;
     }
@@ -418,6 +418,36 @@ export default function EditExerciseLibraryModal({
                   />
                 )}
               </div>
+            </div>
+
+            {/* Muscles (Oct 14 call, JC): required except for cardio. */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Icon
+                  className="text-slate-700"
+                  icon="solar:body-bold"
+                  width={18}
+                />
+                Músculos trabajados
+              </h4>
+              <MusclePicker
+                category={formData.category}
+                disabled={isSubmitting}
+                exerciseName={formData.name}
+                legacy={exercise.muscle_groups}
+                showError={muscleError}
+                value={{
+                  primary: formData.primary_muscles,
+                  secondary: formData.secondary_muscles,
+                }}
+                onChange={(muscles) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    primary_muscles: muscles.primary,
+                    secondary_muscles: muscles.secondary,
+                  }))
+                }
+              />
             </div>
 
             {/* Media */}
@@ -661,55 +691,6 @@ export default function EditExerciseLibraryModal({
                     setFormData((prev) => ({ ...prev, tags }))
                   }
                 />
-
-                {/* Muscle Groups */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Grupos Musculares
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <Input
-                      placeholder="Ej: Cuádriceps, Glúteos"
-                      value={muscleGroupInput}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddMuscleGroup();
-                        }
-                      }}
-                      onValueChange={setMuscleGroupInput}
-                    />
-                    <Button
-                      className="bg-black text-white hover:bg-slate-800"
-                      variant="flat"
-                      onPress={handleAddMuscleGroup}
-                    >
-                      Añadir
-                    </Button>
-                  </div>
-                  {formData.muscle_groups.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.muscle_groups.map((group) => (
-                        <Chip
-                          key={group}
-                          className="bg-slate-200 text-slate-800"
-                          endContent={
-                            <button
-                              className="ml-1"
-                              type="button"
-                              onClick={() => handleRemoveMuscleGroup(group)}
-                            >
-                              <Icon icon="solar:close-circle-bold" width={16} />
-                            </button>
-                          }
-                          variant="flat"
-                        >
-                          {group}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
                 {/* Equipment */}
                 <div>

@@ -1,208 +1,124 @@
 // Admin trainers management API
 import { NextRequest, NextResponse } from "next/server";
 
-import { JWT_SECRET_BYTES } from "@/lib/auth/jwt-secret";
+import { fetchAll } from "@/lib/admin/fetch-all";
+import { verifyAdminRequest as verifyAdminAuth } from "@/lib/auth/admin-auth";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { healThemeJson } from "@/lib/theme/heal";
+import { slugFormatError } from "@/lib/tenant/slug";
 import { TEMP_PASSWORD_TRAINER } from "@/lib/constants/auth";
 
-// Helper to verify admin authentication
-async function verifyAdminAuth(request: NextRequest) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// GET: List all trainers with tenant info and client activity.
+// ponytail: no server-side paging — the table is ~50 rows and the UI
+// sorts/filters in memory. Page here if trainers reach the thousands.
+export async function GET(request: NextRequest) {
   const supabase = createSupabaseClient();
 
-  // Get admin session from cookie
-  const sessionCookie = request.cookies.get("admin-session")?.value;
+  // Admin check and reads run concurrently (DB is a transatlantic round
+  // trip); reads have no side effects and nothing returns unless it passes.
+  const authP = verifyAdminAuth(request);
+  const dataP = Promise.all([
+    supabase
+      .from("trainers")
+      .select(
+        "id, email, full_name, subscription_status, status, password_set_at, invited_at, last_login_at, created_at"
+      )
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("tenants")
+      .select(
+        "trainer_id, host, slug, status, onboarding_completed, nutrition_v2_enabled"
+      ),
+    fetchAll<{ tenant: string | null; last_login_at: string | null }>(
+      (from, to, withCount) =>
+        supabase
+          .from("clients")
+          .select(
+            "tenant, last_login_at",
+            withCount ? { count: "exact" } : undefined
+          )
+          .order("id")
+          .range(from, to)
+    ),
+  ]);
 
-  if (!sessionCookie) {
-    console.log("[AdminAuth] No session cookie found");
+  dataP.catch(() => undefined);
 
-    return { isAdmin: false, adminId: null };
-  }
-
-  try {
-    // Verify JWT token
-    const { jwtVerify } = await import("jose");
-
-    const { payload } = await jwtVerify(sessionCookie, JWT_SECRET_BYTES);
-    const userId = (payload as any).trainer_id;
-
-    if (!userId) {
-      return { isAdmin: false, adminId: null };
-    }
-
-    // Check if user is an active admin
-    const { data: adminData, error } = await supabase
-      .from("admin_users")
-      .select("id, status")
-      .eq("id", userId)
-      .eq("status", "active")
-      .single();
-
-    if (error || !adminData) {
-      console.log("[AdminAuth] User is not an admin or inactive", {
-        userId,
-        error,
-      });
-
-      return { isAdmin: false, adminId: null };
-    }
-
-    console.log("[AdminAuth] Admin verified successfully", {
-      adminId: adminData.id,
-    });
-
-    return { isAdmin: true, adminId: adminData.id };
-  } catch (err) {
-    console.error("[AdminAuth] Error verifying admin:", err);
-
-    return { isAdmin: false, adminId: null };
-  }
-}
-
-// GET: List all trainers
-export async function GET(request: NextRequest) {
-  const { isAdmin, adminId } = await verifyAdminAuth(request);
+  const { isAdmin } = await authP;
 
   if (!isAdmin) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const supabase = createSupabaseClient();
-  const { searchParams } = new URL(request.url);
-
-  // Get query parameters
-  const status = searchParams.get("status"); // active, paused, cancelled, all
-  const search = searchParams.get("search");
-  const page = parseInt(searchParams.get("page") || "1");
-  const limit = parseInt(searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
-
   try {
-    // First, get all trainers
-    let trainersQuery = supabase
-      .from("trainers")
-      .select(
-        `
-        id,
-        email,
-        full_name,
-        subscription_status,
-        status,
-        password_set_at,
-        invited_at,
-        last_login_at,
-        created_at
-      `,
-        { count: "exact" }
-      )
-      .order("created_at", { ascending: false });
+    const [trainersRes, tenantsRes, clients] = await dataP;
 
-    // Apply filters
-    if (status && status !== "all") {
-      trainersQuery = trainersQuery.eq("subscription_status", status);
-    }
+    if (trainersRes.error) throw trainersRes.error;
+    if (tenantsRes.error) throw tenantsRes.error;
 
-    if (search) {
-      trainersQuery = trainersQuery.or(
-        `email.ilike.%${search}%,full_name.ilike.%${search}%`
-      );
-    }
-
-    // Apply pagination
-    trainersQuery = trainersQuery.range(offset, offset + limit - 1);
-
-    const { data: trainersRaw, error, count } = await trainersQuery;
-
-    if (error) {
-      console.error("[AdminTrainers] Error fetching trainers:", error);
-
-      return NextResponse.json(
-        { error: "Error al obtener entrenadores" },
-        { status: 500 }
-      );
-    }
-
-    // Get trainer IDs to fetch their tenants
-    const trainerIds = trainersRaw?.map((t) => t.id) || [];
-
-    // Fetch tenants for these trainers
-    const { data: tenantsData } = await supabase
-      .from("tenants")
-      .select("trainer_id, host, slug")
-      .in("trainer_id", trainerIds);
-
-    // Create a map of trainer_id to tenant info
-    const tenantMap = (tenantsData || []).reduce(
-      (acc, tenant) => {
-        acc[tenant.trainer_id] = {
-          host: tenant.host,
-          slug: tenant.slug,
-        };
-
-        return acc;
-      },
-      {} as Record<string, { host: string; slug: string }>
+    const tenantByTrainer = new Map(
+      (tenantsRes.data ?? []).map((t) => [t.trainer_id, t])
     );
 
-    // Transform data and add tenant info
-    const trainers =
-      trainersRaw?.map((trainer: any) => {
-        const tenantInfo = tenantMap[trainer.id];
-
-        return {
-          id: trainer.id,
-          email: trainer.email,
-          full_name: trainer.full_name,
-          subscription_status: trainer.subscription_status,
-          status: trainer.status,
-          password_set_at: trainer.password_set_at,
-          invited_at: trainer.invited_at,
-          last_login_at: trainer.last_login_at,
-          created_at: trainer.created_at,
-          tenant_host: tenantInfo?.host || "N/A",
-          tenant_slug: tenantInfo?.slug || "N/A",
-        };
-      }) || [];
-
-    // Get client counts for each trainer (reuse trainerIds from above)
-    const { data: clientCounts } = await supabase
-      .from("clients")
-      .select("trainer_id")
-      .in("trainer_id", trainerIds);
-
-    // Count clients per trainer
-    const clientCountMap = (clientCounts || []).reduce(
-      (acc, client) => {
-        acc[client.trainer_id] = (acc[client.trainer_id] || 0) + 1;
-
-        return acc;
-      },
-      {} as Record<string, number>
-    );
-
-    // Add client counts to trainer data
-    const trainersWithCounts = trainers?.map((trainer) => ({
-      ...trainer,
-      clientCount: clientCountMap[trainer.id] || 0,
-    }));
-
-    return NextResponse.json(
+    // clients.tenant holds the trainer's UUID (legacy column name).
+    const now = Date.now();
+    const stats = new Map<
+      string,
       {
-        trainers: trainersWithCounts,
-        pagination: {
-          page,
-          limit,
-          total: count || 0,
-          totalPages: Math.ceil((count || 0) / limit),
-        },
-      },
-      { status: 200 }
-    );
+        total: number;
+        active7: number;
+        active30: number;
+        lastSeen: string | null;
+      }
+    >();
+
+    for (const c of clients) {
+      if (!c.tenant) continue;
+      const s = stats.get(c.tenant) ?? {
+        total: 0,
+        active7: 0,
+        active30: 0,
+        lastSeen: null,
+      };
+      const age = c.last_login_at
+        ? now - new Date(c.last_login_at).getTime()
+        : Infinity;
+
+      s.total += 1;
+      if (age <= 7 * DAY_MS) s.active7 += 1;
+      if (age <= 30 * DAY_MS) s.active30 += 1;
+      if (c.last_login_at && (!s.lastSeen || c.last_login_at > s.lastSeen)) {
+        s.lastSeen = c.last_login_at;
+      }
+      stats.set(c.tenant, s);
+    }
+
+    const trainers = (trainersRes.data ?? []).map((t) => {
+      const tenant = tenantByTrainer.get(t.id);
+      const s = stats.get(t.id);
+
+      return {
+        ...t,
+        tenant_host: tenant?.host ?? null,
+        tenant_slug: tenant?.slug ?? null,
+        tenant_status: tenant?.status ?? null,
+        onboarding_completed: tenant?.onboarding_completed === true,
+        nutrition_v2_enabled: tenant?.nutrition_v2_enabled === true,
+        clientCount: s?.total ?? 0,
+        activeClients7d: s?.active7 ?? 0,
+        activeClients30d: s?.active30 ?? 0,
+        lastClientActivityAt: s?.lastSeen ?? null,
+      };
+    });
+
+    return NextResponse.json({ trainers }, { status: 200 });
   } catch (error) {
-    console.error("[AdminTrainers] Unexpected error:", error);
+    console.error("[AdminTrainers] Error fetching trainers:", error);
 
     return NextResponse.json(
-      { error: "Error interno del servidor" },
+      { error: "Error al obtener entrenadores" },
       { status: 500 }
     );
   }
@@ -230,42 +146,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const fieldError = (field: "email" | "slug", error: string) =>
+      NextResponse.json({ error, field }, { status: 400 });
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: "Formato de correo electrónico no válido" },
-        { status: 400 }
-      );
+      return fieldError("email", "Formato de correo electrónico no válido");
     }
 
-    // Check if tenant_host is already taken
-    const { data: existingTenant } = await supabase
-      .from("trainers")
-      .select("id")
-      .eq("tenant_host", tenantHost.toLowerCase().trim())
-      .single();
+    // The slug becomes the portal path (/<slug>) — reject non-ASCII and
+    // reserved routes before anything is written.
+    const slug = String(tenantHost).toLowerCase().trim();
+    const slugError = slugFormatError(slug);
 
-    if (existingTenant) {
-      return NextResponse.json(
-        { error: "Este subdominio ya está en uso" },
-        { status: 400 }
-      );
+    if (slugError) return fieldError("slug", slugError);
+
+    // A slug is taken if any tenant uses it as slug or host, or any trainer
+    // still has it as tenant_host (renames can leave these out of sync).
+    const [{ data: tenantTaken }, { data: hostTaken }, { data: emailTaken }] =
+      await Promise.all([
+        supabase
+          .from("tenants")
+          .select("slug")
+          .or(`slug.eq.${slug},host.eq.${slug}`)
+          .limit(1),
+        supabase.from("trainers").select("id").eq("tenant_host", slug).limit(1),
+        supabase
+          .from("trainers")
+          .select("id")
+          .eq("email", email.toLowerCase().trim())
+          .limit(1),
+      ]);
+
+    if (tenantTaken?.length || hostTaken?.length) {
+      return fieldError("slug", "Esta dirección ya está en uso");
     }
 
-    // Check if email is already registered
-    const { data: existingTrainer } = await supabase
-      .from("trainers")
-      .select("id")
-      .eq("email", email.toLowerCase().trim())
-      .single();
-
-    if (existingTrainer) {
-      return NextResponse.json(
-        { error: "Este correo electrónico ya está registrado" },
-        { status: 400 }
-      );
+    if (emailTaken?.length) {
+      return fieldError("email", "Este correo electrónico ya está registrado");
     }
 
     // Create Supabase user with a temporary password
@@ -396,6 +316,7 @@ export async function POST(request: NextRequest) {
           fullName: fullName.trim(),
           tenantHost: tenantHost.toLowerCase().trim(),
         },
+        tempPassword: TEMP_PASSWORD_TRAINER,
         message: `Entrenador creado exitosamente. Comparte estas credenciales con ${fullName}:\n\nEmail: ${email}\nContraseña temporal: ${TEMP_PASSWORD_TRAINER}\nURL: ${process.env.NEXT_PUBLIC_APP_DOMAIN || "tu-dominio.com"}/trainer/login\n\nAl iniciar sesión por primera vez, deberán configurar su propia contraseña.`,
       },
       { status: 201 }

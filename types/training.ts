@@ -1,3 +1,5 @@
+import type { MuscleId } from "@/lib/training/muscles";
+
 // Training-related TypeScript interfaces
 
 // Database-level types
@@ -90,6 +92,8 @@ export interface Exercise {
     | "bodyweight"
     | "other";
   muscle_groups?: string[];
+  primary_muscles?: MuscleId[];
+  secondary_muscles?: MuscleId[];
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;
@@ -98,6 +102,10 @@ export interface Exercise {
   image_url?: string;
   instructions?: string[];
   tips?: string[];
+  default_sets?: number | null;
+  default_reps?: string | null;
+  default_rest_seconds?: number | null;
+  default_tempo?: string | null;
   is_public: boolean;
   metadata: {
     [key: string]: any;
@@ -297,6 +305,8 @@ export interface CreateExerciseLibraryRequest {
     | "bodyweight"
     | "other";
   muscle_groups?: string[];
+  primary_muscles?: MuscleId[];
+  secondary_muscles?: MuscleId[];
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;
@@ -322,6 +332,8 @@ export interface UpdateExerciseLibraryRequest {
     | "bodyweight"
     | "other";
   muscle_groups?: string[];
+  primary_muscles?: MuscleId[];
+  secondary_muscles?: MuscleId[];
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;

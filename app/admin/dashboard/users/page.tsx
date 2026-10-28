@@ -2,581 +2,499 @@
 
 import { Icon } from "@iconify/react";
 import {
-  Button,
-  Card,
-  CardBody,
-  Chip,
   Dropdown,
   DropdownItem,
   DropdownMenu,
+  DropdownSection,
   DropdownTrigger,
-  Input,
   Modal,
-  ModalBody,
   ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Spinner,
-  Table,
-  TableBody,
-  TableCell,
-  TableColumn,
-  TableHeader,
-  TableRow,
+  addToast,
 } from "@heroui/react";
 import React from "react";
 
 import AddAdminModal from "@/components/admin/add-admin-modal";
+import {
+  Avatar,
+  DialogHeader,
+  PageHeader,
+  RelativeTime,
+  SearchField,
+  SkeletonRows,
+  SortHeader,
+  StatusDot,
+  buttonClasses,
+  dialogClassNames,
+  formatDate,
+  tableClasses,
+  useSort,
+} from "@/components/admin/admin-ui";
 import EditProfileModal from "@/components/admin/edit-profile-modal";
+import { useAdminData } from "@/lib/admin/use-admin-data";
+
+type Role = "super_admin" | "admin";
 
 interface AdminUser {
   id: string;
   email: string;
   full_name: string;
-  role: "super_admin" | "admin";
+  role: Role;
   status: "active" | "inactive";
   created_at: string;
   last_login_at: string | null;
 }
 
-interface ConfirmAction {
-  type: "role" | "status" | "delete";
-  userId: string;
-  newValue: string;
-  userName: string;
+interface PendingAction {
+  user: AdminUser;
+  title: string;
   description: string;
+  confirmLabel: string;
+  destructive: boolean;
+  run: () => Promise<Response>;
+  success: string;
+}
+
+type SortKey = "name" | "role" | "status" | "login" | "created";
+
+const SORT_ACCESSORS: Record<
+  SortKey,
+  (u: AdminUser) => string | number | null
+> = {
+  name: (u) => u.full_name,
+  role: (u) => u.role,
+  status: (u) => u.status,
+  login: (u) => u.last_login_at,
+  created: (u) => u.created_at,
+};
+
+const ROLE_LABEL: Record<Role, string> = {
+  super_admin: "Super admin",
+  admin: "Admin",
+};
+
+function patchUser(id: string, body: Record<string, string>) {
+  return fetch(`/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
 }
 
 export default function AdminUsersPage() {
-  const [adminUsers, setAdminUsers] = React.useState<AdminUser[]>([]);
-  const [currentAdminId, setCurrentAdminId] = React.useState<string | null>(
-    null
+  const {
+    data,
+    error: loadError,
+    isLoading,
+    refresh: fetchAdmins,
+  } = useAdminData<{ adminUsers: AdminUser[]; currentAdminId: string | null }>(
+    "/api/admin/users"
   );
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [searchTerm, setSearchTerm] = React.useState("");
+  const admins = React.useMemo(() => data?.adminUsers ?? [], [data]);
+  const currentAdminId = data?.currentAdminId ?? null;
+  const [search, setSearch] = React.useState("");
   const [isAddModalOpen, setIsAddModalOpen] = React.useState(false);
-  const [updatingUserId, setUpdatingUserId] = React.useState<string | null>(
-    null
-  );
-  const [confirmAction, setConfirmAction] =
-    React.useState<ConfirmAction | null>(null);
-  const [editProfileUser, setEditProfileUser] =
-    React.useState<AdminUser | null>(null);
+  const [editingSelf, setEditingSelf] = React.useState<AdminUser | null>(null);
+  const [pending, setPending] = React.useState<PendingAction | null>(null);
+  const [isRunning, setIsRunning] = React.useState(false);
 
-  const fetchAdminUsers = React.useCallback(async () => {
-    setIsLoading(true);
+  const me = admins.find((a) => a.id === currentAdminId);
+  const canManage = me?.role === "super_admin";
 
-    try {
-      const response = await fetch("/api/admin/users", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Error fetching admin users");
-      }
-
-      const data = await response.json();
-
-      setAdminUsers(data.adminUsers || []);
-
-      // Set current admin ID if not already set
-      if (!currentAdminId && data.currentAdminId) {
-        setCurrentAdminId(data.currentAdminId);
-      }
-    } catch (error) {
-      console.error("Error fetching admin users:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentAdminId]);
-
-  React.useEffect(() => {
-    fetchAdminUsers();
-  }, [fetchAdminUsers]);
-
-  const handleUpdateStatus = async (userId: string, newStatus: string) => {
-    setUpdatingUserId(userId);
-    setConfirmAction(null);
+  const runPending = async () => {
+    if (!pending) return;
+    setIsRunning(true);
 
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const response = await pending.run();
 
       if (!response.ok) {
-        throw new Error("Error updating status");
-      }
+        const data = await response.json().catch(() => ({}));
 
-      await fetchAdminUsers();
+        throw new Error(data.error || "Error");
+      }
+      addToast({ title: pending.success, color: "success" });
+      setPending(null);
+      await fetchAdmins();
     } catch (error) {
-      console.error("Error updating status:", error);
+      addToast({
+        title:
+          error instanceof Error && error.message !== "Error"
+            ? error.message
+            : "No se pudo completar la acción",
+        color: "danger",
+      });
     } finally {
-      setUpdatingUserId(null);
+      setIsRunning(false);
     }
   };
 
-  const handleUpdateRole = async (userId: string, newRole: string) => {
-    setUpdatingUserId(userId);
-    setConfirmAction(null);
-
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ role: newRole }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Error updating role");
-      }
-
-      await fetchAdminUsers();
-    } catch (error) {
-      console.error("Error updating role:", error);
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    setUpdatingUserId(userId);
-    setConfirmAction(null);
-
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Error deleting user");
-      }
-
-      await fetchAdminUsers();
-    } catch (error) {
-      console.error("Error deleting user:", error);
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const confirmAndExecute = () => {
-    if (!confirmAction) return;
-
-    if (confirmAction.type === "role") {
-      handleUpdateRole(confirmAction.userId, confirmAction.newValue);
-    } else if (confirmAction.type === "status") {
-      handleUpdateStatus(confirmAction.userId, confirmAction.newValue);
-    } else if (confirmAction.type === "delete") {
-      handleDeleteUser(confirmAction.userId);
-    }
-  };
-
-  const requestRoleChange = (user: AdminUser, newRole: string) => {
-    const roleLabel = newRole === "super_admin" ? "Super Admin" : "Admin";
-
-    setConfirmAction({
-      type: "role",
-      userId: user.id,
-      newValue: newRole,
-      userName: user.full_name,
-      description: `¿Estás seguro que deseas cambiar el rol de ${user.full_name} a ${roleLabel}?`,
+  const askRole = (user: AdminUser, role: Role) =>
+    setPending({
+      user,
+      title: `Cambiar rol a ${ROLE_LABEL[role]}`,
+      description:
+        role === "super_admin"
+          ? `${user.full_name} podrá crear, editar y eliminar administradores.`
+          : `${user.full_name} solo podrá gestionar entrenadores.`,
+      confirmLabel: "Cambiar rol",
+      destructive: false,
+      run: () => patchUser(user.id, { role }),
+      success: "Rol actualizado",
     });
-  };
 
-  const requestStatusChange = (user: AdminUser, newStatus: string) => {
-    const statusLabel = newStatus === "active" ? "activar" : "desactivar";
-    const warning =
-      newStatus === "inactive"
-        ? " Este usuario perderá acceso al panel administrativo."
-        : "";
-
-    setConfirmAction({
-      type: "status",
-      userId: user.id,
-      newValue: newStatus,
-      userName: user.full_name,
-      description: `¿Estás seguro que deseas ${statusLabel} a ${user.full_name}?${warning}`,
+  const askStatus = (user: AdminUser, status: AdminUser["status"]) =>
+    setPending({
+      user,
+      title: status === "active" ? "Reactivar acceso" : "Desactivar acceso",
+      description:
+        status === "active"
+          ? `${user.full_name} podrá volver a entrar al panel.`
+          : `${user.full_name} no podrá entrar al panel hasta que lo reactives. Puedes deshacerlo cuando quieras.`,
+      confirmLabel: status === "active" ? "Reactivar" : "Desactivar",
+      destructive: false,
+      run: () => patchUser(user.id, { status }),
+      success: status === "active" ? "Acceso reactivado" : "Acceso desactivado",
     });
-  };
 
-  const requestDelete = (user: AdminUser) => {
-    setConfirmAction({
-      type: "delete",
-      userId: user.id,
-      newValue: "",
-      userName: user.full_name,
-      description: `¿Estás seguro que deseas ELIMINAR PERMANENTEMENTE a ${user.full_name}? Esta acción NO se puede deshacer y eliminará completamente al usuario del sistema, incluyendo su cuenta de autenticación.`,
+  const askDelete = (user: AdminUser) =>
+    setPending({
+      user,
+      title: `Eliminar a ${user.full_name}`,
+      description:
+        "Se borra su cuenta de administrador y su usuario de acceso. No se puede deshacer. Si solo quieres quitarle el acceso, desactívalo.",
+      confirmLabel: "Eliminar",
+      destructive: true,
+      run: () =>
+        fetch(`/api/admin/users/${user.id}`, {
+          method: "DELETE",
+          credentials: "include",
+        }),
+      success: "Administrador eliminado",
     });
-  };
 
-  const filteredUsers = adminUsers.filter(
-    (user) =>
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const visible = React.useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    return admins.filter(
+      (u) =>
+        !term ||
+        u.full_name.toLowerCase().includes(term) ||
+        u.email.toLowerCase().includes(term)
+    );
+  }, [admins, search]);
+
+  const { sorted, sort, toggle } = useSort(visible, SORT_ACCESSORS, {
+    key: "name",
+    dir: "asc",
+  });
+
+  const takenEmails = React.useMemo(
+    () => new Set(admins.map((a) => a.email.toLowerCase())),
+    [admins]
   );
 
-  const activeCount = adminUsers.filter((u) => u.status === "active").length;
-  const superAdminCount = adminUsers.filter(
-    (u) => u.role === "super_admin"
-  ).length;
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "Nunca";
-
-    return new Date(dateString).toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
+  const loading = isLoading && admins.length === 0;
+  const superCount = admins.filter((a) => a.role === "super_admin").length;
+  const inactiveCount = admins.filter((a) => a.status !== "active").length;
 
   return (
-    <div className="space-y-6 p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold font-heading text-slate-900">
-            Usuarios Administradores
-          </h1>
-          <p className="text-slate-500 font-body mt-1">
-            Gestiona los usuarios con acceso al panel administrativo
-          </p>
-        </div>
-        <Button
-          className="bg-black text-white font-body"
-          color="primary"
-          size="lg"
-          startContent={<Icon icon="solar:user-plus-bold" />}
-          onPress={() => setIsAddModalOpen(true)}
-        >
-          Agregar Admin
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-body">Total</p>
-                <p className="text-2xl font-bold font-heading text-slate-900">
-                  {adminUsers.length}
-                </p>
-              </div>
-              <div className="bg-black p-3 rounded-xl">
-                <Icon
-                  className="text-2xl text-white"
-                  icon="solar:shield-user-bold"
-                />
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-body">Activos</p>
-                <p className="text-2xl font-bold font-heading text-green-600">
-                  {activeCount}
-                </p>
-              </div>
-              <div className="bg-green-100 p-3 rounded-xl">
-                <Icon
-                  className="text-2xl text-green-600"
-                  icon="solar:check-circle-bold"
-                />
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-body">Super Admins</p>
-                <p className="text-2xl font-bold font-heading text-indigo-600">
-                  {superAdminCount}
-                </p>
-              </div>
-              <div className="bg-indigo-100 p-3 rounded-xl">
-                <Icon
-                  className="text-2xl text-indigo-600"
-                  icon="solar:star-bold"
-                />
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Search */}
-      <Card>
-        <CardBody>
-          <Input
-            className="w-full"
-            placeholder="Buscar por nombre o email..."
-            startContent={<Icon icon="solar:magnifer-linear" />}
-            value={searchTerm}
-            variant="bordered"
-            onValueChange={setSearchTerm}
-          />
-        </CardBody>
-      </Card>
-
-      {/* Admin Users Table */}
-      <Card>
-        <CardBody>
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Spinner size="lg" />
-            </div>
-          ) : (
-            <Table aria-label="Admin users table">
-              <TableHeader>
-                <TableColumn>USUARIO</TableColumn>
-                <TableColumn>ROL</TableColumn>
-                <TableColumn>ESTADO</TableColumn>
-                <TableColumn>ÚLTIMO ACCESO</TableColumn>
-                <TableColumn>ACCIONES</TableColumn>
-              </TableHeader>
-              <TableBody emptyContent="No hay usuarios administradores">
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-semibold font-body">
-                          {user.full_name}
-                        </p>
-                        <p className="text-sm text-slate-500 font-body">
-                          {user.email}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        color={
-                          user.role === "super_admin" ? "secondary" : "primary"
-                        }
-                        size="sm"
-                        variant="flat"
-                      >
-                        {user.role === "super_admin" ? "Super Admin" : "Admin"}
-                      </Chip>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        color={user.status === "active" ? "success" : "default"}
-                        size="sm"
-                        variant="flat"
-                      >
-                        {user.status === "active" ? "Activo" : "Inactivo"}
-                      </Chip>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-slate-500 font-body">
-                        {formatDate(user.last_login_at)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Dropdown>
-                        <DropdownTrigger>
-                          <Button
-                            isIconOnly
-                            isLoading={updatingUserId === user.id}
-                            size="sm"
-                            variant="light"
-                          >
-                            <Icon icon="solar:menu-dots-bold" />
-                          </Button>
-                        </DropdownTrigger>
-                        <DropdownMenu aria-label="Actions">
-                          {/* Show edit profile for own profile */}
-                          {user.id === currentAdminId ? (
-                            <DropdownItem
-                              key="edit-profile"
-                              startContent={<Icon icon="solar:pen-bold" />}
-                              onPress={() => setEditProfileUser(user)}
-                            >
-                              Editar Mi Perfil
-                            </DropdownItem>
-                          ) : null}
-                          {/* Only show role/status options if NOT viewing own profile */}
-                          {user.id !== currentAdminId ? (
-                            <>
-                              {user.role !== "super_admin" ? (
-                                <DropdownItem
-                                  key="make-super-admin"
-                                  startContent={<Icon icon="solar:star-bold" />}
-                                  onPress={() =>
-                                    requestRoleChange(user, "super_admin")
-                                  }
-                                >
-                                  Hacer Super Admin
-                                </DropdownItem>
-                              ) : null}
-                              {user.role !== "admin" ? (
-                                <DropdownItem
-                                  key="make-admin"
-                                  startContent={<Icon icon="solar:user-bold" />}
-                                  onPress={() =>
-                                    requestRoleChange(user, "admin")
-                                  }
-                                >
-                                  Hacer Admin
-                                </DropdownItem>
-                              ) : null}
-                              {user.status !== "active" ? (
-                                <DropdownItem
-                                  key="activate"
-                                  startContent={
-                                    <Icon icon="solar:check-circle-bold" />
-                                  }
-                                  onPress={() =>
-                                    requestStatusChange(user, "active")
-                                  }
-                                >
-                                  Activar
-                                </DropdownItem>
-                              ) : null}
-                              {user.status !== "inactive" ? (
-                                <DropdownItem
-                                  key="deactivate"
-                                  className="text-warning"
-                                  color="warning"
-                                  startContent={
-                                    <Icon icon="solar:close-circle-bold" />
-                                  }
-                                  onPress={() =>
-                                    requestStatusChange(user, "inactive")
-                                  }
-                                >
-                                  Desactivar
-                                </DropdownItem>
-                              ) : null}
-                              <DropdownItem
-                                key="delete"
-                                className="text-danger"
-                                color="danger"
-                                startContent={
-                                  <Icon icon="solar:trash-bin-trash-bold" />
-                                }
-                                onPress={() => requestDelete(user)}
-                              >
-                                Eliminar Permanentemente
-                              </DropdownItem>
-                            </>
-                          ) : null}
-                        </DropdownMenu>
-                      </Dropdown>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Add Admin Modal */}
-      <AddAdminModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSuccess={() => {
-          setIsAddModalOpen(false);
-          fetchAdminUsers();
-        }}
+    <div className="mx-auto max-w-[1440px] space-y-6 px-10 py-8">
+      <PageHeader
+        actions={
+          <button
+            className={buttonClasses.primary}
+            disabled={!canManage}
+            title={
+              canManage
+                ? undefined
+                : "Solo un super admin puede añadir administradores"
+            }
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            <Icon icon="solar:add-circle-linear" width={16} />
+            Nuevo administrador
+          </button>
+        }
+        subtitle={
+          loading
+            ? "Cargando…"
+            : [
+                `${admins.length} administradores`,
+                `${superCount} super admin`,
+                inactiveCount > 0 ? `${inactiveCount} sin acceso` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+        }
+        title="Administradores"
       />
 
-      {/* Edit Profile Modal */}
-      {editProfileUser && (
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[13px] text-slate-500">
+          {canManage
+            ? "Los admin gestionan entrenadores; los super admin además gestionan este equipo."
+            : "Solo un super admin puede cambiar roles o accesos."}
+        </p>
+        <SearchField
+          placeholder="Buscar nombre o email"
+          value={search}
+          onChange={setSearch}
+        />
+      </div>
+
+      {loadError ? (
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          No se pudieron cargar los administradores.
+          <button
+            className="font-medium underline-offset-2 hover:underline"
+            type="button"
+            onClick={fetchAdmins}
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : null}
+
+      <div className={tableClasses.wrapper}>
+        <table className={tableClasses.table}>
+          <thead className={tableClasses.thead}>
+            <tr>
+              <SortHeader
+                className="pl-4"
+                label="Administrador"
+                sort={sort}
+                sortKey="name"
+                onSort={toggle}
+              />
+              <SortHeader
+                label="Rol"
+                sort={sort}
+                sortKey="role"
+                onSort={toggle}
+              />
+              <SortHeader
+                label="Acceso"
+                sort={sort}
+                sortKey="status"
+                onSort={toggle}
+              />
+              <SortHeader
+                label="Último acceso"
+                sort={sort}
+                sortKey="login"
+                onSort={toggle}
+              />
+              <SortHeader
+                label="Alta"
+                sort={sort}
+                sortKey="created"
+                onSort={toggle}
+              />
+              <th className="w-32 px-3 py-2" scope="col">
+                <span className="sr-only">Acciones</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody
+            key={loading ? "loading" : "ready"}
+            className={loading ? undefined : "admin-fade-in"}
+          >
+            {loading ? (
+              <SkeletonRows cols={6} rows={4} />
+            ) : sorted.length === 0 ? (
+              <tr>
+                <td
+                  className="px-4 py-16 text-center text-slate-500"
+                  colSpan={6}
+                >
+                  {search
+                    ? `Nada coincide con “${search}”.`
+                    : "No hay administradores."}
+                </td>
+              </tr>
+            ) : (
+              sorted.map((u) => {
+                const isMe = u.id === currentAdminId;
+
+                return (
+                  <tr
+                    key={u.id}
+                    className={tableClasses.row.replace("cursor-pointer ", "")}
+                  >
+                    <td className={`${tableClasses.cell} pl-4`}>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={u.full_name} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate font-medium text-slate-900">
+                              {u.full_name}
+                            </span>
+                            {isMe ? (
+                              <span className="inline-flex h-[18px] items-center rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-500">
+                                Tú
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="truncate text-[12px] text-slate-500">
+                            {u.email}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={`${tableClasses.cell} text-slate-700`}>
+                      {ROLE_LABEL[u.role]}
+                    </td>
+                    <td className={tableClasses.cell}>
+                      <StatusDot
+                        label={u.status === "active" ? "Activo" : "Desactivado"}
+                        tone={u.status === "active" ? "green" : "gray"}
+                      />
+                    </td>
+                    <td className={tableClasses.cell}>
+                      <RelativeTime iso={u.last_login_at} />
+                    </td>
+                    <td className={`${tableClasses.cell} text-slate-500`}>
+                      {formatDate(u.created_at)}
+                    </td>
+                    <td className={`${tableClasses.cell} pr-3`}>
+                      <div className="flex items-center justify-end gap-1">
+                        {isMe ? (
+                          <button
+                            className="h-7 rounded-md px-2 text-[12px] font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+                            type="button"
+                            onClick={() => setEditingSelf(u)}
+                          >
+                            Editar perfil
+                          </button>
+                        ) : canManage ? (
+                          <Dropdown placement="bottom-end">
+                            <DropdownTrigger>
+                              <button
+                                aria-label={`Más acciones para ${u.full_name}`}
+                                className="flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/60 hover:text-slate-900"
+                                type="button"
+                              >
+                                <Icon icon="solar:menu-dots-bold" width={16} />
+                              </button>
+                            </DropdownTrigger>
+                            <DropdownMenu aria-label="Acciones">
+                              <DropdownSection showDivider>
+                                <DropdownItem
+                                  key="role"
+                                  onPress={() =>
+                                    askRole(
+                                      u,
+                                      u.role === "super_admin"
+                                        ? "admin"
+                                        : "super_admin"
+                                    )
+                                  }
+                                >
+                                  {u.role === "super_admin"
+                                    ? "Cambiar a admin"
+                                    : "Hacer super admin"}
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="status"
+                                  onPress={() =>
+                                    askStatus(
+                                      u,
+                                      u.status === "active"
+                                        ? "inactive"
+                                        : "active"
+                                    )
+                                  }
+                                >
+                                  {u.status === "active"
+                                    ? "Desactivar acceso"
+                                    : "Reactivar acceso"}
+                                </DropdownItem>
+                              </DropdownSection>
+                              <DropdownSection>
+                                <DropdownItem
+                                  key="delete"
+                                  className="text-danger"
+                                  color="danger"
+                                  onPress={() => askDelete(u)}
+                                >
+                                  Eliminar permanentemente
+                                </DropdownItem>
+                              </DropdownSection>
+                            </DropdownMenu>
+                          </Dropdown>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <AddAdminModal
+        isOpen={isAddModalOpen}
+        takenEmails={takenEmails}
+        onClose={() => setIsAddModalOpen(false)}
+        onCreated={fetchAdmins}
+      />
+
+      {editingSelf && (
         <EditProfileModal
-          currentEmail={editProfileUser.email}
-          currentName={editProfileUser.full_name}
-          isOpen={!!editProfileUser}
-          userId={editProfileUser.id}
-          onClose={() => setEditProfileUser(null)}
+          currentEmail={editingSelf.email}
+          currentName={editingSelf.full_name}
+          isOpen={!!editingSelf}
+          userId={editingSelf.id}
+          onClose={() => setEditingSelf(null)}
           onSuccess={() => {
-            setEditProfileUser(null);
-            fetchAdminUsers();
+            setEditingSelf(null);
+            fetchAdmins();
           }}
         />
       )}
 
-      {/* Confirmation Modal */}
       <Modal
-        isOpen={!!confirmAction}
+        hideCloseButton
+        classNames={dialogClassNames}
+        isDismissable={!isRunning}
+        isOpen={!!pending}
         size="md"
-        onClose={() => setConfirmAction(null)}
+        onClose={() => !isRunning && setPending(null)}
       >
         <ModalContent>
-          <ModalHeader className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Icon
-                className="text-2xl text-warning"
-                icon="solar:danger-circle-bold-duotone"
-              />
-              <h2 className="text-xl font-heading font-bold">
-                Confirmar Acción
-              </h2>
-            </div>
-          </ModalHeader>
-          <ModalBody>
-            <p className="text-slate-700 font-body">
-              {confirmAction?.description}
-            </p>
-            <div
-              className={`${confirmAction?.type === "delete" ? "bg-danger-50 border-danger-200" : "bg-warning-50 border-warning-200"} border rounded-lg p-3 mt-2`}
-            >
-              <div className="flex items-start gap-2">
-                <Icon
-                  className={`${confirmAction?.type === "delete" ? "text-danger" : "text-warning"} text-lg mt-0.5`}
-                  icon={
-                    confirmAction?.type === "delete"
-                      ? "solar:danger-triangle-bold"
-                      : "solar:info-circle-bold"
-                  }
-                />
-                <p
-                  className={`text-sm ${confirmAction?.type === "delete" ? "text-danger-800" : "text-warning-800"} font-body`}
+          {pending ? (
+            <div className="p-6">
+              <DialogHeader title={pending.title} />
+              <p className="mt-2 text-[13px] leading-relaxed text-slate-600">
+                {pending.description}
+              </p>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  className={buttonClasses.ghost}
+                  disabled={isRunning}
+                  type="button"
+                  onClick={() => setPending(null)}
                 >
-                  {confirmAction?.type === "delete"
-                    ? "¡ADVERTENCIA! Esta acción es IRREVERSIBLE y eliminará todos los datos del usuario permanentemente."
-                    : "Esta acción no se puede deshacer fácilmente. Asegúrate de que sea correcta."}
-                </p>
+                  Cancelar
+                </button>
+                <button
+                  className={
+                    pending.destructive
+                      ? buttonClasses.danger
+                      : buttonClasses.primary
+                  }
+                  disabled={isRunning}
+                  type="button"
+                  onClick={runPending}
+                >
+                  {isRunning ? "…" : pending.confirmLabel}
+                </button>
               </div>
             </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              color="default"
-              variant="light"
-              onPress={() => setConfirmAction(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="font-semibold"
-              color={confirmAction?.type === "delete" ? "danger" : "warning"}
-              onPress={confirmAndExecute}
-            >
-              {confirmAction?.type === "delete"
-                ? "Sí, Eliminar Permanentemente"
-                : "Confirmar"}
-            </Button>
-          </ModalFooter>
+          ) : null}
         </ModalContent>
       </Modal>
     </div>

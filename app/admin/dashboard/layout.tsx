@@ -1,9 +1,105 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { Button, Link } from "@heroui/react";
-import { usePathname, useRouter } from "next/navigation";
+import NextLink from "next/link";
+import { usePathname } from "next/navigation";
 import React from "react";
+
+import { useAdminData } from "@/lib/admin/use-admin-data";
+
+import "./admin.css";
+
+const NAV_ITEMS = [
+  {
+    label: "Operaciones",
+    href: "/admin/dashboard/ops",
+    icon: "solar:chart-square-linear",
+    superOnly: true,
+  },
+  {
+    label: "Entrenadores",
+    href: "/admin/dashboard/trainers",
+    icon: "solar:users-group-two-rounded-linear",
+  },
+  {
+    label: "Administradores",
+    href: "/admin/dashboard/users",
+    icon: "solar:shield-user-linear",
+  },
+];
+
+type ThemePref = "system" | "light" | "dark";
+
+const THEME_KEY = "admin-theme";
+
+const THEME_OPTIONS: { key: ThemePref; icon: string; label: string }[] = [
+  { key: "system", icon: "solar:monitor-linear", label: "Sistema" },
+  { key: "light", icon: "solar:sun-2-linear", label: "Claro" },
+  { key: "dark", icon: "solar:moon-linear", label: "Oscuro" },
+];
+
+// Runs while the HTML is parsed, so a dark-mode reload doesn't flash white.
+const THEME_BOOT = `try{var p=localStorage.getItem("${THEME_KEY}")||"system";var d=p==="dark"||(p==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.adminTheme=d?"dark":"light"}catch(e){}`;
+
+function readPref(): ThemePref {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+
+    return v === "light" || v === "dark" ? v : "system";
+  } catch {
+    return "system";
+  }
+}
+
+/** Applies the admin theme to <html> while mounted; removes it on leave. */
+function useAdminTheme() {
+  const [pref, setPref] = React.useState<ThemePref>("system");
+
+  React.useLayoutEffect(() => {
+    setPref(readPref());
+  }, []);
+
+  React.useLayoutEffect(() => {
+    const root = document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      root.dataset.adminTheme =
+        pref === "dark" || (pref === "system" && media.matches)
+          ? "dark"
+          : "light";
+    };
+
+    apply();
+    media.addEventListener("change", apply);
+
+    return () => media.removeEventListener("change", apply);
+  }, [pref]);
+
+  React.useEffect(
+    () => () => {
+      delete document.documentElement.dataset.adminTheme;
+    },
+    []
+  );
+
+  const choose = (next: ThemePref) => {
+    const root = document.documentElement;
+
+    root.classList.add("admin-theme-transition");
+    window.setTimeout(
+      () => root.classList.remove("admin-theme-transition"),
+      250
+    );
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // private mode: the choice just won't persist
+    }
+    setPref(next);
+  };
+
+  return { pref, choose };
+}
 
 export default function AdminDashboardLayout({
   children,
@@ -11,18 +107,22 @@ export default function AdminDashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  const theme = useAdminTheme();
+  // Same cached request the Administradores page uses — tells us our role.
+  const { data: admins } = useAdminData<{
+    adminUsers: { id: string; role: string }[];
+    currentAdminId: string | null;
+  }>("/api/admin/users");
+  const isSuper =
+    admins?.adminUsers.find((a) => a.id === admins.currentAdminId)?.role ===
+    "super_admin";
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
 
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-
-      // Redirect to admin login
+      await fetch("/api/auth/logout", { method: "POST" });
       window.location.href = "/admin/login";
     } catch (error) {
       console.error("Error logging out:", error);
@@ -30,98 +130,103 @@ export default function AdminDashboardLayout({
     }
   };
 
-  const navItems = [
-    {
-      label: "Entrenadores",
-      href: "/admin/dashboard/trainers",
-      icon: "solar:users-group-two-rounded-bold-duotone",
-    },
-    {
-      label: "Usuarios Admin",
-      href: "/admin/dashboard/users",
-      icon: "solar:shield-user-bold-duotone",
-    },
-    {
-      label: "Nutrición v2",
-      href: "/admin/dashboard/nutrition-metrics",
-      icon: "solar:chart-2-bold-duotone",
-    },
-    {
-      label: "Configuración",
-      href: "/admin/dashboard/settings",
-      icon: "solar:settings-bold-duotone",
-      disabled: true,
-    },
-  ];
-
   return (
-    <div className="flex h-screen w-full bg-slate-50 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-black text-white flex flex-col flex-shrink-0">
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/10 p-2 rounded-xl">
-              <Icon
-                className="text-3xl text-white"
-                icon="solar:shield-user-bold"
-              />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold font-heading">Admin Panel</h1>
-              <p className="text-xs text-white/70">TopCoach</p>
-            </div>
-          </div>
+    <div
+      className="flex h-screen w-full overflow-hidden bg-white text-slate-900 antialiased"
+      style={{
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif",
+      }}
+    >
+      <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-slate-50/80">
+        <div className="flex h-14 items-center gap-2 px-4">
+          <span className="flex size-6 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+            T
+          </span>
+          <span className="text-[13px] font-semibold tracking-[-0.01em]">
+            TopCoach
+          </span>
+          <span className="rounded bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            Admin
+          </span>
         </div>
 
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <ul className="space-y-2">
-            {navItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+        <nav className="flex-1 overflow-y-auto px-2 py-2">
+          <ul className="space-y-0.5">
+            {NAV_ITEMS.filter((item) => !item.superOnly || isSuper).map(
+              (item) => {
+                const isActive = pathname.startsWith(item.href);
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    className={`
-                      flex items-center gap-3 px-4 py-3 rounded-lg
-                      font-body transition-all
-                      ${
+                return (
+                  <li key={item.href}>
+                    <NextLink
+                      aria-current={isActive ? "page" : undefined}
+                      className={`flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 ${
                         isActive
-                          ? "bg-white/20 text-white"
-                          : "text-white/70 hover:bg-white/10 hover:text-white"
-                      }
-                      ${item.disabled ? "opacity-50 cursor-not-allowed" : ""}
-                    `}
-                    href={item.disabled ? "#" : item.href}
-                  >
-                    <Icon className="text-xl" icon={item.icon} />
-                    <span className="font-medium">{item.label}</span>
-                    {item.disabled && (
-                      <span className="ml-auto text-xs bg-white/20 px-2 py-1 rounded">
-                        Pronto
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
+                          ? "admin-nav-active bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-900/5"
+                          : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
+                      }`}
+                      href={item.href}
+                    >
+                      <Icon
+                        className={
+                          isActive ? "text-slate-900" : "text-slate-400"
+                        }
+                        icon={item.icon}
+                        width={16}
+                      />
+                      {item.label}
+                    </NextLink>
+                  </li>
+                );
+              }
+            )}
           </ul>
         </nav>
 
-        <div className="p-4 border-t border-white/10">
-          <Button
-            className="w-full bg-white/10 hover:bg-white/20 text-white font-body"
+        <div className="space-y-1 border-t border-slate-200 p-2">
+          <div
+            aria-label="Tema"
+            className="flex rounded-md bg-slate-200/50 p-0.5"
+            role="radiogroup"
+          >
+            {THEME_OPTIONS.map((o) => {
+              const active = theme.pref === o.key;
+
+              return (
+                <button
+                  key={o.key}
+                  aria-checked={active}
+                  aria-label={o.label}
+                  className={`flex h-6 flex-1 items-center justify-center rounded-[5px] transition-colors duration-150 ${
+                    active
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-400 hover:text-slate-700"
+                  }`}
+                  role="radio"
+                  title={o.label}
+                  type="button"
+                  onClick={() => theme.choose(o.key)}
+                >
+                  <Icon icon={o.icon} width={14} />
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-slate-500 transition-colors hover:bg-slate-200/50 hover:text-slate-900 disabled:opacity-50"
             disabled={isLoggingOut}
-            isLoading={isLoggingOut}
-            startContent={<Icon icon="solar:logout-2-bold" />}
+            type="button"
             onClick={handleLogout}
           >
-            Cerrar Sesión
-          </Button>
+            <Icon icon="solar:logout-2-linear" width={16} />
+            {isLoggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+          </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }
