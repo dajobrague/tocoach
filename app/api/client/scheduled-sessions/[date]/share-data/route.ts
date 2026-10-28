@@ -1,12 +1,11 @@
-// GET /api/client/scheduled-sessions/[date]/share-card?sessionId=…
-// PNG con la marca del entrenador y los highlights de la sesión, para que el
-// cliente la comparta (llamada JC, 15 sep). La genera el servidor con
-// next/og: misma imagen en cualquier móvil y lista ANTES del tap de
-// "Compartir" (navigator.share exige gesto de usuario). Estilo y datos
-// visibles los elige el entrenador (tenants.features.share_card, Fase 2).
+// GET /api/client/scheduled-sessions/[date]/share-data?sessionId=…
+// Datos para "Compartir" (llamada JC, 14 oct): la sesión del cliente con sus
+// series, récords, músculos y vídeos, más la firma del entrenador. La imagen
+// la dibuja el móvil del cliente (vista previa al instante, mismo PNG que
+// exporta); aquí solo se leen datos. El logo viaja como PNG en data URI para
+// que el canvas del cliente pueda pintarlo sin CORS.
 //
-// Scoping: la fila se busca por client_id de la sesión del cliente; nunca se
-// lee nada de otro cliente.
+// Scoping: todo se filtra por el client_id de la sesión del cliente.
 
 /* eslint-disable no-console */
 import type { SessionSets, SetInput } from "@/lib/training/e1rm";
@@ -16,17 +15,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientSession } from "@/lib/auth/client-session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { loadShareCardBranding } from "@/lib/share-card/branding";
-import { renderShareCard } from "@/lib/share-card/render";
-import { shareCardSettingsFromFeatures } from "@/lib/share-card/settings";
 import {
-  type ShareCardLog,
-  computeShareCardStats,
-} from "@/lib/training/share-card-stats";
+  type ShareLogInput,
+  type SharePayload,
+  buildShareExercises,
+} from "@/lib/share-card/session-data";
+import { shareCardSettingsFromFeatures } from "@/lib/share-card/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LOG_PREFIX = "[Share Card API]";
+const LOG_PREFIX = "[Share Data API]";
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function legacySets(log: {
@@ -97,7 +96,7 @@ export async function GET(
 
     const { data: row, error: rowError } = await supabase
       .from("scheduled_sessions")
-      .select("id, session:sessions(name, program:programs(name))")
+      .select("id, scheduled_time, completion_date, session:sessions(name)")
       .eq("client_id", clientId)
       .eq("scheduled_date", date)
       .eq("session_id", sessionId)
@@ -121,11 +120,12 @@ export async function GET(
       supabase
         .from("exercise_logs")
         .select(
-          "exercise_id, sets_completed, reps_completed, weight_kg, duration_seconds, distance_meters, exercise:exercises(name), exercise_log_sets(reps, weight_kg)"
+          "id, exercise_id, sets_completed, reps_completed, weight_kg, duration_seconds, distance_meters, exercise:exercises(name, primary_muscles, secondary_muscles), exercise_log_sets(set_number, reps, weight_kg, video_url)"
         )
         .eq("client_id", clientId)
         .eq("scheduled_session_id", row.id)
-        .not("finalized_at", "is", null),
+        .not("finalized_at", "is", null)
+        .order("created_at", { ascending: true }),
       supabase
         .from("scheduled_sessions")
         .select("id", { count: "exact", head: true })
@@ -147,13 +147,22 @@ export async function GET(
       );
     }
 
-    const logs: ShareCardLog[] = (logsResult.data ?? []).map((log: any) => {
-      const rows = (log.exercise_log_sets ?? []) as any[];
+    const logs: ShareLogInput[] = (logsResult.data ?? []).map((log: any) => {
+      const rows = ((log.exercise_log_sets ?? []) as any[]).sort(
+        (a, b) => (a.set_number ?? 0) - (b.set_number ?? 0)
+      );
+      const exercise = pickOne<{
+        name?: string;
+        primary_muscles?: unknown;
+        secondary_muscles?: unknown;
+      }>(log.exercise);
 
       return {
+        id: String(log.id),
         exerciseId: log.exercise_id,
-        exerciseName:
-          pickOne<{ name?: string }>(log.exercise)?.name ?? "Ejercicio",
+        name: exercise?.name ?? "Ejercicio",
+        primaryMuscles: exercise?.primary_muscles ?? [],
+        secondaryMuscles: exercise?.secondary_muscles ?? [],
         sets:
           rows.length > 0
             ? rows.map((set) => ({
@@ -165,17 +174,20 @@ export async function GET(
                 reps_completed: log.reps_completed,
                 weight_kg: toNumber(log.weight_kg),
               }),
+        videoUrls: rows.map((set) =>
+          typeof set.video_url === "string" ? set.video_url : null
+        ),
         durationSeconds: toNumber(log.duration_seconds),
         distanceMeters: toNumber(log.distance_meters),
       };
     });
 
     // Historial de los mismos ejercicios en días ANTERIORES (récords).
-    // Best-effort: si falla, la tarjeta sale sin récords.
+    // Best-effort: si falla, la imagen sale sin récords.
     const priorByExercise = new Map<string, SessionSets[]>();
     const exerciseIds = [...new Set(logs.map((log) => log.exerciseId))];
 
-    if (exerciseIds.length > 0 && settings.stats.includes("records")) {
+    if (exerciseIds.length > 0) {
       const { data: prior, error: priorError } = await supabase
         .from("exercise_logs")
         .select(
@@ -213,22 +225,32 @@ export async function GET(
       }
     }
 
-    const sessionRow = pickOne<{ name?: string; program?: unknown }>(
-      row.session as any
-    );
-
-    return await renderShareCard(
-      {
-        branding,
-        programName:
-          pickOne<{ name?: string }>(sessionRow?.program as any)?.name ?? null,
-        sessionName: sessionRow?.name ?? "Entrenamiento",
-        date,
-        stats: computeShareCardStats(logs, priorByExercise),
-        sessionNumber: countResult.count ?? null,
+    const payload: SharePayload = {
+      branding: {
+        name: settings.displayName || branding.trainerName,
+        instagram: settings.instagram,
+        brandColor: branding.brandColor,
+        logoSrc: branding.logoSrc,
+        showTopcoach: settings.showTopcoach,
       },
-      settings,
-      { "Cache-Control": "private, no-store" }
+      session: {
+        sessionName:
+          pickOne<{ name?: string }>(row.session as any)?.name ??
+          "Entrenamiento",
+        date,
+        sessionNumber: countResult.count ?? null,
+        startTime:
+          typeof row.scheduled_time === "string"
+            ? row.scheduled_time.slice(0, 5)
+            : null,
+        completedAt: row.completion_date ?? null,
+        exercises: buildShareExercises(logs, priorByExercise),
+      },
+    };
+
+    return NextResponse.json(
+      { success: true, data: payload },
+      { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
     console.error(`${LOG_PREFIX} unexpected error:`, {

@@ -52,6 +52,8 @@ import { useSetVideos } from "./hooks/use-set-videos";
 import { TrainerNoteCard } from "./trainer-note-card";
 
 import { ClientScreen } from "@/components/client-dashboard/client-screen";
+import { ShareScreen } from "@/components/client-dashboard/workouts/share-screen";
+import { useTenant } from "@/components/tenant-provider";
 import {
   clearExerciseLogDraft,
   slotScopedExerciseId,
@@ -60,6 +62,7 @@ import { clientFetch } from "@/lib/auth/client-token-storage";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { useDeleteExerciseLogs } from "@/lib/hooks/use-client-queries";
 import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
+import { shareCardSettingsFromFeatures } from "@/lib/share-card/settings";
 import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
 interface ExtendedExerciseShape extends ExerciseShape {
@@ -243,6 +246,8 @@ export function ExerciseLogModal({
   const handleUserFormChange = useCallback<typeof setFormData>(
     (next) => {
       isDirtyRef.current = true;
+      // Editar tras finalizar vuelve al pie normal (hay que re-finalizar).
+      setJustFinalized(false);
       setFormData(next);
     },
     [setFormData]
@@ -489,6 +494,13 @@ export function ExerciseLogModal({
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const [isCelebrating, setIsCelebrating] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
+  // Compartir (JC, 14 oct): tras "Finalizado" la pantalla se queda en
+  // "hecho" con Compartir a mano, en vez de cerrarse sola.
+  const shareEnabled = shareCardSettingsFromFeatures(
+    useTenant()?.features
+  ).enabled;
+  const [justFinalized, setJustFinalized] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const cancelPendingClose = useCallback(() => {
     if (closeTimerRef.current !== null) {
@@ -505,6 +517,8 @@ export function ExerciseLogModal({
       setAutoSaveState("idle");
       setCelebration(null);
       setIsCelebrating(false);
+      setJustFinalized(false);
+      setShareOpen(false);
       cancelPendingClose();
     }
   }, [isOpen, cancelPendingClose]);
@@ -575,6 +589,14 @@ export function ExerciseLogModal({
 
     const holdMs = startCelebration(outcome);
 
+    if (shareEnabled) {
+      // Se queda abierta: el banner de récord y "Compartir" a la vista.
+      setIsCelebrating(false);
+      setJustFinalized(true);
+
+      return;
+    }
+
     if (holdMs === 0) {
       onClose();
 
@@ -639,6 +661,7 @@ export function ExerciseLogModal({
   const increaseWeight =
     !existingLog?.finalized_at &&
     isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate);
+  const canShareLog = shareEnabled && Boolean(existingLog?.finalized_at);
 
   return (
     // Sin backdrop (pantalla completa) y sin Esc: el log se cierra solo con
@@ -655,53 +678,91 @@ export function ExerciseLogModal({
               estar scrolleado abajo del todo. */}
           {celebration ? <CelebrationBanner celebration={celebration} /> : null}
 
-          {existingLog?.id ? (
-            <Button
-              className="h-10 self-center bg-transparent text-sm font-semibold"
-              color="danger"
-              isDisabled={isSaving || deleteLog.isPending}
-              isLoading={deleteLog.isPending}
-              startContent={
-                !deleteLog.isPending && (
-                  <Icon icon="solar:trash-bin-minimalistic-linear" width={16} />
-                )
-              }
-              variant="light"
-              onPress={handleDelete}
+          {justFinalized ? (
+            <>
+              {celebration ? null : (
+                <p
+                  className="flex items-center justify-center gap-1.5 text-[13px] text-default-500"
+                  role="status"
+                >
+                  <Icon
+                    aria-hidden
+                    className="text-success"
+                    icon="solar:check-circle-bold"
+                    width={16}
+                  />
+                  Ejercicio guardado
+                </p>
+              )}
+              <div className="grid grid-cols-[1fr_1.6fr] gap-2.5">
+                <Button
+                  className="h-[52px] bg-default-100 text-[17px] font-semibold text-foreground"
+                  radius="lg"
+                  onPress={handleClose}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  className="h-[52px] text-[17px] font-semibold"
+                  color="primary"
+                  radius="lg"
+                  startContent={<Icon icon="solar:share-linear" width={20} />}
+                  onPress={() => setShareOpen(true)}
+                >
+                  Compartir
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div
+              className={`grid gap-2.5 ${
+                canShareLog
+                  ? "grid-cols-[52px_1fr_1.6fr]"
+                  : "grid-cols-[1fr_1.6fr]"
+              }`}
             >
-              Borrar registro
-            </Button>
-          ) : null}
-          <div className="grid grid-cols-[1fr_1.6fr] gap-2.5">
-            <Button
-              className="h-[52px] bg-default-100 text-[17px] font-semibold text-foreground"
-              isDisabled={isSaving || deleteLog.isPending}
-              radius="lg"
-              onPress={handleClose}
-            >
-              Cerrar
-            </Button>
-            <Button
-              className="h-[52px] text-[17px] font-semibold"
-              color="primary"
-              isDisabled={
-                isSaving ||
-                isCelebrating ||
-                cardioVideo.isUploading ||
-                setVideos.uploadingIndex !== null ||
-                deleteLog.isPending
-              }
-              isLoading={isSaving}
-              radius="lg"
-              onPress={handleFinalize}
-            >
-              {isSaving
-                ? "Guardando..."
-                : isCelebrating
-                  ? "¡Guardado!"
-                  : "Finalizado"}
-            </Button>
-          </div>
+              {canShareLog ? (
+                <Button
+                  isIconOnly
+                  aria-label="Compartir"
+                  className="h-[52px] w-[52px] bg-default-100 text-foreground"
+                  isDisabled={isSaving || deleteLog.isPending}
+                  radius="lg"
+                  onPress={() => setShareOpen(true)}
+                >
+                  <Icon icon="solar:share-linear" width={22} />
+                </Button>
+              ) : null}
+              <Button
+                className="h-[52px] bg-default-100 text-[17px] font-semibold text-foreground"
+                isDisabled={isSaving || deleteLog.isPending}
+                radius="lg"
+                onPress={handleClose}
+              >
+                Cerrar
+              </Button>
+              <Button
+                className="h-[52px] text-[17px] font-semibold"
+                color="primary"
+                isDisabled={
+                  isSaving ||
+                  isCelebrating ||
+                  cardioVideo.isUploading ||
+                  setVideos.uploadingIndex !== null ||
+                  deleteLog.isPending
+                }
+                isLoading={isSaving}
+                radius="lg"
+                onPress={handleFinalize}
+              >
+                {isSaving
+                  ? "Guardando..."
+                  : isCelebrating
+                    ? "¡Guardado!"
+                    : "Finalizado"}
+              </Button>
+            </div>
+          )}
         </div>
       }
       isOpen={isOpen}
@@ -783,7 +844,36 @@ export function ExerciseLogModal({
           setVideos={setVideos}
           onChange={handleUserFormChange}
         />
+
+        {/* Acción destructiva al final del contenido, lejos de los botones
+            principales del pie. */}
+        {existingLog?.id ? (
+          <Button
+            className="h-10 self-center bg-transparent text-sm font-semibold"
+            color="danger"
+            isDisabled={isSaving || deleteLog.isPending}
+            isLoading={deleteLog.isPending}
+            startContent={
+              !deleteLog.isPending && (
+                <Icon icon="solar:trash-bin-minimalistic-linear" width={16} />
+              )
+            }
+            variant="light"
+            onPress={handleDelete}
+          >
+            Borrar registro
+          </Button>
+        ) : null}
       </div>
+
+      <ShareScreen
+        initialExerciseId={exerciseId || null}
+        initialScope="exercise"
+        isOpen={shareOpen}
+        scheduledDate={scheduledDate}
+        sessionId={sessionId}
+        onClose={() => setShareOpen(false)}
+      />
     </ClientScreen>
   );
 }

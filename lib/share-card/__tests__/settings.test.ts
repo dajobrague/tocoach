@@ -16,69 +16,41 @@ describe("share card settings", () => {
     );
   });
 
-  it("sanea campo a campo y respeta el orden canónico de stats", () => {
+  it("ajustes antiguos (estilo, datos, lista) se leen sin romper", () => {
     expect(
       shareCardSettingsFromFeatures({
         share_card: {
           enabled: false,
-          style: "neon",
-          stats: ["reps", "x", "volume"],
+          style: "panel",
+          stats: ["volume"],
+          exerciseList: true,
+          instagram: "coach.joseca",
         },
       })
     ).toEqual({
       ...DEFAULT_SHARE_CARD_SETTINGS,
       enabled: false,
-      stats: ["volume", "reps"],
+      instagram: "coach.joseca",
     });
   });
 
-  it("el PUT rechaza valores desconocidos", () => {
+  it("el PUT exige enabled y sanea nombre e Instagram", () => {
     expect(
       validateShareCardSettings({
         enabled: true,
-        style: "white",
-        stats: ["sets"],
-      })
-    ).toEqual({
-      ...DEFAULT_SHARE_CARD_SETTINGS,
-      style: "white",
-      stats: ["sets"],
-    });
-    expect(
-      validateShareCardSettings({
-        enabled: true,
-        style: "white",
-        stats: ["kcal"],
-      })
-    ).toBeNull();
-    expect(validateShareCardSettings({ style: "panel", stats: [] })).toBeNull();
-  });
-
-  it("nombre e Instagram se sanean; un usuario inválido no se guarda", () => {
-    const base = { enabled: true, style: "panel", stats: [] };
-
-    expect(
-      validateShareCardSettings({
-        ...base,
         displayName: "  Coach   Joseca ",
         instagram: "@coach.joseca",
-        exerciseList: false,
         showTopcoach: false,
       })
-    ).toMatchObject({
+    ).toEqual({
+      enabled: true,
       displayName: "Coach Joseca",
       instagram: "coach.joseca",
-      exerciseList: false,
       showTopcoach: false,
     });
+    expect(validateShareCardSettings({ displayName: "x" })).toBeNull();
     expect(
-      validateShareCardSettings({ ...base, instagram: "no vale" })
+      validateShareCardSettings({ enabled: true, instagram: "no vale" })
     ).toBeNull();
-    // Ajustes guardados antes de existir estos campos: activados.
-    expect(shareCardSettingsFromFeatures({ share_card: base })).toMatchObject({
-      exerciseList: true,
-      showTopcoach: true,
-      instagram: "",
-    });
   });
 });

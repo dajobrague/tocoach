@@ -1,115 +1,78 @@
 "use client";
 
-// Ajustes → Marca → "Tarjeta de sesión" (Fase 2, JC 23 sep): el entrenador
-// decide si sus clientes pueden compartir la tarjeta al terminar una sesión,
-// con qué estilo y qué datos aparecen. La vista previa es la imagen real
-// (misma ruta de dibujo que la del cliente) con una sesión de ejemplo.
+// Ajustes → Marca → "Compartir entrenos" (JC, 14 oct): el cliente compone su
+// imagen (plantilla, fondo, datos, color); el entrenador solo firma. Aquí
+// decide si se puede compartir, su nombre, su Instagram y el pie
+// "topcoach.io". La vista previa usa las mismas plantillas que el cliente
+// con una sesión de ejemplo, dibujadas en el navegador.
 
-import type {
-  ShareCardSettings,
-  ShareCardStyle,
-} from "@/lib/share-card/settings";
+import type { ShareCardSettings } from "@/lib/share-card/settings";
 
-import {
-  Alert,
-  Button,
-  Checkbox,
-  CheckboxGroup,
-  Input,
-  Skeleton,
-  Spinner,
-  Switch,
-} from "@heroui/react";
+import { Alert, Button, Input, Skeleton, Switch } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ensureShareFonts } from "@/components/share-card/fonts";
+import { Sticker, type TemplateId } from "@/components/share-card/sticker";
 import {
-  DEFAULT_SHARE_CARD_SETTINGS,
-  SHARE_CARD_STATS,
-  SHARE_CARD_STAT_LABELS,
-} from "@/lib/share-card/settings";
+  SAMPLE_SESSION,
+  SESSION_STATS,
+  type ShareBranding,
+  pickStats,
+} from "@/lib/share-card/session-data";
+import { DEFAULT_SHARE_CARD_SETTINGS } from "@/lib/share-card/settings";
 
-// Fondo "tipo foto" para ver los stickers transparentes (texto blanco y
-// oscuro se leen sobre él, igual que sobre una foto real).
-const PHOTO_BACKDROP =
-  "bg-gradient-to-br from-[#d9c7a8] via-[#8a8f8c] to-[#3b4a5a]";
+interface Branding {
+  trainerName: string;
+  brandColor: string | null;
+  logoSrc: string | null;
+}
 
-const STYLE_OPTIONS: Array<{
-  key: ShareCardStyle;
-  title: string;
-  description: string;
-  /** Muestra en miniatura sobre el fondo tipo foto. */
-  sample: string;
-}> = [
-  {
-    key: "panel",
-    title: "Panel",
-    description: "Panel oscuro detrás de la tarjeta. Se lee siempre.",
-    sample: "rounded-md bg-black/45 px-2 py-1 text-white",
-  },
-  {
-    key: "white",
-    title: "Texto blanco",
-    description: "Sin recuadro. Para fotos oscuras.",
-    sample: "text-white [text-shadow:0_1px_6px_rgba(0,0,0,.6)]",
-  },
-  {
-    key: "ink",
-    title: "Texto oscuro",
-    description: "Sin recuadro. Para fotos claras.",
-    sample: "text-slate-900 [text-shadow:0_1px_6px_rgba(255,255,255,.7)]",
-  },
+// Damero oscuro: el sticker es transparente y va sobre la foto del cliente.
+const CHECKER = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='%233a3a3a'/%3E%3Crect width='12' height='12' fill='%234a4a4a'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%234a4a4a'/%3E%3C/svg%3E")`;
+
+const PREVIEWS: { id: TemplateId; name: string }[] = [
+  { id: "datos", name: "Datos" },
+  { id: "musculos", name: "Músculos" },
+  { id: "record", name: "Récord" },
 ];
 
-function previewUrl(settings: ShareCardSettings): string {
-  const params = new URLSearchParams({
-    style: settings.style,
-    stats: settings.stats.join(","),
-    name: settings.displayName,
-    ig: settings.instagram,
-    list: settings.exerciseList ? "1" : "0",
-    tc: settings.showTopcoach ? "1" : "0",
-  });
-
-  return `/api/trainer/share-card/preview?${params.toString()}`;
-}
+const SAMPLE_STATS = pickStats(
+  SESSION_STATS,
+  ["duration", "volume", "sets"],
+  SAMPLE_SESSION
+);
 
 export default function ShareCardTab() {
   const [saved, setSaved] = useState<ShareCardSettings | null>(null);
   const [draft, setDraft] = useState<ShareCardSettings>(
     DEFAULT_SHARE_CARD_SETTINGS
   );
+  const [branding, setBranding] = useState<Branding | null>(null);
+  const [fontsReady, setFontsReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
-  // La imagen tarda ~1-2 s en generarse: spinner encima de la anterior.
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(true);
 
   useEffect(() => {
+    void ensureShareFonts().then(() => setFontsReady(true));
     fetch("/api/trainer/share-card", { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = (await res.json()) as { settings: ShareCardSettings };
+        const body = (await res.json()) as {
+          settings: ShareCardSettings;
+          branding: Branding;
+        };
 
         setSaved(body.settings);
         setDraft(body.settings);
+        setBranding(body.branding);
       })
       .catch(() => setLoadError(true));
   }, []);
-
-  // Debounce corto: marcar varias casillas seguidas no dispara N imágenes.
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setPreviewLoading(true);
-      setPreviewSrc(previewUrl(draft));
-    }, 350);
-
-    return () => window.clearTimeout(timer);
-  }, [draft]);
 
   const isDirty =
     saved !== null && JSON.stringify(saved) !== JSON.stringify(draft);
@@ -128,7 +91,7 @@ export default function ShareCardTab() {
 
       setSaved(body.settings);
       setDraft(body.settings);
-      setMessage({ type: "success", text: "Ajustes de la tarjeta guardados." });
+      setMessage({ type: "success", text: "Ajustes guardados." });
     } catch {
       setMessage({
         type: "error",
@@ -143,13 +106,13 @@ export default function ShareCardTab() {
     return (
       <Alert
         color="danger"
-        description="No pudimos cargar los ajustes de la tarjeta. Recarga la página."
+        description="No pudimos cargar los ajustes. Recarga la página."
         title="Error"
       />
     );
   }
 
-  if (saved === null) {
+  if (saved === null || branding === null) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-16 w-full rounded-lg" />
@@ -157,6 +120,14 @@ export default function ShareCardTab() {
       </div>
     );
   }
+
+  const previewBranding: ShareBranding = {
+    name: draft.displayName || branding.trainerName,
+    instagram: draft.instagram,
+    brandColor: branding.brandColor,
+    logoSrc: branding.logoSrc,
+    showTopcoach: draft.showTopcoach,
+  };
 
   return (
     <div className="space-y-8">
@@ -168,220 +139,137 @@ export default function ShareCardTab() {
         />
       )}
 
-      <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-default-200 bg-content1 p-5">
         <div className="space-y-1">
-          <h3 className="text-base font-semibold text-gray-900">
-            Tarjeta para compartir la sesión
+          <h3 className="text-base font-semibold text-foreground">
+            Tus clientes comparten sus entrenos
           </h3>
-          <p className="max-w-xl text-sm text-gray-600">
-            Al terminar un entrenamiento, tus clientes pueden compartir una
-            imagen con tu logo y los datos de la sesión en Instagram o WhatsApp.
+          <p className="max-w-xl text-sm text-default-600">
+            Al terminar una sesión o un ejercicio, el cliente crea su imagen
+            para Instagram: elige la plantilla, el fondo (su foto, su vídeo o un
+            color) y los datos. Tú solo pones tu firma, que sale siempre.
           </p>
         </div>
         <Switch
-          aria-label="Permitir que los clientes compartan la tarjeta"
+          aria-label="Permitir que los clientes compartan sus entrenos"
           isSelected={draft.enabled}
           onValueChange={(enabled) => setDraft((d) => ({ ...d, enabled }))}
         />
       </div>
 
       <div
-        className={`grid gap-8 lg:grid-cols-[1fr_300px] ${draft.enabled ? "" : "pointer-events-none opacity-50"}`}
+        className={`grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] ${draft.enabled ? "" : "pointer-events-none opacity-50"}`}
       >
-        <div className="space-y-8">
-          <section className="space-y-3">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-              Estilo
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {STYLE_OPTIONS.map((option) => {
-                const selected = draft.style === option.key;
-
-                return (
-                  <button
-                    key={option.key}
-                    aria-pressed={selected}
-                    className={`flex flex-col gap-3 rounded-xl border-2 p-3 text-left transition-colors ${
-                      selected
-                        ? "border-gray-900 bg-gray-50"
-                        : "border-gray-200 bg-white hover:border-gray-300"
-                    }`}
-                    type="button"
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, style: option.key }))
-                    }
-                  >
-                    <span
-                      className={`flex h-16 w-full items-center justify-center rounded-lg ${PHOTO_BACKDROP}`}
-                    >
-                      <span
-                        className={`text-sm font-bold tabular-nums ${option.sample}`}
-                      >
-                        8.420 kg
-                      </span>
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold text-gray-900">
-                        {option.title}
-                      </span>
-                      <span className="block text-xs text-gray-500">
-                        {option.description}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-              Tu marca en la tarjeta
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                description="Vacío = el nombre de tu marca."
-                id="share-card-display-name"
-                label="Nombre"
-                labelPlacement="outside"
-                maxLength={40}
-                placeholder="Como quieres que aparezca"
-                value={draft.displayName}
-                onValueChange={(displayName) =>
-                  setDraft((d) => ({ ...d, displayName }))
-                }
-              />
-              <Input
-                description="Se muestra debajo de tu nombre."
-                id="share-card-instagram"
-                label="Instagram"
-                labelPlacement="outside"
-                placeholder="tu.usuario"
-                startContent={<span className="text-sm text-gray-400">@</span>}
-                value={draft.instagram}
-                onValueChange={(value) =>
-                  setDraft((d) => ({
-                    ...d,
-                    // Solo lo que admite un usuario de Instagram.
-                    instagram: value
-                      .trim()
-                      .replace(/^@/, "")
-                      .replace(/[^A-Za-z0-9._]/g, "")
-                      .slice(0, 30),
-                  }))
-                }
-              />
-            </div>
-            <Switch
-              isSelected={draft.showTopcoach}
-              size="sm"
-              onValueChange={(showTopcoach) =>
-                setDraft((d) => ({ ...d, showTopcoach }))
-              }
-            >
-              <span className="text-sm text-gray-700">
-                Mostrar «topcoach.io» al pie
-              </span>
-            </Switch>
-          </section>
-
-          <section className="space-y-3">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-              Datos que se muestran
-            </h4>
-            <Switch
-              isSelected={draft.exerciseList}
-              size="sm"
-              onValueChange={(exerciseList) =>
-                setDraft((d) => ({ ...d, exerciseList }))
-              }
-            >
-              <span className="text-sm text-gray-700">
-                Lista de ejercicios con sus series
-              </span>
-            </Switch>
-            <CheckboxGroup
-              aria-label="Datos que se muestran en la tarjeta"
-              classNames={{ wrapper: "grid gap-2 sm:grid-cols-2" }}
-              value={draft.stats}
-              onValueChange={(values) =>
-                setDraft((d) => ({
-                  ...d,
-                  // Orden canónico: el de la tarjeta, no el de los clics.
-                  stats: SHARE_CARD_STATS.filter((stat) =>
-                    values.includes(stat)
-                  ),
-                }))
-              }
-            >
-              {SHARE_CARD_STATS.map((stat) => (
-                <Checkbox
-                  key={stat}
-                  // La lista ya enseña los ejercicios: el número no se pinta.
-                  isDisabled={stat === "exercises" && draft.exerciseList}
-                  value={stat}
-                >
-                  {SHARE_CARD_STAT_LABELS[stat]}
-                  {stat === "exercises" && draft.exerciseList ? (
-                    <span className="block text-xs text-gray-400">
-                      Ya aparecen en la lista
-                    </span>
-                  ) : null}
-                </Checkbox>
-              ))}
-            </CheckboxGroup>
-            <p className="text-xs text-gray-500">
-              Cada dato solo aparece si el cliente lo tiene en esa sesión. Sin
-              «Cardio», el cardio no sale ni en las barras ni en la lista.
-            </p>
-          </section>
-        </div>
+        <section className="space-y-4">
+          <h4 className="text-sm font-semibold text-foreground">Tu firma</h4>
+          <Input
+            description="Vacío = el nombre de tu marca."
+            id="share-card-display-name"
+            label="Nombre"
+            labelPlacement="outside"
+            maxLength={40}
+            placeholder={branding.trainerName}
+            value={draft.displayName}
+            onValueChange={(displayName) =>
+              setDraft((d) => ({ ...d, displayName }))
+            }
+          />
+          <Input
+            description="Se muestra debajo de tu nombre."
+            id="share-card-instagram"
+            label="Instagram"
+            labelPlacement="outside"
+            placeholder="tu.usuario"
+            startContent={<span className="text-sm text-default-400">@</span>}
+            value={draft.instagram}
+            onValueChange={(value) =>
+              setDraft((d) => ({
+                ...d,
+                // Solo lo que admite un usuario de Instagram.
+                instagram: value
+                  .trim()
+                  .replace(/^@/, "")
+                  .replace(/[^A-Za-z0-9._]/g, "")
+                  .slice(0, 30),
+              }))
+            }
+          />
+          <Switch
+            isSelected={draft.showTopcoach}
+            size="sm"
+            onValueChange={(showTopcoach) =>
+              setDraft((d) => ({ ...d, showTopcoach }))
+            }
+          >
+            <span className="text-sm text-default-700">
+              Mostrar «topcoach.io» al pie
+            </span>
+          </Switch>
+          <p className="flex items-start gap-2 rounded-lg bg-default-100 p-3 text-xs text-default-600">
+            <Icon
+              className="mt-0.5 shrink-0"
+              icon="solar:palette-linear"
+              width={16}
+            />
+            El logo y el color salen de tu marca (Ajustes → Marca).
+          </p>
+        </section>
 
         <section className="space-y-3">
-          <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+          <h4 className="text-sm font-semibold text-foreground">
             Vista previa
           </h4>
-          <div
-            className={`relative overflow-hidden rounded-xl border border-gray-200 ${PHOTO_BACKDROP}`}
-          >
-            {previewSrc !== null ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                alt="Vista previa de la tarjeta con una sesión de ejemplo"
-                className="block w-full"
-                src={previewSrc}
-                onError={() => setPreviewLoading(false)}
-                onLoad={() => setPreviewLoading(false)}
-              />
-            ) : (
-              <div className="aspect-[4/5] w-full" />
-            )}
-            {previewLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/40">
-                <Spinner />
-              </div>
-            ) : null}
+          <div className="grid grid-cols-3 gap-3">
+            {PREVIEWS.map((preview) => (
+              <figure key={preview.id} className="m-0 space-y-1.5">
+                <div
+                  className="relative flex aspect-[9/16] items-center justify-center overflow-hidden rounded-xl"
+                  style={{
+                    backgroundImage: CHECKER,
+                    backgroundSize: "16px 16px",
+                  }}
+                >
+                  {fontsReady ? (
+                    <Sticker
+                      branding={previewBranding}
+                      className="h-auto w-[86%]"
+                      exercise={null}
+                      id={`trainer-${preview.id}`}
+                      ink="white"
+                      mapMode="auto"
+                      session={SAMPLE_SESSION}
+                      shadow={false}
+                      stats={SAMPLE_STATS}
+                      template={preview.id}
+                      onBrandBg={false}
+                    />
+                  ) : null}
+                </div>
+                <figcaption className="text-center text-xs text-default-500">
+                  {preview.name}
+                </figcaption>
+              </figure>
+            ))}
           </div>
-          <p className="text-xs text-gray-500">
-            Sesión de ejemplo con tu logo, tu nombre y tu color. El fondo es
-            transparente: tu cliente lo pone sobre su foto.
+          <p className="text-xs text-default-500">
+            Sesión de ejemplo. El cliente elige entre estas y otras plantillas,
+            y puede compartir también un solo ejercicio.
           </p>
         </section>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-6">
+      <div className="flex items-center justify-end gap-3 border-t border-default-200 pt-6">
         {isDirty ? (
-          <span className="text-sm text-gray-500">Cambios sin guardar</span>
+          <span className="text-sm text-default-500">Cambios sin guardar</span>
         ) : null}
         <Button
-          className="bg-black text-white hover:bg-slate-800"
+          color="primary"
           isDisabled={!isDirty}
           isLoading={isSaving}
-          size="lg"
           startContent={<Icon icon="solar:diskette-linear" />}
           onPress={save}
         >
-          {isSaving ? "Guardando..." : "Guardar Cambios"}
+          {isSaving ? "Guardando..." : "Guardar cambios"}
         </Button>
       </div>
     </div>

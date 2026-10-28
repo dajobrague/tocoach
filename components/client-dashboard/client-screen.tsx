@@ -24,6 +24,8 @@ interface ClientScreenProps {
   /** Esc cierra la pantalla (desactivar si hay visores encima que lo usan). */
   closeOnEscape?: boolean;
   ariaLabel?: string;
+  /** El contenido ocupa todo el alto disponible (pantallas sin scroll). */
+  fill?: boolean;
   children: ReactNode;
 }
 
@@ -46,6 +48,7 @@ export function ClientScreen({
   footer,
   closeOnEscape = true,
   ariaLabel,
+  fill = false,
   children,
 }: ClientScreenProps) {
   const onCloseRef = useRef(onClose);
@@ -107,7 +110,9 @@ export function ClientScreen({
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <div className="mx-auto max-w-lg">{children}</div>
+              <div className={`mx-auto max-w-lg ${fill ? "h-full" : ""}`}>
+                {children}
+              </div>
             </div>
 
             {footer ? (

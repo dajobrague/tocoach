@@ -44,7 +44,7 @@ export default function SettingsContent({
     },
     {
       key: "share-card",
-      title: "Tarjeta de sesión",
+      title: "Compartir entrenos",
       icon: "solar:share-linear",
       component: <ShareCardTab />,
     },

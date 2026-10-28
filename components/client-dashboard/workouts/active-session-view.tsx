@@ -373,7 +373,6 @@ export function ActiveSessionView({
             <ShareSessionButton
               scheduledDate={scheduledDate}
               sessionId={session.id}
-              sessionName={session.name}
             />
             {schedState.data?.completedManually === true ? (
               <Button

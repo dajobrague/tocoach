@@ -1,13 +1,15 @@
-// GET/PUT /api/trainer/share-card — ajustes de la tarjeta "Comparte tu
-// sesión" del entrenador (Fase 2, JC 23 sep): activarla, estilo y qué datos
-// se ven. Se guardan en tenants.features.share_card sin tocar el resto de
-// features (food_market, etc.).
+// GET/PUT /api/trainer/share-card — lo que firma el entrenador en las
+// imágenes que comparten sus clientes (JC, 14 oct): activarlas, nombre,
+// Instagram y el pie "topcoach.io". Se guardan en tenants.features.share_card
+// sin tocar el resto de features. El GET devuelve además su marca (nombre,
+// color y logo en data URI) para la vista previa.
 
 /* eslint-disable no-console */
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { loadShareCardBranding } from "@/lib/share-card/branding";
 import {
   shareCardSettingsFromFeatures,
   validateShareCardSettings,
@@ -26,7 +28,7 @@ export async function GET() {
   const supabase = createSupabaseClient();
   const { data: tenant, error } = await supabase
     .from("tenants")
-    .select("features")
+    .select("features, logo_url, theme_json")
     .eq("trainer_id", session.trainer_id)
     .maybeSingle();
 
@@ -34,8 +36,11 @@ export async function GET() {
     return NextResponse.json({ error: "Marca no encontrada" }, { status: 404 });
   }
 
+  const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   return NextResponse.json({
     settings: shareCardSettingsFromFeatures(tenant.features),
+    branding: await loadShareCardBranding(tenant, correlationId),
   });
 }
 
