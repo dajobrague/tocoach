@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { parseTags } from "@/lib/library/parse-tags";
+import { parseMuscles } from "@/lib/training/muscles";
 
 // GET - Fetch a single exercise
 export async function GET(
@@ -155,6 +156,22 @@ export async function PUT(
         );
       }
       updateData.tags = parsedTags.tags;
+    }
+
+    const parsedMuscles = parseMuscles(
+      body.primary_muscles,
+      body.secondary_muscles
+    );
+
+    if (parsedMuscles !== undefined) {
+      if (parsedMuscles.ok === false) {
+        return NextResponse.json(
+          { success: false, error: parsedMuscles.error },
+          { status: 400 }
+        );
+      }
+      updateData.primary_muscles = parsedMuscles.muscles.primary;
+      updateData.secondary_muscles = parsedMuscles.muscles.secondary;
     }
 
     // Cardio activity type lives in metadata.cardio_type — merge without

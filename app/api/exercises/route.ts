@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { parseTagParams, parseTags } from "@/lib/library/parse-tags";
+import { parseMuscles } from "@/lib/training/muscles";
 
 // GET - Fetch all exercises from trainer's library
 export async function GET(request: NextRequest) {
@@ -147,6 +148,8 @@ export async function POST(request: NextRequest) {
       tips,
       cardio_type,
       tags,
+      primary_muscles,
+      secondary_muscles,
     } = body;
 
     const parsedTags = parseTags(tags);
@@ -154,6 +157,15 @@ export async function POST(request: NextRequest) {
     if (parsedTags !== undefined && parsedTags.ok === false) {
       return NextResponse.json(
         { success: false, error: parsedTags.error },
+        { status: 400 }
+      );
+    }
+
+    const parsedMuscles = parseMuscles(primary_muscles, secondary_muscles);
+
+    if (parsedMuscles !== undefined && parsedMuscles.ok === false) {
+      return NextResponse.json(
+        { success: false, error: parsedMuscles.error },
         { status: 400 }
       );
     }
@@ -223,6 +235,12 @@ export async function POST(request: NextRequest) {
         metadata: category === "cardio" && cardio_type ? { cardio_type } : {},
         // Only when sent: keeps inserts working before the tags migration.
         ...(parsedTags?.ok === true ? { tags: parsedTags.tags } : {}),
+        ...(parsedMuscles?.ok === true
+          ? {
+              primary_muscles: parsedMuscles.muscles.primary,
+              secondary_muscles: parsedMuscles.muscles.secondary,
+            }
+          : {}),
       })
       .select()
       .single();
