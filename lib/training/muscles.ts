@@ -113,6 +113,47 @@ export function parseMuscles(
   };
 }
 
+/** Cardio is the only category saved without a primary muscle (Oct 27, David). */
+export const primaryMuscleRequired = (category: string | null | undefined) =>
+  category !== "cardio";
+
+export const MISSING_PRIMARY_ERROR = "Elige al menos un músculo principal";
+
+/** Same exercise name across libraries: case, edge and inner spaces ignored. */
+export const normalizeExerciseName = (name: string) =>
+  name.toLowerCase().trim().replace(/\s+/g, " ");
+
+/**
+ * Most common muscle pick among exercises with the same name (other
+ * trainers' libraries included). Offered as a suggestion the trainer
+ * accepts, never applied on its own.
+ */
+export function pickMuscleSuggestion(
+  rows: readonly { primary_muscles: unknown; secondary_muscles: unknown }[]
+): MuscleSelection | null {
+  const votes = new Map<string, { pick: MuscleSelection; count: number }>();
+
+  for (const row of rows) {
+    const parsed = parseMuscles(row.primary_muscles, row.secondary_muscles);
+
+    if (parsed?.ok !== true || parsed.muscles.primary.length === 0) continue;
+
+    const key = JSON.stringify(parsed.muscles);
+    const vote = votes.get(key) ?? { pick: parsed.muscles, count: 0 };
+
+    vote.count++;
+    votes.set(key, vote);
+  }
+
+  let best: { pick: MuscleSelection; count: number } | null = null;
+
+  for (const vote of votes.values()) {
+    if (best === null || vote.count > best.count) best = vote;
+  }
+
+  return best?.pick ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // One-off backfill from the legacy free-text muscle_groups column. Order in
 // the old list is the only signal: first muscle → primary, the rest →

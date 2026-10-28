@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { parseTags } from "@/lib/library/parse-tags";
-import { parseMuscles } from "@/lib/training/muscles";
+import {
+  MISSING_PRIMARY_ERROR,
+  parseMuscles,
+  primaryMuscleRequired,
+} from "@/lib/training/muscles";
 
 // GET - Fetch a single exercise
 export async function GET(
@@ -167,6 +171,31 @@ export async function PUT(
       if (parsedMuscles.ok === false) {
         return NextResponse.json(
           { success: false, error: parsedMuscles.error },
+          { status: 400 }
+        );
+      }
+      // Editing muscles in the editor must leave a primary (Oct 14 call, JC).
+      // Partial updates that don't touch muscles skip the rule, so legacy
+      // exercises without muscles can still get a new video or tag.
+      let category: string | undefined = body.category;
+
+      if (category === undefined) {
+        const { data: current } = await supabase
+          .from("exercises")
+          .select("category")
+          .eq("id", exerciseId)
+          .eq("tenant_host", tenant.host)
+          .single();
+
+        category = current?.category ?? undefined;
+      }
+
+      if (
+        primaryMuscleRequired(category) &&
+        parsedMuscles.muscles.primary.length === 0
+      ) {
+        return NextResponse.json(
+          { success: false, error: MISSING_PRIMARY_ERROR },
           { status: 400 }
         );
       }

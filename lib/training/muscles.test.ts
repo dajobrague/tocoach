@@ -3,7 +3,14 @@ import { join } from "node:path";
 
 import { describe, it, expect } from "vitest";
 
-import { MUSCLES, legacyToMuscles, parseMuscles } from "./muscles";
+import {
+  MUSCLES,
+  legacyToMuscles,
+  normalizeExerciseName,
+  parseMuscles,
+  pickMuscleSuggestion,
+  primaryMuscleRequired,
+} from "./muscles";
 
 describe("muscle taxonomy", () => {
   it("matches the CHECK list in the migration", () => {
@@ -129,5 +136,42 @@ describe("legacyToMuscles — leftovers from the prod dry run", () => {
     expect(legacyToMuscles(["Braquioradial"], "").primary).toEqual([
       "antebrazo",
     ]);
+  });
+});
+
+describe("primaryMuscleRequired", () => {
+  it("only cardio may skip the primary muscle", () => {
+    expect(primaryMuscleRequired("cardio")).toBe(false);
+    expect(primaryMuscleRequired("strength")).toBe(true);
+    expect(primaryMuscleRequired("")).toBe(true);
+  });
+});
+
+describe("pickMuscleSuggestion", () => {
+  it("returns the most common valid pick, ignoring empty and unknown rows", () => {
+    const bench = {
+      primary_muscles: ["pectoral"],
+      secondary_muscles: ["triceps"],
+    };
+
+    expect(
+      pickMuscleSuggestion([
+        { primary_muscles: ["triceps"], secondary_muscles: [] },
+        bench,
+        bench,
+        { primary_muscles: [], secondary_muscles: ["triceps"] },
+        { primary_muscles: ["pecho"], secondary_muscles: [] },
+      ])
+    ).toEqual({ primary: ["pectoral"], secondary: ["triceps"] });
+  });
+
+  it("returns null when nobody tagged it", () => {
+    expect(pickMuscleSuggestion([])).toBeNull();
+  });
+});
+
+describe("normalizeExerciseName", () => {
+  it("ignores case and stray spaces", () => {
+    expect(normalizeExerciseName("  Remo con  Barra ")).toBe("remo con barra");
   });
 });

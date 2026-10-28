@@ -102,6 +102,10 @@ export interface Exercise {
   image_url?: string;
   instructions?: string[];
   tips?: string[];
+  default_sets?: number | null;
+  default_reps?: string | null;
+  default_rest_seconds?: number | null;
+  default_tempo?: string | null;
   is_public: boolean;
   metadata: {
     [key: string]: any;

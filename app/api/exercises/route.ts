@@ -3,7 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { parseTagParams, parseTags } from "@/lib/library/parse-tags";
-import { parseMuscles } from "@/lib/training/muscles";
+import {
+  isMuscleId,
+  MISSING_PRIMARY_ERROR,
+  parseMuscles,
+  primaryMuscleRequired,
+} from "@/lib/training/muscles";
 
 // GET - Fetch all exercises from trainer's library
 export async function GET(request: NextRequest) {
@@ -25,6 +30,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
     // Repeatable ?tag=a&tag=b: the exercise must carry both.
     const tags = parseTagParams(searchParams);
+    // ?muscle=<id> (primary or secondary) or ?muscle=none (no primary yet).
+    const muscle = searchParams.get("muscle");
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
@@ -71,13 +78,33 @@ export async function GET(request: NextRequest) {
       query = query.contains("tags", tags);
     }
 
+    if (muscle === "none") {
+      query = query.eq("primary_muscles", "{}");
+    } else if (isMuscleId(muscle)) {
+      query = query.or(
+        `primary_muscles.cs.{${muscle}},secondary_muscles.cs.{${muscle}}`
+      );
+    }
+
     // Pagination
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     query = query.range(from, to);
 
-    const { data: exercises, error: exercisesError, count } = await query;
+    // Strength exercises still missing their primary muscle, for the
+    // library's "Sin músculos" filter. Cardio may stay empty.
+    const [{ data: exercises, error: exercisesError, count }, missing] =
+      await Promise.all([
+        query,
+        supabase
+          .from("exercises")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_host", tenant.host)
+          .eq("trainer_id", session.trainer_id)
+          .neq("category", "cardio")
+          .eq("primary_muscles", "{}"),
+      ]);
 
     if (exercisesError) {
       console.error(
@@ -96,6 +123,7 @@ export async function GET(request: NextRequest) {
         success: true,
         exercises: exercises || [],
         total: count || 0,
+        missing_muscles: missing.count ?? 0,
         page,
         limit,
       },
@@ -166,6 +194,16 @@ export async function POST(request: NextRequest) {
     if (parsedMuscles !== undefined && parsedMuscles.ok === false) {
       return NextResponse.json(
         { success: false, error: parsedMuscles.error },
+        { status: 400 }
+      );
+    }
+
+    if (
+      primaryMuscleRequired(category) &&
+      !(parsedMuscles?.ok === true && parsedMuscles.muscles.primary.length > 0)
+    ) {
+      return NextResponse.json(
+        { success: false, error: MISSING_PRIMARY_ERROR },
         { status: 400 }
       );
     }
