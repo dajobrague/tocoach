@@ -4,6 +4,7 @@ import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { clearTenantCache } from "@/lib/tenant/loader";
 import { isHttpsUrl, resolveTenantLogoUrl } from "@/lib/tenant/logo";
+import { simplifyBrandColors } from "@/lib/theme/brand-colors";
 import { healThemeJson } from "@/lib/theme/heal";
 import { validateTheme } from "@/lib/theme/schema";
 
@@ -132,7 +133,13 @@ export async function PATCH(request: NextRequest) {
     const updatedTheme = {
       ...currentTheme,
       ...(body.colors && {
-        colors: { ...(currentTheme.colors || {}), ...body.colors },
+        // Editor simple (`auto: true`): solo brand/accent; textos y fondos se
+        // reescriben con los neutros derivados (ver lib/theme/brand-colors).
+        // Sin `auto`, merge superficial como siempre.
+        colors:
+          body.colors.auto === true
+            ? simplifyBrandColors(currentTheme.colors, body.colors)
+            : { ...(currentTheme.colors || {}), ...body.colors },
       }),
       ...(body.fonts && {
         fonts: { ...(currentTheme.fonts || {}), ...body.fonts },

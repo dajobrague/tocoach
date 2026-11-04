@@ -201,7 +201,7 @@ export default function LogoSetup() {
           size="lg"
           onPress={actions.nextStep}
         >
-          Siguiente: Tipografía
+          Siguiente: Revisar
         </Button>
       </div>
     </div>

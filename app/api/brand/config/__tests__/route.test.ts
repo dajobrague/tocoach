@@ -133,6 +133,39 @@ describe("PATCH /api/brand/config", () => {
     expect(payload?.theme_json.meta.domain).toBe("fuerzavital");
   });
 
+  it("editor simple (colors.auto): guarda brand/accent y reescribe textos/fondos con los neutros", async () => {
+    const stub = supabaseStub();
+
+    vi.mocked(createSupabaseClient).mockReturnValue(stub.client as never);
+
+    const res = await PATCH(
+      patch({ colors: { brand: "#ef4444", accent: "#f59e0b", auto: true } })
+    );
+
+    expect(res.status).toBe(200);
+    const colors = (stub.update.mock.calls[0]?.[0]?.theme_json as any).colors;
+
+    expect(colors).toMatchObject({
+      brand: "#ef4444",
+      accent: "#f59e0b",
+      auto: true,
+      surface: { "1": "#ffffff", "2": "#f8fafc" },
+      text: { primary: "#0f172a", secondary: "#64748b" },
+    });
+  });
+
+  it("sin auto conserva el merge superficial de siempre", async () => {
+    const stub = supabaseStub();
+
+    vi.mocked(createSupabaseClient).mockReturnValue(stub.client as never);
+
+    await PATCH(patch({ colors: { accent: "#f59e0b" } }));
+    const colors = (stub.update.mock.calls[0]?.[0]?.theme_json as any).colors;
+
+    expect(colors.brand).toBe("#0E3158");
+    expect(colors.auto).toBeUndefined();
+  });
+
   it("ignores an empty brand_name", async () => {
     const stub = supabaseStub();
 

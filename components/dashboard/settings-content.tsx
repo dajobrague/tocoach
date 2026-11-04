@@ -30,27 +30,30 @@ export default function SettingsContent({
 
     if (!tab) return;
     setMainSection("brand");
-    setBrandTab(tab);
+    // ?tab=typography (enlaces antiguos) vive ahora dentro de "colors".
+    setBrandTab(tab === "typography" ? "colors" : tab);
   }, []);
 
   const brandTabs = [
     {
       key: "colors",
-      title: "Colores",
+      // Colores y tipografía juntos: son la marca (el resto se deriva).
+      title: "Colores y tipografía",
       icon: "solar:palette-linear",
-      component: <BrandColorsTab />,
+      component: (
+        <div className="space-y-10">
+          <BrandColorsTab />
+          <div className="border-t border-gray-200 pt-8">
+            <BrandTypographyTab />
+          </div>
+        </div>
+      ),
     },
     {
       key: "logo",
       title: "Logo y Marca",
       icon: "solar:gallery-linear",
       component: <BrandLogoTab />,
-    },
-    {
-      key: "typography",
-      title: "Tipografía",
-      icon: "solar:text-field-linear",
-      component: <BrandTypographyTab />,
     },
     {
       key: "share-card",

@@ -7,6 +7,8 @@ import React, {
   useReducer,
 } from "react";
 
+import { simplifyBrandColors } from "@/lib/theme/brand-colors";
+
 /**
  * Pick a sensible heading weight from a font's available weights.
  *
@@ -699,45 +701,14 @@ export function SetupWizardProvider({
           },
         },
 
-        // Colors configuration (required by DB)
-        // Map our detailed color structure to DB format
-        colors: {
-          // Main brand colors
+        // Colores: el wizard solo pide principal + secundario. Textos,
+        // fondos, bordes y botones los deriva el pipeline con contraste
+        // garantizado (lib/theme/brand-colors.ts); los campos text/background/
+        // buttons del estado ya no se editan ni se persisten.
+        colors: simplifyBrandColors(undefined, {
           brand: state.colors.primary,
           accent: state.colors.secondary,
-
-          // Text colors
-          text: {
-            primary: state.colors.text.h1,
-            secondary: state.colors.text.body,
-            muted: state.colors.text.muted,
-          },
-
-          // Surface/background colors
-          surface: {
-            "1": state.colors.background.primary,
-            "2": state.colors.background.secondary,
-            "3": state.colors.background.accent,
-          },
-
-          // Border and fill colors
-          border: state.colors.text.muted,
-          fill: state.colors.background.accent,
-
-          // Button colors (custom extension)
-          buttons: {
-            primary: {
-              bg: state.colors.buttons.primary.bg,
-              text: state.colors.buttons.primary.text,
-              hover: state.colors.buttons.primary.hover,
-            },
-            secondary: {
-              bg: state.colors.buttons.secondary.bg,
-              text: state.colors.buttons.secondary.text,
-              hover: state.colors.buttons.secondary.hover,
-            },
-          },
-        },
+        }),
 
         // Radius configuration (required by DB)
         radius: {

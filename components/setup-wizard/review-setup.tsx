@@ -108,42 +108,10 @@ export default function ReviewSetup() {
                     </div>
                   </div>
 
-                  {/* Button Colors */}
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase mb-2">
-                      Botones
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-8 rounded-lg border border-gray-200 shadow-sm"
-                          style={{
-                            backgroundColor: state.colors.buttons.primary.bg,
-                          }}
-                        />
-                        <div>
-                          <p className="text-xs text-gray-600">Primario</p>
-                          <p className="text-xs font-mono text-gray-800">
-                            {state.colors.buttons.primary.bg}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-8 rounded-lg border border-gray-200 shadow-sm"
-                          style={{
-                            backgroundColor: state.colors.buttons.secondary.bg,
-                          }}
-                        />
-                        <div>
-                          <p className="text-xs text-gray-600">Secundario</p>
-                          <p className="text-xs font-mono text-gray-800">
-                            {state.colors.buttons.secondary.bg}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <p className="text-xs text-gray-500 self-center">
+                    Textos, fondos y botones se ajustan automáticamente a tu
+                    color principal.
+                  </p>
                 </div>
               </div>
             </div>
@@ -223,7 +191,7 @@ export default function ReviewSetup() {
               className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
-              onPress={() => actions.setStep(3)}
+              onPress={() => actions.setStep(4)}
             >
               Editar
             </Button>
@@ -284,7 +252,7 @@ export default function ReviewSetup() {
               className="bg-black text-white hover:bg-slate-800"
               size="sm"
               startContent={<Icon icon="solar:pen-linear" />}
-              onPress={() => actions.setStep(4)}
+              onPress={() => actions.setStep(3)}
             >
               Editar
             </Button>

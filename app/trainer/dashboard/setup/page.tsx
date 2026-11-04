@@ -20,8 +20,8 @@ import {
 const STEPS = [
   { key: 1, title: "Dominio", description: "Dirección web" },
   { key: 2, title: "Colores", description: "Paleta de marca" },
-  { key: 3, title: "Logo", description: "Identidad visual" },
-  { key: 4, title: "Tipografía", description: "Fuentes de texto" },
+  { key: 3, title: "Tipografía", description: "Fuentes de texto" },
+  { key: 4, title: "Logo", description: "Identidad visual" },
   { key: 5, title: "Revisar", description: "Confirmar cambios" },
 ];
 
@@ -35,10 +35,11 @@ function SetupWizardContent() {
         return <DomainSetup />;
       case 2:
         return <ColorSetup />;
+      // Tipografía justo después de los colores: son la marca juntos.
       case 3:
-        return <LogoSetup />;
-      case 4:
         return <TypographySetup />;
+      case 4:
+        return <LogoSetup />;
       case 5:
         return <ReviewSetup />;
       default:
