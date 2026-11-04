@@ -23,6 +23,16 @@ export default function SettingsContent({
   );
   const [brandTab, setBrandTab] = React.useState("colors");
 
+  // Enlace directo a una pestaña de Marca (p. ej. desde Novedades):
+  // /trainer/settings?tab=share-card
+  React.useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+
+    if (!tab) return;
+    setMainSection("brand");
+    setBrandTab(tab);
+  }, []);
+
   const brandTabs = [
     {
       key: "colors",

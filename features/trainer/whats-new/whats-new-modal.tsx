@@ -1,96 +1,53 @@
 "use client";
 
-// Modal de novedades de varias páginas: sale la primera vez que el
-// entrenador entra tras una actualización y no vuelve al cerrarlo.
+// Novedades tras una actualización: sale una vez por versión y no vuelve al
+// cerrarlo. Este archivo solo decide si toca; el diálogo (con el cuerpo, los
+// clips y el sticker) se carga aparte para no pesar en el resto del panel.
 // ponytail: visto en localStorage (por dispositivo); pasar a la BD si JC
 // necesita que no reaparezca al cambiar de dispositivo.
 
-import { Button, Modal, ModalBody, ModalContent } from "@heroui/react";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
 import { LATEST_RELEASE } from "./releases";
 
-import { IconTile } from "@/components/shared/icon-tile";
+const WhatsNewDialog = dynamic(() => import("./whats-new-dialog"), {
+  ssr: false,
+});
 
 const SEEN_KEY = "topcoach:trainer:whats-new-seen";
 
 export function WhatsNewModal() {
-  const { id, pages } = LATEST_RELEASE;
   const [open, setOpen] = useState(false);
-  const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    let seen: string | null = null;
+    let seen: string | null;
 
     try {
       seen = localStorage.getItem(SEEN_KEY);
     } catch {
-      return; // Sin almacenamiento no podemos recordar: mejor no mostrarlo.
+      return; // Sin almacenamiento no podemos recordarlo: mejor no mostrarlo.
     }
-    if (seen === id) return;
-    const t = window.setTimeout(() => setOpen(true), 700);
+    if (seen === LATEST_RELEASE.id) return;
+    // Un respiro tras cargar: que no salte encima de la página.
+    const t = window.setTimeout(() => setOpen(true), 900);
 
     return () => window.clearTimeout(t);
-  }, [id]);
+  }, []);
 
-  const close = () => {
-    try {
-      localStorage.setItem(SEEN_KEY, id);
-    } catch {
-      // ignore
-    }
-    setOpen(false);
-  };
-
-  const page = pages[index];
-
-  if (!page) return null;
-  const last = index === pages.length - 1;
+  if (!open) return null;
 
   return (
-    <Modal isOpen={open} placement="center" size="md" onClose={close}>
-      <ModalContent>
-        <ModalBody className="gap-0 px-6 pb-6 pt-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-            Novedades
-          </p>
-          <div className="mt-4 flex min-h-[176px] flex-col items-start gap-4">
-            <IconTile icon={page.icon} />
-            <h2 className="text-xl font-semibold leading-tight text-foreground [text-wrap:balance]">
-              {page.title}
-            </h2>
-            <p className="text-sm text-default-600">{page.text}</p>
-          </div>
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <div aria-hidden className="flex gap-1.5">
-              {pages.map((p, i) => (
-                <span
-                  key={p.title}
-                  className={`h-1.5 rounded-full transition-all ${
-                    i === index ? "w-5 bg-primary" : "w-1.5 bg-default-300"
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="sr-only">
-              {`Página ${index + 1} de ${pages.length}`}
-            </span>
-            <div className="flex gap-2">
-              {index > 0 ? (
-                <Button variant="light" onPress={() => setIndex(index - 1)}>
-                  Atrás
-                </Button>
-              ) : null}
-              <Button
-                color="primary"
-                onPress={() => (last ? close() : setIndex(index + 1))}
-              >
-                {last ? "Entendido" : "Siguiente"}
-              </Button>
-            </div>
-          </div>
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+    <WhatsNewDialog
+      release={LATEST_RELEASE}
+      onClose={() => {
+        try {
+          localStorage.setItem(SEEN_KEY, LATEST_RELEASE.id);
+        } catch {
+          // ignore
+        }
+        setOpen(false);
+      }}
+    />
   );
 }
