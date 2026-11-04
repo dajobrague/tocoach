@@ -1,4 +1,8 @@
-import type { CheckInSchedule } from "@/lib/forms/types";
+import type {
+  CheckInSchedule,
+  FormConfigData,
+  QuestionConfig,
+} from "@/lib/forms/types";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -8,15 +12,17 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
   FormResponseSubmission,
   getEnabledQuestions,
+  isFormType,
   isStructuredConfig,
   normalizeFormAnswers,
   validateFormResponse,
 } from "@/lib/forms";
 import { relaxStepsRequirement } from "@/lib/forms/neat-steps";
 import { dropPagesNotDue } from "@/lib/forms/page-cadence";
+import { parseWorkoutSessionId } from "@/lib/forms/workout";
 
 /**
- * GET /api/forms/responses/[clientId]?form_type=checkins|habits&start_date=&end_date=
+ * GET /api/forms/responses/[clientId]?form_type=checkins|habits|workout&start_date=&end_date=
  * Get form responses for a specific client
  * Supports both trainer and client sessions
  */
@@ -104,7 +110,7 @@ export async function GET(
     const startDate = searchParams.get("start_date");
     const endDate = searchParams.get("end_date");
 
-    if (!formType || (formType !== "checkins" && formType !== "habits")) {
+    if (!isFormType(formType)) {
       return NextResponse.json(
         { success: false, error: "Tipo de formulario inválido" },
         { status: 400 }
@@ -319,11 +325,53 @@ export async function POST(
     }
 
     // Validate required fields
-    if (!form_type || (form_type !== "checkins" && form_type !== "habits")) {
+    if (!isFormType(form_type)) {
       return NextResponse.json(
         { success: false, error: "Tipo de formulario inválido" },
         { status: 400 }
       );
+    }
+
+    // Post-entreno: la respuesta se enlaza a UNA sesión programada real del
+    // cliente (fecha = `response_date`, sesión = metadata.session_id). Sin
+    // fila en scheduled_sessions no hay entreno que valorar.
+    let workoutLink: {
+      session_id: string;
+      scheduled_session_id: string;
+    } | null = null;
+
+    if (form_type === "workout") {
+      const sessionId = parseWorkoutSessionId(metadata);
+
+      if (!sessionId || !/^\d{4}-\d{2}-\d{2}$/.test(resolvedDate)) {
+        return NextResponse.json(
+          { success: false, error: "Falta la sesión del entrenamiento" },
+          { status: 400 }
+        );
+      }
+
+      const { data: scheduledRow, error: scheduledError } = await supabase
+        .from("scheduled_sessions")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("scheduled_date", resolvedDate)
+        .eq("session_id", sessionId)
+        .maybeSingle();
+
+      if (scheduledError || !scheduledRow) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No encontramos ese entrenamiento en tu calendario",
+          },
+          { status: 404 }
+        );
+      }
+
+      workoutLink = {
+        session_id: sessionId,
+        scheduled_session_id: String(scheduledRow.id),
+      };
     }
 
     // `*` instead of naming `reviewed_at`: if the column isn't migrated yet the
@@ -363,12 +411,29 @@ export async function POST(
       );
     }
 
-    let { data: configRow, error: configFetchError } = await supabase
-      .from("client_form_configs")
-      .select("questions_config, schedule")
-      .eq("client_id", clientId)
-      .eq("form_type", form_type)
-      .maybeSingle();
+    // Post-entreno: valida contra la plantilla ACTIVA del entrenador (no hay
+    // copia por cliente). Apagada → no se aceptan respuestas nuevas.
+    const configResult =
+      form_type === "workout"
+        ? await supabase
+            .from("form_templates")
+            .select("questions_config")
+            .eq("tenant_host", tenantHost)
+            .eq("form_type", "workout")
+            .eq("is_active", true)
+            .maybeSingle()
+        : await supabase
+            .from("client_form_configs")
+            .select("questions_config, schedule")
+            .eq("client_id", clientId)
+            .eq("form_type", form_type)
+            .maybeSingle();
+    // questions_config es JSONB sin tipar (lo validan los helpers de abajo).
+    let configRow = configResult.data as {
+      questions_config: QuestionConfig[] | FormConfigData;
+      schedule?: unknown;
+    } | null;
+    const configFetchError = configResult.error;
 
     if (configFetchError) {
       console.error(
@@ -393,6 +458,16 @@ export async function POST(
     // recién había creado al cliente sin haber guardado el editor de
     // formularios. La RPC también es idempotente, así que llamar
     // dos veces no duplica.
+    if (!configRow?.questions_config && form_type === "workout") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Tu entrenador no tiene activado este formulario.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (!configRow?.questions_config) {
       const { data: createdRows, error: rpcError } = await supabase.rpc(
         "get_or_create_client_form_config",
@@ -546,7 +621,9 @@ export async function POST(
           form_type,
           response_date: resolvedDate,
           answers: mergedAnswers,
-          metadata: metadata || {},
+          metadata: workoutLink
+            ? { ...(metadata || {}), ...workoutLink }
+            : metadata || {},
         },
         {
           onConflict: "tenant_host,client_id,form_type,response_date",

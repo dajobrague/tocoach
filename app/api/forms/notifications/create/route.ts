@@ -150,6 +150,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Solo check-ins y hábitos tienen recordatorios. El post-entreno se pide
+    // al completar una sesión, nunca por notificación.
+    if (form_type !== "checkins" && form_type !== "habits") {
+      return NextResponse.json(
+        { success: false, error: "Este formulario no tiene recordatorios" },
+        { status: 400 }
+      );
+    }
+
     // Get client details and tenant_host
     const { data: client } = await supabase
       .from("clients")

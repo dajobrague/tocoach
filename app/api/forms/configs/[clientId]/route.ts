@@ -6,6 +6,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
+  isFormType,
   validateQuestionsConfig,
   fetchCheckinsTemplateDefaultSchedule,
   validateCheckInScheduleInput,
@@ -49,7 +50,7 @@ function resolveCheckinScheduleForConfigResponse(
 }
 
 /**
- * GET /api/forms/configs/[clientId]?form_type=checkins|habits
+ * GET /api/forms/configs/[clientId]?form_type=checkins|habits|workout
  * Get form configuration for a specific client
  * Auto-creates from template if doesn't exist (lazy initialization)
  */
@@ -151,11 +152,54 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const formType = searchParams.get("form_type");
 
-    if (!formType || (formType !== "checkins" && formType !== "habits")) {
+    if (!isFormType(formType)) {
       return NextResponse.json(
         { success: false, error: "Tipo de formulario inválido" },
         { status: 400 }
       );
+    }
+
+    // Post-entreno: sin copia por cliente ni auto-creación — la plantilla
+    // ACTIVA del entrenador es la config. Apagada o inexistente → 404 y el
+    // portal no ofrece el formulario.
+    if (formType === "workout") {
+      const { data: template, error: templateError } = await supabase
+        .from("form_templates")
+        .select("id, questions_config")
+        .eq("tenant_host", tenantHost)
+        .eq("form_type", "workout")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (templateError) {
+        console.error(
+          "[Forms Configs] Error fetching workout template:",
+          templateError
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al obtener plantilla" },
+          { status: 500 }
+        );
+      }
+
+      if (!template) {
+        return NextResponse.json(
+          { success: false, error: "Formulario no activado" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        config: {
+          form_type: "workout",
+          questions_config: template.questions_config,
+          template_id: template.id,
+        },
+        schedule: null,
+        schedule_source: null,
+      });
     }
 
     // Try to get existing config

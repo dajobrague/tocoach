@@ -9,7 +9,18 @@ export type QuestionType =
   | "group"
   | "choice"
   | "multi_choice";
-export type FormType = "checkins" | "habits";
+/**
+ * `workout` = formulario post-entreno (sensaciones al completar una sesión).
+ * A diferencia de check-ins/hábitos NO tiene copia por cliente: la plantilla
+ * del entrenador (`form_templates`, `is_active` = activado) es la fuente de
+ * verdad, sin horario ni recordatorios. Ver `lib/forms/workout.ts`.
+ */
+export const FORM_TYPES = ["checkins", "habits", "workout"] as const;
+export type FormType = (typeof FORM_TYPES)[number];
+
+export function isFormType(raw: unknown): raw is FormType {
+  return (FORM_TYPES as readonly unknown[]).includes(raw);
+}
 
 /**
  * Estrellas de una pregunta `rating`. El formulario del cliente pinta

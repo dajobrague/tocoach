@@ -306,7 +306,11 @@ export async function GET(request: NextRequest) {
     // Form responses (check-ins / habits)
     (recentFormResponses as any).data?.forEach((f: any) => {
       const formLabel =
-        f.form_type === "checkins" ? "check-in" : "formulario de hábitos";
+        f.form_type === "checkins"
+          ? "check-in"
+          : f.form_type === "workout"
+            ? "formulario post-entreno"
+            : "formulario de hábitos";
 
       events.push({
         id: `form-${f.id}`,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-import { validateQuestionsConfig } from "@/lib/forms";
+import { isFormType, validateQuestionsConfig } from "@/lib/forms";
 
 /**
  * GET /api/forms/templates
@@ -42,10 +42,16 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("form_templates")
       .select("*")
-      .eq("tenant_host", tenant.host)
-      .eq("is_active", true);
+      .eq("tenant_host", tenant.host);
 
-    if (formType && (formType === "checkins" || formType === "habits")) {
+    // El post-entreno usa `is_active` como interruptor on/off del editor:
+    // el entrenador tiene que ver (y poder reactivar) su plantilla apagada.
+    // El resto de tipos solo lista las activas, como siempre.
+    if (formType !== "workout") {
+      query = query.eq("is_active", true);
+    }
+
+    if (isFormType(formType)) {
       query = query.eq("form_type", formType);
     }
 
@@ -115,7 +121,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!form_type || (form_type !== "checkins" && form_type !== "habits")) {
+    if (!isFormType(form_type)) {
       return NextResponse.json(
         { success: false, error: "Tipo de formulario inválido" },
         { status: 400 }
@@ -166,7 +172,8 @@ export async function POST(request: NextRequest) {
       name,
       description,
       questions_config,
-      is_active: true,
+      // Opt-in para el post-entreno: el editor lo crea apagado.
+      is_active: typeof body.is_active === "boolean" ? body.is_active : true,
     };
 
     if (auto_apply_to_new_clients !== undefined) {

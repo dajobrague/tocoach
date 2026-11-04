@@ -100,7 +100,9 @@ export async function POST(request: NextRequest) {
           .from("form_templates")
           .select("id, form_type, questions_config, default_schedule")
           .eq("tenant_host", tenantRow.host)
-          .eq("is_active", true);
+          .eq("is_active", true)
+          // El post-entreno no se copia por cliente (lib/forms/workout.ts).
+          .neq("form_type", "workout");
 
         if (tplError) {
           console.warn(

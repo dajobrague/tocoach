@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { client_id, form_type } = body;
 
-    if (!client_id || !form_type) {
+    if (!client_id || (form_type !== "checkins" && form_type !== "habits")) {
       return NextResponse.json(
         { success: false, error: "client_id and form_type required" },
         { status: 400 }
