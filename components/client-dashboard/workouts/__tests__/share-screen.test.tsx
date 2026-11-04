@@ -4,6 +4,12 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ShareComposer } from "../share-screen";
 
+// El cuerpo sombreado se baja por red: sin él, el sticker usa el mapa plano.
+vi.mock("@/lib/hooks/use-share-body", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-share-body")>()),
+  useShareBody: () => null,
+}));
+
 import {
   SAMPLE_SESSION,
   type SharePayload,
