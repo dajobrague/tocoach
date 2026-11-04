@@ -158,9 +158,20 @@ type NumberProps = {
   label: string;
   readOnly: boolean;
   unit: string | undefined;
+  /** Rango configurado por el entrenador (se valida al avanzar/enviar). */
+  min?: number | undefined;
+  max?: number | undefined;
   value: unknown;
   onChange: (v: number | string) => void;
 };
+
+function rangeHint(min: number | undefined, max: number | undefined) {
+  if (min !== undefined && max !== undefined) return `entre ${min} y ${max}`;
+  if (min !== undefined) return `de ${min} o más`;
+  if (max !== undefined) return `de ${max} o menos`;
+
+  return null;
+}
 
 const numberInputProps = (p: NumberProps) => ({
   [FIELD_ATTR]: "",
@@ -197,7 +208,11 @@ export function BigNumberInput(p: NumberProps) {
         )}
       </label>
       {!p.readOnly && (
-        <FieldHint>Ingresa el valor{p.unit ? ` en ${p.unit}` : ""}</FieldHint>
+        <FieldHint>
+          {rangeHint(p.min, p.max)
+            ? `Ingresa un valor ${rangeHint(p.min, p.max)}`
+            : `Ingresa el valor${p.unit ? ` en ${p.unit}` : ""}`}
+        </FieldHint>
       )}
     </div>
   );

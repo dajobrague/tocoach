@@ -23,6 +23,15 @@ export function isFormType(raw: unknown): raw is FormType {
 }
 
 /**
+ * Objetivo ON CONFLICT de los upserts a `form_responses` (UNIQUE NULLS NOT
+ * DISTINCT de la migración 20261104120000). `scheduled_session_id` es NULL
+ * en check-ins/hábitos → una respuesta por cliente/tipo/día como siempre; en
+ * el post-entreno lleva la sesión → una por sesión programada.
+ */
+export const FORM_RESPONSE_UPSERT_CONFLICT =
+  "tenant_host,client_id,form_type,response_date,scheduled_session_id";
+
+/**
  * Estrellas de una pregunta `rating`. El formulario del cliente pinta
  * exactamente estas (dynamic-form-modal) y las gráficas deben usar el
  * mismo máximo — no hay escala configurable por pregunta.
@@ -116,6 +125,13 @@ export interface QuestionConfig {
   icon: string;
   type: QuestionType;
   unit?: string;
+  /**
+   * Solo `number`: rango permitido (inclusive). Opcionales e independientes;
+   * sin ellos cualquier número vale (plantillas antiguas). El servidor los
+   * exige al validar respuestas de cualquier formulario.
+   */
+  min?: number;
+  max?: number;
   enabled: boolean;
   required: boolean;
   conditionalOn?: string;

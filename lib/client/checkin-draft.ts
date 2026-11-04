@@ -20,9 +20,13 @@ export type FormResponseDraftAnswers = Record<string, unknown>;
 export function formResponseDraftStorageKey(
   clientId: string,
   formType: FormType,
-  responseDate: string
+  responseDate: string,
+  /** Post-entreno: la sesión (puede haber dos respuestas el mismo día). */
+  scope?: string
 ): string {
-  return `${PREFIX}${clientId}:${formType}:${responseDate}`;
+  const base = `${PREFIX}${clientId}:${formType}:${responseDate}`;
+
+  return scope ? `${base}:${scope}` : base;
 }
 
 export type FormResponseDraftRead = {

@@ -88,6 +88,28 @@ export function validateQuestionConfig(question: any): ValidationResult {
     }
   }
 
+  // Rango de `number`: opcional, numérico, y min ≤ max si están los dos.
+  for (const bound of ["min", "max"] as const) {
+    const v = question[bound];
+
+    if (v !== undefined && (typeof v !== "number" || !Number.isFinite(v))) {
+      errors.push({
+        field: bound,
+        message: `${bound} debe ser un número`,
+      });
+    }
+  }
+  if (
+    typeof question.min === "number" &&
+    typeof question.max === "number" &&
+    question.min > question.max
+  ) {
+    errors.push({
+      field: "min",
+      message: "El mínimo no puede ser mayor que el máximo",
+    });
+  }
+
   // Group type validation
   if (question.type === "group") {
     if (
@@ -316,6 +338,75 @@ export function isEmptyAnswer(
   return false;
 }
 
+/**
+ * Borrador del editor (texto de los inputs "Mínimo"/"Máximo") → rango de la
+ * pregunta. Vacío = sin límite. Acepta coma decimal.
+ */
+export function parseNumberRange(
+  minText: string,
+  maxText: string
+):
+  | { ok: true; range: Pick<QuestionConfig, "min" | "max"> }
+  | { ok: false; error: string } {
+  const parse = (t: string): number | null | "bad" => {
+    const trimmed = t.trim().replace(",", ".");
+
+    if (trimmed === "") return null;
+    const n = Number(trimmed);
+
+    return Number.isFinite(n) ? n : "bad";
+  };
+  const min = parse(minText);
+  const max = parse(maxText);
+
+  if (min === "bad" || max === "bad") {
+    return { ok: false, error: "Mínimo y máximo deben ser números" };
+  }
+  if (min !== null && max !== null && min > max) {
+    return { ok: false, error: "El mínimo no puede ser mayor que el máximo" };
+  }
+  const range: Pick<QuestionConfig, "min" | "max"> = {};
+
+  if (min !== null) range.min = min;
+  if (max !== null) range.max = max;
+
+  return { ok: true, range };
+}
+
+/** Quita min/max de la pregunta y aplica `range` (sin claves undefined). */
+export function withNumberRange(
+  question: QuestionConfig,
+  range: Pick<QuestionConfig, "min" | "max">
+): QuestionConfig {
+  const next: QuestionConfig = { ...question };
+
+  delete next.min;
+  delete next.max;
+
+  return { ...next, ...range };
+}
+
+/**
+ * Mensaje si `value` se sale del rango min/max de la pregunta; null si vale o
+ * si la pregunta no define rango. Compartido con el input del cliente.
+ */
+export function numberRangeError(
+  question: Pick<QuestionConfig, "min" | "max">,
+  value: number
+): string | null {
+  const { min, max } = question;
+  const hasMin = typeof min === "number" && Number.isFinite(min);
+  const hasMax = typeof max === "number" && Number.isFinite(max);
+
+  if ((hasMin && value < min) || (hasMax && value > max)) {
+    if (hasMin && hasMax) return `Debe estar entre ${min} y ${max}`;
+
+    return hasMin ? `Debe ser ${min} o más` : `Debe ser ${max} o menos`;
+  }
+
+  return null;
+}
+
 function pushAnswerTypeErrors(
   question: QuestionConfig,
   answer: unknown,
@@ -338,14 +429,19 @@ function pushAnswerTypeErrors(
       }
       break;
 
-    case "number":
+    case "number": {
       if (typeof answer !== "number" || isNaN(answer)) {
         errors.push({
           field: fieldId,
           message: `${label} debe ser un número válido`,
         });
+        break;
       }
+      const rangeError = numberRangeError(question, answer);
+
+      if (rangeError) errors.push({ field: fieldId, message: rangeError });
       break;
+    }
 
     case "boolean":
       if (typeof answer !== "boolean") {

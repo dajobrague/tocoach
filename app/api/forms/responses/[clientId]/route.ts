@@ -10,6 +10,7 @@ import { getClientSession } from "@/lib/auth/client-session";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
+  FORM_RESPONSE_UPSERT_CONFLICT,
   FormResponseSubmission,
   getEnabledQuestions,
   isFormType,
@@ -376,14 +377,23 @@ export async function POST(
 
     // `*` instead of naming `reviewed_at`: if the column isn't migrated yet the
     // select still succeeds, so orphan answers are never dropped.
-    const { data: existingRow } = await supabase
+    // Misma clave que el UNIQUE: el post-entreno es por sesión programada
+    // (puede haber dos el mismo día), el resto por día.
+    const existingQuery = supabase
       .from("form_responses")
       .select("*")
       .eq("tenant_host", tenantHost)
       .eq("client_id", clientId)
       .eq("form_type", form_type)
-      .eq("response_date", resolvedDate)
-      .maybeSingle();
+      .eq("response_date", resolvedDate);
+    const { data: existingRow } = await (
+      workoutLink
+        ? existingQuery.eq(
+            "scheduled_session_id",
+            workoutLink.scheduled_session_id
+          )
+        : existingQuery.is("scheduled_session_id", null)
+    ).maybeSingle();
 
     // Once the trainer reviewed a check-in it's locked for the client — the
     // trainer already gave feedback on that version. Checked BEFORE answer
@@ -621,13 +631,12 @@ export async function POST(
           form_type,
           response_date: resolvedDate,
           answers: mergedAnswers,
+          scheduled_session_id: workoutLink?.scheduled_session_id ?? null,
           metadata: workoutLink
             ? { ...(metadata || {}), ...workoutLink }
             : metadata || {},
         },
-        {
-          onConflict: "tenant_host,client_id,form_type,response_date",
-        }
+        { onConflict: FORM_RESPONSE_UPSERT_CONFLICT }
       )
       .select()
       .single();

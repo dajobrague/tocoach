@@ -52,6 +52,7 @@ import { ChoicesEditor } from "./choices-editor";
 
 import { IconPicker } from "@/components/ui/icon-picker";
 import { normalizeFormConfig } from "@/lib/forms/types";
+import { parseNumberRange, withNumberRange } from "@/lib/forms/validation";
 
 // ── Sortable wrapper ──────────────────────────────────────────────────
 function SortableItem({
@@ -184,6 +185,10 @@ export default function FormConfigEditor({
     id: string;
     label: string;
     fullQuestion: string;
+    /** Solo preguntas `number`: rango como texto de los inputs. */
+    isNumber: boolean;
+    min: string;
+    max: string;
   } | null>(null);
 
   // Edit sub-question modal (rename only — id is immutable)
@@ -211,6 +216,8 @@ export default function FormConfigEditor({
     fullQuestion: "",
     type: "text" as QuestionType,
     unit: "",
+    min: "",
+    max: "",
     icon: "solar:question-circle-bold",
     choices: [] as ChoiceOption[],
   });
@@ -473,13 +480,17 @@ export default function FormConfigEditor({
   const updateQuestionText = (
     qId: string,
     label: string,
-    fullQuestion: string
+    fullQuestion: string,
+    range?: Pick<QuestionConfig, "min" | "max">
   ) => {
     emitChange({
       ...config,
-      questions: config.questions.map((q) =>
-        q.id === qId ? { ...q, label, fullQuestion } : q
-      ),
+      questions: config.questions.map((q) => {
+        if (q.id !== qId) return q;
+        const renamed = { ...q, label, fullQuestion };
+
+        return range ? withNumberRange(renamed, range) : renamed;
+      }),
     });
   };
 
@@ -511,6 +522,11 @@ export default function FormConfigEditor({
 
     const unitValue =
       newQ.type === "number" ? newQ.unit.trim() || undefined : undefined;
+    const rangeResult =
+      newQ.type === "number" ? parseNumberRange(newQ.min, newQ.max) : null;
+
+    if (rangeResult && !rangeResult.ok) return;
+    const rangeValue = rangeResult?.ok ? rangeResult.range : {};
     const choicesValue = isChoiceType
       ? newQ.choices
           .filter((c) => c.label.trim())
@@ -523,6 +539,7 @@ export default function FormConfigEditor({
       icon: newQ.icon,
       type: newQ.type,
       ...(unitValue !== undefined ? { unit: unitValue } : {}),
+      ...rangeValue,
       ...(choicesValue !== undefined ? { choices: choicesValue } : {}),
       enabled: true,
       required: false,
@@ -535,6 +552,8 @@ export default function FormConfigEditor({
       fullQuestion: "",
       type: "text",
       unit: "",
+      min: "",
+      max: "",
       icon: "solar:question-circle-bold",
       choices: [],
     });
@@ -1063,6 +1082,16 @@ export default function FormConfigEditor({
                                               label: question.label,
                                               fullQuestion:
                                                 question.fullQuestion || "",
+                                              isNumber:
+                                                question.type === "number",
+                                              min:
+                                                question.min !== undefined
+                                                  ? String(question.min)
+                                                  : "",
+                                              max:
+                                                question.max !== undefined
+                                                  ? String(question.max)
+                                                  : "",
                                             }),
                                         },
                                       ];
@@ -1434,6 +1463,14 @@ export default function FormConfigEditor({
               )}
             </div>
 
+            {newQ.type === "number" && (
+              <NumberRangeInputs
+                max={newQ.max}
+                min={newQ.min}
+                onChange={(min, max) => setNewQ({ ...newQ, min, max })}
+              />
+            )}
+
             {(newQ.type === "choice" || newQ.type === "multi_choice") && (
               <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
                 <ChoicesEditor
@@ -1573,6 +1610,17 @@ export default function FormConfigEditor({
                 )
               }
             />
+            {editingQuestion?.isNumber ? (
+              <NumberRangeInputs
+                max={editingQuestion.max}
+                min={editingQuestion.min}
+                onChange={(min, max) =>
+                  setEditingQuestion((prev) =>
+                    prev ? { ...prev, min, max } : null
+                  )
+                }
+              />
+            ) : null}
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setEditingQuestion(null)}>
@@ -1580,13 +1628,24 @@ export default function FormConfigEditor({
             </Button>
             <Button
               className="bg-gray-900 text-white font-semibold"
-              isDisabled={!editingQuestion?.label.trim()}
+              isDisabled={
+                !editingQuestion?.label.trim() ||
+                (editingQuestion.isNumber &&
+                  !parseNumberRange(editingQuestion.min, editingQuestion.max)
+                    .ok)
+              }
               onPress={() => {
                 if (editingQuestion && editingQuestion.label.trim()) {
+                  const rangeResult = editingQuestion.isNumber
+                    ? parseNumberRange(editingQuestion.min, editingQuestion.max)
+                    : null;
+
+                  if (rangeResult && !rangeResult.ok) return;
                   updateQuestionText(
                     editingQuestion.id,
                     editingQuestion.label.trim(),
-                    editingQuestion.fullQuestion.trim()
+                    editingQuestion.fullQuestion.trim(),
+                    rangeResult?.ok ? rangeResult.range : undefined
                   );
                   setEditingQuestion(null);
                 }
@@ -1813,6 +1872,49 @@ export default function FormConfigEditor({
           </ModalFooter>
         </ModalContent>
       </Modal>
+    </div>
+  );
+}
+
+/** Mínimo / máximo opcionales de una pregunta `number` (vacío = sin límite). */
+function NumberRangeInputs({
+  min,
+  max,
+  onChange,
+}: {
+  min: string;
+  max: string;
+  onChange: (min: string, max: string) => void;
+}) {
+  const result = parseNumberRange(min, max);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex gap-3">
+        <Input
+          inputMode="decimal"
+          label="Mínimo"
+          placeholder="Sin límite"
+          value={min}
+          variant="bordered"
+          onValueChange={(v) => onChange(v, max)}
+        />
+        <Input
+          inputMode="decimal"
+          label="Máximo"
+          placeholder="Sin límite"
+          value={max}
+          variant="bordered"
+          onValueChange={(v) => onChange(min, v)}
+        />
+      </div>
+      <p
+        className={`text-xs ${result.ok ? "text-default-500" : "text-danger"}`}
+      >
+        {result.ok
+          ? "Opcional. El cliente no podrá enviar un valor fuera del rango."
+          : result.error}
+      </p>
     </div>
   );
 }
