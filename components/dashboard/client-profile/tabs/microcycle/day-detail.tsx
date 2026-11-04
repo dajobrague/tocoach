@@ -26,6 +26,7 @@ import { allTimeMaxE1rm } from "../workouts/helpers";
 import { classificationLabel } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
 import { buildLoggedExerciseGroups } from "./logged-view";
+import { WorkoutFeedbackSummary } from "./workout-feedback-summary";
 
 import { estimateOneRepMax } from "@/lib/training/e1rm";
 
@@ -708,6 +709,14 @@ function SessionCard({
           </button>
         ) : null}
       </header>
+
+      {!showFuture && entry.scheduledSession.session ? (
+        <WorkoutFeedbackSummary
+          clientId={increaseWeightCtx.clientId}
+          date={increaseWeightCtx.date}
+          sessionId={entry.scheduledSession.session.id}
+        />
+      ) : null}
 
       {entry.scheduledSession.originally_prescribed_session ? (
         <div className="flex items-start gap-1.5 border-b border-gray-100 bg-gray-50/60 px-4 py-2 text-[11px] text-gray-600">

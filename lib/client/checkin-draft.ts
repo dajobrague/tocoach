@@ -1,3 +1,5 @@
+import type { FormType } from "@/lib/forms/types";
+
 /**
  * Client-side drafts for the check-in / habits modal so in-progress answers
  * survive app backgrounding, tab reloads, and accidental pull-to-refresh
@@ -17,7 +19,7 @@ export type FormResponseDraftAnswers = Record<string, unknown>;
 
 export function formResponseDraftStorageKey(
   clientId: string,
-  formType: "checkins" | "habits",
+  formType: FormType,
   responseDate: string
 ): string {
   return `${PREFIX}${clientId}:${formType}:${responseDate}`;

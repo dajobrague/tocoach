@@ -112,6 +112,12 @@ export const TRAINER_NAV: TrainerNavSection[] = [
             icon: "solar:notebook-linear",
             href: "/trainer/settings/forms/habits",
           },
+          {
+            key: "templates-workout-form",
+            title: "Post-entreno",
+            icon: "solar:dumbbell-large-minimalistic-linear",
+            href: "/trainer/settings/forms/workout",
+          },
         ],
       },
     ],

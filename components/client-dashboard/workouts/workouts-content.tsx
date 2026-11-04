@@ -316,6 +316,11 @@ export function WorkoutsContent() {
     queryClient.invalidateQueries({
       queryKey: ["client", "past-sessions"],
     });
+    // Guardar el último ejercicio puede auto-completar la sesión: refrescar
+    // su estado para que la vista lo refleje (y ofrezca el post-entreno).
+    queryClient.invalidateQueries({
+      queryKey: ["client", "scheduled-state"],
+    });
   };
 
   const isLoading = isLoadingAvailable;
@@ -514,6 +519,7 @@ export function WorkoutsContent() {
       >
         {activeSession ? (
           <ActiveSessionView
+            clientId={clientId}
             exerciseLogs={exerciseLogs}
             programs={programs}
             scheduledDate={selectedDate}

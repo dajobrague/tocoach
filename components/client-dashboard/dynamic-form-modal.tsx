@@ -45,13 +45,19 @@ import {
   isStructuredConfig,
   normalizeFormConfig,
   type CheckInSchedule,
+  type FormType,
 } from "@/lib/forms/types";
 
 interface DynamicFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   clientId: string;
-  formType: "checkins" | "habits";
+  formType: FormType;
+  /**
+   * Metadatos extra del envío (se mezclan con los del modal). El post-entreno
+   * manda aquí `session_id` para enlazar la respuesta a la sesión.
+   */
+  metadata?: Record<string, unknown> | undefined;
   /** Resolved from dashboard; merged with API schedule when modal opens. */
   schedule?: CheckInSchedule | null;
   /**
@@ -74,6 +80,7 @@ export function DynamicFormModal({
   schedule: scheduleProp,
   onSuccess,
   targetDate,
+  metadata: extraMetadata,
 }: DynamicFormModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
   // Sentido de la última navegación entre pasos: adelante desliza la
@@ -719,6 +726,7 @@ export function DynamicFormModal({
           response_date: targetDate || getLocalTodayYmd(),
           answers,
           metadata: {
+            ...extraMetadata,
             submitted_from: "mobile",
             completion_time: new Date().toISOString(),
           },
@@ -1265,7 +1273,9 @@ export function DynamicFormModal({
   const formName =
     formType === "checkins"
       ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
-      : "Registro diario";
+      : formType === "workout"
+        ? "Cómo fue el entreno"
+        : "Registro diario";
   const dateFor = (ymd: string) =>
     new Date(`${ymd}T12:00:00`).toLocaleDateString("es-ES", {
       day: "numeric",
@@ -1276,9 +1286,10 @@ export function DynamicFormModal({
     : formType === "habits"
       ? dateFor(getLocalTodayYmd())
       : "";
-  const dialogLabel = targetDate
-    ? `${formType === "checkins" ? formName : "Registro"} del ${dateLabel}`
-    : formName;
+  const dialogLabel =
+    targetDate && formType !== "workout"
+      ? `${formType === "checkins" ? formName : "Registro"} del ${dateLabel}`
+      : formName;
   const showSteps = !isLoading && !configError && !isViewMode;
   const isLastStep = currentStep >= totalSteps - 1;
   const busy = isSubmitting || uploadingPhotos.size > 0;

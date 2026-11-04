@@ -88,6 +88,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .select("answers, response_date")
       .eq("tenant_host", session.tenant_host)
       .eq("client_id", Number(clientId))
+      // El post-entreno no trae peso: que no desplace a check-ins/hábitos.
+      .in("form_type", ["checkins", "habits"])
       .order("response_date", { ascending: false })
       .limit(30);
 

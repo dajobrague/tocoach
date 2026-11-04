@@ -14,7 +14,7 @@ import type { AvailableSession } from "./hooks/use-available-sessions";
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BorrowExerciseModal } from "./borrow-exercise-modal";
 import { collectExtraLoggedExercises } from "./extra-logged-exercises";
@@ -29,7 +29,9 @@ import { SessionTypeTile } from "./session-card";
 import { getSessionTypeStyle } from "./session-type-style";
 import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
+import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 
+import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
@@ -101,6 +103,7 @@ interface ExerciseLogLike {
 type ExerciseStatus = "not_started" | "in_progress" | "completed";
 
 interface Props {
+  clientId: string;
   session: AvailableSession;
   programs: WorkoutProgram[];
   exerciseLogs: ExerciseLogLike[];
@@ -109,6 +112,7 @@ interface Props {
 }
 
 export function ActiveSessionView({
+  clientId,
   session,
   programs,
   exerciseLogs,
@@ -129,6 +133,31 @@ export function ActiveSessionView({
   // empezar a entrenar.
 
   const sessionCompleted = schedState.data?.status === "completed";
+
+  // Formulario post-entreno (configurable por el entrenador). Se abre solo
+  // cuando la sesión PASA a completada con esta vista abierta (botón manual
+  // o auto-completado al registrar el último ejercicio) y aún no hay
+  // respuesta para esta sesión; abrir una sesión ya completada no lo
+  // dispara. Después se puede editar desde la tarjeta de completado.
+  const feedback = useWorkoutFeedback(clientId, scheduledDate, session.id);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const prevCompletedRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (!schedState.isSuccess) return;
+    const wasCompleted = prevCompletedRef.current;
+
+    prevCompletedRef.current = sessionCompleted;
+    if (
+      wasCompleted === false &&
+      sessionCompleted &&
+      feedback.enabled &&
+      !feedback.answered
+    ) {
+      setIsFeedbackOpen(true);
+    }
+    // Solo la transición del estado dispara; feedback se lee en ese momento.
+  }, [schedState.isSuccess, sessionCompleted]);
 
   // Hora de inicio con borrador local: bindear el input directo al server
   // disparaba un PUT por keystroke (y pisaba lo tecleado con el valor viejo).
@@ -405,7 +434,46 @@ export function ActiveSessionView({
               </Button>
             ) : null}
           </div>
+          {feedback.enabled ? (
+            <div className="w-full pl-[52px]">
+              <Button
+                className="h-9 px-3.5 text-sm font-semibold"
+                radius="full"
+                startContent={
+                  <Icon
+                    aria-hidden
+                    icon={
+                      feedback.answered
+                        ? "solar:pen-new-square-linear"
+                        : "solar:chat-round-like-linear"
+                    }
+                    width={18}
+                  />
+                }
+                variant="flat"
+                onPress={() => setIsFeedbackOpen(true)}
+              >
+                {feedback.answered
+                  ? "Editar cómo te fue"
+                  : "Cuéntale cómo te fue"}
+              </Button>
+            </div>
+          ) : null}
         </div>
+      ) : null}
+
+      {feedback.enabled ? (
+        <DynamicFormModal
+          clientId={clientId}
+          formType="workout"
+          isOpen={isFeedbackOpen}
+          metadata={{ session_id: session.id }}
+          targetDate={scheduledDate}
+          onClose={() => setIsFeedbackOpen(false)}
+          onSuccess={async () => {
+            await feedback.refetch();
+          }}
+        />
       ) : null}
 
       <div>
