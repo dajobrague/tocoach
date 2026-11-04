@@ -1,6 +1,12 @@
 "use client";
 
-import { Button, ModalContent, ModalFooter, addToast } from "@heroui/react";
+import {
+  Button,
+  ModalContent,
+  ModalFooter,
+  addToast,
+  closeToast,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -689,6 +695,19 @@ export function DynamicFormModal({
     return () => cancelAnimationFrame(raf);
   }, [errors, currentStep]);
 
+  // Último aviso de validación: se cierra al reenviar para no acumularse.
+  const warningToastRef = useRef<string | null>(null);
+  const clearWarningToast = () => {
+    if (warningToastRef.current !== null) {
+      closeToast(warningToastRef.current);
+      warningToastRef.current = null;
+    }
+  };
+  const showWarningToast = (toast: { title: string; description: string }) => {
+    clearWarningToast();
+    warningToastRef.current = addToast({ ...toast, color: "warning" });
+  };
+
   const handleNext = () => {
     // Avance entre páginas: solo validamos la sección actual. Si pasa,
     // pasamos a la siguiente.
@@ -729,14 +748,15 @@ export function DynamicFormModal({
       scrollToErrorRef.current = true;
       setErrors(allErrors);
       goToStep(firstErrorStep);
-      addToast({
-        title: "Faltan campos por completar",
-        description:
-          firstErrorStep === currentStep
-            ? "Revisa los campos marcados antes de enviar."
-            : `Revisa el paso ${firstErrorStep + 1} antes de enviar.`,
-        color: "warning",
-      });
+      // En el paso actual el error ya se ve en el campo (borde rojo +
+      // scroll): un toast abajo solo tapaba el botón Enviar. Solo avisamos
+      // cuando el error está en otro paso.
+      if (firstErrorStep !== currentStep) {
+        showWarningToast({
+          title: "Faltan campos por completar",
+          description: `Revisa el paso ${firstErrorStep + 1} antes de enviar.`,
+        });
+      }
 
       return;
     }
@@ -752,6 +772,9 @@ export function DynamicFormModal({
   };
 
   const handleSubmit = async () => {
+    // Un aviso de un intento anterior no debe quedarse junto a
+    // "Formulario enviado" (ni tapando el botón mientras se reenvía).
+    clearWarningToast();
     setIsSubmitting(true);
     setSubmitError(null);
     // 30s timeout on submit. If the network stalls (tunnel, flaky 3G,
@@ -907,11 +930,10 @@ export function DynamicFormModal({
             setSubmitError(unmappedMessages.join(" · "));
           }
 
-          addToast({
+          showWarningToast({
             title: "Revisa los campos marcados",
             description:
               "Hay respuestas que necesitan corrección antes de enviar.",
-            color: "warning",
           });
         } else {
           setSubmitError(data.error || "Error al enviar formulario");
