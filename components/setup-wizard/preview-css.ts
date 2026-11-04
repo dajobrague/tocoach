@@ -7,7 +7,6 @@ import type { SetupWizardState } from "@/lib/setup-wizard/context";
 import { simplifyBrandColors } from "@/lib/theme/brand-colors";
 import { brandInk, resolveClientSurface } from "@/lib/theme/client-surface";
 import { pickForegroundHSL } from "@/lib/theme/color-utils";
-import { defaultTheme } from "@/lib/theme/schema";
 
 // Function to convert hex to HSL (HeroUI format).
 //
@@ -69,14 +68,10 @@ export function generatePreviewCSS(state: SetupWizardState): string {
   const colors = simplifyBrandColors(undefined, {
     brand: state.colors?.primary,
     accent: state.colors?.secondary,
+    scheme: state.colors?.dark ? "dark" : "light",
   });
-  const brand = String(colors.brand);
-  const accent = String(colors.accent);
-  const surface = resolveClientSurface({
-    ...defaultTheme.colors,
-    brand,
-    accent,
-  });
+  const { brand, accent } = colors;
+  const surface = resolveClientSurface(colors);
   const ink = brandInk(brand, surface.background, surface.foreground);
   const semantic = state.colors?.semantic;
   const success = semantic?.success ?? "#22c55e";

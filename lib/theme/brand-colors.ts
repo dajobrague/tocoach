@@ -17,12 +17,21 @@
 //     que solo usaba el editor antiguo (buttons, text.muted, surface."3",
 //     background, primary/secondary legacy) y marca `auto: true`. Con esos
 //     neutros, resolveClientSurface deriva la misma escala neutra para todos.
+//   - Interruptor "Fondo oscuro": con `scheme: "dark"` se escribe
+//     DARK_NEUTRALS en vez de los neutros claros, para que los tenants con
+//     lienzo oscuro (5/45 en prod, ~#161516) lo conserven al re-guardar.
+//     `scheme` vive junto a `auto`; heal lo conserva (keys extra) y el schema
+//     lo ignora, igual que `auto`.
 //   - `auto: true` es la marca de "neutros gestionados por la app": un futuro
 //     modo noche puede ignorar los neutros guardados (son de modo claro) y
 //     derivar el lienzo oscuro solo a partir de brand/accent.
 
 import { getContrastRatio } from "./contrast";
+import type { ThemeConfig } from "./schema";
+
 import { defaultTheme } from "./schema";
+
+export type CanvasScheme = "light" | "dark";
 
 const HEX = /^#?[0-9a-f]{6}$/i;
 
@@ -33,6 +42,37 @@ export const DERIVED_NEUTRALS = {
   border: defaultTheme.colors.border,
   fill: defaultTheme.colors.fill,
 } as const;
+
+/**
+ * Neutros oscuros, cercanos a los lienzos oscuros reales de prod (#161516,
+ * #1f1b1b…). resolveClientSurface los respeta porque son legibles: texto
+ * #fafafa / #a1a1aa ≥ 4.5:1, borde y relleno sutiles.
+ */
+export const DARK_NEUTRALS = {
+  text: { primary: "#fafafa", secondary: "#a1a1aa" },
+  surface: { "1": "#161516", "2": "#201e1f" },
+  border: "#3a3739",
+  fill: "#2a2729",
+} as const;
+
+const neutralsFor = (scheme: CanvasScheme) =>
+  scheme === "dark" ? DARK_NEUTRALS : DERIVED_NEUTRALS;
+
+/**
+ * true si el lienzo guardado (colors.surface["1"]) es oscuro, por luminancia
+ * (mismo criterio que client-surface: contrasta más con blanco que con
+ * negro), no por hex exacto. Forma parcial o hex inválido → false.
+ */
+export function isDarkCanvas(colors: unknown): boolean {
+  const surface =
+    isRecord(colors) && isRecord(colors.surface) ? colors.surface : {};
+  const h = normHex(surface["1"]);
+
+  return (
+    h !== null &&
+    getContrastRatio(h, "#ffffff") > getContrastRatio(h, "#000000")
+  );
+}
 
 /** Claves de `colors` que ya no edita nadie y se derivan. */
 const DERIVED_KEYS = new Set([
@@ -65,8 +105,12 @@ function normHex(v: unknown): string | null {
  */
 export function simplifyBrandColors(
   current: unknown,
-  input: { brand?: unknown; accent?: unknown }
-): Record<string, unknown> {
+  input: { brand?: unknown; accent?: unknown; scheme?: unknown }
+): ThemeConfig["colors"] & {
+  auto: true;
+  scheme: CanvasScheme;
+  [key: string]: unknown;
+} {
   const prev = isRecord(current) ? current : {};
   const kept = Object.fromEntries(
     Object.entries(prev).filter(([k]) => !DERIVED_KEYS.has(k))
@@ -74,16 +118,19 @@ export function simplifyBrandColors(
   const brand =
     normHex(input.brand) ?? normHex(prev.brand) ?? defaultTheme.colors.brand;
   const accent = normHex(input.accent) ?? brand;
+  const scheme: CanvasScheme = input.scheme === "dark" ? "dark" : "light";
+  const n = neutralsFor(scheme);
 
   return {
     ...kept,
     brand,
     accent,
     auto: true,
-    text: { ...DERIVED_NEUTRALS.text },
-    surface: { ...DERIVED_NEUTRALS.surface },
-    border: DERIVED_NEUTRALS.border,
-    fill: DERIVED_NEUTRALS.fill,
+    scheme,
+    text: { ...n.text },
+    surface: { ...n.surface },
+    border: n.border,
+    fill: n.fill,
   };
 }
 
@@ -95,13 +142,14 @@ export function hasLegacyCustomColors(colors: unknown): boolean {
   if (!isRecord(colors) || colors.auto === true) return false;
   const text = isRecord(colors.text) ? colors.text : {};
   const surface = isRecord(colors.surface) ? colors.surface : {};
+  const n = neutralsFor(isDarkCanvas(colors) ? "dark" : "light");
   const pairs: [unknown, string][] = [
-    [text.primary, DERIVED_NEUTRALS.text.primary],
-    [text.secondary, DERIVED_NEUTRALS.text.secondary],
-    [surface["1"], DERIVED_NEUTRALS.surface["1"]],
-    [surface["2"], DERIVED_NEUTRALS.surface["2"]],
-    [colors.border, DERIVED_NEUTRALS.border],
-    [colors.fill, DERIVED_NEUTRALS.fill],
+    [text.primary, n.text.primary],
+    [text.secondary, n.text.secondary],
+    [surface["1"], n.surface["1"]],
+    [surface["2"], n.surface["2"]],
+    [colors.border, n.border],
+    [colors.fill, n.fill],
   ];
 
   return pairs.some(([v, d]) => {

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DARK_NEUTRALS,
   DERIVED_NEUTRALS,
+  isDarkCanvas,
   brandColorHint,
   hasLegacyCustomColors,
   simplifyBrandColors,
 } from "../brand-colors";
-import { resolveClientSurface } from "../client-surface";
+import { brandInk, resolveClientSurface } from "../client-surface";
 import { getContrastRatio } from "../contrast";
 import { healThemeJson } from "../heal";
 import { generateThemeCSS, resolveTenantTheme } from "../render-css";
@@ -41,6 +43,7 @@ describe("simplifyBrandColors", () => {
       brand: "#ef4444",
       accent: "#f59e0b",
       auto: true,
+      scheme: "light",
       ...NEUTRALS,
       // Claves que no son color editable se conservan.
       shadows: { light: "rgba(0,0,0,0.1)" },
@@ -173,5 +176,112 @@ describe("brandColorHint", () => {
       expect(brandColorHint(hex)).toBeNull();
     }
     expect(brandColorHint("")).toBeNull();
+  });
+});
+
+describe("Fondo oscuro (scheme: dark)", () => {
+  // Forma real de los tenants oscuros de prod (lienzos #1f1b1b, #151615,
+  // #161615, #161516), con textos claros personalizados.
+  const darkTenant = {
+    brand: "#e11d48",
+    accent: "#f43f5e",
+    text: { primary: "#ffffff", secondary: "#b5b5b5", muted: "#8a8a8a" },
+    surface: { "1": "#1f1b1b", "2": "#2a2525", "3": "#332d2d" },
+    border: "#3d3636",
+    fill: "#2a2525",
+  };
+  const surfaceOf = (themeJson: unknown) =>
+    resolveClientSurface(
+      resolveTenantTheme({ theme_json: themeJson as any, theme_slug: "t" }, "t")
+        .colors
+    );
+
+  it("isDarkCanvas decide por luminancia, no por hex exacto", () => {
+    for (const hex of ["#1f1b1b", "#151615", "#161615", "#161516", "#0e3158"]) {
+      expect(isDarkCanvas({ surface: { "1": hex } })).toBe(true);
+    }
+    expect(isDarkCanvas({ surface: { "1": "#ffffff" } })).toBe(false);
+    expect(isDarkCanvas({ surface: { "1": "#fffaf0" } })).toBe(false);
+    expect(isDarkCanvas({ text: { primary: "#000" } })).toBe(false);
+    expect(isDarkCanvas(undefined)).toBe(false);
+  });
+
+  it("guarda los neutros oscuros derivados y scheme junto a auto", () => {
+    const out = simplifyBrandColors(darkTenant, {
+      brand: "#e11d48",
+      scheme: "dark",
+    });
+
+    expect(out).toMatchObject({
+      auto: true,
+      scheme: "dark",
+      surface: DARK_NEUTRALS.surface,
+      text: DARK_NEUTRALS.text,
+      border: DARK_NEUTRALS.border,
+      fill: DARK_NEUTRALS.fill,
+    });
+    expect(simplifyBrandColors(darkTenant, {}).scheme).toBe("light");
+    // heal conserva scheme/auto (keys extra) y el resultado valida.
+    const healed = healThemeJson({ colors: out });
+
+    expect(healed.colors).toMatchObject({ auto: true, scheme: "dark" });
+    expect(validateTheme(healed, "t").success).toBe(true);
+  });
+
+  it("un tenant oscuro que re-guarda con el interruptor sigue oscuro y legible", () => {
+    const before = surfaceOf({ colors: darkTenant });
+    const after = surfaceOf(
+      healThemeJson({
+        colors: simplifyBrandColors(darkTenant, {
+          brand: darkTenant.brand,
+          accent: darkTenant.accent,
+          scheme: "dark",
+        }),
+      })
+    );
+
+    expect(before.dark).toBe(true);
+    expect(after.dark).toBe(true);
+    // Misma familia de lienzo: casi negro, diferencia de contraste mínima.
+    expect(getContrastRatio(after.background, before.background)).toBeLessThan(
+      1.1
+    );
+    expect(getContrastRatio(after.foreground, after.c1)).toBeGreaterThanOrEqual(
+      4.5
+    );
+    expect(getContrastRatio(after.d500, after.c1)).toBeGreaterThanOrEqual(4.5);
+    expect(getContrastRatio(after.d400, after.c1)).toBeGreaterThanOrEqual(3);
+    // Los neutros oscuros se usan tal cual (resolveClientSurface los acepta).
+    expect(after.d300).toBe(DARK_NEUTRALS.border);
+    expect(after.foreground).toBe(DARK_NEUTRALS.text.primary);
+  });
+
+  it("con principal pálido sobre oscuro, la marca como texto sigue legible", () => {
+    const theme = resolveTenantTheme(
+      {
+        theme_json: healThemeJson({
+          colors: simplifyBrandColors(undefined, {
+            brand: "#1e3a8a",
+            scheme: "dark",
+          }),
+        }) as any,
+        theme_slug: "t",
+      },
+      "t"
+    );
+    const s = resolveClientSurface(theme.colors);
+    const ink = brandInk(theme.colors.brand, s.background, s.foreground);
+
+    expect(getContrastRatio(ink, s.background)).toBeGreaterThanOrEqual(4.5);
+    expect(generateThemeCSS(theme)).toContain(
+      "--heroui-primary-foreground: 0 0% 100%"
+    );
+  });
+
+  it("hasLegacyCustomColors compara contra los neutros de su esquema", () => {
+    expect(hasLegacyCustomColors(darkTenant)).toBe(true);
+    expect(hasLegacyCustomColors({ ...DARK_NEUTRALS, brand: "#e11d48" })).toBe(
+      false
+    );
   });
 });

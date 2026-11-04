@@ -86,3 +86,23 @@ describe("generatePreviewCSS — derivación del editor simple", () => {
     expect(() => generatePreviewCSS(state("#22c55e"))).not.toThrow();
   });
 });
+
+describe("generatePreviewCSS — Fondo oscuro", () => {
+  it("refleja el interruptor con el lienzo oscuro derivado", () => {
+    const base = {
+      fonts: { heading: { family: "Inter" }, body: { family: "Inter" } },
+    };
+    const dark = generatePreviewCSS({
+      ...base,
+      colors: { primary: "#e11d48", secondary: "#f43f5e", dark: true },
+    } as unknown as SetupWizardState);
+    const light = generatePreviewCSS({
+      ...base,
+      colors: { primary: "#e11d48", secondary: "#f43f5e", dark: false },
+    } as unknown as SetupWizardState);
+
+    expect(dark).toContain(`--heroui-background: ${hexToHSL("#161516")}`);
+    expect(dark).toContain(`--heroui-foreground: ${hexToHSL("#fafafa")}`);
+    expect(light).not.toContain(hexToHSL("#161516"));
+  });
+});

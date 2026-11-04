@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardBody, Input } from "@heroui/react";
+import { Button, Card, CardBody, Input, Switch } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 import { HexColorPicker } from "react-colorful";
@@ -181,6 +181,17 @@ export default function ColorSetup() {
           </Button>
         </div>
       </div>
+
+      <Switch
+        isSelected={state.colors.dark}
+        onValueChange={actions.setDarkCanvas}
+      >
+        <span className="text-sm text-black">Fondo oscuro</span>
+        <span className="block text-xs text-gray-500">
+          La app de tus clientes usa un fondo oscuro; los textos se ajustan
+          solos.
+        </span>
+      </Switch>
 
       {/* Action Buttons */}
       <div className="flex justify-between pt-6 border-t border-gray-200">
