@@ -53,3 +53,36 @@ describe("generatePreviewCSS", () => {
     expect(generatePreviewCSS(state)).toContain(".preview-theme-wrapper");
   });
 });
+
+describe("generatePreviewCSS — derivación del editor simple", () => {
+  const state = (primary: string, extra: Record<string, unknown> = {}) =>
+    ({
+      colors: { primary, secondary: "#6366f1", ...extra },
+      fonts: { heading: { family: "Inter" }, body: { family: "Inter" } },
+    }) as unknown as SetupWizardState;
+
+  it("ignora los textos/fondos legacy del estado y usa los neutros derivados", () => {
+    const css = generatePreviewCSS(
+      state("#0ea5e9", {
+        text: { h1: "#ff0000", body: "#ff0000" },
+        background: { secondary: "#000000" },
+      })
+    );
+
+    expect(css).not.toContain(hexToHSL("#ff0000"));
+    expect(css).toContain(`--heroui-content1: ${hexToHSL("#ffffff")}`);
+  });
+
+  it("elige el texto del botón según el principal (no siempre blanco)", () => {
+    expect(generatePreviewCSS(state("#fde047"))).toContain(
+      "--heroui-primary-foreground: 222 47% 11%"
+    );
+    expect(generatePreviewCSS(state("#0f172a"))).toContain(
+      "--heroui-primary-foreground: 0 0% 100%"
+    );
+  });
+
+  it("no rompe con solo el principal (sin semantic/shadows en el estado)", () => {
+    expect(() => generatePreviewCSS(state("#22c55e"))).not.toThrow();
+  });
+});

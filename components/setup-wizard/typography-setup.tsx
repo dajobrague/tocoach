@@ -492,7 +492,7 @@ export default function TypographySetup() {
           size="lg"
           onPress={actions.nextStep}
         >
-          Siguiente: Revisar
+          Siguiente: Logo
         </Button>
       </div>
     </div>

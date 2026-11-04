@@ -4,6 +4,11 @@
 
 import type { SetupWizardState } from "@/lib/setup-wizard/context";
 
+import { simplifyBrandColors } from "@/lib/theme/brand-colors";
+import { brandInk, resolveClientSurface } from "@/lib/theme/client-surface";
+import { pickForegroundHSL } from "@/lib/theme/color-utils";
+import { defaultTheme } from "@/lib/theme/schema";
+
 // Function to convert hex to HSL (HeroUI format).
 //
 // Resilient to missing/invalid input. Partial or legacy themes can omit a
@@ -52,142 +57,98 @@ export function hexToHSL(hex: string | undefined | null): string {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-// Generate HeroUI-compatible CSS from wizard state
+// Generate HeroUI-compatible CSS from wizard state.
+//
+// Mismo cálculo que el portal real: el wizard solo elige principal y
+// secundario, así que las superficies, textos y el texto sobre botones se
+// derivan con resolveClientSurface / brandInk / pickForegroundHSL a partir
+// de los neutros que se guardarán (simplifyBrandColors). Así la vista previa
+// enseña exactamente lo que verá el cliente, sin leer los text/background
+// legacy del estado (que podían venir parciales y tumbar el wizard).
 export function generatePreviewCSS(state: SetupWizardState): string {
-  const primaryHSL = hexToHSL(state.colors.primary);
-  const secondaryHSL = hexToHSL(state.colors.secondary);
-  const successHSL = hexToHSL(state.colors.semantic.success);
-  const warningHSL = hexToHSL(state.colors.semantic.warning);
-  const dangerHSL = hexToHSL(state.colors.semantic.danger);
+  const colors = simplifyBrandColors(undefined, {
+    brand: state.colors?.primary,
+    accent: state.colors?.secondary,
+  });
+  const brand = String(colors.brand);
+  const accent = String(colors.accent);
+  const surface = resolveClientSurface({
+    ...defaultTheme.colors,
+    brand,
+    accent,
+  });
+  const ink = brandInk(brand, surface.background, surface.foreground);
+  const semantic = state.colors?.semantic;
+  const success = semantic?.success ?? "#22c55e";
+  const warning = semantic?.warning ?? "#f59e0b";
+  const danger = semantic?.danger ?? "#ef4444";
+  const shadows = state.colors?.shadows;
 
   return `
     /* HeroUI Theme Override for Preview */
     .preview-theme-wrapper {
-      /* Primary Color */
-      --heroui-primary: ${primaryHSL};
-      --heroui-primary-foreground: 0 0% 100%;
-      
-      /* Secondary Color */
-      --heroui-secondary: ${secondaryHSL};
-      --heroui-secondary-foreground: 0 0% 100%;
-      
-      /* Background System */
-      --heroui-background: ${hexToHSL(state.colors.background.secondary)};
-      --heroui-foreground: ${hexToHSL(state.colors.text.h1)};
-      --heroui-content1: ${hexToHSL(state.colors.surface["1"])};
-      --heroui-content2: ${hexToHSL(state.colors.surface["2"])};
-      --heroui-content3: ${hexToHSL(state.colors.background.accent)};
-      --heroui-content4: ${hexToHSL(state.colors.text.muted)};
-      
+      --heroui-primary: ${hexToHSL(brand)};
+      --heroui-primary-foreground: ${pickForegroundHSL(brand)};
+      --heroui-secondary: ${hexToHSL(accent)};
+      --heroui-secondary-foreground: ${pickForegroundHSL(accent)};
+
+      /* Background System (derivado) */
+      --heroui-background: ${hexToHSL(surface.background)};
+      --heroui-foreground: ${hexToHSL(surface.foreground)};
+      --heroui-content1: ${hexToHSL(surface.c1)};
+      --heroui-content2: ${hexToHSL(surface.c2)};
+      --heroui-content3: ${hexToHSL(surface.c3)};
+      --heroui-content4: ${hexToHSL(surface.c4)};
+
       /* Semantic Colors */
-      --heroui-success: ${successHSL};
-      --heroui-success-foreground: 0 0% 100%;
-      --heroui-warning: ${warningHSL};
-      --heroui-warning-foreground: 0 0% 100%;
-      --heroui-danger: ${dangerHSL};
-      --heroui-danger-foreground: 0 0% 100%;
-      
-      /* Default/Neutral Colors */
-      --heroui-default: ${hexToHSL(state.colors.surface["2"])};
-      --heroui-default-50: ${hexToHSL(state.colors.surface["1"])};
-      --heroui-default-100: ${hexToHSL(state.colors.surface["2"])};
-      --heroui-default-200: ${hexToHSL(state.colors.background.accent)};
-      --heroui-default-300: ${hexToHSL(state.colors.text.muted)};
-      --heroui-default-400: ${hexToHSL(state.colors.text.muted)};
-      --heroui-default-500: ${hexToHSL(state.colors.text.body)};
-      --heroui-default-600: ${hexToHSL(state.colors.text.body)};
-      --heroui-default-700: ${hexToHSL(state.colors.text.h2)};
-      --heroui-default-800: ${hexToHSL(state.colors.text.h1)};
-      --heroui-default-900: ${hexToHSL(state.colors.text.h1)};
-      --heroui-default-foreground: ${hexToHSL(state.colors.text.h1)};
-      
-      /* Focus */
-      --heroui-focus: ${secondaryHSL};
-      
-      /* Layout */
+      --heroui-success: ${hexToHSL(success)};
+      --heroui-success-foreground: ${pickForegroundHSL(success)};
+      --heroui-warning: ${hexToHSL(warning)};
+      --heroui-warning-foreground: ${pickForegroundHSL(warning)};
+      --heroui-danger: ${hexToHSL(danger)};
+      --heroui-danger-foreground: ${pickForegroundHSL(danger)};
+
+      /* Default/Neutral Colors (derivado) */
+      --heroui-default: ${hexToHSL(surface.default)};
+      --heroui-default-50: ${hexToHSL(surface.d50)};
+      --heroui-default-100: ${hexToHSL(surface.d100)};
+      --heroui-default-200: ${hexToHSL(surface.d200)};
+      --heroui-default-300: ${hexToHSL(surface.d300)};
+      --heroui-default-400: ${hexToHSL(surface.d400)};
+      --heroui-default-500: ${hexToHSL(surface.d500)};
+      --heroui-default-600: ${hexToHSL(surface.d600)};
+      --heroui-default-700: ${hexToHSL(surface.d700)};
+      --heroui-default-800: ${hexToHSL(surface.d800)};
+      --heroui-default-900: ${hexToHSL(surface.d900)};
+      --heroui-default-foreground: ${hexToHSL(surface.dFg)};
+
+      --heroui-focus: ${hexToHSL(accent)};
+
       --heroui-radius-small: 6px;
       --heroui-radius-medium: 8px;
       --heroui-radius-large: 12px;
-      
-      /* Shadows */
-      --heroui-box-shadow-small: 0 1px 2px ${state.colors.shadows.light};
-      --heroui-box-shadow-medium: 0 2px 4px ${state.colors.shadows.medium};
-      --heroui-box-shadow-large: 0 10px 25px ${state.colors.shadows.dark};
+
+      --heroui-box-shadow-small: 0 1px 2px ${shadows?.light ?? "rgba(0, 0, 0, 0.05)"};
+      --heroui-box-shadow-medium: 0 2px 4px ${shadows?.medium ?? "rgba(0, 0, 0, 0.1)"};
+      --heroui-box-shadow-large: 0 10px 25px ${shadows?.dark ?? "rgba(0, 0, 0, 0.25)"};
     }
-    
-    /* Direct color overrides for preview */
+
     .preview-theme-wrapper .bg-primary {
-      background-color: ${state.colors.primary} !important;
+      background-color: ${brand} !important;
     }
-    
+
     .preview-theme-wrapper .bg-secondary {
-      background-color: ${state.colors.secondary} !important;
+      background-color: ${accent} !important;
     }
-    
-    .preview-theme-wrapper .bg-warning {
-      background-color: ${state.colors.semantic.warning} !important;
-    }
-    
-    .preview-theme-wrapper .bg-danger {
-      background-color: ${state.colors.semantic.danger} !important;
-    }
-    
-    .preview-theme-wrapper .bg-success {
-      background-color: ${state.colors.semantic.success} !important;
-    }
-    
+
     .preview-theme-wrapper .text-primary {
-      color: ${state.colors.primary} !important;
+      color: ${ink} !important;
     }
-    
-    .preview-theme-wrapper .text-foreground {
-      color: ${state.colors.text.h1} !important;
-    }
-    
-    .preview-theme-wrapper .text-foreground\\/60 {
-      color: ${state.colors.text.body} !important;
-    }
-    
-    .preview-theme-wrapper .text-foreground\\/70 {
-      color: ${state.colors.text.h2} !important;
-    }
-    
+
     .preview-theme-wrapper .bg-background {
-      background-color: ${state.colors.background.secondary} !important;
+      background-color: ${surface.background} !important;
     }
-    
-    .preview-theme-wrapper .bg-content1 {
-      background-color: ${state.colors.surface["1"]} !important;
-    }
-    
-    .preview-theme-wrapper .bg-default-100 {
-      background-color: ${state.colors.surface["2"]} !important;
-    }
-    
-    .preview-theme-wrapper .bg-default-200 {
-      background-color: ${state.colors.background.accent} !important;
-    }
-    
-    .preview-theme-wrapper .bg-primary\\/10 {
-      background-color: ${state.colors.primary}19 !important;
-    }
-    
-    .preview-theme-wrapper .bg-warning\\/10 {
-      background-color: ${state.colors.semantic.warning}19 !important;
-    }
-    
-    .preview-theme-wrapper .bg-secondary\\/10 {
-      background-color: ${state.colors.secondary}19 !important;
-    }
-    
-    .preview-theme-wrapper .bg-danger\\/10 {
-      background-color: ${state.colors.semantic.danger}19 !important;
-    }
-    
-    .preview-theme-wrapper .bg-success\\/10 {
-      background-color: ${state.colors.semantic.success}19 !important;
-    }
-    
+
     /* Font overrides */
     .preview-theme-wrapper .font-heading {
       font-family: ${state.fonts.heading.family}, sans-serif !important;

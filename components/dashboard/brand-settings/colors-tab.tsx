@@ -11,53 +11,43 @@ import {
   ColorPickerFormat,
   ColorPickerOutput,
 } from "@/components/kibo-ui/color-picker";
+import {
+  brandColorHint,
+  hasLegacyCustomColors,
+} from "@/lib/theme/brand-colors";
+import { pickForegroundHSL } from "@/lib/theme/color-utils";
 
+// Editor simple: solo color principal (brand) y secundario (accent). Textos,
+// fondos, bordes y botones los deriva el pipeline con contraste garantizado.
+// Guardar envía `auto: true` y el PATCH reescribe lo derivado con
+// simplifyBrandColors (lib/theme/brand-colors.ts). Quien no guarde aquí
+// conserva su theme_json y se ve exactamente igual que antes.
 interface BrandColors {
   brand: string;
   accent: string;
-  text: {
-    primary: string;
-    secondary: string;
-    muted: string;
-  };
-  surface: {
-    "1": string;
-    "2": string;
-    "3": string;
-  };
-  border: string;
-  fill: string;
-  buttons: {
-    primary: { bg: string; text: string; hover: string };
-    secondary: { bg: string; text: string; hover: string };
-  };
 }
 
 const DEFAULT_COLORS: BrandColors = {
   brand: "#3b82f6",
   accent: "#6366f1",
-  text: {
-    primary: "#1f2937",
-    secondary: "#6b7280",
-    muted: "#9ca3af",
-  },
-  surface: {
-    "1": "#ffffff",
-    "2": "#f8fafc",
-    "3": "#f1f5f9",
-  },
-  border: "#e2e8f0",
-  fill: "#f1f5f9",
-  buttons: {
-    primary: { bg: "#3b82f6", text: "#ffffff", hover: "#2563eb" },
-    secondary: { bg: "#f1f5f9", text: "#374151", hover: "#e2e8f0" },
-  },
 };
+
+const HEX_RE = /^#?[0-9a-f]{6}$/i;
+
+const hexOr = (v: unknown, fallback: string): string =>
+  typeof v === "string" && HEX_RE.test(v)
+    ? v.startsWith("#")
+      ? v
+      : `#${v}`
+    : fallback;
 
 export default function BrandColorsTab() {
   const [colors, setColors] = React.useState<BrandColors>(DEFAULT_COLORS);
   const [originalColors, setOriginalColors] =
     React.useState<BrandColors>(DEFAULT_COLORS);
+  // Tenant con textos/fondos personalizados del editor antiguo: al guardar
+  // pasan a derivarse, así que se avisa y se permite guardar sin cambios.
+  const [hasLegacy, setHasLegacy] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
   const [message, setMessage] = React.useState<{
@@ -72,51 +62,19 @@ export default function BrandColorsTab() {
 
         if (response.ok) {
           const data = await response.json();
+          const c: unknown = data.theme_json?.colors;
 
-          if (data.theme_json?.colors) {
-            const c = data.theme_json.colors;
+          if (c && typeof c === "object") {
+            const rec = c as Record<string, unknown>;
+            const brand = hexOr(rec.brand, DEFAULT_COLORS.brand);
             const loaded: BrandColors = {
-              brand: c.brand || DEFAULT_COLORS.brand,
-              accent: c.accent || DEFAULT_COLORS.accent,
-              text: {
-                primary: c.text?.primary || DEFAULT_COLORS.text.primary,
-                secondary: c.text?.secondary || DEFAULT_COLORS.text.secondary,
-                muted: c.text?.muted || DEFAULT_COLORS.text.muted,
-              },
-              surface: {
-                "1": c.surface?.["1"] || DEFAULT_COLORS.surface["1"],
-                "2": c.surface?.["2"] || DEFAULT_COLORS.surface["2"],
-                "3": c.surface?.["3"] || DEFAULT_COLORS.surface["3"],
-              },
-              border: c.border || DEFAULT_COLORS.border,
-              fill: c.fill || DEFAULT_COLORS.fill,
-              buttons: {
-                primary: {
-                  bg:
-                    c.buttons?.primary?.bg || DEFAULT_COLORS.buttons.primary.bg,
-                  text:
-                    c.buttons?.primary?.text ||
-                    DEFAULT_COLORS.buttons.primary.text,
-                  hover:
-                    c.buttons?.primary?.hover ||
-                    DEFAULT_COLORS.buttons.primary.hover,
-                },
-                secondary: {
-                  bg:
-                    c.buttons?.secondary?.bg ||
-                    DEFAULT_COLORS.buttons.secondary.bg,
-                  text:
-                    c.buttons?.secondary?.text ||
-                    DEFAULT_COLORS.buttons.secondary.text,
-                  hover:
-                    c.buttons?.secondary?.hover ||
-                    DEFAULT_COLORS.buttons.secondary.hover,
-                },
-              },
+              brand,
+              accent: hexOr(rec.accent, brand),
             };
 
             setColors(loaded);
             setOriginalColors(loaded);
+            setHasLegacy(hasLegacyCustomColors(c));
           }
         }
       } catch (error) {
@@ -137,20 +95,13 @@ export default function BrandColorsTab() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          colors: {
-            brand: colors.brand,
-            accent: colors.accent,
-            text: colors.text,
-            surface: colors.surface,
-            border: colors.border,
-            fill: colors.fill,
-            buttons: colors.buttons,
-          },
+          colors: { brand: colors.brand, accent: colors.accent, auto: true },
         }),
       });
 
       if (response.ok) {
         setOriginalColors(colors);
+        setHasLegacy(false);
         setMessage({
           type: "success",
           text: "Colores guardados exitosamente",
@@ -167,7 +118,11 @@ export default function BrandColorsTab() {
     }
   };
 
-  const hasChanges = JSON.stringify(colors) !== JSON.stringify(originalColors);
+  const hasChanges =
+    hasLegacy ||
+    colors.brand !== originalColors.brand ||
+    colors.accent !== originalColors.accent;
+  const brandHint = brandColorHint(colors.brand);
 
   const [openPicker, setOpenPicker] = React.useState<string | null>(null);
 
@@ -336,258 +291,81 @@ export default function BrandColorsTab() {
         />
       )}
 
-      {/* Brand Colors Section */}
       <div>
         <h4 className="text-md font-semibold text-black mb-1 flex items-center gap-2">
           <Icon className="text-slate-700" icon="solar:palette-linear" />
-          Colores de Marca
+          Colores de marca
         </h4>
         <p className="text-sm text-gray-500 mb-4">
-          Los colores principales que definen tu identidad visual
+          Elige tu color principal y, si quieres, uno secundario. Los textos,
+          fondos y botones se ajustan solos para que todo se lea bien.
         </p>
+
+        {hasLegacy && (
+          <Alert
+            className="mb-4"
+            color="warning"
+            description="Tu marca tiene colores de texto y fondo personalizados de la versión anterior. Al guardar, se ajustarán automáticamente a tu color principal."
+            title="Textos y fondos automáticos"
+          />
+        )}
+
         <div className="grid md:grid-cols-2 gap-6">
-          <ColorPickerButton
-            color={colors.brand}
-            label="Color Primario"
-            pickerId="brand"
-            onChange={(c) => setColors({ ...colors, brand: c })}
-          />
-          <ColorPickerButton
-            color={colors.accent}
-            label="Color de Acento"
-            pickerId="accent"
-            onChange={(c) => setColors({ ...colors, accent: c })}
-          />
-        </div>
-      </div>
-
-      {/* Text Colors Section */}
-      <div>
-        <h4 className="text-md font-semibold text-black mb-1 flex items-center gap-2">
-          <Icon className="text-slate-700" icon="solar:text-field-linear" />
-          Colores de Texto
-        </h4>
-        <p className="text-sm text-gray-500 mb-4">
-          Define cómo se ven los textos en tu plataforma
-        </p>
-        <div className="grid md:grid-cols-3 gap-6">
-          <ColorPickerButton
-            color={colors.text.primary}
-            label="Texto Principal"
-            pickerId="text-primary"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                text: { ...colors.text, primary: c },
-              })
-            }
-          />
-          <ColorPickerButton
-            color={colors.text.secondary}
-            label="Texto Secundario"
-            pickerId="text-secondary"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                text: { ...colors.text, secondary: c },
-              })
-            }
-          />
-          <ColorPickerButton
-            color={colors.text.muted}
-            label="Texto Sutil"
-            pickerId="text-muted"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                text: { ...colors.text, muted: c },
-              })
-            }
-          />
-        </div>
-      </div>
-
-      {/* Surface/Background Colors Section */}
-      <div>
-        <h4 className="text-md font-semibold text-black mb-1 flex items-center gap-2">
-          <Icon className="text-slate-700" icon="solar:layers-linear" />
-          Colores de Fondo
-        </h4>
-        <p className="text-sm text-gray-500 mb-4">
-          Los fondos y superficies de tarjetas y secciones
-        </p>
-        <div className="grid md:grid-cols-3 gap-6">
-          <ColorPickerButton
-            color={colors.surface["1"]}
-            label="Fondo Principal"
-            pickerId="surface-1"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                surface: { ...colors.surface, "1": c },
-              })
-            }
-          />
-          <ColorPickerButton
-            color={colors.surface["2"]}
-            label="Fondo de Secciones"
-            pickerId="surface-2"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                surface: { ...colors.surface, "2": c },
-              })
-            }
-          />
-          <ColorPickerButton
-            color={colors.surface["3"]}
-            label="Fondo de Acentos"
-            pickerId="surface-3"
-            onChange={(c) =>
-              setColors({
-                ...colors,
-                surface: { ...colors.surface, "3": c },
-              })
-            }
-          />
-        </div>
-      </div>
-
-      {/* Border & Fill */}
-      <div>
-        <h4 className="text-md font-semibold text-black mb-1 flex items-center gap-2">
-          <Icon className="text-slate-700" icon="solar:ruler-angular-linear" />
-          Bordes y Rellenos
-        </h4>
-        <p className="text-sm text-gray-500 mb-4">
-          Colores para bordes de tarjetas y áreas de relleno
-        </p>
-        <div className="grid md:grid-cols-2 gap-6">
-          <ColorPickerButton
-            color={colors.border}
-            label="Color de Borde"
-            pickerId="border"
-            onChange={(c) => setColors({ ...colors, border: c })}
-          />
-          <ColorPickerButton
-            color={colors.fill}
-            label="Color de Relleno"
-            pickerId="fill"
-            onChange={(c) => setColors({ ...colors, fill: c })}
-          />
-        </div>
-      </div>
-
-      {/* Button Colors Section */}
-      <div>
-        <h4 className="text-md font-semibold text-black mb-1 flex items-center gap-2">
-          <Icon className="text-slate-700" icon="solar:cursor-linear" />
-          Colores de Botones
-        </h4>
-        <p className="text-sm text-gray-500 mb-4">
-          Personaliza la apariencia de los botones en la app del cliente
-        </p>
-
-        {/* Primary Button */}
-        <div className="mb-6">
-          <h5 className="text-sm font-medium text-gray-700 mb-3">
-            Botón Primario
-          </h5>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="space-y-2">
             <ColorPickerButton
-              color={colors.buttons.primary.bg}
-              label="Fondo"
-              pickerId="btn-primary-bg"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    primary: { ...colors.buttons.primary, bg: c },
-                  },
-                })
-              }
+              color={colors.brand}
+              label="Color principal"
+              pickerId="brand"
+              onChange={(c) => setColors({ ...colors, brand: c })}
             />
+            {brandHint && (
+              <p className="flex items-start gap-1.5 text-xs text-warning-600">
+                <Icon
+                  className="mt-0.5 shrink-0"
+                  icon="solar:danger-triangle-linear"
+                />
+                {brandHint}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
             <ColorPickerButton
-              color={colors.buttons.primary.text}
-              label="Texto"
-              pickerId="btn-primary-text"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    primary: { ...colors.buttons.primary, text: c },
-                  },
-                })
-              }
+              color={colors.accent}
+              label="Color secundario (opcional)"
+              pickerId="accent"
+              onChange={(c) => setColors({ ...colors, accent: c })}
             />
-            <ColorPickerButton
-              color={colors.buttons.primary.hover}
-              label="Hover"
-              pickerId="btn-primary-hover"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    primary: { ...colors.buttons.primary, hover: c },
-                  },
-                })
-              }
-            />
+            <Button
+              size="sm"
+              variant="light"
+              onPress={() => setColors({ ...colors, accent: colors.brand })}
+            >
+              Usar el color principal
+            </Button>
           </div>
         </div>
 
-        {/* Secondary Button */}
-        <div>
-          <h5 className="text-sm font-medium text-gray-700 mb-3">
-            Botón Secundario
-          </h5>
-          <div className="grid md:grid-cols-3 gap-4">
-            <ColorPickerButton
-              color={colors.buttons.secondary.bg}
-              label="Fondo"
-              pickerId="btn-secondary-bg"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    secondary: { ...colors.buttons.secondary, bg: c },
-                  },
-                })
-              }
-            />
-            <ColorPickerButton
-              color={colors.buttons.secondary.text}
-              label="Texto"
-              pickerId="btn-secondary-text"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    secondary: { ...colors.buttons.secondary, text: c },
-                  },
-                })
-              }
-            />
-            <ColorPickerButton
-              color={colors.buttons.secondary.hover}
-              label="Hover"
-              pickerId="btn-secondary-hover"
-              onChange={(c) =>
-                setColors({
-                  ...colors,
-                  buttons: {
-                    ...colors.buttons,
-                    secondary: { ...colors.buttons.secondary, hover: c },
-                  },
-                })
-              }
-            />
-          </div>
+        {/* Muestra: el texto del botón se elige solo (pickForegroundHSL). */}
+        <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-4">
+          <span className="text-xs text-gray-500">Vista previa</span>
+          <span
+            className="rounded-lg px-4 py-2 text-sm font-medium"
+            style={{
+              backgroundColor: colors.brand,
+              color: `hsl(${pickForegroundHSL(colors.brand)})`,
+            }}
+          >
+            Botón principal
+          </span>
+          <span
+            className="rounded-lg px-4 py-2 text-sm font-medium"
+            style={{
+              backgroundColor: colors.accent,
+              color: `hsl(${pickForegroundHSL(colors.accent)})`,
+            }}
+          >
+            Secundario
+          </span>
         </div>
       </div>
 
@@ -601,7 +379,7 @@ export default function BrandColorsTab() {
           startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSave}
         >
-          {isSaving ? "Guardando..." : "Guardar Cambios"}
+          {isSaving ? "Guardando..." : "Guardar colores"}
         </Button>
       </div>
     </div>

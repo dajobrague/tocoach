@@ -577,7 +577,7 @@ export default function BrandTypographyTab() {
           startContent={<Icon icon="solar:diskette-linear" />}
           onPress={handleSave}
         >
-          {isSaving ? "Guardando..." : "Guardar Cambios"}
+          {isSaving ? "Guardando..." : "Guardar tipografía"}
         </Button>
       </div>
     </div>
