@@ -12,7 +12,25 @@ export function dayLabelClassification(day: DayMetrics): DayClassification {
     return day.isFuture ? "future" : "rest";
   }
 
-  const nonFuture = day.sessions.filter((s) => s.classification !== "future");
+  const all = day.sessions.filter((s) => s.classification !== "future");
+  // El cliente elige qué sesión hace ("Escoge tu siguiente entrenamiento"):
+  // si completó una sesión real, la sugerencia de la plantilla que no tocó
+  // (fila virtual `template:*` sin actividad) no convierte el día en
+  // "Empezado".
+  const didTrain = all.some(
+    (s) =>
+      s.classification === "complete" &&
+      !s.scheduledSession.id.startsWith("template:")
+  );
+  const nonFuture = didTrain
+    ? all.filter(
+        (s) =>
+          !(
+            s.scheduledSession.id.startsWith("template:") &&
+            s.classification === "pending"
+          )
+      )
+    : all;
 
   if (nonFuture.length === 0) {
     return "future";

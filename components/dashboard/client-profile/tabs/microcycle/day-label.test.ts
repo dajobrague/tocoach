@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import { dayLabelClassification } from "./day-label";
 
-function session(classification: SessionEntry["classification"]): SessionEntry {
-  return { classification } as SessionEntry;
+function session(
+  classification: SessionEntry["classification"],
+  id = "real-1"
+): SessionEntry {
+  return { classification, scheduledSession: { id } } as SessionEntry;
 }
 
 function day(
@@ -31,6 +34,20 @@ describe("dayLabelClassification — regla compartida semana/mes", () => {
     ).toBe("complete");
     expect(
       dayLabelClassification(day([session("complete"), session("pending")]))
+    ).toBe("partial");
+  });
+
+  it("sugerencia de plantilla sin tocar no quita el Hecho si entrenó otra sesión", () => {
+    expect(
+      dayLabelClassification(
+        day([session("pending", "template:a"), session("complete")])
+      )
+    ).toBe("complete");
+    // Sin ninguna sesión real completa sigue contando.
+    expect(
+      dayLabelClassification(
+        day([session("pending", "template:a"), session("partial")])
+      )
     ).toBe("partial");
   });
 
