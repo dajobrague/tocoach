@@ -33,6 +33,7 @@ import { useResolvedDayPrescription } from "./hooks/use-resolved-day-prescriptio
 import { LoggedSessionsSection } from "./logged-sessions-section";
 import { MicrocycleReferenceModal } from "./microcycle-reference-modal";
 import { WeekDateSelector, formatSelectedLabel } from "./week-date-selector";
+import { WorkoutTimerBubble } from "./workout-timer-bubble";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
@@ -528,6 +529,21 @@ export function WorkoutsContent() {
           />
         ) : null}
       </ClientScreen>
+
+      {/* Cronómetro + descanso flotante: solo dentro del entreno activo
+          (pantalla de sesión y registros de ejercicio apilados encima), y
+          no en sesiones ya completadas. */}
+      {!isLoading &&
+      !error &&
+      activeSession !== null &&
+      activeSchedState.data?.status !== "completed" ? (
+        <WorkoutTimerBubble
+          clientId={clientId}
+          scheduledDate={selectedDate}
+          sessionId={activeSession.id}
+          startTime={activeSchedState.data?.scheduled_time ?? null}
+        />
+      ) : null}
 
       <ExerciseLogModal
         clientId={clientId}
