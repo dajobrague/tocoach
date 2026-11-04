@@ -6,8 +6,8 @@
 // imagen real del producto a la izquierda, beneficios y una acción clara a
 // la derecha. La imagen es un ejercicio con sus músculos en el mapa, claro y
 // grande (David: la historia oscura con logo no se leía). Solo sale si le
-// faltan ejercicios por completar. Se abre sola la primera vez; después
-// queda una franja en Inicio para volver a verla mientras falten.
+// faltan ejercicios por completar. Ya no se abre sola (lo cubre el modal de
+// Novedades); queda una franja en Inicio para abrirla mientras falten.
 
 import { Button, Chip, Modal, ModalBody, ModalContent } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -47,14 +47,6 @@ const BENEFITS = [
   },
 ] as const;
 
-function isDismissed(): boolean {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 function dismiss() {
   try {
     localStorage.setItem(DISMISSED_KEY, "1");
@@ -70,7 +62,6 @@ export function MusclesAnnouncement() {
 
   useEffect(() => {
     let cancelled = false;
-    const seen = isDismissed();
 
     fetch("/api/exercises?limit=1", { cache: "no-store" })
       .then((r) => r.json())
@@ -79,9 +70,6 @@ export function MusclesAnnouncement() {
 
         if (cancelled || !exercises?.success || count === 0) return;
         setMissing(count);
-        if (seen) return;
-        // Un respiro tras cargar Inicio: que no salte encima de la página.
-        window.setTimeout(() => !cancelled && setOpen(true), 700);
       })
       .catch(() => {
         // Sin datos no hay aviso; la biblioteca tiene su propio banner.
@@ -113,7 +101,7 @@ export function MusclesAnnouncement() {
   return (
     <>
       {/* Ya vista: franja discreta para volver a abrirla mientras falten. */}
-      {!open && isDismissed() ? (
+      {!open ? (
         <div className="flex flex-col gap-3 rounded-xl border border-default-200 bg-content1 px-4 py-3 sm:flex-row sm:items-center">
           <IconTile icon="solar:body-bold" size="sm" />
           <p className="min-w-0 flex-1 text-sm text-default-600">
