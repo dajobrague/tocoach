@@ -25,6 +25,7 @@ import {
 } from "./body-figure";
 import { SHARE_FONT, fitText, textWidth } from "./fonts";
 
+import { ANATOMY_VIEW, anatomyCrop } from "@/lib/share-card/anatomy-crops";
 import {
   BODY_HEIGHT,
   BODY_OVERLAYS,
@@ -50,6 +51,7 @@ export type Ink = "white" | "dark" | "brand";
 export type SessionTemplate =
   | "datos"
   | "musculos"
+  | "anatomia"
   | "record"
   | "lista"
   | "minimo";
@@ -66,6 +68,7 @@ export interface TemplateDef<T extends TemplateId> {
 export const SESSION_TEMPLATES: TemplateDef<SessionTemplate>[] = [
   { id: "datos", name: "Datos", y: 0.5 },
   { id: "musculos", name: "Músculos", y: 0.48 },
+  { id: "anatomia", name: "Anatomía", y: 0.48 },
   { id: "record", name: "Récord", y: 0.5 },
   { id: "lista", name: "Lista", y: 0.5 },
   { id: "minimo", name: "Mínimo", y: 0.8 },
@@ -87,7 +90,7 @@ export function sessionTemplatesFor(session: ShareSession) {
   return SESSION_TEMPLATES.filter(
     (t) =>
       (t.id !== "record" || hasSets) &&
-      (t.id !== "musculos" || hasMuscles) &&
+      ((t.id !== "musculos" && t.id !== "anatomia") || hasMuscles) &&
       (t.id !== "lista" || session.exercises.length > 0)
   );
 }
@@ -286,6 +289,17 @@ function templateBlock(p: StickerProps, ink: string, accent: string): Block {
         statRow(p.stats, ink),
       ]);
     }
+
+    case "anatomia":
+      return column([
+        sessionTitle(p, ink),
+        space(44),
+        anatomyGrid(p, ink, accent),
+        space(56),
+        mark(true),
+        space(56),
+        statRow(p.stats, ink),
+      ]);
 
     case "record": {
       const recordEx = p.session.exercises.find((e) => e.recordIndex !== null);
@@ -684,7 +698,7 @@ function volumeBlock(exercises: ShareExercise[], ink: string): Block | null {
         size: 44,
         fill: ink,
         children: fitText(
-          `${muscleLabel(id).toUpperCase()} · ${fmtSets.format(sets)} ${sets === 1 ? "serie" : "series"}`,
+          `${muscleLabel(id).toUpperCase()} · ${seriesText(sets)}`,
           44,
           900
         ),
@@ -695,6 +709,138 @@ function volumeBlock(exercises: ShareExercise[], ink: string): Block | null {
 }
 
 const fmtSets = new Intl.NumberFormat("es", { maximumFractionDigits: 1 });
+
+const seriesText = (sets: number) =>
+  `${fmtSets.format(sets)} ${sets === 1 ? "serie" : "series"}`;
+
+/**
+ * Plantilla Anatomía (JC): una ficha por grupo trabajado con ese músculo
+ * encendido en el cuerpo del cliente (recortado a su zona) y sus series.
+ * Sin cuerpo sombreado (cargando o sin kit), la figura plana entera.
+ */
+function anatomyGrid(p: StickerProps, ink: string, accent: string): Block {
+  const max = 6;
+  const all = muscleVolume(
+    p.session.exercises.map((e) => ({
+      sets: e.sets.length,
+      primary: e.primary,
+      secondary: e.secondary,
+    }))
+  );
+  const shown = all.slice(0, max);
+  const cols =
+    shown.length <= 1 ? 1 : shown.length === 2 || shown.length === 4 ? 2 : 3;
+  const gap = 40;
+  const size = Math.min(340, (920 - gap * (cols - 1)) / cols);
+  const tileH = size + 104;
+  const rows = Math.ceil(shown.length / cols);
+  const body = p.body;
+  // Un solo tamaño para todas las etiquetas: el que hace caber la más larga.
+  const labelSize = Math.min(
+    ...shown.map(({ id }) => shrink(muscleLabel(id), 40, size))
+  );
+
+  const grid: Block = {
+    h: rows * tileH + Math.max(0, rows - 1) * 44,
+    draw: (top) =>
+      shown.map(({ id, sets }, i) => {
+        const row = Math.floor(i / cols);
+        const inRow = Math.min(cols, shown.length - row * cols);
+        const x = CX + ((i % cols) - (inRow - 1) / 2) * (size + gap) - size / 2;
+        const y = top + row * (tileH + 44);
+        const clipId = `${p.id}-ana-${id}`;
+        let figure: ReactNode;
+
+        if (body) {
+          const crop = anatomyCrop(body.sex, id);
+          const h = BODY_HEIGHT[body.sex][crop.view];
+          const base = body.files[`${crop.view}_base.webp`];
+
+          figure = (
+            <svg
+              height={size}
+              viewBox={`${crop.x} ${crop.y} ${crop.side} ${crop.side}`}
+              width={size}
+              x={x}
+              y={y}
+            >
+              {base ? (
+                <image height={h} href={base} width={BODY_WIDTH} />
+              ) : null}
+              {(BODY_OVERLAYS[id][crop.view] ?? []).map((name) => {
+                const href = body.files[bodyFile(crop.view, name)];
+
+                return href ? (
+                  <image key={name} height={h} href={href} width={BODY_WIDTH} />
+                ) : null;
+              })}
+            </svg>
+          );
+        } else {
+          const view = ANATOMY_VIEW[id];
+          const w = size / figureHeight([view], 1);
+
+          figure = (
+            <BodyFigure
+              accent={accent}
+              heat={{ [id]: 1 }}
+              id={clipId}
+              ink={ink}
+              views={[view]}
+              width={w}
+              x={x + (size - w) / 2}
+              y={y + size * 0.04}
+            />
+          );
+        }
+        const label = muscleLabel(id);
+
+        return (
+          <g key={id} data-muscle={id}>
+            <defs>
+              <clipPath id={clipId}>
+                <rect height={size} rx={28} width={size} x={x} y={y} />
+              </clipPath>
+            </defs>
+            <rect
+              fill={ink}
+              fillOpacity={0.08}
+              height={size}
+              rx={28}
+              width={size}
+              x={x}
+              y={y}
+            />
+            <g clipPath={body ? `url(#${clipId})` : undefined}>{figure}</g>
+            <Text
+              fill={ink}
+              size={labelSize}
+              top={y + size + 20 + (40 - labelSize) * 0.8}
+              x={x + size / 2}
+            >
+              {fitText(label, labelSize, size)}
+            </Text>
+            <Text fill={accent} size={36} top={y + size + 66} x={x + size / 2}>
+              {seriesText(sets)}
+            </Text>
+          </g>
+        );
+      }),
+  };
+
+  return column([
+    grid,
+    all.length > max && space(36),
+    all.length > max &&
+      line({
+        size: 40,
+        weight: 400,
+        fill: ink,
+        opacity: 0.7,
+        children: `y ${all.length - max} grupos más`,
+      }),
+  ]);
+}
 
 function figureBlock(
   p: StickerProps,
