@@ -135,6 +135,10 @@ The compressed files are already built in `~/library-media-out/{male,female}`
 ```bash
 node scripts/library-media/upload.mjs ~/library-media-out/male male
 node scripts/library-media/upload.mjs ~/library-media-out/female female
+# Shaded muscle body kit (39 files per sex, used by the picker, the client
+# session card and the share image). Built with build-body.mjs.
+node scripts/library-media/upload.mjs ~/library-media-out/body-male male body
+node scripts/library-media/upload.mjs ~/library-media-out/body-female female body
 ```
 
 Verify (expect 1,245 per sex):
