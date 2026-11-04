@@ -14,6 +14,7 @@ import {
 } from "@/components/client-dashboard/client-page";
 import { IconTile } from "@/components/shared/icon-tile";
 import { SegmentedControl } from "@/components/shared/segmented-control";
+import { useTenant } from "@/components/tenant-provider";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { daysToFetchForChartRange } from "@/lib/forms/chart-helpers";
 import {
@@ -32,6 +33,7 @@ import {
   FormResponse,
   type CheckInSchedule,
 } from "@/lib/forms/types";
+import { habitLogDaysFromFeatures } from "@/lib/forms/habit-log-days";
 import { useFormResponses } from "@/lib/hooks/use-client-queries";
 
 /** Weekly default schedule if parsing or chart math fails (Monday 12:00 Europe/Madrid). */
@@ -169,11 +171,18 @@ export function DashboardContent() {
     isError: isErrorWeekly,
   } = useFormResponses(clientId, "checkins", checkinFetchDays);
 
+  // Días que el cliente puede rellenar (incluido hoy); lo decide el entrenador.
+  const habitLogDays = habitLogDaysFromFeatures(useTenant()?.features);
+
   const {
     data: dailyResponses = [] as FormResponse[],
     isLoading: isLoadingDaily,
     isError: isErrorDaily,
-  } = useFormResponses(clientId, "habits", HABITS_FETCH_DAYS);
+  } = useFormResponses(
+    clientId,
+    "habits",
+    Math.max(HABITS_FETCH_DAYS, habitLogDays)
+  );
 
   const isLoadingForms = isLoadingWeekly || isLoadingDaily;
   const isErrorForms = isErrorWeekly || isErrorDaily;
@@ -301,7 +310,7 @@ export function DashboardContent() {
       isSubmitted: boolean;
     }[] = [];
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < habitLogDays; i++) {
       const d = new Date(anchor);
 
       d.setDate(anchor.getDate() - i);
@@ -327,7 +336,7 @@ export function DashboardContent() {
     }
 
     return days;
-  }, [responsesByDate, todayYmd]);
+  }, [responsesByDate, todayYmd, habitLogDays]);
 
   // Check-in pendiente: la acción más importante de la semana, así que es
   // la ÚNICA tarjeta de marca de Inicio, justo bajo el título (bg-primary +
@@ -471,7 +480,7 @@ export function DashboardContent() {
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="-mx-4 -my-1 flex snap-x gap-2.5 overflow-x-auto px-4 py-1 [scrollbar-width:none]">
                 {dailyFormDays.map((day) => {
                   const status = day.isSubmitted
                     ? "sent"
@@ -491,7 +500,7 @@ export function DashboardContent() {
                             ? "pendiente"
                             : "sin registro"
                       }`}
-                      className="flex min-w-0 cursor-pointer flex-col items-center rounded-large bg-content1 px-1.5 pb-3 pt-3.5 shadow-small transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none motion-reduce:active:scale-100"
+                      className="flex min-w-0 shrink-0 basis-[calc((100%-1.25rem)/3)] cursor-pointer snap-start flex-col items-center rounded-large bg-content1 px-1.5 pb-3 pt-3.5 shadow-small transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none motion-reduce:active:scale-100"
                       type="button"
                       onClick={() => setSelectedDayForForm(day.date)}
                     >

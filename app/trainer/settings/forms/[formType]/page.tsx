@@ -8,7 +8,15 @@ import type {
   QuestionConfig,
 } from "@/lib/forms/types";
 
-import { Card, CardBody, Divider, Skeleton, Switch } from "@heroui/react";
+import {
+  Card,
+  CardBody,
+  Divider,
+  Select,
+  SelectItem,
+  Skeleton,
+  Switch,
+} from "@heroui/react";
 import { notFound, useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -23,6 +31,7 @@ import {
   DEFAULT_CHECKIN_CONFIG,
   DEFAULT_HABIT_CONFIG,
 } from "@/lib/forms/defaults";
+import { HABIT_LOG_DAYS_OPTIONS } from "@/lib/forms/habit-log-days";
 import { useInstantSave } from "@/lib/hooks/use-instant-save";
 
 const FORM_TYPE_LABELS: Record<FormType, { title: string; subtitle: string }> =
@@ -303,6 +312,33 @@ function TemplateEditor({ formType }: { formType: FormType }) {
     [scheduleSave]
   );
 
+  // ── Días de margen del Registro diario (habits only, de todo el tenant) ──
+  const [habitLogDays, setHabitLogDays] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (formType !== "habits") return;
+    fetch("/api/trainer/habit-log-days", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (typeof json?.days === "number") setHabitLogDays(json.days);
+      })
+      .catch(() => {});
+  }, [formType]);
+
+  const habitDaysSave = useInstantSave(
+    useCallback(async (value: unknown, signal: AbortSignal) => {
+      const res = await fetch("/api/trainer/habit-log-days", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        signal,
+        body: JSON.stringify({ days: value }),
+      });
+
+      if (!res.ok) throw new Error("No se pudo guardar");
+    }, [])
+  );
+
   const labels = useMemo(() => FORM_TYPE_LABELS[formType], [formType]);
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -391,6 +427,49 @@ function TemplateEditor({ formType }: { formType: FormType }) {
               variant="template"
               onScheduleChange={handleScheduleChange}
             />
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {formType === "habits" && habitLogDays !== null ? (
+        <Card>
+          <CardBody>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Días para rellenar
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Cuántos días, contando hoy, puede rellenar el cliente su
+                  registro diario. Se aplica a todos tus clientes.
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-3">
+                <InstantSaveBadge
+                  error={habitDaysSave.error}
+                  status={habitDaysSave.status}
+                />
+                <Select
+                  aria-label="Días para rellenar el registro diario"
+                  className="w-36"
+                  selectedKeys={new Set([String(habitLogDays)])}
+                  size="sm"
+                  onSelectionChange={(keys) => {
+                    const days = Number(Array.from(keys)[0]);
+
+                    if (!Number.isFinite(days)) return;
+                    setHabitLogDays(days);
+                    habitDaysSave.save(days);
+                  }}
+                >
+                  {HABIT_LOG_DAYS_OPTIONS.map((n) => (
+                    <SelectItem key={String(n)}>
+                      {n === 1 ? "Solo hoy" : `${n} días`}
+                    </SelectItem>
+                  ))}
+                </Select>
+              </div>
+            </div>
           </CardBody>
         </Card>
       ) : null}
