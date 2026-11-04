@@ -31,6 +31,8 @@ import {
   setText,
 } from "@/lib/share-card/session-data";
 import { estimateOneRepMax } from "@/lib/training/e1rm";
+import { muscleVolume } from "@/lib/training/muscle-volume";
+import { muscleLabel } from "@/lib/training/muscles";
 
 export const STICKER_WIDTH = 1000;
 const CX = STICKER_WIDTH / 2;
@@ -260,10 +262,13 @@ function templateBlock(p: StickerProps, ink: string, accent: string): Block {
 
     case "musculos": {
       const figure = figureBlock(p, p.session.exercises, ink, accent, 700);
+      const volume = volumeBlock(p.session.exercises, ink);
 
       return column([
         figure,
         figure && space(40),
+        volume,
+        volume && space(40),
         mark(true),
         space(56),
         statRow(p.stats, ink),
@@ -632,6 +637,36 @@ function dumbbell(accent: string): Block {
     ),
   };
 }
+
+/** Top 4 grupos musculares con sus series (principal 1, secundario 0,5). */
+function volumeBlock(exercises: ShareExercise[], ink: string): Block | null {
+  const top = muscleVolume(
+    exercises.map((e) => ({
+      sets: e.sets.length,
+      primary: e.primary,
+      secondary: e.secondary,
+    }))
+  ).slice(0, 4);
+
+  if (top.length === 0) return null;
+
+  return column(
+    top.map(({ id, sets }) =>
+      line({
+        size: 44,
+        fill: ink,
+        children: fitText(
+          `${muscleLabel(id).toUpperCase()} · ${fmtSets.format(sets)} ${sets === 1 ? "serie" : "series"}`,
+          44,
+          900
+        ),
+      })
+    ),
+    16
+  );
+}
+
+const fmtSets = new Intl.NumberFormat("es", { maximumFractionDigits: 1 });
 
 function figureBlock(
   p: StickerProps,

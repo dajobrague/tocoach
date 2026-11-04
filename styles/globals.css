@@ -68,6 +68,15 @@ select {
   min-width: 44px;
 }
 
+/* Chips, pills and icon toggles keep their own size with a mouse; touch
+   devices keep the 44px tap target above. Opt in with `compact-control`. */
+@media (pointer: fine) {
+  .compact-control {
+    min-height: 0 !important;
+    min-width: 0 !important;
+  }
+}
+
 /* Theme debugging - shows current CSS variable values */
 .debug-theme {
   background: var(--color-brand);

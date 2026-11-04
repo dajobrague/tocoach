@@ -29,6 +29,7 @@
 "use client";
 
 import type { NewRecord } from "@/lib/training/e1rm";
+import type { LibraryMedia } from "@/lib/hooks/use-library-media";
 
 import { addToast, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -67,6 +68,8 @@ import { confirmAfterPress } from "@/lib/ui/native-dialog";
 
 interface ExtendedExerciseShape extends ExerciseShape {
   imageUrl?: string;
+  /** Animación/póster del catálogo (según el sexo del cliente). */
+  libraryMedia?: LibraryMedia | undefined;
   videoUrl?: string;
   uploadedVideoUrl?: string;
   notes?: string;
@@ -772,6 +775,7 @@ export function ExerciseLogModal({
         exerciseName={exercise.name}
         imageUrl={exercise.imageUrl ?? null}
         isCardio={isCardio}
+        libraryMedia={exercise.libraryMedia}
         videoUrl={trainerVideoUrl}
         onClose={handleClose}
       />

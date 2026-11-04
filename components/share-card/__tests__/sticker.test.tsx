@@ -72,6 +72,12 @@ describe("Sticker", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("muscle template lists groups with their series", () => {
+    const text = renderTemplate("musculos").textContent ?? "";
+
+    expect(text).toMatch(/· \d+(,\d)? series?/);
+  });
+
   it("series template marks the record set", () => {
     const text = renderTemplate("ex-series").textContent ?? "";
 

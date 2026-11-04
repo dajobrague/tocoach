@@ -134,8 +134,6 @@ export async function PUT(
     if (body.description !== undefined)
       updateData.description = body.description || null;
     if (body.category !== undefined) updateData.category = body.category;
-    if (body.muscle_groups !== undefined)
-      updateData.muscle_groups = body.muscle_groups || [];
     if (body.equipment !== undefined)
       updateData.equipment = body.equipment || [];
     if (body.movement_pattern !== undefined)

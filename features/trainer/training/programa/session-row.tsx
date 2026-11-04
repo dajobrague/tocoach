@@ -45,6 +45,8 @@ import { useState } from "react";
 import { CATEGORY_VISUAL, prescriptionLine } from "./programa-format";
 import { useExerciseMutations } from "./use-training";
 
+import { MuscleVolume } from "@/components/shared/muscle-volume";
+import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/tabs/microcycle/exercise-metrics-popover";
 
 interface SessionRowProps {
@@ -170,6 +172,15 @@ export function SessionRow({
       onError: () => setActionError("No se pudo reordenar los ejercicios"),
     });
   };
+
+  // Foto propia del entrenador; si no hay, póster del catálogo.
+  const libraryMedia = useLibraryMedia(
+    session.exercises.map((e) => e.libraryExerciseId)
+  );
+  const thumbOf = (e: WorkoutExercise) =>
+    typeof e.imageUrl === "string" && e.imageUrl.length > 0
+      ? e.imageUrl
+      : libraryMedia[e.libraryExerciseId ?? ""]?.poster;
 
   const subtitleParts = [
     `${session.exercises.length} ${session.exercises.length === 1 ? "ejercicio" : "ejercicios"}`,
@@ -307,14 +318,13 @@ export function SessionRow({
                         >
                           <Icon icon="solar:hamburger-menu-linear" width={14} />
                         </button>
-                        {typeof exercise.imageUrl === "string" &&
-                        exercise.imageUrl.length > 0 ? (
+                        {thumbOf(exercise) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
                             loading="lazy"
-                            src={exercise.imageUrl}
+                            src={thumbOf(exercise)}
                           />
                         ) : (
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
@@ -512,6 +522,15 @@ export function SessionRow({
               })}
             </SortableContext>
           </DndContext>
+
+          <MuscleVolume
+            className="mt-1 rounded-large border border-gray-200 bg-white p-3"
+            exercises={session.exercises.map((e) => ({
+              sets: e.sets,
+              primary: e.primaryMuscles,
+              secondary: e.secondaryMuscles,
+            }))}
+          />
 
           {actionError !== null && (
             <div className="flex items-center gap-2 rounded-large border border-danger-200 bg-danger-50 p-2 text-xs text-danger-700">

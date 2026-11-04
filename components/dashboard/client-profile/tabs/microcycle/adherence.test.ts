@@ -118,7 +118,6 @@ function log(
       id: "ex-1",
       name: "Sentadilla",
       category: "strength",
-      muscle_groups: null,
     },
     scheduled_date: "2026-08-03",
     completed_at: "2026-08-03T10:00:00Z",

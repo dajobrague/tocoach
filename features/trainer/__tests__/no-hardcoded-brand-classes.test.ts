@@ -136,4 +136,27 @@ describe("perfil de cliente sin literales de color", () => {
 
     expect(src).not.toContain("window.confirm");
   });
+  it("biblioteca de ejercicios: sin negros/grises/azules/rojos fijos ni cabeceras en mayúsculas", () => {
+    const src = read(
+      "../../../components/dashboard/exercise-library-content.tsx"
+    );
+
+    // bg-white (el arte del catálogo viene sobre blanco) y bg-black (letterbox
+    // de vídeo) son excepciones deliberadas y no se fijan aquí.
+    for (const literal of [
+      "bg-slate-",
+      "text-slate-",
+      "bg-gray-",
+      "text-gray-",
+      "border-gray-",
+      "divide-gray-",
+      "bg-blue-",
+      "bg-red-",
+      "text-red-",
+      "text-white font-semibold",
+      "uppercase tracking-wider",
+    ]) {
+      expect(src, literal).not.toContain(literal);
+    }
+  });
 });

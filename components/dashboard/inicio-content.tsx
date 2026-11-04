@@ -11,6 +11,7 @@ import AddSupplementModal from "@/components/dashboard/add-supplement-modal";
 import { CenteredState } from "@/components/shared/centered-state";
 import { IconTile } from "@/components/shared/icon-tile";
 import { StatTile } from "@/components/shared/stat-tile";
+import { MusclesAnnouncement } from "@/features/trainer/library/muscles-announcement";
 import { NutritionUpdateBanner } from "@/features/trainer/nutrition-update/nutrition-update-banner";
 import { PendingReviewsCard } from "@/features/trainer/training/videos/pending-reviews-card";
 
@@ -190,6 +191,7 @@ export default function InicioContent() {
           </p>
         </div>
 
+        <MusclesAnnouncement />
         <NutritionUpdateBanner />
 
         {/* KPIs principales */}

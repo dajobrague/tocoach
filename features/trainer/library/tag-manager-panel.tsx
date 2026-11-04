@@ -4,7 +4,6 @@ import type { LibraryTagKind } from "./use-library-tags";
 
 import {
   Button,
-  Chip,
   Input,
   Modal,
   ModalBody,
@@ -40,18 +39,27 @@ export function TagManagerButton({
   kind,
   onChanged,
   className,
-}: TagManagerProps & { className?: string }) {
+  iconOnly = false,
+}: TagManagerProps & { className?: string; iconOnly?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <Button
         className={className}
-        startContent={<Icon icon="solar:tag-linear" width={18} />}
         variant="bordered"
         onPress={() => setOpen(true)}
+        {...(iconOnly
+          ? {
+              isIconOnly: true,
+              "aria-label": "Gestionar etiquetas",
+              title: "Gestionar etiquetas",
+            }
+          : {
+              startContent: <Icon icon="solar:tag-linear" width={18} />,
+            })}
       >
-        Etiquetas
+        {iconOnly ? <Icon icon="solar:tag-linear" width={18} /> : "Etiquetas"}
       </Button>
       <TagManagerPanel
         isOpen={open}
@@ -137,28 +145,21 @@ export function TagManagerPanel({
       onClose={onClose}
     >
       <ModalContent>
-        <ModalHeader className="flex flex-col gap-1">
-          <span className="flex items-center gap-2">
-            <Icon
-              className="text-default-500"
-              icon="solar:tag-bold"
-              width={20}
-            />
+        <ModalHeader className="flex flex-col gap-1 border-b border-default-200 px-5 py-4">
+          <h2 className="font-heading text-lg font-semibold text-foreground">
             Etiquetas de {nouns.plural}
-          </span>
-          <span className="text-xs font-normal text-default-500">
+          </h2>
+          <p className="text-sm font-normal text-default-500">
             Sirven para filtrar. Renombrar o eliminar una etiqueta afecta a
-            todas las {nouns.plural} que la llevan. Las carpetas se gestionan
-            aparte.
-          </span>
+            todas las {nouns.plural} que la llevan.
+          </p>
         </ModalHeader>
-        <ModalBody className="gap-3 pb-6">
-          <div className="flex items-end gap-2">
+        <ModalBody className="gap-4 px-5 py-5">
+          <div className="flex items-center gap-2">
             <Input
+              aria-label="Nueva etiqueta"
               isDisabled={busy}
-              label="Nueva etiqueta"
-              placeholder="Ej. vegano"
-              size="sm"
+              placeholder="Nueva etiqueta, ej. vegano"
               value={draft}
               variant="bordered"
               onKeyDown={(event) => {
@@ -170,11 +171,9 @@ export function TagManagerPanel({
               onValueChange={setDraft}
             />
             <Button
-              className="bg-black text-white"
               color="primary"
               isDisabled={canCreate === false}
               isLoading={createM.isPending}
-              size="sm"
               onPress={create}
             >
               Añadir
@@ -198,9 +197,12 @@ export function TagManagerPanel({
               Todavía no hay etiquetas. Añade la primera arriba.
             </p>
           ) : (
-            <ul className="flex flex-col divide-y divide-gray-100">
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
               {(tags.data ?? []).map((tag) => (
-                <li key={tag.id} className="flex items-center gap-2 py-2">
+                <li
+                  key={tag.id}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-150 [@media(hover:hover)]:hover:bg-default-50"
+                >
                   {editing?.id === tag.id ? (
                     <Input
                       autoFocus
@@ -221,19 +223,15 @@ export function TagManagerPanel({
                       onValueChange={(name) => setEditing({ id: tag.id, name })}
                     />
                   ) : (
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="truncate text-sm text-gray-900">
+                    <>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                         {tag.name}
                       </span>
-                      <Chip
-                        className="text-default-500"
-                        size="sm"
-                        variant="flat"
-                      >
+                      <span className="shrink-0 pr-1 text-xs tabular-nums text-default-500">
                         {tag.usage}{" "}
                         {tag.usage === 1 ? nouns.singular : nouns.plural}
-                      </Chip>
-                    </span>
+                      </span>
+                    </>
                   )}
 
                   {editing?.id === tag.id ? (
@@ -241,6 +239,7 @@ export function TagManagerPanel({
                       <Button
                         isIconOnly
                         aria-label="Guardar nombre"
+                        className="compact-control"
                         isLoading={renameM.isPending}
                         size="sm"
                         variant="light"
@@ -251,6 +250,7 @@ export function TagManagerPanel({
                       <Button
                         isIconOnly
                         aria-label="Cancelar"
+                        className="compact-control"
                         isDisabled={renameM.isPending}
                         size="sm"
                         variant="light"
@@ -264,7 +264,7 @@ export function TagManagerPanel({
                       <Button
                         isIconOnly
                         aria-label={`Renombrar ${tag.name}`}
-                        className="text-default-500"
+                        className="compact-control text-default-500"
                         isDisabled={busy}
                         size="sm"
                         variant="light"
@@ -277,7 +277,7 @@ export function TagManagerPanel({
                       <Button
                         isIconOnly
                         aria-label={`Eliminar ${tag.name}`}
-                        color="danger"
+                        className="compact-control text-default-500 [@media(hover:hover)]:hover:text-danger"
                         isDisabled={busy}
                         size="sm"
                         variant="light"

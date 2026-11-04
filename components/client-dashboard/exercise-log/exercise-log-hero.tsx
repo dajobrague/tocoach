@@ -11,6 +11,8 @@
 
 "use client";
 
+import type { LibraryMedia } from "@/lib/hooks/use-library-media";
+
 import { Icon } from "@iconify/react";
 import { useState } from "react";
 
@@ -25,6 +27,8 @@ interface Props {
   /** Vídeo de demostración del entrenador (archivo, YouTube o Vimeo). */
   videoUrl?: string | null;
   exerciseName?: string | undefined;
+  /** Animación del catálogo: solo si no hay imagen ni vídeo del entrenador. */
+  libraryMedia?: LibraryMedia | undefined;
   onClose: () => void;
 }
 
@@ -33,6 +37,7 @@ export function ExerciseLogHero({
   isCardio,
   videoUrl = null,
   exerciseName,
+  libraryMedia,
   onClose,
 }: Props) {
   const typeStyle = getSessionTypeStyle(isCardio ? "cardio" : "strength");
@@ -59,6 +64,32 @@ export function ExerciseLogHero({
           preload="metadata"
           src={`${embed.embedUrl}#t=0.1`}
         />
+      ) : libraryMedia?.video || libraryMedia?.poster ? (
+        // Clip del catálogo sobre blanco (el vídeo ya trae el fondo). Con
+        // "reducir movimiento" solo el póster, sin reproducción.
+        <div className="h-full w-full bg-white">
+          {libraryMedia.video ? (
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              aria-hidden="true"
+              className="h-full w-full object-contain motion-reduce:hidden"
+              poster={libraryMedia.poster}
+              src={libraryMedia.video}
+            />
+          ) : null}
+          {libraryMedia.poster ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              alt=""
+              className={`h-full w-full object-contain ${libraryMedia.video ? "hidden motion-reduce:block" : ""}`}
+              decoding="async"
+              src={libraryMedia.poster}
+            />
+          ) : null}
+        </div>
       ) : (
         <div
           className={`flex h-full w-full items-center justify-center ${typeStyle.tileClass}`}

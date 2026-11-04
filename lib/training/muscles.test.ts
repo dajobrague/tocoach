@@ -6,9 +6,7 @@ import { describe, it, expect } from "vitest";
 import {
   MUSCLES,
   legacyToMuscles,
-  normalizeExerciseName,
   parseMuscles,
-  pickMuscleSuggestion,
   primaryMuscleRequired,
 } from "./muscles";
 
@@ -17,11 +15,12 @@ describe("muscle taxonomy", () => {
     const sql = readFileSync(
       join(
         __dirname,
-        "../../supabase/migrations/20261027120000_exercise_muscles.sql"
+        "../../supabase/migrations/20261102120000_muscles_16_groups.sql"
       ),
       "utf8"
     );
-    const inSql = [...sql.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    const check = sql.slice(sql.indexOf("ARRAY[\n"));
+    const inSql = [...check.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 
     expect(inSql.sort()).toEqual(MUSCLES.map((m) => m.id).sort());
   });
@@ -65,26 +64,27 @@ describe("legacyToMuscles", () => {
   it("splits comma, semicolon and 'y' joined strings", () => {
     expect(map(["cuádriceps; isquios; glúteo mayor"]).secondary).toEqual([
       "isquiotibiales",
-      "gluteo_mayor",
+      "gluteo",
     ]);
     expect(map(["Gemelos (gastrocnemio, sóleo)"])).toMatchObject({
       primary: ["gemelos"],
-      secondary: ["soleo"],
+      secondary: [],
     });
   });
 
   it("keeps specific phrases over the generic word", () => {
     expect(map(["Pecho (porción superior/clavicular)"]).primary).toEqual([
-      "pectoral_superior",
+      "pectoral",
     ]);
     expect(map(["Hombros (deltoides posterior)"]).primary).toEqual([
       "deltoides_posterior",
     ]);
     expect(map(["Deltoides medial"]).primary).toEqual(["deltoides_lateral"]);
     expect(map(["Bíceps femoral"]).primary).toEqual(["isquiotibiales"]);
-    expect(map(["Bíceps braquial", "Braquial"]).secondary).toEqual([
-      "braquial",
-    ]);
+    expect(map(["Bíceps braquial", "Braquial"])).toMatchObject({
+      primary: ["biceps"],
+      secondary: [],
+    });
     expect(map(["Recto femoral"]).primary).toEqual(["cuadriceps"]);
   });
 
@@ -99,14 +99,10 @@ describe("legacyToMuscles", () => {
       "deltoides_anterior",
     ]);
     expect(map(["Trapecio"], "Encogimientos con barra").primary).toEqual([
-      "trapecio_superior",
+      "trapecio",
     ]);
-    expect(map(["Trapecio"], "Remo con barra").primary).toEqual([
-      "trapecio_medio",
-    ]);
-    expect(map(["Pectoral"], "Press inclinado").primary).toEqual([
-      "pectoral_superior",
-    ]);
+    expect(map(["Trapecio"], "Remo con barra").primary).toEqual(["trapecio"]);
+    expect(map(["Pectoral"], "Press inclinado").primary).toEqual(["pectoral"]);
   });
 
   it("covers typos trainers actually wrote", () => {
@@ -130,7 +126,7 @@ describe("legacyToMuscles — leftovers from the prod dry run", () => {
       "deltoides_posterior",
     ]);
     expect(legacyToMuscles(["Tensor de la fascia lata"], "").primary).toEqual([
-      "gluteo_medio",
+      "gluteo",
     ]);
     expect(legacyToMuscles(["Quads"], "").primary).toEqual(["cuadriceps"]);
     expect(legacyToMuscles(["Braquioradial"], "").primary).toEqual([
@@ -144,34 +140,5 @@ describe("primaryMuscleRequired", () => {
     expect(primaryMuscleRequired("cardio")).toBe(false);
     expect(primaryMuscleRequired("strength")).toBe(true);
     expect(primaryMuscleRequired("")).toBe(true);
-  });
-});
-
-describe("pickMuscleSuggestion", () => {
-  it("returns the most common valid pick, ignoring empty and unknown rows", () => {
-    const bench = {
-      primary_muscles: ["pectoral"],
-      secondary_muscles: ["triceps"],
-    };
-
-    expect(
-      pickMuscleSuggestion([
-        { primary_muscles: ["triceps"], secondary_muscles: [] },
-        bench,
-        bench,
-        { primary_muscles: [], secondary_muscles: ["triceps"] },
-        { primary_muscles: ["pecho"], secondary_muscles: [] },
-      ])
-    ).toEqual({ primary: ["pectoral"], secondary: ["triceps"] });
-  });
-
-  it("returns null when nobody tagged it", () => {
-    expect(pickMuscleSuggestion([])).toBeNull();
-  });
-});
-
-describe("normalizeExerciseName", () => {
-  it("ignores case and stray spaces", () => {
-    expect(normalizeExerciseName("  Remo con  Barra ")).toBe("remo con barra");
   });
 });

@@ -25,7 +25,6 @@ function log(exerciseId: string, name: string, setCount: number): ExerciseLog {
       id: exerciseId,
       name,
       category: "strength",
-      muscle_groups: null,
     },
     scheduled_date: "2026-06-02",
     completed_at: "2026-06-02T12:00:00Z",

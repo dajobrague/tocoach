@@ -416,7 +416,7 @@ export const SAMPLE_SESSION: ShareSession = {
       exerciseId: "row",
       name: "Remo con barra",
       primary: ["dorsal"],
-      secondary: ["biceps", "trapecio_medio", "romboides"],
+      secondary: ["biceps", "trapecio"],
       sets: [
         { reps: 10, weightKg: 70 },
         { reps: 10, weightKg: 70 },
@@ -448,7 +448,7 @@ export const SAMPLE_SESSION: ShareSession = {
       exerciseId: "curl",
       name: "Curl con mancuernas",
       primary: ["biceps"],
-      secondary: ["braquial", "antebrazo"],
+      secondary: ["antebrazo"],
       sets: [
         { reps: 12, weightKg: 14 },
         { reps: 11, weightKg: 14 },

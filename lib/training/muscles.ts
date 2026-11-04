@@ -1,15 +1,16 @@
-// Fixed muscle taxonomy for the exercise library (Oct 14 call, JC): the
+// Fixed muscle taxonomy for the exercise library: 16 groups (Nov 2 call, JC —
+// "aunque el cuerpo humano tiene cientos de músculos, se suelen agrupar"). The
 // trainer tags each exercise with primary muscles (required except for cardio,
-// several allowed) and optional secondary ones. Drives the client's muscle map on the share
-// card and the library filter. Ids are stored in exercises.primary_muscles /
-// secondary_muscles and pinned by a CHECK in 20261027120000_exercise_muscles —
-// adding an id means a migration too (muscles.test.ts guards the pairing).
+// several allowed) and optional secondary ones. Drives the client's muscle map,
+// per-muscle volume and the library filter. Ids are stored in
+// exercises.primary_muscles / secondary_muscles and pinned by a CHECK in
+// 20261102120000_muscles_16_groups — adding an id means a migration too
+// (muscles.test.ts guards the pairing).
 //
-// Granularity follows what trainers already type in muscle_groups (pectoral
-// superior, the three deltoid heads, trapecio medio, glúteo medio, sóleo…)
-// cross-checked with free-exercise-db (17 groups), wger (15) and ExRx. Deep
-// muscles (transverso, romboides, manguito, psoas) stay because trainers use
-// them; the map paints them on the region that covers them.
+// Merged on purpose: pectoral (+superior, serrato), bíceps (+braquial),
+// trapecio (+romboides), dorsal (+redondo mayor), abdomen (+oblicuos,
+// transverso), glúteo (+medio/abductores), gemelos (+sóleo), erectores (was
+// lumbares). Removed: manguito rotador, flexores de cadera, tibial, cuello.
 
 export const MUSCLE_REGIONS = [
   "Pecho",
@@ -19,15 +20,12 @@ export const MUSCLE_REGIONS = [
   "Core",
   "Cadera",
   "Piernas",
-  "Cuello",
 ] as const;
 
 export type MuscleRegion = (typeof MUSCLE_REGIONS)[number];
 
 export const MUSCLES = [
-  { id: "pectoral_superior", label: "Pectoral superior", region: "Pecho" },
   { id: "pectoral", label: "Pectoral", region: "Pecho" },
-  { id: "serrato", label: "Serrato anterior", region: "Pecho" },
   { id: "deltoides_anterior", label: "Deltoides anterior", region: "Hombros" },
   { id: "deltoides_lateral", label: "Deltoides lateral", region: "Hombros" },
   {
@@ -35,34 +33,18 @@ export const MUSCLES = [
     label: "Deltoides posterior",
     region: "Hombros",
   },
-  { id: "manguito_rotador", label: "Manguito rotador", region: "Hombros" },
-  { id: "biceps", label: "Bíceps", region: "Brazos" },
-  { id: "braquial", label: "Braquial", region: "Brazos" },
+  { id: "biceps", label: "Bíceps y braquial", region: "Brazos" },
   { id: "triceps", label: "Tríceps", region: "Brazos" },
   { id: "antebrazo", label: "Antebrazo", region: "Brazos" },
-  { id: "trapecio_superior", label: "Trapecio superior", region: "Espalda" },
-  {
-    id: "trapecio_medio",
-    label: "Trapecio medio e inferior",
-    region: "Espalda",
-  },
-  { id: "romboides", label: "Romboides", region: "Espalda" },
+  { id: "trapecio", label: "Trapecio", region: "Espalda" },
   { id: "dorsal", label: "Dorsal ancho", region: "Espalda" },
-  { id: "redondo_mayor", label: "Redondo mayor", region: "Espalda" },
-  { id: "lumbares", label: "Lumbares (erectores)", region: "Espalda" },
-  { id: "abdominales", label: "Abdominales", region: "Core" },
-  { id: "oblicuos", label: "Oblicuos", region: "Core" },
-  { id: "transverso", label: "Transverso", region: "Core" },
-  { id: "gluteo_mayor", label: "Glúteo mayor", region: "Cadera" },
-  { id: "gluteo_medio", label: "Glúteo medio (abductores)", region: "Cadera" },
-  { id: "flexores_cadera", label: "Flexores de cadera", region: "Cadera" },
+  { id: "erectores", label: "Erectores", region: "Espalda" },
+  { id: "abdomen", label: "Abdomen", region: "Core" },
+  { id: "gluteo", label: "Glúteo", region: "Cadera" },
   { id: "aductores", label: "Aductores", region: "Cadera" },
   { id: "cuadriceps", label: "Cuádriceps", region: "Piernas" },
   { id: "isquiotibiales", label: "Isquiotibiales", region: "Piernas" },
   { id: "gemelos", label: "Gemelos", region: "Piernas" },
-  { id: "soleo", label: "Sóleo", region: "Piernas" },
-  { id: "tibial", label: "Tibial anterior", region: "Piernas" },
-  { id: "cuello", label: "Cuello", region: "Cuello" },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -119,46 +101,12 @@ export const primaryMuscleRequired = (category: string | null | undefined) =>
 
 export const MISSING_PRIMARY_ERROR = "Elige al menos un músculo principal";
 
-/** Same exercise name across libraries: case, edge and inner spaces ignored. */
-export const normalizeExerciseName = (name: string) =>
-  name.toLowerCase().trim().replace(/\s+/g, " ");
-
-/**
- * Most common muscle pick among exercises with the same name (other
- * trainers' libraries included). Offered as a suggestion the trainer
- * accepts, never applied on its own.
- */
-export function pickMuscleSuggestion(
-  rows: readonly { primary_muscles: unknown; secondary_muscles: unknown }[]
-): MuscleSelection | null {
-  const votes = new Map<string, { pick: MuscleSelection; count: number }>();
-
-  for (const row of rows) {
-    const parsed = parseMuscles(row.primary_muscles, row.secondary_muscles);
-
-    if (parsed?.ok !== true || parsed.muscles.primary.length === 0) continue;
-
-    const key = JSON.stringify(parsed.muscles);
-    const vote = votes.get(key) ?? { pick: parsed.muscles, count: 0 };
-
-    vote.count++;
-    votes.set(key, vote);
-  }
-
-  let best: { pick: MuscleSelection; count: number } | null = null;
-
-  for (const vote of votes.values()) {
-    if (best === null || vote.count > best.count) best = vote;
-  }
-
-  return best?.pick ?? null;
-}
-
 // ---------------------------------------------------------------------------
-// One-off backfill from the legacy free-text muscle_groups column. Order in
-// the old list is the only signal: first muscle → primary, the rest →
-// secondary. Ambiguous words ("hombro", "trapecio", "pecho") are resolved
-// with the exercise name. Unknown words are reported, not guessed.
+// The trainer's old free-text muscle_groups, read as a suggestion in the
+// picker (never applied on its own: David, 28 oct, no data migration).
+// Order in the old list is the only signal: first muscle → primary, the
+// rest → secondary. Ambiguous words ("hombro", "trapecio", "pecho") are
+// resolved with the exercise name. Unknown words are reported, not guessed.
 
 type LegacyRule = [RegExp, MuscleId[] | ((name: string) => MuscleId[])];
 
@@ -169,61 +117,32 @@ const deltoidByName = (name: string): MuscleId[] =>
       ? ["deltoides_posterior"]
       : ["deltoides_anterior"];
 
-const trapByName = (name: string): MuscleId[] =>
-  /encogim|shrug|ment[oó]n|farmer|granjero|paseo/.test(name)
-    ? ["trapecio_superior"]
-    : ["trapecio_medio"];
-
-const chestByName = (name: string): MuscleId[] =>
-  /inclinad/.test(name) ? ["pectoral_superior"] : ["pectoral"];
-
 // First match wins, so specific phrases sit above the generic word.
 const LEGACY_RULES: LegacyRule[] = [
   [/b[ií]ceps femoral/, ["isquiotibiales"]],
-  [/b[ií]ceps/, ["biceps"]],
+  [/b[ií]ceps|braquial/, ["biceps"]],
   [/tr[ií]ceps/, ["triceps"]],
   [
     /braquio?rradial|braquioradial|antebrazo|flexores de (la )?mu[ñn]eca|extensores de (la )?mu[ñn]eca/,
     ["antebrazo"],
   ],
-  [/braquial/, ["braquial"]],
-  [
-    /pector.*(superior|clavicular)|(superior|clavicular).*pector|pecho.*(superior|clavicular)/,
-    ["pectoral_superior"],
-  ],
-  [/pector|pecho/, chestByName],
-  [/serrato/, ["serrato"]],
+  [/pector|pecho|serrato/, ["pectoral"]],
   [/(deltoides?|hombros?) ?(anterior|frontal)/, ["deltoides_anterior"]],
   [/(deltoides?|hombros?) ?(lateral|medial|medio)/, ["deltoides_lateral"]],
   [/(deltoides?|hombros?) ?posterior/, ["deltoides_posterior"]],
-  [/manguito|rotadores|infraespinoso|supraespinoso/, ["manguito_rotador"]],
   [/deltiodes|deltoide|hombro/, deltoidByName],
-  [/trapecio (medio|inferior)/, ["trapecio_medio"]],
-  [/trapecio superior/, ["trapecio_superior"]],
-  [/trapecio/, trapByName],
-  [/romboid/, ["romboides"]],
-  [/redondo mayor/, ["redondo_mayor"]],
-  [/espalda (alta|media)/, ["trapecio_medio", "romboides"]],
-  [/espalda baja|lumbar|erector/, ["lumbares"]],
-  [/dorsal|espalda/, ["dorsal"]],
-  [/cadena posterior/, ["gluteo_mayor", "isquiotibiales", "lumbares"]],
-  [/obl[ií]cu/, ["oblicuos"]],
-  [/transverso/, ["transverso"]],
-  [/abdom|core|recto abdominal/, ["abdominales"]],
-  [/gl[uú]te.*(medio|menor)|abductor|fascia lata/, ["gluteo_medio"]],
-  [/gl[uú]te/, ["gluteo_mayor"]],
-  [/psoas|flexores de (la )?cadera|il[ií]aco/, ["flexores_cadera"]],
+  [/trapecio|romboid|espalda (alta|media)/, ["trapecio"]],
+  [/dorsal|redondo mayor/, ["dorsal"]],
+  [/espalda baja|lumbar|erector/, ["erectores"]],
+  [/espalda/, ["dorsal"]],
+  [/cadena posterior/, ["gluteo", "isquiotibiales", "erectores"]],
+  [/obl[ií]cu|transverso|abdom|core|recto abdominal/, ["abdomen"]],
+  [/gl[uú]te|abductor|fascia lata/, ["gluteo"]],
   [/adu+c?ctor/, ["aductores"]],
   [/cu[aá]driceps|quadriceps|quads|recto femoral|vasto/, ["cuadriceps"]],
   [/isqui|femoral/, ["isquiotibiales"]],
-  [/s[oó]leo/, ["soleo"]],
-  [/gemelo|gastrocnemio|pantorrilla/, ["gemelos"]],
-  [/tibial/, ["tibial"]],
-  [/cuello|esternocleido/, ["cuello"]],
-  [
-    /tren inferior|^piernas?$/,
-    ["cuadriceps", "isquiotibiales", "gluteo_mayor"],
-  ],
+  [/s[oó]leo|gemelo|gastrocnemio|pantorrilla/, ["gemelos"]],
+  [/tren inferior|^piernas?$/, ["cuadriceps", "isquiotibiales", "gluteo"]],
 ];
 
 export type LegacyMapping = MuscleSelection & { unknown: string[] };

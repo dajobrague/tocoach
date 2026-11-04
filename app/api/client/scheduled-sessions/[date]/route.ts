@@ -5,6 +5,8 @@
 // last-used-weight prefill are preserved.
 
 /* eslint-disable no-console */
+import type { MuscleId } from "@/lib/training/muscles";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getClientSession } from "@/lib/auth/client-session";
@@ -34,6 +36,9 @@ interface ResolvedExercise {
    * TODOS los videos subidos (solo los enlaces externos llegaban).
    */
   uploaded_video_url: string | null;
+  primary_muscles: MuscleId[];
+  secondary_muscles: MuscleId[];
+  library_exercise_id: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;
@@ -151,7 +156,7 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
-             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url)
+             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url, primary_muscles, secondary_muscles, library_exercise_id)
            )
          )`
       )
@@ -327,7 +332,7 @@ export async function GET(
            session_exercises(
              id, exercise_order, sets, reps, weight_kg,
              duration_seconds, distance_meters, rest_seconds, notes, metadata,
-             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url)
+             exercise:exercises(id, name, category, image_url, video_url, uploaded_video_url, primary_muscles, secondary_muscles, library_exercise_id)
            )`
         )
         .eq("id", slotMatch.sessionId)
@@ -485,6 +490,9 @@ function makeResolvedDay(
       image_url: string | null;
       video_url: string | null;
       uploaded_video_url?: string | null;
+      primary_muscles?: MuscleId[] | null;
+      secondary_muscles?: MuscleId[] | null;
+      library_exercise_id?: string | null;
     };
   }>,
   trainerRecommendedSessionIds: string[]
@@ -512,6 +520,9 @@ function makeResolvedDay(
         image_url: r.exercise.image_url ?? null,
         video_url: r.exercise.video_url ?? null,
         uploaded_video_url: r.exercise.uploaded_video_url ?? null,
+        primary_muscles: r.exercise.primary_muscles ?? [],
+        secondary_muscles: r.exercise.secondary_muscles ?? [],
+        library_exercise_id: r.exercise.library_exercise_id ?? null,
         exercise_order: r.exercise_order,
         sets: r.sets,
         reps: r.reps,

@@ -14,7 +14,6 @@ export interface ExerciseLog {
     id: string;
     name: string;
     category: string;
-    muscle_groups: string[] | null;
   };
   scheduled_date: string;
   session_id?: string | null;

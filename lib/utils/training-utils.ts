@@ -333,6 +333,9 @@ export function transformToWorkoutProgram(
             ...(se.exercise?.image_url
               ? { imageUrl: se.exercise.image_url }
               : {}),
+            ...(se.exercise?.library_exercise_id
+              ? { libraryExerciseId: se.exercise.library_exercise_id }
+              : {}),
             ...(se.id ? { id: se.id } : {}),
             ...(se.exercise_id ? { exercise_id: se.exercise_id } : {}),
           };
@@ -360,6 +363,15 @@ export function transformToWorkoutProgram(
             videoUrl: se.exercise?.video_url,
             uploadedVideoUrl: se.exercise?.uploaded_video_url,
             imageUrl: se.exercise?.image_url,
+            ...(se.exercise?.primary_muscles
+              ? { primaryMuscles: se.exercise.primary_muscles }
+              : {}),
+            ...(se.exercise?.secondary_muscles
+              ? { secondaryMuscles: se.exercise.secondary_muscles }
+              : {}),
+            ...(se.exercise?.library_exercise_id
+              ? { libraryExerciseId: se.exercise.library_exercise_id }
+              : {}),
             id: se.id,
             exercise_id: se.exercise_id,
           };

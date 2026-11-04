@@ -17,21 +17,31 @@ import {
   ModalBody,
   ModalContent,
   ModalHeader,
+  Select,
+  SelectItem,
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import AddExerciseLibraryModal from "./add-exercise-library-modal";
+import { LibraryCatalogModal } from "./library-catalog-modal";
 import EditExerciseLibraryModal from "./edit-exercise-library-modal";
 
+import { setFigureSex, useFigureSex } from "@/lib/hooks/use-figure-sex";
+import {
+  useLibraryMedia,
+  type LibraryMedia,
+} from "@/lib/hooks/use-library-media";
 import { MuscleMap } from "@/components/shared/muscle-map";
+import { MuscleBody } from "@/components/shared/muscle-body";
 import { IconTile } from "@/components/shared/icon-tile";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import {
   MuscleFilterSelect,
   type MuscleFilter,
 } from "@/features/trainer/library/muscle-filter-select";
+import { MuscleAssistantReview } from "@/features/trainer/library/muscle-assistant-review";
 import { TagFilterSelect } from "@/features/trainer/library/tag-filter-select";
 import { TagManagerButton } from "@/features/trainer/library/tag-manager-panel";
 import { muscleLabel, type MuscleId } from "@/lib/training/muscles";
@@ -41,8 +51,16 @@ import { getCategoryLabel } from "@/lib/utils/exercise-utils";
 
 const PAGE_SIZE = 50;
 
+const MUSCLES_INTRO_KEY = "topcoach:trainer:muscles-intro-dismissed";
+const OPEN_REVIEW_KEY = "topcoach:trainer:open-muscle-review";
+
 export default function ExerciseLibraryContent() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  // Pósters/animaciones del catálogo (URLs firmadas, aparte de image_url: la
+  // foto propia del entrenador nunca se sustituye ni se guarda).
+  const libraryMedia = useLibraryMedia(
+    exercises.map((e) => e.library_exercise_id)
+  );
   const [totalCount, setTotalCount] = useState(0);
   const [lastLoadedPage, setLastLoadedPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,8 +71,43 @@ export default function ExerciseLibraryContent() {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [muscleFilter, setMuscleFilter] = useState<MuscleFilter>("");
   const [missingMuscles, setMissingMuscles] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  // Aviso de novedad (David, 28 oct): se cierra una vez por navegador.
+  const [introDismissed, setIntroDismissed] = useState(true);
+
+  useEffect(() => {
+    try {
+      setIntroDismissed(localStorage.getItem(MUSCLES_INTRO_KEY) === "1");
+    } catch {
+      setIntroDismissed(false);
+    }
+  }, []);
+
+  // Desde el aviso de Inicio: abre la revisión directamente (bandera de un
+  // solo uso; la URL de Next aún no está actualizada al montar).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(OPEN_REVIEW_KEY) !== "1") return;
+      sessionStorage.removeItem(OPEN_REVIEW_KEY);
+      setReviewOpen(true);
+    } catch {
+      // Sin almacenamiento: el banner sigue ahí.
+    }
+  }, []);
+
+  const dismissIntro = () => {
+    setIntroDismissed(true);
+    try {
+      localStorage.setItem(MUSCLES_INTRO_KEY, "1");
+    } catch {
+      // Sin almacenamiento: vuelve a salir la próxima vez.
+    }
+  };
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const figureSex = useFigureSex();
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [viewingExercise, setViewingExercise] = useState<Exercise | null>(null);
   const skipInitialSearchDebounceRef = useRef(true);
@@ -217,90 +270,109 @@ export default function ExerciseLibraryContent() {
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-      {/* Header */}
+      {/* Cabecera en un solo renglón: título y contador a la izquierda, las
+          dos acciones a la derecha. */}
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Biblioteca de Ejercicios
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Gestiona tu catálogo personal de ejercicios
-            </p>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="flex min-w-0 items-baseline gap-2.5 font-heading text-2xl font-semibold text-foreground">
+            <span className="truncate">Biblioteca de ejercicios</span>
+            {totalCount > 0 ? (
+              <span className="shrink-0 text-base font-normal tabular-nums text-default-400">
+                {totalCount}
+                <span className="sr-only"> ejercicios en tu catálogo</span>
+              </span>
+            ) : null}
+          </h1>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              aria-label="Explorar catálogo"
+              startContent={<Icon icon="solar:library-linear" width={18} />}
+              variant="bordered"
+              onPress={() => setIsCatalogOpen(true)}
+            >
+              <span className="hidden sm:inline">Explorar catálogo</span>
+            </Button>
+            <Button
+              color="primary"
+              startContent={<Icon icon="solar:add-circle-bold" width={18} />}
+              onPress={() => setIsAddModalOpen(true)}
+            >
+              Añadir ejercicio
+            </Button>
           </div>
-          <Button
-            className="bg-black text-white hover:bg-slate-800 font-semibold"
-            size="lg"
-            startContent={<Icon icon="solar:add-circle-bold" width={20} />}
-            onPress={() => setIsAddModalOpen(true)}
+        </div>
+
+        {/* Fuerza / Cardio son la navegación de la página (pestañas con
+            subrayado); a la derecha, cuadrícula o lista. */}
+        <div className="flex items-end justify-between gap-4 border-b border-default-200">
+          <div
+            aria-label="Tipo de ejercicio"
+            className="flex gap-6"
+            role="tablist"
           >
-            Añadir Ejercicio
-          </Button>
-        </div>
+            {(
+              [
+                ["strength", "Fuerza"],
+                ["cardio", "Cardio"],
+              ] as const
+            ).map(([key, label]) => {
+              const active =
+                (categoryFilter === "cardio" ? "cardio" : "strength") === key;
 
-        {/* Category Tabs */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-2">
-            <Button
-              className={
-                categoryFilter === "strength"
-                  ? "font-semibold bg-black text-white hover:bg-slate-800"
-                  : "font-semibold text-slate-700 bg-white"
-              }
-              size="lg"
-              startContent={<Icon icon="solar:dumbbell-bold" width={20} />}
-              variant={categoryFilter === "strength" ? "solid" : "bordered"}
-              onPress={() => setCategoryFilter("strength")}
-            >
-              Fuerza
-            </Button>
-            <Button
-              className={`font-semibold ${
-                categoryFilter === "cardio"
-                  ? "text-white"
-                  : "text-red-600 bg-white"
-              }`}
-              color={categoryFilter === "cardio" ? "danger" : "default"}
-              size="lg"
-              startContent={<Icon icon="solar:heart-pulse-bold" width={20} />}
-              variant={categoryFilter === "cardio" ? "solid" : "bordered"}
-              onPress={() => setCategoryFilter("cardio")}
-            >
-              Cardio
-            </Button>
+              return (
+                <button
+                  key={key}
+                  aria-selected={active}
+                  className={`-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors duration-150 ${
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-default-500 [@media(hover:hover)]:hover:text-foreground"
+                  }`}
+                  role="tab"
+                  type="button"
+                  onClick={() => setCategoryFilter(key)}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-
-          {/* View Mode Toggle */}
-          <div className="flex gap-2">
-            <Button
-              isIconOnly
-              className={viewMode === "grid" ? "bg-black text-white" : ""}
-              size="md"
-              variant={viewMode === "grid" ? "solid" : "bordered"}
-              onPress={() => setViewMode("grid")}
-            >
-              <Icon icon="solar:widget-4-bold" width={20} />
-            </Button>
-            <Button
-              isIconOnly
-              className={viewMode === "table" ? "bg-black text-white" : ""}
-              size="md"
-              variant={viewMode === "table" ? "solid" : "bordered"}
-              onPress={() => setViewMode("table")}
-            >
-              <Icon icon="solar:list-bold" width={20} />
-            </Button>
+          <div
+            aria-label="Vista"
+            className="flex items-center gap-0.5 pb-1.5"
+            role="group"
+          >
+            {(
+              [
+                ["grid", "solar:widget-4-bold", "Cuadrícula"],
+                ["table", "solar:list-bold", "Lista"],
+              ] as const
+            ).map(([key, icon, label]) => (
+              <button
+                key={key}
+                aria-label={label}
+                aria-pressed={viewMode === key}
+                className={`compact-control flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 ${
+                  viewMode === key
+                    ? "bg-default-100 text-foreground"
+                    : "text-default-500 [@media(hover:hover)]:hover:text-foreground"
+                }`}
+                title={label}
+                type="button"
+                onClick={() => setViewMode(key)}
+              >
+                <Icon icon={icon} width={18} />
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Search + filters: one row from tablet up (GHL iframe height is scarce). */}
-        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+        {/* Buscar y filtrar: una fila, mismo borde y misma altura. */}
+        <div className="flex flex-wrap items-center gap-2">
           <Input
-            className="md:min-w-[240px] md:flex-1"
-            classNames={{
-              input: "text-sm",
-            }}
-            placeholder="Buscar ejercicios por nombre..."
+            className="basis-full xl:basis-0 xl:min-w-[200px] xl:flex-1"
+            classNames={{ input: "text-sm", inputWrapper: "bg-content1" }}
+            placeholder="Buscar ejercicio por nombre"
             startContent={
               <Icon
                 className="text-default-400"
@@ -309,39 +381,112 @@ export default function ExerciseLibraryContent() {
               />
             }
             value={searchQuery}
+            variant="bordered"
             onValueChange={setSearchQuery}
           />
-
           <MuscleFilterSelect
-            className="md:w-[220px]"
+            className="w-full sm:w-[200px]"
             missingCount={missingMuscles}
             value={muscleFilter}
             onChange={setMuscleFilter}
           />
-
           <TagFilterSelect
-            className="md:w-[220px]"
+            className="w-full sm:w-[200px]"
             kind="exercise"
             value={tagFilter}
             onChange={setTagFilter}
           />
+          {/* Figura de las animaciones y del mapa muscular: mismo lenguaje que
+              los otros filtros. */}
+          <Select
+            disallowEmptySelection
+            aria-label="Figura de las animaciones y del mapa muscular"
+            className="w-full sm:w-[140px]"
+            selectedKeys={[figureSex]}
+            startContent={
+              <Icon
+                className="text-default-400"
+                icon="solar:user-linear"
+                width={16}
+              />
+            }
+            variant="bordered"
+            onSelectionChange={(keys) => {
+              const [key] = keys === "all" ? [] : Array.from(keys);
 
+              if (key === "male" || key === "female") setFigureSex(key);
+            }}
+          >
+            <SelectItem key="male">Hombre</SelectItem>
+            <SelectItem key="female">Mujer</SelectItem>
+          </Select>
           {/* Renaming/removing a tag rewrites exercise arrays: reload page 1. */}
           <TagManagerButton
-            className="self-start md:self-auto"
+            iconOnly
+            className="self-start"
             kind="exercise"
             onChanged={() => fetchExercisesPage(1, "replace")}
           />
         </div>
+
+        {/* Aviso de una línea: lo que falta y cómo resolverlo. */}
+        {missingMuscles > 0 && !introDismissed ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/20 bg-primary/5 py-2 pl-3 pr-2">
+            <Icon className="text-primary" icon="solar:body-bold" width={18} />
+            <p className="min-w-0 flex-1 text-sm text-default-600">
+              <span className="font-medium text-foreground">
+                {missingMuscles === 1
+                  ? "1 ejercicio sin músculos"
+                  : `${missingMuscles} ejercicios sin músculos`}
+              </span>{" "}
+              · tus clientes verán el mapa al compartir sus entrenos.
+            </p>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                color="primary"
+                size="sm"
+                startContent={
+                  <Icon icon="solar:magic-stick-3-linear" width={16} />
+                }
+                variant="flat"
+                onPress={() => setReviewOpen(true)}
+              >
+                Completar con el asistente
+              </Button>
+              <Button
+                size="sm"
+                variant="light"
+                onPress={() => setMuscleFilter("none")}
+              >
+                Ver cuáles
+              </Button>
+              <Button
+                isIconOnly
+                aria-label="Cerrar aviso"
+                radius="full"
+                size="sm"
+                variant="light"
+                onPress={dismissIntro}
+              >
+                <Icon icon="solar:close-circle-linear" width={18} />
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {savedNotice ? (
+          <p className="text-sm text-success-700" role="status">
+            {savedNotice}
+          </p>
+        ) : null}
       </div>
 
       {/* Loading State */}
       {isLoading && (
-        <Card className="bg-white border border-gray-200 shadow-sm">
+        <Card className="border border-default-200 bg-content1 shadow-none">
           <CardBody className="p-12">
             <div className="flex flex-col items-center justify-center">
               <Spinner color="primary" size="lg" />
-              <p className="mt-4 text-gray-600">Cargando ejercicios...</p>
+              <p className="mt-4 text-default-600">Cargando ejercicios…</p>
             </div>
           </CardBody>
         </Card>
@@ -349,23 +494,23 @@ export default function ExerciseLibraryContent() {
 
       {/* Empty State */}
       {!isLoading && exercises.length === 0 && (
-        <Card className="bg-white border border-gray-200 shadow-sm">
+        <Card className="border border-default-200 bg-content1 shadow-none">
           <CardBody className="p-12">
             <div className="flex flex-col items-center justify-center text-center">
-              <div className="bg-gray-100 p-4 rounded-full mb-4">
+              <div className="mb-4 rounded-full bg-default-100 p-4">
                 <Icon
-                  className="text-gray-400 text-5xl"
+                  className="text-5xl text-default-400"
                   icon="solar:dumbbell-linear"
                 />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="mb-2 font-heading text-lg font-semibold text-foreground">
                 {searchQuery
                   ? "No se encontraron ejercicios"
                   : `No hay ejercicios de ${
                       categoryFilter === "cardio" ? "cardio" : "fuerza"
                     }`}
               </h3>
-              <p className="text-gray-500 text-sm mb-4">
+              <p className="mb-4 text-sm text-default-500">
                 {searchQuery
                   ? "Intenta con otros términos de búsqueda"
                   : `Comienza añadiendo ejercicios de ${
@@ -374,14 +519,13 @@ export default function ExerciseLibraryContent() {
               </p>
               {!searchQuery && (
                 <Button
-                  className="text-white font-semibold"
                   color="primary"
                   startContent={
                     <Icon icon="solar:add-circle-bold" width={20} />
                   }
                   onPress={() => setIsAddModalOpen(true)}
                 >
-                  Añadir Primer Ejercicio
+                  Añadir el primer ejercicio
                 </Button>
               )}
             </div>
@@ -391,11 +535,13 @@ export default function ExerciseLibraryContent() {
 
       {/* Exercise Grid View */}
       {!isLoading && exercises.length > 0 && viewMode === "grid" && (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
           {exercises.map((exercise) => (
             <ExerciseCard
               key={exercise.id}
+              clip={libraryMedia[exercise.library_exercise_id ?? ""]?.video}
               exercise={exercise}
+              poster={libraryMedia[exercise.library_exercise_id ?? ""]?.poster}
               onDelete={() => handleDelete(exercise.id, exercise.name)}
               onEdit={() => setEditingExercise(exercise)}
               onView={() => setViewingExercise(exercise)}
@@ -406,34 +552,34 @@ export default function ExerciseLibraryContent() {
 
       {/* Exercise Table View */}
       {!isLoading && exercises.length > 0 && viewMode === "table" && (
-        <Card className="bg-white border border-gray-200 shadow-sm">
+        <Card className="border border-default-200 bg-content1 shadow-none">
           <CardBody className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-default-50 border-b border-default-200">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-default-500">
                       Ejercicio
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-default-500">
                       Categoría
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-default-500">
                       Tipo
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-default-500">
                       Equipamiento
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-default-500">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-default-200">
                   {exercises.map((exercise) => (
                     <tr
                       key={exercise.id}
-                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      className="hover:bg-default-50 transition-colors cursor-pointer"
                       onClick={() => setViewingExercise(exercise)}
                     >
                       <td className="px-6 py-4">
@@ -441,22 +587,29 @@ export default function ExerciseLibraryContent() {
                           <div
                             className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
                               exercise.category === "cardio"
-                                ? "bg-red-100"
-                                : "bg-blue-100"
+                                ? "bg-danger-50"
+                                : "bg-primary/10"
                             }`}
                           >
-                            {exercise.image_url ? (
+                            {exercise.image_url ||
+                            libraryMedia[exercise.library_exercise_id ?? ""]
+                              ?.poster ? (
                               <img
                                 alt={exercise.name}
                                 className="w-full h-full object-cover rounded-lg"
-                                src={exercise.image_url}
+                                src={
+                                  exercise.image_url ??
+                                  libraryMedia[
+                                    exercise.library_exercise_id ?? ""
+                                  ]?.poster
+                                }
                               />
                             ) : (
                               <Icon
                                 className={
                                   exercise.category === "cardio"
-                                    ? "text-red-600"
-                                    : "text-slate-700"
+                                    ? "text-danger"
+                                    : "text-primary"
                                 }
                                 icon={
                                   exercise.category === "cardio"
@@ -468,11 +621,11 @@ export default function ExerciseLibraryContent() {
                             )}
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900">
+                            <p className="font-semibold text-foreground">
                               {exercise.name}
                             </p>
                             {exercise.description && (
-                              <p className="text-sm text-gray-500 line-clamp-1">
+                              <p className="text-sm text-default-500 line-clamp-1">
                                 {exercise.description}
                               </p>
                             )}
@@ -492,8 +645,8 @@ export default function ExerciseLibraryContent() {
                         <Chip
                           className={
                             exercise.category === "cardio"
-                              ? "bg-red-100 text-red-700 border border-red-200"
-                              : "bg-blue-100 text-blue-700 border border-blue-200"
+                              ? "bg-danger-50 text-danger border border-danger-200"
+                              : "bg-primary/10 text-primary border border-primary/20"
                           }
                           size="sm"
                           variant="flat"
@@ -503,9 +656,9 @@ export default function ExerciseLibraryContent() {
                       </td>
                       <td className="px-6 py-4">
                         {exercise.category === "strength" ? (
-                          <div className="text-sm text-gray-600">—</div>
+                          <div className="text-sm text-default-600">—</div>
                         ) : (
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-default-600">
                             {exercise.metadata?.cardio_type
                               ? exercise.metadata.cardio_type
                               : "Cardio"}
@@ -513,7 +666,7 @@ export default function ExerciseLibraryContent() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-default-600">
                           {exercise.equipment && exercise.equipment.length > 0
                             ? exercise.equipment.join(", ")
                             : "Ninguno"}
@@ -534,7 +687,7 @@ export default function ExerciseLibraryContent() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Icon
-                                className="text-slate-700"
+                                className="text-primary"
                                 icon="solar:play-circle-bold"
                                 width={18}
                               />
@@ -542,7 +695,6 @@ export default function ExerciseLibraryContent() {
                           )}
                           <Button
                             isIconOnly
-                            className="text-white font-semibold"
                             color="primary"
                             size="sm"
                             onClick={(e) => {
@@ -580,11 +732,11 @@ export default function ExerciseLibraryContent() {
 
       {!isLoading && exercises.length > 0 && hasMore && (
         <div className="flex flex-col items-center gap-3 mt-8">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-default-500">
             Mostrando {exercises.length} de {totalCount} ejercicios
           </p>
           <Button
-            className="font-semibold border-gray-300"
+            className="font-semibold border-default-300"
             isLoading={isLoadingMore}
             size="lg"
             variant="bordered"
@@ -596,6 +748,12 @@ export default function ExerciseLibraryContent() {
           </Button>
         </div>
       )}
+
+      <LibraryCatalogModal
+        isOpen={isCatalogOpen}
+        onAdded={fetchExercises}
+        onClose={() => setIsCatalogOpen(false)}
+      />
 
       {/* Add Exercise Modal */}
       <AddExerciseLibraryModal
@@ -620,10 +778,22 @@ export default function ExerciseLibraryContent() {
         />
       )}
 
+      <MuscleAssistantReview
+        isOpen={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onSaved={(updated) => {
+          setSavedNotice(
+            `${updated} ejercicio${updated === 1 ? "" : "s"} con músculos guardado${updated === 1 ? "" : "s"}.`
+          );
+          fetchExercisesPage(1, "replace");
+        }}
+      />
+
       {/* View Exercise Detail Modal */}
       {viewingExercise && (
         <ExerciseDetailModal
           exercise={viewingExercise}
+          libraryMedia={libraryMedia[viewingExercise.library_exercise_id ?? ""]}
           onClose={() => setViewingExercise(null)}
           onEdit={() => {
             setEditingExercise(viewingExercise);
@@ -642,11 +812,17 @@ export default function ExerciseLibraryContent() {
  */
 function ExerciseCard({
   exercise,
+  poster,
+  clip,
   onView,
   onEdit,
   onDelete,
 }: {
   exercise: Exercise;
+  /** Póster del catálogo si el entrenador no subió foto. */
+  poster?: string | undefined;
+  /** Animación del catálogo: solo suena al pasar el ratón (no se carga antes). */
+  clip?: string | undefined;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -655,6 +831,9 @@ function ExerciseCard({
   const secondary = exercise.secondary_muscles ?? [];
   const isCardio = exercise.category === "cardio";
   const hasVideo = Boolean(exercise.uploaded_video_url || exercise.video_url);
+  const [hovered, setHovered] = useState(false);
+  // El clip es del catálogo: si el entrenador subió su propia foto, no se usa.
+  const libraryOnly = !exercise.image_url && Boolean(poster);
   const meta = [
     isCardio ? exercise.metadata?.cardio_type : null,
     exercise.movement_pattern,
@@ -664,7 +843,7 @@ function ExerciseCard({
 
   return (
     <Card
-      className="h-full border border-default-200 bg-content1 transition-[border-color,box-shadow] duration-150 hover:border-default-300 hover:shadow-medium"
+      className="group h-full border border-default-200 bg-content1 transition-[border-color,box-shadow,transform] duration-150 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:transform-none [@media(hover:hover)]:hover:border-default-300 [@media(hover:hover)]:hover:shadow-medium"
       shadow="none"
     >
       <CardBody className="relative flex h-full flex-col p-0">
@@ -673,12 +852,18 @@ function ExerciseCard({
           type="button"
           onClick={onView}
         >
-          <div className="relative flex h-44 w-full items-center justify-center overflow-hidden bg-default-50">
-            {exercise.image_url ? (
+          <div
+            className={`relative flex h-44 w-full items-center justify-center overflow-hidden ${libraryOnly ? "bg-white" /* the catalog art ships on white */ : "bg-default-50"}`}
+            onPointerEnter={(e) =>
+              e.pointerType === "mouse" && setHovered(true)
+            }
+            onPointerLeave={() => setHovered(false)}
+          >
+            {exercise.image_url || poster ? (
               <img
                 alt={exercise.name}
-                className="h-full w-full object-cover"
-                src={exercise.image_url}
+                className={`h-full w-full ${libraryOnly ? "object-contain" : "object-cover"}`}
+                src={exercise.image_url ?? poster}
               />
             ) : isCardio && primary.length === 0 && secondary.length === 0 ? (
               <Icon
@@ -695,13 +880,24 @@ function ExerciseCard({
                 secondary={secondary}
               />
             )}
-            {exercise.image_url &&
+            {libraryOnly && clip && hovered && (
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full bg-white object-contain motion-reduce:hidden"
+                poster={poster}
+                src={clip}
+              />
+            )}
+            {(exercise.image_url || poster) &&
               (primary.length > 0 || secondary.length > 0) && (
                 <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-content1 px-1.5 py-1 shadow-small">
-                  <MuscleMap
-                    className="w-[46px] gap-0.5"
-                    labels={false}
-                    outlineWidth={0.5}
+                  <MuscleBody
+                    className="w-[30px]"
+                    flip={false}
                     primary={primary}
                     secondary={secondary}
                   />
@@ -730,11 +926,6 @@ function ExerciseCard({
               secondary={secondary}
             />
             <Prescription exercise={exercise} />
-            {exercise.description && (
-              <p className="line-clamp-2 text-sm text-default-600">
-                {exercise.description}
-              </p>
-            )}
             {tags.length > 0 && (
               <div className="mt-auto flex flex-wrap gap-1 pt-1">
                 {tags.slice(0, 3).map((tag) => (
@@ -752,14 +943,14 @@ function ExerciseCard({
           </div>
         </button>
 
-        {/* Actions live in one overflow menu (Mobbin: Airbnb, Sketch, Framer);
-            the card itself opens the detail. Always visible: tablets have no hover. */}
+        {/* Actions live in one overflow menu (Mobbin: Arcade, Customer.io): shown
+            on hover/focus where there is a pointer, always on touch (tablets). */}
         <Dropdown placement="bottom-end">
           <DropdownTrigger>
             <Button
               isIconOnly
               aria-label={`Acciones de ${exercise.name}`}
-              className="absolute right-2.5 top-2.5 h-8 w-8 min-w-8 bg-content1 text-foreground shadow-small"
+              className="absolute right-2.5 top-2.5 h-8 w-8 min-w-8 bg-content1 text-foreground shadow-small transition-opacity duration-150 focus-visible:opacity-100 data-[open=true]:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
               radius="full"
               size="sm"
               variant="flat"
@@ -867,33 +1058,26 @@ function MusclesSummary({
   );
 }
 
-/** The trainer's default prescription (sets, reps, rest, tempo), only the
- *  values they filled in. */
+/** The trainer's default prescription as one quiet line ("3 series · 12 reps
+ *  · 90 s"), only the values they filled in. */
 function Prescription({ exercise }: { exercise: Exercise }) {
   const rest = resolveRestLabel(null, exercise.default_rest_seconds);
-  const cells = [
-    ["Series", exercise.default_sets ? String(exercise.default_sets) : ""],
-    ["Reps", exercise.default_reps?.trim() ?? ""],
-    ["Descanso", rest],
-    ["Tempo", exercise.default_tempo?.trim() ?? ""],
-  ].filter(([, value]) => value);
+  const sets = exercise.default_sets;
+  const parts = [
+    sets ? `${sets} ${sets === 1 ? "serie" : "series"}` : "",
+    exercise.default_reps?.trim() ? `${exercise.default_reps.trim()} reps` : "",
+    rest,
+    exercise.default_tempo?.trim()
+      ? `tempo ${exercise.default_tempo.trim()}`
+      : "",
+  ].filter(Boolean);
 
-  if (cells.length === 0) return null;
+  if (parts.length === 0) return null;
 
   return (
-    <dl className="mt-1 grid auto-cols-fr grid-flow-col divide-x divide-default-200 rounded-lg border border-default-200">
-      {cells.map(([label, value]) => (
-        <div
-          key={label}
-          className="flex min-w-0 flex-col-reverse px-2 py-1.5 text-center"
-        >
-          <dt className="text-[10px] text-default-500">{label}</dt>
-          <dd className="truncate text-sm font-semibold tabular-nums text-foreground">
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <p className="line-clamp-1 text-xs tabular-nums text-default-600">
+      {parts.join(" · ")}
+    </p>
   );
 }
 
@@ -905,10 +1089,12 @@ function Prescription({ exercise }: { exercise: Exercise }) {
  */
 function ExerciseDetailModal({
   exercise,
+  libraryMedia,
   onClose,
   onEdit,
 }: {
   exercise: Exercise;
+  libraryMedia?: LibraryMedia | undefined;
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -916,7 +1102,9 @@ function ExerciseDetailModal({
   const secondary = exercise.secondary_muscles ?? [];
   const hasMuscles = primary.length > 0 || secondary.length > 0;
   const isCardio = exercise.category === "cardio";
-  const mediaIsMap = !exercise.uploaded_video_url && !exercise.image_url;
+  const hasLibrary = Boolean(libraryMedia?.video || libraryMedia?.poster);
+  const mediaIsMap =
+    !exercise.uploaded_video_url && !exercise.image_url && !hasLibrary;
   const meta = [
     getCategoryLabel(exercise.category),
     isCardio ? exercise.metadata?.cardio_type : null,
@@ -967,6 +1155,9 @@ function ExerciseDetailModal({
             {/* Media: photo and client video side by side in a small
                 gallery (Mobbin: Etsy, Dribbble); the map when there is neither. */}
             <div className="flex flex-col gap-3">
+              {libraryMedia && hasLibrary && (
+                <LibraryClip media={libraryMedia} name={exercise.name} />
+              )}
               {mediaIsMap ? (
                 <div className="flex w-full justify-center rounded-xl bg-default-50 px-6 py-5">
                   <MuscleMap
@@ -976,9 +1167,9 @@ function ExerciseDetailModal({
                     secondary={secondary}
                   />
                 </div>
-              ) : (
+              ) : exercise.image_url || exercise.uploaded_video_url ? (
                 <ExerciseMedia exercise={exercise} />
-              )}
+              ) : null}
               {exercise.video_url && (
                 <Button
                   as="a"
@@ -1003,10 +1194,8 @@ function ExerciseDetailModal({
                 {hasMuscles ? (
                   <div className="flex items-start gap-5">
                     {!mediaIsMap && (
-                      <MuscleMap
-                        className="w-[112px] shrink-0"
-                        labels={false}
-                        outlineWidth={1}
+                      <MuscleBody
+                        className="w-[92px] shrink-0"
                         primary={primary}
                         secondary={secondary}
                       />
@@ -1115,6 +1304,33 @@ function ExerciseDetailModal({
 
 /** Main view plus thumbnails when the exercise has both a photo and the
  *  client video; a single item shows on its own. */
+/** Clip del catálogo en bucle sobre blanco; con "reducir movimiento", el póster. */
+function LibraryClip({ media, name }: { media: LibraryMedia; name: string }) {
+  return (
+    <div className="aspect-square w-full overflow-hidden rounded-xl border border-default-200 bg-white">
+      {media.video ? (
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          aria-label={`Animación de ${name}`}
+          className="h-full w-full object-contain motion-reduce:hidden"
+          poster={media.poster}
+          src={media.video}
+        />
+      ) : null}
+      {media.poster ? (
+        <img
+          alt={name}
+          className={`h-full w-full object-contain ${media.video ? "hidden motion-reduce:block" : ""}`}
+          src={media.poster}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
   const items = [
     exercise.image_url ? ("photo" as const) : null,

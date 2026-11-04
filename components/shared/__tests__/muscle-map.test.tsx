@@ -13,8 +13,8 @@ describe("MuscleMap", () => {
       <MuscleMap primary={["pectoral"]} secondary={["triceps"]} />
     );
 
-    // Pectoral: left + right chest. Tríceps: 2 front + 6 back pieces.
-    expect(painted(container, "1")).toBe(2);
+    // Pectoral: 8 pieces (chest + serrato, merged). Tríceps: 2 front + 6 back.
+    expect(painted(container, "1")).toBe(8);
     expect(painted(container, "0.38")).toBe(8);
   });
 
@@ -30,7 +30,7 @@ describe("MuscleMap", () => {
 
     fireEvent.click(tappable[0]!);
     expect(onToggle).toHaveBeenCalledTimes(1);
-    // Romboides (2) + transverso (4).
-    expect(deep.length).toBe(6);
+    // Romboides paths (2) are painted under trapecio, not tappable themselves.
+    expect(deep.length).toBe(2);
   });
 });

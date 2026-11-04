@@ -2,8 +2,8 @@
 -- (required in the editor, several allowed) and optional secondary ones,
 -- from the fixed taxonomy in lib/training/muscles.ts. Feeds the client's
 -- muscle map on the share card and the library filter. The legacy free-text
--- muscle_groups column stays untouched; the backfill from it is a separate
--- reviewed script (scripts/backfill-exercise-muscles.ts), not this migration.
+-- muscle_groups column stays untouched: trainers fill the new columns
+-- themselves, helped by the picker's suggestions and the assistant.
 
 ALTER TABLE exercises
     ADD COLUMN IF NOT EXISTS primary_muscles TEXT[] NOT NULL DEFAULT '{}',

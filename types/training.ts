@@ -94,6 +94,8 @@ export interface Exercise {
   muscle_groups?: string[];
   primary_muscles?: MuscleId[];
   secondary_muscles?: MuscleId[];
+  /** Entrada del catálogo con licencia (library_exercises.slug), si la hay. */
+  library_exercise_id?: string | null;
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;
@@ -188,6 +190,11 @@ export interface WorkoutExercise {
   videoUrl?: string;
   uploadedVideoUrl?: string;
   imageUrl?: string;
+  /** Músculos de la biblioteca, para el volumen por grupo muscular. */
+  primaryMuscles?: MuscleId[];
+  secondaryMuscles?: MuscleId[];
+  /** Slug del catálogo: la animación se pide aparte (useLibraryMedia). */
+  libraryExerciseId?: string;
   // Cardio-specific fields
   duration?: number; // Duration in minutes
   distance?: number; // Distance in km
@@ -307,6 +314,8 @@ export interface CreateExerciseLibraryRequest {
   muscle_groups?: string[];
   primary_muscles?: MuscleId[];
   secondary_muscles?: MuscleId[];
+  /** Entrada del catálogo con licencia (library_exercises.slug), si la hay. */
+  library_exercise_id?: string | null;
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;
@@ -334,6 +343,8 @@ export interface UpdateExerciseLibraryRequest {
   muscle_groups?: string[];
   primary_muscles?: MuscleId[];
   secondary_muscles?: MuscleId[];
+  /** Entrada del catálogo con licencia (library_exercises.slug), si la hay. */
+  library_exercise_id?: string | null;
   equipment?: string[];
   tags?: string[];
   movement_pattern?: string;

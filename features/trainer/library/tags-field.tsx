@@ -20,6 +20,8 @@ interface TagsFieldProps {
   label?: string;
   placeholder?: string;
   description?: string;
+  /** `outside` matches forms whose other fields keep the label above. */
+  labelPlacement?: "inside" | "outside";
 }
 
 /**
@@ -38,6 +40,7 @@ export function TagsField({
   label = "Etiquetas",
   placeholder = "Escribe una etiqueta...",
   description = "Escribe y pulsa Enter para añadir. Si no existe, se crea.",
+  labelPlacement = "inside",
 }: TagsFieldProps) {
   const names = useLibraryTagNames(kind);
   const { createM } = useLibraryTagMutations(kind);
@@ -73,22 +76,6 @@ export function TagsField({
 
   return (
     <div className="flex flex-col gap-2">
-      {value.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {value.map((tag) => (
-            <Chip
-              key={tag}
-              isDisabled={disabled}
-              size="sm"
-              variant="flat"
-              onClose={() => onChange(value.filter((item) => item !== tag))}
-            >
-              {tag}
-            </Chip>
-          ))}
-        </div>
-      )}
-
       <Autocomplete
         allowsCustomValue
         description={description}
@@ -96,6 +83,7 @@ export function TagsField({
         isDisabled={disabled}
         items={matches.map((tag) => ({ key: tag, label: tag }))}
         label={label}
+        labelPlacement={labelPlacement}
         placeholder={placeholder}
         selectedKey={null}
         startContent={
@@ -138,6 +126,23 @@ export function TagsField({
           </AutocompleteItem>
         )}
       </Autocomplete>
+
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((tag) => (
+            <Chip
+              key={tag}
+              classNames={{ closeButton: "compact-control" }}
+              isDisabled={disabled}
+              size="sm"
+              variant="flat"
+              onClose={() => onChange(value.filter((item) => item !== tag))}
+            >
+              {tag}
+            </Chip>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

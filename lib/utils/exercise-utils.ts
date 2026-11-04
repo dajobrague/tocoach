@@ -1,22 +1,5 @@
 // Exercise library utility functions
 
-import type { Exercise } from "@/types/training";
-
-/**
- * Format exercise for display in UI
- * @param exercise - Exercise from database
- * @returns Formatted exercise object
- */
-export function formatExerciseForDisplay(exercise: Exercise) {
-  return {
-    ...exercise,
-    categoryLabel: getCategoryLabel(exercise.category),
-    movementPattern: exercise.movement_pattern || "N/A",
-    muscleGroupsText: exercise.muscle_groups?.join(", ") || "N/A",
-    equipmentText: exercise.equipment?.join(", ") || "Ninguno",
-  };
-}
-
 /**
  * Get human-readable category label
  */

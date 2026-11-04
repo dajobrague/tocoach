@@ -7,6 +7,7 @@
 // hooks/use-persisted-active-training.ts), así que sobrevive a
 // recargas y al cambio de pestañas del bottom-nav.
 
+import type { MuscleId } from "@/lib/training/muscles";
 import type { WorkoutProgram } from "@/types/training";
 import type { OpenLogPayload } from "./available-sessions-list";
 import type { AvailableSession } from "./hooks/use-available-sessions";
@@ -29,6 +30,8 @@ import { getSessionTypeStyle } from "./session-type-style";
 import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 
+import { MuscleVolume } from "@/components/shared/muscle-volume";
+import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
 import { logMatchesSlot } from "@/lib/training/log-attribution";
@@ -37,6 +40,11 @@ export interface ExerciseLike {
   order: number;
   name: string;
   imageUrl?: string;
+  /** Músculos de la biblioteca: resumen "músculos de hoy". */
+  primaryMuscles?: MuscleId[];
+  secondaryMuscles?: MuscleId[];
+  /** Slug del catálogo con licencia: póster/animación vía useLibraryMedia. */
+  libraryExerciseId?: string;
   exercise_id?: string;
   /** Slot específico del plan (session_exercises.id) que se loguea. */
   session_exercise_id?: string;
@@ -222,6 +230,13 @@ export function ActiveSessionView({
       ...visibleBorrowed,
     ];
   }, [exercises, extraLoggedExercises, borrowed, templateExerciseIds]);
+
+  // Póster/animación del catálogo; el servidor elige la figura según el sexo
+  // del cliente. Sin catálogo (o sin subir) todo queda como antes.
+  const libraryMedia = useLibraryMedia(
+    allExercises.map((e) => e.libraryExerciseId),
+    { client: true }
+  );
 
   const trackable = allExercises.filter(
     (e) => typeof e.exercise_id === "string" && e.exercise_id.length > 0
@@ -444,10 +459,20 @@ export function ActiveSessionView({
                         scheduledDate
                       )
                     }
+                    poster={
+                      exercise.libraryExerciseId
+                        ? libraryMedia[exercise.libraryExerciseId]?.poster
+                        : undefined
+                    }
                     status={status}
                     onClick={() =>
                       onLogExercise({
-                        exercise,
+                        exercise: {
+                          ...exercise,
+                          libraryMedia: exercise.libraryExerciseId
+                            ? libraryMedia[exercise.libraryExerciseId]
+                            : undefined,
+                        },
                         sessionId: session.id,
                         scheduledDate,
                         existingLog: existingLog ?? null,
@@ -459,6 +484,20 @@ export function ActiveSessionView({
             })}
           </ul>
         )}
+
+        {!resolvedLoading || resolved ? (
+          <MuscleVolume
+            client
+            map
+            className="mt-4 rounded-large bg-content1 p-4 shadow-small"
+            exercises={allExercises.map((e) => ({
+              sets: e.sets ?? 0,
+              primary: e.primaryMuscles,
+              secondary: e.secondaryMuscles,
+            }))}
+            title="Músculos de hoy"
+          />
+        ) : null}
 
         {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
             sesiones ya completadas — el entrenamiento terminó. */}
@@ -515,6 +554,8 @@ export function ActiveSessionView({
 
 interface RowProps {
   exercise: ExerciseLike & Record<string, unknown>;
+  /** Póster del catálogo cuando el entrenador no subió imagen. */
+  poster?: string | undefined;
   /** El entrenador pidió subir peso en esta sesión. */
   increaseWeight: boolean;
   status: ExerciseStatus;
@@ -542,7 +583,13 @@ const STATUS_STYLE: Record<
   },
 };
 
-function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
+function ExerciseRow({
+  exercise,
+  poster,
+  increaseWeight,
+  status,
+  onClick,
+}: RowProps) {
   const isCardio = isExerciseCardio(exercise);
   const stats = formatExerciseStats(exercise, isCardio);
   const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
@@ -556,14 +603,14 @@ function ExerciseRow({ exercise, increaseWeight, status, onClick }: RowProps) {
       type="button"
       onClick={onClick}
     >
-      {exercise.imageUrl ? (
+      {exercise.imageUrl || poster ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
           className="h-14 w-14 shrink-0 rounded-[14px] bg-default-100 object-cover"
           decoding="async"
           loading="lazy"
-          src={exercise.imageUrl}
+          src={exercise.imageUrl ?? poster}
         />
       ) : (
         <span

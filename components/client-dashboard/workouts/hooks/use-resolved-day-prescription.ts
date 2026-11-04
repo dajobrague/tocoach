@@ -1,5 +1,7 @@
 "use client";
 
+import type { MuscleId } from "@/lib/training/muscles";
+
 import { useQuery } from "@tanstack/react-query";
 
 import { clientFetch } from "@/lib/auth/client-token-storage";
@@ -22,6 +24,9 @@ export interface ResolvedExercise {
    * preferencia por el subido (ver exercise-log-modal).
    */
   uploaded_video_url: string | null;
+  primary_muscles?: MuscleId[];
+  secondary_muscles?: MuscleId[];
+  library_exercise_id?: string | null;
   exercise_order: number;
   sets: number | null;
   reps: string | null;
