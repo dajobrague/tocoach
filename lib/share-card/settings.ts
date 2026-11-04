@@ -11,8 +11,10 @@ export interface ShareCardSettings {
   displayName: string;
   /** Usuario de Instagram sin @; "" = no se muestra. */
   instagram: string;
-  /** "topcoach.io" al pie. */
+  /** Mostrar el pie. */
   showTopcoach: boolean;
+  /** Texto del pie (p. ej. el nombre del programa); "" = "topcoach.io". */
+  footer: string;
 }
 
 export const DEFAULT_SHARE_CARD_SETTINGS: ShareCardSettings = {
@@ -20,9 +22,11 @@ export const DEFAULT_SHARE_CARD_SETTINGS: ShareCardSettings = {
   displayName: "",
   instagram: "",
   showTopcoach: true,
+  footer: "",
 };
 
 const DISPLAY_NAME_MAX = 40;
+const FOOTER_MAX = 40;
 const INSTAGRAM_RE = /^[A-Za-z0-9._]{1,30}$/;
 
 const cleanDisplayName = (value: unknown): string =>
@@ -39,6 +43,11 @@ export function cleanInstagram(value: unknown): string | null {
 
   return INSTAGRAM_RE.test(handle) ? handle : null;
 }
+
+const cleanFooter = (value: unknown): string =>
+  typeof value === "string"
+    ? value.trim().replace(/\s+/g, " ").slice(0, FOOTER_MAX)
+    : "";
 
 const bool = (value: unknown, fallback: boolean) =>
   typeof value === "boolean" ? value : fallback;
@@ -58,6 +67,7 @@ export function parseShareCardSettings(value: unknown): ShareCardSettings {
       raw.showTopcoach,
       DEFAULT_SHARE_CARD_SETTINGS.showTopcoach
     ),
+    footer: cleanFooter(raw.footer),
   };
 }
 
@@ -90,6 +100,8 @@ export function validateShareCardSettings(
   if (raw.showTopcoach !== undefined && typeof raw.showTopcoach !== "boolean") {
     return null;
   }
+
+  if (raw.footer !== undefined && typeof raw.footer !== "string") return null;
 
   return parseShareCardSettings(raw);
 }

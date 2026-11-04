@@ -47,8 +47,14 @@ describe("share card settings", () => {
       displayName: "Coach Joseca",
       instagram: "coach.joseca",
       showTopcoach: false,
+      footer: "",
     });
     expect(validateShareCardSettings({ displayName: "x" })).toBeNull();
+    expect(
+      validateShareCardSettings({ enabled: true, footer: "  Reto  90 días " })
+        ?.footer
+    ).toBe("Reto 90 días");
+    expect(validateShareCardSettings({ enabled: true, footer: 3 })).toBeNull();
     expect(
       validateShareCardSettings({ enabled: true, instagram: "no vale" })
     ).toBeNull();

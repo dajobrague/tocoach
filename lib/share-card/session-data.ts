@@ -40,6 +40,8 @@ export interface ShareBranding {
   /** PNG en data URI (se puede pintar en canvas sin CORS). */
   logoSrc: string | null;
   showTopcoach: boolean;
+  /** Texto del pie; "" = "topcoach.io". */
+  footer?: string;
 }
 
 export interface ShareSession {

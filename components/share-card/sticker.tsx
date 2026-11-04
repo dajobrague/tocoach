@@ -265,6 +265,8 @@ function templateBlock(p: StickerProps, ink: string, accent: string): Block {
       const volume = volumeBlock(p.session.exercises, ink);
 
       return column([
+        sessionTitle(p, ink),
+        space(40),
         figure,
         figure && space(40),
         volume,
@@ -330,7 +332,13 @@ function templateBlock(p: StickerProps, ink: string, accent: string): Block {
       ]);
 
     case "minimo":
-      return column([statRow(p.stats, ink), space(40), mark(true)]);
+      return column([
+        sessionTitle(p, ink),
+        space(32),
+        statRow(p.stats, ink),
+        space(40),
+        mark(true),
+      ]);
 
     case "ex-hero": {
       if (!ex) return column([mark()]);
@@ -392,6 +400,16 @@ function templateBlock(p: StickerProps, ink: string, accent: string): Block {
         mark(true),
       ]);
   }
+}
+
+/** Nombre de la sesión como título (JC, 28 oct: también en Mínimo y Músculos). */
+function sessionTitle(p: StickerProps, ink: string): Block {
+  return line({
+    size: 56,
+    fill: ink,
+    letterSpacing: -0.5,
+    children: fitText(p.session.sessionName.toUpperCase(), 56, 900),
+  });
 }
 
 function durationLabel(p: StickerProps): string | null {
@@ -804,7 +822,7 @@ function markBlock(
           fill: ink,
           opacity: 0.55,
           letterSpacing: 0.6,
-          children: "topcoach.io",
+          children: fitText(branding.footer || "topcoach.io", 30, 900),
         })
       : false,
   ]);

@@ -232,6 +232,7 @@ export async function GET(
         brandColor: branding.brandColor,
         logoSrc: branding.logoSrc,
         showTopcoach: settings.showTopcoach,
+        footer: settings.footer,
       },
       session: {
         sessionName:

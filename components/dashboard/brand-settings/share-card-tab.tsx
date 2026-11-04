@@ -127,6 +127,7 @@ export default function ShareCardTab() {
     brandColor: branding.brandColor,
     logoSrc: branding.logoSrc,
     showTopcoach: draft.showTopcoach,
+    footer: draft.footer,
   };
 
   return (
@@ -201,10 +202,20 @@ export default function ShareCardTab() {
               setDraft((d) => ({ ...d, showTopcoach }))
             }
           >
-            <span className="text-sm text-default-700">
-              Mostrar «topcoach.io» al pie
-            </span>
+            <span className="text-sm text-default-700">Mostrar pie</span>
           </Switch>
+          {draft.showTopcoach && (
+            <Input
+              description="Por ejemplo, el nombre de tu programa. Vacío = topcoach.io."
+              id="share-card-footer"
+              label="Pie de imagen"
+              labelPlacement="outside"
+              maxLength={40}
+              placeholder="topcoach.io"
+              value={draft.footer}
+              onValueChange={(footer) => setDraft((d) => ({ ...d, footer }))}
+            />
+          )}
           <p className="flex items-start gap-2 rounded-lg bg-default-100 p-3 text-xs text-default-600">
             <Icon
               className="mt-0.5 shrink-0"
