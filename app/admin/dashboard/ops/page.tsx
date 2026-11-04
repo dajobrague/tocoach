@@ -1,7 +1,8 @@
 "use client";
 
+import { Select, SelectItem } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 
 import {
@@ -19,6 +20,7 @@ import {
   tableClasses,
   useSort,
 } from "@/components/admin/admin-ui";
+import { parseTrainerFilter } from "@/lib/admin/ops-filter";
 import { prefetchAdmin, useAdminData } from "@/lib/admin/use-admin-data";
 
 interface TrainerOps {
@@ -91,6 +93,82 @@ interface Ops {
     number
   >;
   trainers: TrainerOps[];
+  /** Every trainer, regardless of the filter — feeds the selector. */
+  trainerOptions: TrainerOption[];
+}
+
+interface TrainerOption {
+  id: string;
+  name: string;
+  slug: string | null;
+}
+
+/** Multi-select in the header; empty = whole platform. */
+function TrainerFilter({
+  options,
+  selected,
+  loading,
+  onChange,
+}: {
+  options: TrainerOption[];
+  selected: string[];
+  loading: boolean;
+  onChange: (ids: string[]) => void;
+}) {
+  return (
+    <>
+      {selected.length > 0 ? (
+        <button
+          className={buttonClasses.ghost}
+          type="button"
+          onClick={() => onChange([])}
+        >
+          Limpiar
+        </button>
+      ) : null}
+      <Select
+        aria-label="Filtrar por entrenador"
+        className="w-64"
+        classNames={{
+          trigger:
+            "h-8 min-h-8 rounded-lg border border-slate-200 bg-white shadow-none data-[hover=true]:bg-slate-50",
+          value: "text-[13px] text-slate-700",
+        }}
+        isLoading={loading}
+        items={options}
+        placeholder="Todos los entrenadores"
+        renderValue={(items) =>
+          items.length === 1
+            ? items[0]?.textValue
+            : `${items.length} entrenadores`
+        }
+        selectedKeys={new Set(selected)}
+        selectionMode="multiple"
+        size="sm"
+        startContent={
+          <Icon
+            className="shrink-0 text-slate-400"
+            icon="solar:users-group-rounded-linear"
+            width={14}
+          />
+        }
+        variant="flat"
+        onSelectionChange={(keys) =>
+          onChange(keys === "all" ? [] : [...keys].map(String))
+        }
+      >
+        {(o) => (
+          <SelectItem
+            key={o.id}
+            description={o.slug ? `/${o.slug}` : "sin slug"}
+            textValue={o.name}
+          >
+            {o.name}
+          </SelectItem>
+        )}
+      </Select>
+    </>
+  );
 }
 
 const nf = new Intl.NumberFormat("es-ES");
@@ -314,10 +392,67 @@ const ACCESSORS: Record<SortKey, (t: TrainerOps) => string | number | null> = {
   login: (t) => t.last_login_at,
 };
 
+// useSearchParams needs a Suspense boundary for the static shell.
 export default function OpsPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <OpsPanel />
+    </React.Suspense>
+  );
+}
+
+function OpsPanel() {
   const router = useRouter();
-  const { data, error, isLoading, refresh } =
-    useAdminData<Ops>("/api/admin/ops");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Selection lives in ?trainers= so it survives reloads and can be shared.
+  const trainersParam = searchParams.get("trainers");
+  const selected = React.useMemo(() => {
+    const f = parseTrainerFilter(trainersParam);
+
+    return f.ok ? (f.ids ?? []) : [];
+  }, [trainersParam]);
+  const setSelected = (ids: string[]) => {
+    const q = new URLSearchParams(searchParams.toString());
+
+    if (ids.length) q.set("trainers", ids.join(","));
+    else q.delete("trainers");
+    const qs = q.toString();
+
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const {
+    data: fresh,
+    error,
+    refresh,
+  } = useAdminData<Ops>(
+    selected.length
+      ? `/api/admin/ops?trainers=${selected.join(",")}`
+      : "/api/admin/ops"
+  );
+  // Keep the previous selection's numbers on screen while the new ones load,
+  // dimmed, instead of collapsing everything back to skeletons.
+  const [last, setLast] = React.useState<Ops | undefined>(undefined);
+
+  React.useEffect(() => {
+    if (fresh) setLast(fresh);
+  }, [fresh]);
+  const data = fresh ?? last;
+  const isLoading = !data && !error;
+  const refetching = !fresh && !!data && !error;
+  const scope = selected.length
+    ? selected.length === 1
+      ? "1 entrenador"
+      : `${selected.length} entrenadores`
+    : "Toda la plataforma";
+  const filter = (
+    <TrainerFilter
+      loading={refetching}
+      options={data?.trainerOptions ?? []}
+      selected={selected}
+      onChange={setSelected}
+    />
+  );
   const [refreshing, setRefreshing] = React.useState(false);
   const trainers = React.useMemo(() => data?.trainers ?? [], [data]);
   const { sorted, sort, toggle } = useSort(trainers, ACCESSORS, {
@@ -351,7 +486,7 @@ export default function OpsPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-[1440px] space-y-6 px-10 py-8">
-        <PageHeader title="Operaciones" />
+        <PageHeader actions={filter} title="Operaciones" />
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
           {error}
         </div>
@@ -366,35 +501,41 @@ export default function OpsPage() {
   const weeks = data?.weeks ?? [];
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6 px-10 py-8">
+    <div
+      aria-busy={refetching}
+      className={`mx-auto max-w-[1440px] space-y-6 px-10 py-8 [&>*]:transition-opacity [&>*]:duration-150 ${refetching ? "[&>*:not(header)]:opacity-60" : ""}`}
+    >
       <PageHeader
         actions={
-          <button
-            className={buttonClasses.secondary}
-            disabled={refreshing}
-            type="button"
-            onClick={async () => {
-              setRefreshing(true);
-              await refresh();
-              setRefreshing(false);
-            }}
-          >
-            <Icon
-              className={refreshing ? "animate-spin" : ""}
-              icon="solar:refresh-linear"
-              width={14}
-            />
-            Actualizar
-          </button>
+          <>
+            {filter}
+            <button
+              className={buttonClasses.secondary}
+              disabled={refreshing}
+              type="button"
+              onClick={async () => {
+                setRefreshing(true);
+                await refresh();
+                setRefreshing(false);
+              }}
+            >
+              <Icon
+                className={refreshing ? "animate-spin" : ""}
+                icon="solar:refresh-linear"
+                width={14}
+              />
+              Actualizar
+            </button>
+          </>
         }
         subtitle={
           data ? (
             <>
-              Toda la plataforma · actualizado{" "}
+              {scope} · actualizado{" "}
               {formatRelative(data.generatedAt).toLowerCase()}
             </>
           ) : (
-            "Toda la plataforma"
+            scope
           )
         }
         title="Operaciones"
@@ -477,7 +618,7 @@ export default function OpsPage() {
 
       <div className="grid grid-cols-3 gap-6">
         <Panel
-          subtitle="toda la plataforma"
+          subtitle={scope.toLowerCase()}
           title="Servicio de los entrenadores"
         >
           {s ? (
