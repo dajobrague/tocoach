@@ -15,6 +15,7 @@ import {
   SetupWizardProvider,
   useSetupWizard,
 } from "@/lib/setup-wizard/context";
+import { isDarkCanvas } from "@/lib/theme/brand-colors";
 
 // Wizard steps configuration
 const STEPS = [
@@ -372,6 +373,8 @@ function buildInitialColors(storedTheme: unknown) {
     // (healThemeJson lo garantiza); colors.secondary solo existe en shapes
     // pre-wizard.
     secondary: color(colors.accent, color(colors.secondary, "#334155")),
+    // "Fondo oscuro" arranca encendido si el lienzo guardado ya es oscuro.
+    dark: isDarkCanvas(colors),
     text: {
       h1: color(text.h1, color(text.primary, "#1f2937")),
       h2: color(text.h2, "#374151"),

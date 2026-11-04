@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Input } from "@heroui/react";
+import { Alert, Button, Input, Switch } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React from "react";
 
@@ -14,6 +14,8 @@ import {
 import {
   brandColorHint,
   hasLegacyCustomColors,
+  isDarkCanvas,
+  simplifyBrandColors,
 } from "@/lib/theme/brand-colors";
 import { pickForegroundHSL } from "@/lib/theme/color-utils";
 
@@ -25,11 +27,14 @@ import { pickForegroundHSL } from "@/lib/theme/color-utils";
 interface BrandColors {
   brand: string;
   accent: string;
+  /** Interruptor "Fondo oscuro" (colors.scheme). */
+  dark: boolean;
 }
 
 const DEFAULT_COLORS: BrandColors = {
   brand: "#3b82f6",
   accent: "#6366f1",
+  dark: false,
 };
 
 const HEX_RE = /^#?[0-9a-f]{6}$/i;
@@ -70,6 +75,8 @@ export default function BrandColorsTab() {
             const loaded: BrandColors = {
               brand,
               accent: hexOr(rec.accent, brand),
+              // Encendido si el lienzo guardado ya es oscuro (por luminancia).
+              dark: isDarkCanvas(c),
             };
 
             setColors(loaded);
@@ -95,7 +102,12 @@ export default function BrandColorsTab() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          colors: { brand: colors.brand, accent: colors.accent, auto: true },
+          colors: {
+            brand: colors.brand,
+            accent: colors.accent,
+            scheme: colors.dark ? "dark" : "light",
+            auto: true,
+          },
         }),
       });
 
@@ -121,7 +133,11 @@ export default function BrandColorsTab() {
   const hasChanges =
     hasLegacy ||
     colors.brand !== originalColors.brand ||
-    colors.accent !== originalColors.accent;
+    colors.accent !== originalColors.accent ||
+    colors.dark !== originalColors.dark;
+  const canvas = simplifyBrandColors(undefined, {
+    scheme: colors.dark ? "dark" : "light",
+  });
   const brandHint = brandColorHint(colors.brand);
 
   const [openPicker, setOpenPicker] = React.useState<string | null>(null);
@@ -305,7 +321,7 @@ export default function BrandColorsTab() {
           <Alert
             className="mb-4"
             color="warning"
-            description="Tu marca tiene colores de texto y fondo personalizados de la versión anterior. Al guardar, se ajustarán automáticamente a tu color principal."
+            description="Tu marca tiene colores de texto y fondo personalizados de la versión anterior. Al guardar, textos, bordes y rellenos se ajustarán automáticamente. Tu fondo se mantiene claro u oscuro según el interruptor «Fondo oscuro»."
             title="Textos y fondos automáticos"
           />
         )}
@@ -345,9 +361,30 @@ export default function BrandColorsTab() {
           </div>
         </div>
 
-        {/* Muestra: el texto del botón se elige solo (pickForegroundHSL). */}
-        <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-4">
-          <span className="text-xs text-gray-500">Vista previa</span>
+        <Switch
+          className="mt-6"
+          isSelected={colors.dark}
+          onValueChange={(dark) => setColors({ ...colors, dark })}
+        >
+          <span className="text-sm text-black">Fondo oscuro</span>
+          <span className="block text-xs text-gray-500">
+            La app de tus clientes usa un fondo oscuro; los textos se ajustan
+            solos.
+          </span>
+        </Switch>
+
+        {/* Muestra sobre el lienzo elegido: el texto del botón se elige solo
+            (pickForegroundHSL). */}
+        <div
+          className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border p-4"
+          style={{
+            backgroundColor: canvas.surface["1"],
+            borderColor: canvas.border,
+          }}
+        >
+          <span className="text-xs" style={{ color: canvas.text.secondary }}>
+            Vista previa
+          </span>
           <span
             className="rounded-lg px-4 py-2 text-sm font-medium"
             style={{

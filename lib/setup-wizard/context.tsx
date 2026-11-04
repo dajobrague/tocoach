@@ -72,6 +72,8 @@ export interface SetupWizardState {
     // Brand colors
     primary: string;
     secondary: string;
+    /** Interruptor "Fondo oscuro" del lienzo del cliente. */
+    dark: boolean;
 
     // Text colors
     text: {
@@ -162,6 +164,7 @@ type SetupWizardAction =
   | { type: "SET_DOMAIN_CHECKING"; payload: boolean }
   | { type: "SET_PRIMARY_COLOR"; payload: string }
   | { type: "SET_SECONDARY_COLOR"; payload: string }
+  | { type: "SET_DARK_CANVAS"; payload: boolean }
   | {
       type: "SET_TEXT_COLOR";
       payload: { type: "h1" | "h2" | "h3" | "body" | "muted"; color: string };
@@ -207,6 +210,7 @@ const initialState: SetupWizardState = {
   colors: {
     primary: "#3b82f6", // Default blue
     secondary: "#6366f1", // Default indigo
+    dark: false,
 
     text: {
       h1: "#1f2937", // Dark gray for main headings
@@ -325,6 +329,12 @@ function setupWizardReducer(
           primary: action.payload,
           surface: generateSurfaceColors(action.payload),
         },
+      };
+
+    case "SET_DARK_CANVAS":
+      return {
+        ...state,
+        colors: { ...state.colors, dark: action.payload },
       };
 
     case "SET_SECONDARY_COLOR":
@@ -463,6 +473,7 @@ const SetupWizardContext = createContext<{
     saveDomain: (domain: string) => Promise<void>;
     setPrimaryColor: (color: string) => void;
     setSecondaryColor: (color: string) => void;
+    setDarkCanvas: (dark: boolean) => void;
     setTextColor: (
       type: "h1" | "h2" | "h3" | "body" | "muted",
       color: string
@@ -578,6 +589,10 @@ export function SetupWizardProvider({
 
   const setPrimaryColor = useCallback((color: string) => {
     dispatch({ type: "SET_PRIMARY_COLOR", payload: color });
+  }, []);
+
+  const setDarkCanvas = useCallback((dark: boolean) => {
+    dispatch({ type: "SET_DARK_CANVAS", payload: dark });
   }, []);
 
   const setSecondaryColor = useCallback((color: string) => {
@@ -708,6 +723,7 @@ export function SetupWizardProvider({
         colors: simplifyBrandColors(undefined, {
           brand: state.colors.primary,
           accent: state.colors.secondary,
+          scheme: state.colors.dark ? "dark" : "light",
         }),
 
         // Radius configuration (required by DB)
@@ -802,6 +818,7 @@ export function SetupWizardProvider({
     saveDomain,
     setPrimaryColor,
     setSecondaryColor,
+    setDarkCanvas,
     setTextColor,
     setBackgroundColor,
     setButtonColor,
