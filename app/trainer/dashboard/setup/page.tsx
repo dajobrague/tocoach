@@ -53,8 +53,8 @@ function SetupWizardContent() {
       className="flex h-screen bg-gray-50 overflow-hidden"
       style={{ overscrollBehavior: "none" }}
     >
-      {/* Left Side - Setup Wizard */}
-      <div className="w-1/2 flex flex-col bg-white border-r border-gray-200 overflow-hidden">
+      {/* Left Side - Setup Wizard (ancho completo en móvil) */}
+      <div className="flex w-full flex-col overflow-hidden border-r border-gray-200 bg-white md:w-1/2">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
@@ -208,8 +208,8 @@ function SetupWizardContent() {
         </div>
       </div>
 
-      {/* Right Side - Live Preview */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
+      {/* Right Side - Live Preview: en móvil no cabe al lado del editor */}
+      <div className="hidden flex-col overflow-hidden md:flex md:w-1/2">
         <LivePreview />
       </div>
     </div>
