@@ -57,8 +57,8 @@ describe("ShareComposer", () => {
       />
     );
 
-    // Datos, Músculos, Récord, Lista, Mínimo.
-    expect(cards(container)).toHaveLength(5);
+    // Datos, Músculos, Anatomía, Récord, Lista, Mínimo.
+    expect(cards(container)).toHaveLength(6);
     expect(container.textContent).toContain("NUEVO RÉCORD");
   });
 

@@ -35,6 +35,7 @@ const CHECKER = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 const PREVIEWS: { id: TemplateId; name: string }[] = [
   { id: "datos", name: "Datos" },
   { id: "musculos", name: "Músculos" },
+  { id: "anatomia", name: "Anatomía" },
   { id: "record", name: "Récord" },
 ];
 
@@ -234,7 +235,7 @@ export default function ShareCardTab() {
           <h4 className="text-sm font-semibold text-foreground">
             Vista previa
           </h4>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {PREVIEWS.map((preview) => (
               <figure key={preview.id} className="m-0 space-y-1.5">
                 <div
