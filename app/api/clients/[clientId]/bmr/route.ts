@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/clients/supabase-server";
+import { FORM_RESPONSE_UPSERT_CONFLICT } from "@/lib/forms/types";
 
 interface RouteContext {
   params: Promise<{ clientId: string }>;
@@ -210,7 +211,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             weight_updated_by: "trainer",
           },
         },
-        { onConflict: "tenant_host,client_id,form_type,response_date" }
+        { onConflict: FORM_RESPONSE_UPSERT_CONFLICT }
       );
 
       if (error) {

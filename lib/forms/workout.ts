@@ -43,6 +43,8 @@ export const DEFAULT_WORKOUT_CONFIG: FormConfigData = {
       icon: "solar:fire-bold",
       type: "number",
       unit: "/10",
+      min: 1,
+      max: 10,
       enabled: true,
       required: true,
       pageId: "workout_feedback",

@@ -2,7 +2,8 @@ import type { FormConfigData } from "@/lib/forms/types";
 
 import { describe, expect, it } from "vitest";
 
-import { isFormType } from "@/lib/forms/types";
+import { formResponseDraftStorageKey } from "@/lib/client/checkin-draft";
+import { FORM_RESPONSE_UPSERT_CONFLICT, isFormType } from "@/lib/forms/types";
 import { validateFormResponse, validateQuestionsConfig } from "@/lib/forms";
 import {
   DEFAULT_WORKOUT_CONFIG,
@@ -146,5 +147,26 @@ describe("summarizeWorkoutAnswers", () => {
         (l) => l.value
       )
     ).toEqual(["Genial", "No"]);
+  });
+});
+
+describe("una respuesta por sesión", () => {
+  it("el upsert incluye la sesión en la clave de conflicto", () => {
+    expect(FORM_RESPONSE_UPSERT_CONFLICT.split(",")).toEqual([
+      "tenant_host",
+      "client_id",
+      "form_type",
+      "response_date",
+      "scheduled_session_id",
+    ]);
+  });
+
+  it("el borrador del post-entreno es por sesión; el de hábitos no cambia", () => {
+    expect(formResponseDraftStorageKey("7", "habits", "2026-11-04")).toBe(
+      "tc_form_response_draft:7:habits:2026-11-04"
+    );
+    expect(
+      formResponseDraftStorageKey("7", "workout", "2026-11-04", "s1")
+    ).not.toBe(formResponseDraftStorageKey("7", "workout", "2026-11-04", "s2"));
   });
 });

@@ -36,7 +36,8 @@ import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/cond
 import { isStepsQuestion } from "@/lib/forms/neat-steps";
 import { dropPagesNotDue } from "@/lib/forms/page-cadence";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
-import { isEmptyAnswer } from "@/lib/forms/validation";
+import { isEmptyAnswer, numberRangeError } from "@/lib/forms/validation";
+import { findWorkoutResponseForSession } from "@/lib/forms/workout";
 import {
   QuestionConfig,
   FormPage,
@@ -82,6 +83,10 @@ export function DynamicFormModal({
   targetDate,
   metadata: extraMetadata,
 }: DynamicFormModalProps) {
+  const draftScope =
+    typeof extraMetadata?.session_id === "string"
+      ? extraMetadata.session_id
+      : undefined;
   const [currentStep, setCurrentStep] = useState(0);
   // Sentido de la última navegación entre pasos: adelante desliza la
   // página hacia la izquierda, atrás hacia la derecha.
@@ -156,7 +161,8 @@ export function DynamicFormModal({
             const draftKey = formResponseDraftStorageKey(
               clientId,
               formType,
-              dateForKey
+              dateForKey,
+              draftScope
             );
             const existing = readFormResponseDraft(draftKey);
 
@@ -258,7 +264,12 @@ export function DynamicFormModal({
   useEffect(() => {
     if (!isOpen || isLoading || isViewMode || isEditingExisting) return;
     const dateForKey = targetDate || getLocalTodayYmd();
-    const key = formResponseDraftStorageKey(clientId, formType, dateForKey);
+    const key = formResponseDraftStorageKey(
+      clientId,
+      formType,
+      dateForKey,
+      draftScope
+    );
 
     if (Object.keys(answers).length === 0) {
       clearFormResponseDraft(key);
@@ -275,6 +286,7 @@ export function DynamicFormModal({
     clientId,
     formType,
     targetDate,
+    draftScope,
   ]);
 
   const checkNeatCards = async (isCancelled?: () => boolean) => {
@@ -311,9 +323,17 @@ export function DynamicFormModal({
 
       if (isCancelled?.()) return;
 
-      if (data.success && data.responses && data.responses.length > 0) {
-        const existingResponse = data.responses[0];
+      // Post-entreno: puede haber una respuesta por sesión el mismo día —
+      // solo vale la de ESTA sesión.
+      const sessionId = extraMetadata?.session_id;
+      const existingResponse =
+        formType === "workout"
+          ? typeof sessionId === "string"
+            ? findWorkoutResponseForSession(data.responses ?? [], sessionId)
+            : null
+          : data.responses?.[0];
 
+      if (data.success && existingResponse) {
         setAnswers(existingResponse.answers || {});
         setExistingResponseDate(existingResponse.response_date);
 
@@ -325,7 +345,12 @@ export function DynamicFormModal({
         // Server copy supersedes any local draft for this date — clear it
         // so we don't accidentally restore stale answers next time.
         clearFormResponseDraft(
-          formResponseDraftStorageKey(clientId, formType, dateToCheck)
+          formResponseDraftStorageKey(
+            clientId,
+            formType,
+            dateToCheck,
+            draftScope
+          )
         );
       } else {
         setIsEditingExisting(false);
@@ -335,7 +360,12 @@ export function DynamicFormModal({
         // the client can resume where they left off after a refresh, tab
         // background, or accidental modal close.
         const draft = readFormResponseDraft(
-          formResponseDraftStorageKey(clientId, formType, dateToCheck)
+          formResponseDraftStorageKey(
+            clientId,
+            formType,
+            dateToCheck,
+            draftScope
+          )
         );
 
         setAnswers(draft?.answers ?? {});
@@ -619,6 +649,22 @@ export function DynamicFormModal({
       }
     });
 
+    // Rango min/max de los `number` (mismo helper que el servidor), también
+    // dentro de grupos. Solo si hay respuesta: vacío es cosa del required.
+    const numberQs = section.questions.flatMap((q) =>
+      q.type === "group" ? (q.subQuestions ?? []) : [q]
+    );
+
+    numberQs.forEach((q) => {
+      const v = answers[q.id];
+
+      if (q.type !== "number" || typeof v !== "number") return;
+      if (!shouldShowQuestion(q) || sectionErrors[q.id]) return;
+      const rangeError = numberRangeError(q, v);
+
+      if (rangeError) sectionErrors[q.id] = rangeError;
+    });
+
     return sectionErrors;
   };
 
@@ -774,7 +820,8 @@ export function DynamicFormModal({
           formResponseDraftStorageKey(
             clientId,
             formType,
-            targetDate || getLocalTodayYmd()
+            targetDate || getLocalTodayYmd(),
+            draftScope
           )
         );
 
@@ -971,6 +1018,8 @@ export function DynamicFormModal({
             integer={isStepsQuestion(question)}
             invalid={invalid}
             label={question.label}
+            max={question.max}
+            min={question.min}
             readOnly={isViewMode}
             unit={question.unit}
             value={value}

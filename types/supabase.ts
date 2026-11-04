@@ -1055,6 +1055,7 @@ export type Database = {
           id: string;
           metadata: Json | null;
           response_date: string;
+          scheduled_session_id: string | null;
           submitted_at: string | null;
           tenant_host: string;
           updated_at: string | null;
@@ -1067,6 +1068,7 @@ export type Database = {
           id?: string;
           metadata?: Json | null;
           response_date?: string;
+          scheduled_session_id?: string | null;
           submitted_at?: string | null;
           tenant_host: string;
           updated_at?: string | null;
@@ -1079,6 +1081,7 @@ export type Database = {
           id?: string;
           metadata?: Json | null;
           response_date?: string;
+          scheduled_session_id?: string | null;
           submitted_at?: string | null;
           tenant_host?: string;
           updated_at?: string | null;
