@@ -12,6 +12,8 @@ import type {
   ShareSession,
   Stat,
 } from "@/lib/share-card/session-data";
+import type { ShareBody } from "@/lib/hooks/use-share-body";
+import type { MuscleId } from "@/lib/training/muscles";
 
 import { type ReactNode, forwardRef } from "react";
 
@@ -23,6 +25,12 @@ import {
 } from "./body-figure";
 import { SHARE_FONT, fitText, textWidth } from "./fonts";
 
+import {
+  BODY_HEIGHT,
+  BODY_OVERLAYS,
+  BODY_WIDTH,
+  bodyFile,
+} from "@/lib/training/body-overlays";
 import {
   formatMinutes,
   heroSet,
@@ -122,6 +130,8 @@ export interface StickerProps {
   onBrandBg: boolean;
   shadow: boolean;
   mapMode: MapMode;
+  /** Cuerpo sombreado (data URIs); sin él, el mapa plano de siempre. */
+  body?: ShareBody | null;
   className?: string;
 }
 
@@ -698,6 +708,8 @@ function figureBlock(
 
   if (views.length === 0 || Object.keys(heat).length === 0) return null;
   const w = views.length === 1 ? width * 0.5 : width;
+
+  if (p.body) return shadedFigure(p.body, views, heat, w, p.id);
   const h = figureHeight(views, w);
 
   return {
@@ -713,6 +725,71 @@ function figureBlock(
         x={CX - w / 2}
         y={top}
       />
+    ),
+  };
+}
+
+/** El cuerpo sombreado de la app: base + overlays con opacidad por calor. */
+function shadedFigure(
+  body: ShareBody,
+  views: ("front" | "back")[],
+  heat: Partial<Record<MuscleId, number>>,
+  width: number,
+  id: string
+): Block {
+  const gap = views.length > 1 ? width * 0.06 : 0;
+  const each = (width - gap) / views.length;
+  const heightOf = (view: "front" | "back") =>
+    (each * BODY_HEIGHT[body.sex][view]) / BODY_WIDTH;
+  const h = Math.max(...views.map(heightOf));
+  const x0 = CX - width / 2;
+
+  return {
+    h,
+    draw: (top) => (
+      <g>
+        {views.map((view, index) => {
+          // Overlay -> calor máximo de los músculos que lo encienden.
+          const overlays = new Map<string, number>();
+
+          for (const [m, value] of Object.entries(heat) as [
+            MuscleId,
+            number,
+          ][]) {
+            for (const name of BODY_OVERLAYS[m][view] ?? []) {
+              const file = bodyFile(view, name);
+
+              overlays.set(file, Math.max(overlays.get(file) ?? 0, value));
+            }
+          }
+          const x = x0 + index * (each + gap);
+          const hv = heightOf(view);
+          const base = body.files[`${view}_base.webp`];
+
+          return (
+            <g key={`${id}-${view}`}>
+              {base ? (
+                <image height={hv} href={base} width={each} x={x} y={top} />
+              ) : null}
+              {[...overlays]
+                .sort((a, b) => a[1] - b[1])
+                .map(([file, value]) =>
+                  body.files[file] ? (
+                    <image
+                      key={file}
+                      height={hv}
+                      href={body.files[file]}
+                      opacity={0.35 + 0.65 * value}
+                      width={each}
+                      x={x}
+                      y={top}
+                    />
+                  ) : null
+                )}
+            </g>
+          );
+        })}
+      </g>
     ),
   };
 }

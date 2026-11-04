@@ -20,6 +20,7 @@ import {
   type ShareBranding,
   pickStats,
 } from "@/lib/share-card/session-data";
+import { sessionMuscles, useShareBody } from "@/lib/hooks/use-share-body";
 import { DEFAULT_SHARE_CARD_SETTINGS } from "@/lib/share-card/settings";
 
 interface Branding {
@@ -37,6 +38,8 @@ const PREVIEWS: { id: TemplateId; name: string }[] = [
   { id: "record", name: "Récord" },
 ];
 
+const SAMPLE_MUSCLES = sessionMuscles(SAMPLE_SESSION.exercises);
+
 const SAMPLE_STATS = pickStats(
   SESSION_STATS,
   ["duration", "volume", "sets"],
@@ -50,6 +53,7 @@ export default function ShareCardTab() {
   );
   const [branding, setBranding] = useState<Branding | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  const body = useShareBody(SAMPLE_MUSCLES);
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{
@@ -242,6 +246,7 @@ export default function ShareCardTab() {
                 >
                   {fontsReady ? (
                     <Sticker
+                      body={body}
                       branding={previewBranding}
                       className="h-auto w-[86%]"
                       exercise={null}

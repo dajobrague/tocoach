@@ -53,6 +53,7 @@ import {
   shareFileName,
 } from "@/components/share-card/export";
 import { ensureShareFonts } from "@/components/share-card/fonts";
+import { sessionMuscles, useShareBody } from "@/lib/hooks/use-share-body";
 import {
   type Ink,
   type TemplateDef,
@@ -180,6 +181,10 @@ export function ShareComposer({
 }) {
   const { session, branding } = data;
   const brand = brandAccent(branding);
+  // Cuerpo sombreado de la app (figura del sexo del cliente) en el sticker.
+  const body = useShareBody(sessionMuscles(session.exercises), {
+    client: true,
+  });
   const [scope, setScope] = useState<Scope>(initialScope);
   const [exId, setExId] = useState(
     () =>
@@ -644,6 +649,7 @@ export function ShareComposer({
                   ref={(el) => {
                     if (el) stickers.current.set(t.id, el);
                   }}
+                  body={body}
                   branding={branding}
                   className="block h-auto w-full"
                   exercise={scope === "exercise" ? exercise : null}

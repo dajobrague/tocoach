@@ -20,6 +20,11 @@ import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import {
+  type ShareBody,
+  sessionMuscles,
+  useShareBody,
+} from "@/lib/hooks/use-share-body";
+import {
   SAMPLE_SESSION,
   SESSION_STATS,
   type ShareBranding,
@@ -44,6 +49,7 @@ export default function WhatsNewDialog({
   const last = index === pages.length - 1;
   // Precarga: clips, fuentes y firma del sticker listos antes de llegar.
   const branding = useShareBranding();
+  const body = useShareBody(SAMPLE_MUSCLES);
 
   useLibraryMedia(CLIPS.map((c) => c.slug));
 
@@ -84,7 +90,7 @@ export default function WhatsNewDialog({
     >
       <ModalContent>
         <ModalBody>
-          <div className="grid md:h-[560px] md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
+          <div className="grid md:h-[min(560px,calc(100dvh-8rem))] md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
             {/* Escenario */}
             <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8">
               <AnimatePresence initial={false} mode="wait">
@@ -94,7 +100,7 @@ export default function WhatsNewDialog({
                   className="flex w-full items-center justify-center"
                   transition={{ duration: 0.45, ease: EASE }}
                 >
-                  <Stage branding={branding} stage={page.stage} />
+                  <Stage body={body} branding={branding} stage={page.stage} />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -204,9 +210,11 @@ export default function WhatsNewDialog({
 function Stage({
   stage,
   branding,
+  body,
 }: {
   stage: WhatsNewStage;
   branding: ShareBranding | null;
+  body: ShareBody | null;
 }) {
   switch (stage) {
     case "muscles":
@@ -216,43 +224,68 @@ function Stage({
     case "volume":
       return <VolumeStage />;
     case "share":
-      return <ShareStage branding={branding} />;
+      return <ShareStage body={body} branding={branding} />;
   }
 }
 
-// ── 1. Músculos: un ejercicio real etiquetado sobre el cuerpo ─────────────
+// ── 1. Músculos: el clip del ejercicio + sus músculos en el cuerpo ─────────
 
 const BENCH = {
+  slug: "bench-press",
   name: "Press de banca con barra",
   primary: ["pectoral"] as const,
   secondary: ["deltoides_anterior", "triceps"] as const,
 };
 
 function MusclesStage() {
+  const clip = useLibraryMedia([BENCH.slug])[BENCH.slug];
+
   return (
-    <div className="w-full max-w-[320px] rounded-2xl bg-content1 p-5 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.25)]">
-      <p className="text-[15px] font-semibold text-foreground">{BENCH.name}</p>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {BENCH.primary.map((id) => (
-          <span
-            key={id}
-            className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground"
-          >
-            {muscleLabel(id)}
-          </span>
-        ))}
-        {BENCH.secondary.map((id) => (
-          <OutlineChip key={id} tone="muted">
-            {muscleLabel(id)}
-          </OutlineChip>
-        ))}
+    <div className="w-full max-w-[400px] overflow-hidden rounded-2xl bg-content1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.25)]">
+      <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-center gap-2 bg-white pr-4">
+        <div className="aspect-square">
+          {clip?.video ? (
+            <video
+              aria-hidden
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="h-full w-full object-cover"
+              poster={clip.poster}
+              src={clip.video}
+            />
+          ) : (
+            <div className="h-full w-full animate-pulse bg-default-100 motion-reduce:animate-none" />
+          )}
+        </div>
+        <MuscleBody
+          className="mx-auto w-full max-w-[104px]"
+          flip={false}
+          primary={BENCH.primary}
+          secondary={BENCH.secondary}
+        />
       </div>
-      <MuscleBody
-        className="mx-auto mt-4 w-[200px]"
-        flip={false}
-        primary={BENCH.primary}
-        secondary={BENCH.secondary}
-      />
+      <div className="border-t border-default-200 px-5 py-4">
+        <p className="text-[15px] font-semibold text-foreground">
+          {BENCH.name}
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {BENCH.primary.map((id) => (
+            <span
+              key={id}
+              className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground"
+            >
+              {muscleLabel(id)}
+            </span>
+          ))}
+          {BENCH.secondary.map((id) => (
+            <OutlineChip key={id} tone="muted">
+              {muscleLabel(id)}
+            </OutlineChip>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -388,7 +421,15 @@ function useShareBranding(): ShareBranding | null {
   return branding;
 }
 
-function ShareStage({ branding }: { branding: ShareBranding | null }) {
+const SAMPLE_MUSCLES = sessionMuscles(SAMPLE_SESSION.exercises);
+
+function ShareStage({
+  branding,
+  body,
+}: {
+  branding: ShareBranding | null;
+  body: ShareBody | null;
+}) {
   return (
     <div
       className="flex aspect-[9/16] h-[460px] max-h-[64vh] items-center justify-center overflow-hidden rounded-[28px] shadow-[0_24px_48px_-20px_rgba(0,0,0,0.45)]"
@@ -396,6 +437,7 @@ function ShareStage({ branding }: { branding: ShareBranding | null }) {
     >
       {branding ? (
         <Sticker
+          body={body}
           branding={branding}
           className="h-auto w-[88%]"
           exercise={null}
