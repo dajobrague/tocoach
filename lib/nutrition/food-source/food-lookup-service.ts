@@ -5,7 +5,7 @@ import type {
 } from "./ingredient-repository";
 import type { FoodResult, FoodSource } from "./types";
 
-import { normalizeFoodQuery } from "./common-foods-repository";
+import { matchTier, normalizeFoodQuery } from "./common-foods-repository";
 import { rowToFoodResult } from "./ingredient-repository";
 
 /**
@@ -73,7 +73,12 @@ export class FoodLookupService {
     // A brand filter always queries the source: the brand's catalogue lives in
     // OFF, not the local cache, so the usual "enough local results" short-circuit
     // would hide most of it.
-    if (hasBrand || cachedRows.length + freshSeed.length < MIN_LOCAL_RESULTS) {
+    // Only non-seed rows (branded products the tenant already cached) count
+    // towards "enough local results": seed staples must not stop the source
+    // from being asked, or branded products vanish from generic searches.
+    const cachedProducts = cachedRows.filter((row) => row.source !== "seed");
+
+    if (hasBrand || cachedProducts.length < MIN_LOCAL_RESULTS) {
       freshSource = (
         await this.searchSource(query, locale, country, brand)
       ).filter(
@@ -255,9 +260,9 @@ function brandMatches(result: FoodResult, brand: string): boolean {
 }
 
 /**
- * Order results by how well the name matches the query: exact > prefix >
- * substring; ties prefer seed foods (raw staples) and shorter names. Also
- * dedupes by cache row id.
+ * Order results by how well the name matches the query (see `matchTier`:
+ * exact > prefix > word > substring); ties prefer seed foods (raw staples)
+ * and shorter names. Also dedupes by cache row id.
  */
 function rankResults(query: string, results: FoodResult[]): FoodResult[] {
   const q = normalizeFoodQuery(query);
@@ -273,18 +278,15 @@ function rankResults(query: string, results: FoodResult[]): FoodResult[] {
     }
   }
 
+  // Same tiers as the seed search, plus one step down for results whose
+  // energy is plainly wrong (0 kcal with real macros — a known Open Food Facts
+  // data problem), so they never sit above a sound entry.
   const tier = (r: FoodResult): number => {
-    const name = normalizeFoodQuery(r.name);
+    const n = r.nutrientsPer100g;
+    const brokenEnergy =
+      n.kcal === 0 && n.protein_g + n.carbs_g + n.fat_g > 1 ? 1 : 0;
 
-    if (name === q) {
-      return 0;
-    }
-
-    if (name.startsWith(q)) {
-      return 1;
-    }
-
-    return 2;
+    return matchTier(normalizeFoodQuery(r.name), q) + brokenEnergy;
   };
 
   return deduped.sort((a, b) => {

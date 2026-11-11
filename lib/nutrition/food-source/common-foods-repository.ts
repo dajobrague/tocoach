@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TABLE = "common_foods";
 const MAX_RESULTS = 10;
+/** Candidatos que se traen para ordenar por relevancia antes de cortar. */
+const MAX_CANDIDATES = 60;
 
 /** A row of the global `common_foods` seed table (migration 20260610110000). */
 export interface CommonFoodRow {
@@ -58,14 +60,50 @@ export class SupabaseCommonFoodsRepository implements CommonFoodsRepository {
       .select("*")
       .ilike("name_normalized", `%${normalized}%`)
       .order("name_normalized")
-      .limit(MAX_RESULTS);
+      .limit(MAX_CANDIDATES);
 
     if (error !== null) {
       throw new Error(`common_foods search failed: ${error.message}`);
     }
 
-    return ((data ?? []) as CommonFoodRow[]).map(commonFoodToResult);
+    return rankSeedRows(normalized, (data ?? []) as CommonFoodRow[])
+      .slice(0, MAX_RESULTS)
+      .map(commonFoodToResult);
   }
+}
+
+/**
+ * How well a normalized food name matches a normalized query (lower is
+ * better): 0 exact — a parenthetical qualifier doesn't count, so "lentejas
+ * (crudas)" is exact for "lentejas"; 1 starts with it; 2 a word starts with
+ * it ("pechuga de pollo" for "pollo"); 3 any other substring ("repollo").
+ */
+export function matchTier(name: string, normalizedQuery: string): number {
+  if (name === normalizedQuery) return 0;
+  if (name.replace(/\s*\(.*$/, "") === normalizedQuery) return 0;
+  if (name.startsWith(normalizedQuery)) return 1;
+  if (name.includes(` ${normalizedQuery}`)) return 2;
+
+  return 3;
+}
+
+/**
+ * Best matches first (see {@link matchTier}); shorter names win ties. Without
+ * this the alphabetical cut-off hid the staples once the seed grew past a
+ * handful of matches per query.
+ */
+export function rankSeedRows(
+  normalizedQuery: string,
+  rows: CommonFoodRow[]
+): CommonFoodRow[] {
+  const tier = (name: string): number => matchTier(name, normalizedQuery);
+
+  return [...rows].sort(
+    (a, b) =>
+      tier(a.name_normalized) - tier(b.name_normalized) ||
+      a.name_normalized.length - b.name_normalized.length ||
+      a.name_normalized.localeCompare(b.name_normalized)
+  );
 }
 
 /** Map a seed row to the source-agnostic FoodResult shape (sourceRef = row id). */
