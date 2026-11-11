@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CheckInFrequency, CheckInSchedule } from "./types";
 
-import { getScheduleOrDefault } from "./schedule";
+import { getScheduleOrDefault, parseYmd } from "./schedule";
 
 /**
  * Loads `default_schedule` from the client's template row, or the tenant's active check-ins template.
@@ -259,6 +259,43 @@ export function validateCheckInScheduleInput(
     }
   }
 
+  const firstCloseRaw = o.first_close_date;
+  let firstCloseDate: string | null = null;
+
+  if (firstCloseRaw !== undefined && firstCloseRaw !== null) {
+    if (typeof firstCloseRaw !== "string" || !parseYmd(firstCloseRaw)) {
+      errors.push("first_close_date debe ser una fecha válida (AAAA-MM-DD).");
+    } else {
+      firstCloseDate = firstCloseRaw;
+    }
+  }
+
+  // Excepciones puntuales: { "AAAA-MM-DD" (cierre original): "AAAA-MM-DD" | null }.
+  const exceptions: Record<string, string | null> = {};
+
+  if (o.exceptions !== undefined && o.exceptions !== null) {
+    const entries =
+      typeof o.exceptions === "object" && !Array.isArray(o.exceptions)
+        ? Object.entries(o.exceptions as Record<string, unknown>)
+        : null;
+
+    if (
+      !entries ||
+      entries.length > 60 ||
+      entries.some(
+        ([k, v]) =>
+          !parseYmd(k) ||
+          !(v === null || (typeof v === "string" && parseYmd(v)))
+      )
+    ) {
+      errors.push(
+        "exceptions debe ser un objeto de fechas AAAA-MM-DD (máximo 60) con otra fecha o null."
+      );
+    } else {
+      for (const [k, v] of entries) exceptions[k] = v as string | null;
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -295,6 +332,8 @@ export function validateCheckInScheduleInput(
     custom_name: (customName as string).trim(),
     grace_period_hours: grace as number,
     enabled,
+    ...(firstCloseDate ? { first_close_date: firstCloseDate } : {}),
+    ...(Object.keys(exceptions).length > 0 ? { exceptions } : {}),
   };
 
   return { ok: true, value };

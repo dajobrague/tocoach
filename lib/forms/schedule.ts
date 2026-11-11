@@ -193,18 +193,144 @@ function wallClockToUtc(
  */
 function isIntervalInstantActive(
   utcMs: number,
-  intervalWeeks: number
+  s: Pick<
+    CheckInSchedule,
+    "interval_weeks" | "grace_period_hours" | "timezone" | "first_close_date"
+  >
 ): boolean {
-  if (!Number.isFinite(intervalWeeks) || intervalWeeks <= 1) return true;
+  const n = Number.isFinite(s.interval_weeks)
+    ? Math.min(MAX_INTERVAL_WEEKS, Math.max(1, Math.round(s.interval_weeks)))
+    : 1;
+  const first = parseYmd(s.first_close_date);
 
-  const n = Math.min(
-    MAX_INTERVAL_WEEKS,
-    Math.max(1, Math.round(intervalWeeks))
-  );
+  if (first) {
+    // Con primer check-in elegido por el entrenador: nada cierra antes de esa
+    // fecha y las semanas se cuentan desde ella. Días de calendario en la
+    // zona del check-in (no ms) para que el cambio de hora no mueva la semana.
+    const close = getZonedParts(
+      new Date(utcMs + Math.max(0, s.grace_period_hours) * MS_PER_HOUR),
+      s.timezone
+    );
+    const days = Math.round(
+      (Date.UTC(close.year, close.month - 1, close.day) -
+        Date.UTC(first[0], first[1] - 1, first[2])) /
+        MS_PER_DAY
+    );
+
+    return days >= 0 && Math.floor(days / 7) % n === 0;
+  }
 
   if (n === 1) return true;
 
   return Math.floor(utcMs / WEEK_MS) % n === 0;
+}
+
+const toYmd = (y: number, mo: number, d: number) =>
+  `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** Fecha de cierre ("YYYY-MM-DD", zona del check-in) de la ventana que abre en `trigger`. */
+export function checkInCloseYmd(
+  s: Pick<CheckInSchedule, "grace_period_hours" | "timezone">,
+  trigger: Date
+): string {
+  const p = getZonedParts(
+    new Date(
+      trigger.getTime() + Math.max(0, s.grace_period_hours) * MS_PER_HOUR
+    ),
+    s.timezone
+  );
+
+  return toYmd(p.year, p.month, p.day);
+}
+
+/** Apertura que da la regla ese día (día de la semana + semana activa), sin excepciones. */
+function regularTriggerOnDay(
+  s: CheckInSchedule,
+  y: number,
+  mo: number,
+  d: number
+): Date | null {
+  if (!s.days_of_week.includes(weekdayUtcCalendar(y, mo, d))) return null;
+  const [th, tm] = parseTime(s.time);
+  const trigger = wallClockToUtc(y, mo, d, th, tm, s.timezone);
+
+  return isIntervalInstantActive(trigger.getTime(), s) ? trigger : null;
+}
+
+/**
+ * Apertura real ese día: la de la regla, salvo que ese check-in se haya
+ * quitado o movido (`exceptions`), más cualquier check-in movido A ese día.
+ * Todas las búsquedas de fechas pasan por aquí.
+ */
+function triggerOnDay(
+  s: CheckInSchedule,
+  y: number,
+  mo: number,
+  d: number
+): Date | null {
+  const regular = regularTriggerOnDay(s, y, mo, d);
+  const ex = s.exceptions;
+
+  if (!ex) return regular;
+  if (regular && !Object.hasOwn(ex, checkInCloseYmd(s, regular))) {
+    return regular;
+  }
+
+  for (const [from, to] of Object.entries(ex)) {
+    const a = parseYmd(from);
+    const b = parseYmd(to);
+
+    if (!a || !b) continue;
+    const shift = Math.round(
+      (Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) /
+        MS_PER_DAY
+    );
+    const [oy, om, od] = addCalendarDays(y, mo, d, -shift);
+    const original = regularTriggerOnDay(s, oy, om, od);
+
+    if (original && checkInCloseYmd(s, original) === from) {
+      const [th, tm] = parseTime(s.time);
+
+      return wallClockToUtc(y, mo, d, th, tm, s.timezone);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Mueve (`to` = fecha), quita (`to` = null) o restaura (`to` = undefined) el
+ * check-in que cierra en `closeYmd`. Si ese check-in ya venía movido, se
+ * actualiza su excepción original en vez de encadenar otra.
+ */
+export function setCheckInException(
+  s: CheckInSchedule,
+  closeYmd: string,
+  to: string | null | undefined
+): CheckInSchedule {
+  const exceptions = { ...s.exceptions };
+  const source =
+    Object.keys(exceptions).find((k) => exceptions[k] === closeYmd) ?? closeYmd;
+
+  if (to === undefined || to === source) delete exceptions[source];
+  else exceptions[source] = to;
+
+  return { ...s, exceptions };
+}
+
+/** "YYYY-MM-DD" → [year, month (1-12), day]; null si falta o no es una fecha real. */
+export function parseYmd(
+  value: string | null | undefined
+): [number, number, number] | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+
+  return date.getUTCMonth() === mo - 1 && date.getUTCDate() === d
+    ? [y, mo, d]
+    : null;
 }
 
 function normalizeFrequency(f: CheckInFrequency | undefined): CheckInFrequency {
@@ -391,19 +517,11 @@ export function isDueNow(
   if (!s.enabled) return false;
 
   const p = getZonedParts(now, s.timezone);
-  const dow = weekdayUtcCalendar(p.year, p.month, p.day);
-
-  if (!s.days_of_week.includes(dow)) return false;
-
   const [th, tm] = parseTime(s.time);
 
   if (p.hour !== th || p.minute !== tm) return false;
 
-  if (s.interval_weeks <= 1) return true;
-
-  const trigger = wallClockToUtc(p.year, p.month, p.day, th, tm, s.timezone);
-
-  return isIntervalInstantActive(trigger.getTime(), s.interval_weeks);
+  return triggerOnDay(s, p.year, p.month, p.day) !== null;
 }
 
 /**
@@ -426,8 +544,19 @@ export function getNextCheckInDate(
   fromDate: Date = new Date()
 ): Date {
   const s = getScheduleOrDefault(schedule);
-  const [th, tm] = parseTime(s.time);
-  const anchor = getZonedParts(fromDate, s.timezone);
+  // Con un primer check-in lejano, la búsqueda arranca cerca de él en vez de
+  // agotar la ventana de días antes de llegar.
+  const first = parseYmd(s.first_close_date);
+  const searchFrom = first
+    ? new Date(
+        Math.max(
+          fromDate.getTime(),
+          Date.UTC(first[0], first[1] - 1, first[2]) -
+            (Math.max(0, s.grace_period_hours) + 48) * MS_PER_HOUR
+        )
+      )
+    : fromDate;
+  const anchor = getZonedParts(searchFrom, s.timezone);
   const maxDays = maxSearchDaysFor(s.interval_weeks);
 
   for (let delta = 0; delta <= maxDays; delta++) {
@@ -437,15 +566,12 @@ export function getNextCheckInDate(
       anchor.day,
       delta
     );
-    const dow = weekdayUtcCalendar(y, mo, d);
+    const trigger = triggerOnDay(s, y, mo, d);
 
-    if (!s.days_of_week.includes(dow)) continue;
-
-    const trigger = wallClockToUtc(y, mo, d, th, tm, s.timezone);
+    if (!trigger) continue;
     const t = trigger.getTime();
 
     if (t <= fromDate.getTime()) continue;
-    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
 
     return trigger;
   }
@@ -483,7 +609,6 @@ function findLastTriggerOnOrBefore(
   referenceDate: Date
 ): Date {
   const s = getScheduleOrDefault(schedule);
-  const [th, tm] = parseTime(s.time);
   const anchor = getZonedParts(referenceDate, s.timezone);
   let best: Date | null = null;
   const maxDays = maxSearchDaysFor(s.interval_weeks);
@@ -495,15 +620,12 @@ function findLastTriggerOnOrBefore(
       anchor.day,
       -delta
     );
-    const dow = weekdayUtcCalendar(y, mo, d);
+    const trigger = triggerOnDay(s, y, mo, d);
 
-    if (!s.days_of_week.includes(dow)) continue;
-
-    const trigger = wallClockToUtc(y, mo, d, th, tm, s.timezone);
+    if (!trigger) continue;
     const t = trigger.getTime();
 
     if (t > referenceDate.getTime()) continue;
-    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
     if (!best || t > best.getTime()) best = trigger;
   }
 
@@ -519,7 +641,6 @@ function findOpenCheckInWindow(
   now: Date
 ): { periodStart: Date; deadline: Date } | null {
   const s = getScheduleOrDefault(schedule);
-  const [th, tm] = parseTime(s.time);
   const anchor = getZonedParts(now, s.timezone);
   let bestT: number | null = null;
   let bestStart: Date | null = null;
@@ -533,15 +654,12 @@ function findOpenCheckInWindow(
       anchor.day,
       -delta
     );
-    const dow = weekdayUtcCalendar(y, mo, d);
+    const trigger = triggerOnDay(s, y, mo, d);
 
-    if (!s.days_of_week.includes(dow)) continue;
-
-    const trigger = wallClockToUtc(y, mo, d, th, tm, s.timezone);
+    if (!trigger) continue;
     const t = trigger.getTime();
 
     if (t > n) continue;
-    if (!isIntervalInstantActive(t, s.interval_weeks)) continue;
 
     const deadlineMs = getCheckInDeadline(s, trigger).getTime();
 
@@ -725,6 +843,60 @@ export function getCheckInStatus(
   if (t < nextT.getTime()) return "not_due";
 
   return "expired";
+}
+
+export interface CheckInOccurrence {
+  /** Instante en que se abre la ventana. */
+  opensAt: Date;
+  /** Instante en que se cierra (apertura + margen). */
+  closesAt: Date;
+}
+
+/**
+ * Próximas ocurrencias del check-in en orden: la ventana abierta ahora (si la
+ * hay) y después las siguientes. Vacío si el check-in está desactivado.
+ */
+export function getUpcomingCheckIns(
+  schedule: CheckInScheduleInput,
+  count: number,
+  now: Date = new Date()
+): CheckInOccurrence[] {
+  const s = getScheduleOrDefault(schedule);
+
+  if (!s.enabled) return [];
+
+  const out: CheckInOccurrence[] = [];
+  const open = findOpenCheckInWindow(s, now);
+  let from = now;
+
+  if (open) {
+    out.push({ opensAt: open.periodStart, closesAt: open.deadline });
+    from = open.periodStart;
+  }
+
+  while (out.length < count) {
+    const opensAt = getNextCheckInDate(s, from);
+
+    out.push({ opensAt, closesAt: getCheckInDeadline(s, opensAt) });
+    from = opensAt;
+  }
+
+  return out.slice(0, Math.max(0, count));
+}
+
+/** "lun, 17 nov, 12:00" en la zona horaria del propio check-in. */
+export function formatCheckInInstant(
+  instant: Date | string,
+  timezone: string,
+  withTime = true
+): string {
+  return new Date(instant).toLocaleString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    timeZone: timezone,
+  });
 }
 
 function formatDaysSpanish(days: number[]): string {

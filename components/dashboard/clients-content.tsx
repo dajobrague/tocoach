@@ -25,6 +25,7 @@ import { CenteredState } from "@/components/shared/centered-state";
 import { OutlineChip } from "@/components/shared/outline-chip";
 import { SegmentedControl } from "@/components/shared/segmented-control";
 import { StatTile } from "@/components/shared/stat-tile";
+import { formatCheckInInstant } from "@/lib/forms/schedule";
 
 const STATUS_FILTERS = [
   { key: "all", label: "Todos" },
@@ -36,6 +37,7 @@ const SORT_MODES = [
   { key: "default", label: "Alfabético" },
   { key: "pending_first", label: "Pendientes" },
   { key: "expired_first", label: "Expirados" },
+  { key: "next_date", label: "Por fecha" },
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
@@ -52,7 +54,15 @@ interface ClientCheckInSummary {
   status: CheckInListStatus;
   customName: string;
   scheduleDescription: string;
+  timezone: string;
+  nextOpensAt: string | null;
+  nextClosesAt: string | null;
 }
+
+/** Fecha que se enseña (y por la que se ordena): pendiente → cuándo cierra;
+ *  el resto → cuándo abre el siguiente. */
+const checkInNextDate = (c: ClientCheckInSummary | null): string | null =>
+  !c ? null : c.status === "pending" ? c.nextClosesAt : c.nextOpensAt;
 
 interface Client {
   id: number;
@@ -95,6 +105,7 @@ const CHECK_IN_RANK: Record<CheckInSortMode, CheckInListStatus[]> = {
   default: [],
   pending_first: ["pending", "expired", "completed", "not_due", "disabled"],
   expired_first: ["expired", "pending", "completed", "not_due", "disabled"],
+  next_date: [],
 };
 
 const formatDate = (value: string): string => {
@@ -216,6 +227,16 @@ export default function ClientsContent() {
           c.email.toLowerCase().includes(q) ||
           c.nickName?.toLowerCase().includes(q) ||
           c.occupation?.toLowerCase().includes(q)
+      );
+    }
+
+    if (sortMode === "next_date") {
+      // ISO UTC: el orden de texto es el cronológico. Sin fecha, al final.
+      const key = (c: Client) => checkInNextDate(c.checkIn) ?? "9";
+
+      return [...list].sort(
+        (a, b) =>
+          key(a).localeCompare(key(b)) || a.name.localeCompare(b.name, "es")
       );
     }
 
@@ -452,6 +473,7 @@ export default function ClientsContent() {
                         const chip = client.checkIn
                           ? CHECK_IN_CHIPS[client.checkIn.status]
                           : null;
+                        const nextDate = checkInNextDate(client.checkIn);
 
                         return (
                           <TableRow key={client.id}>
@@ -496,9 +518,26 @@ export default function ClientsContent() {
 
                             <TableCell>
                               {client.checkIn && chip ? (
-                                <OutlineChip tone={chip.tone}>
-                                  {chip.label}
-                                </OutlineChip>
+                                <div className="flex flex-col items-start gap-1">
+                                  <OutlineChip tone={chip.tone}>
+                                    {chip.label}
+                                  </OutlineChip>
+                                  {nextDate && client.checkIn.nextClosesAt ? (
+                                    <span
+                                      className="text-xs text-default-500"
+                                      title={`Cierra ${formatCheckInInstant(client.checkIn.nextClosesAt, client.checkIn.timezone)}`}
+                                    >
+                                      {client.checkIn.status === "pending"
+                                        ? "Cierra "
+                                        : "Abre "}
+                                      {formatCheckInInstant(
+                                        nextDate,
+                                        client.checkIn.timezone,
+                                        false
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </div>
                               ) : (
                                 <span className="text-sm text-default-400">
                                   —

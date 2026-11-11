@@ -89,6 +89,19 @@ export interface CheckInSchedule {
   custom_name: string;
   grace_period_hours: number;
   enabled: boolean;
+  /**
+   * Per-client: date ("YYYY-MM-DD", schedule timezone) of the first check-in
+   * close, picked by the trainer. No check-in closes before it and "every N
+   * weeks" counts from it. Absent = legacy behaviour (no start, N-week parity
+   * anchored at the Unix epoch).
+   */
+  first_close_date?: string | null;
+  /**
+   * Per-client one-off changes, keyed by the ORIGINAL close date
+   * ("YYYY-MM-DD", schedule timezone): another date = that check-in is moved
+   * there (same times); `null` = that check-in is removed.
+   */
+  exceptions?: Record<string, string | null>;
 }
 
 export const DEFAULT_CHECKIN_SCHEDULE: CheckInSchedule = {

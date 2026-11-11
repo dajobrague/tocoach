@@ -23,9 +23,11 @@ import {
   getLocalYmd,
 } from "@/lib/forms/client-helpers";
 import {
+  formatCheckInInstant,
   getEffectiveSubmissionDeadline,
   getCheckInPeriodStart,
   getScheduleOrDefault,
+  getUpcomingCheckIns,
   isCheckInDue,
 } from "@/lib/forms/schedule";
 import {
@@ -295,6 +297,30 @@ export function DashboardContent() {
     return latest && !latest.reviewed_at ? latest : null;
   }, [showWeeklyBanner, checkinSchedule.enabled, weeklyResponses]);
 
+  // Sin check-in abierto por rellenar: cuándo se abre el siguiente.
+  const nextCheckinLabel = useMemo(() => {
+    if (isCheckinConfigLoading || isLoadingForms || showWeeklyBanner) {
+      return null;
+    }
+    try {
+      const now = Date.now();
+      const next = getUpcomingCheckIns(checkinSchedule, 2).find(
+        (o) => o.opensAt.getTime() > now
+      );
+
+      return next
+        ? formatCheckInInstant(next.opensAt, checkinSchedule.timezone)
+        : null;
+    } catch {
+      return null;
+    }
+  }, [
+    isCheckinConfigLoading,
+    isLoadingForms,
+    showWeeklyBanner,
+    checkinSchedule,
+  ]);
+
   // Anclamos los memos del "calendario local" a `todayYmd` (estado
   // refrescado por el effect de medianoche). Construir el Date desde
   // `${ymd}T00:00:00` lo deja en huso local, igual que getLocalYmd.
@@ -457,6 +483,12 @@ export function DashboardContent() {
                 Editar
               </Button>
             </div>
+          )}
+
+          {nextCheckinLabel && (
+            <p className="px-1 text-[13px] text-default-500">
+              {`Próximo ${checkinName}: ${nextCheckinLabel}`}
+            </p>
           )}
 
           {/* Registro diario — 3 tarjetas (hoy + 2 anteriores). Skeleton con

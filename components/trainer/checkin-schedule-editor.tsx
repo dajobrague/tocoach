@@ -29,8 +29,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type CheckInCloseView,
+  checkInCloseYmd,
+  formatCheckInInstant,
   fromCloseView,
   getScheduleOrDefault,
+  getUpcomingCheckIns,
+  setCheckInException,
   toCloseView,
 } from "@/lib/forms/schedule";
 
@@ -350,6 +354,126 @@ function clampIntervalWeeks(n: number): number {
  * - `times_per_week` is always coerced to match `days_of_week.length` when >1,
  *   which is what the backend validator expects.
  */
+const formatYmd = (ymd: string) =>
+  new Date(`${ymd}T12:00:00Z`).toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+
+/** Fechas reales de los próximos check-ins del cliente; cada uno se puede
+ *  mover a otro día o quitar sin tocar la regla (se guarda con el resto). */
+function UpcomingCheckIns({
+  draft,
+  onChange,
+}: {
+  draft: CheckInSchedule;
+  onChange: (next: CheckInSchedule) => void;
+}) {
+  const exceptions = draft.exceptions ?? {};
+  const todayYmd = checkInCloseYmd(
+    { grace_period_hours: 0, timezone: draft.timezone },
+    new Date()
+  );
+  const removed = Object.keys(exceptions)
+    .filter((k) => exceptions[k] === null && k >= todayYmd)
+    .sort();
+
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium text-default-700">
+        Próximos check-ins
+      </p>
+      <ul className="divide-y divide-default-200 rounded-xl border border-default-200 bg-default-50 text-sm">
+        {getUpcomingCheckIns(draft, 6).map((o) => {
+          const closeYmd = checkInCloseYmd(draft, o.opensAt);
+          const movedFrom = Object.keys(exceptions).find(
+            (k) => exceptions[k] === closeYmd
+          );
+
+          return (
+            <li
+              key={o.opensAt.getTime()}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 tabular-nums text-default-700">
+                {formatCheckInInstant(o.opensAt, draft.timezone)}
+                {" → cierra "}
+                {formatCheckInInstant(o.closesAt, draft.timezone)}
+                {movedFrom ? (
+                  <span className="text-default-500">
+                    {` · movido desde ${formatYmd(movedFrom)}`}
+                  </span>
+                ) : null}
+              </span>
+              <input
+                aria-label={`Mover el check-in que cierra el ${formatYmd(closeYmd)}`}
+                className="h-8 rounded-lg border border-default-200 bg-content1 px-2 text-sm text-foreground"
+                min={todayYmd}
+                type="date"
+                value={closeYmd}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onChange(
+                      setCheckInException(draft, closeYmd, e.target.value)
+                    );
+                  }
+                }}
+              />
+              {movedFrom ? (
+                <Button
+                  size="sm"
+                  variant="light"
+                  onPress={() =>
+                    onChange(setCheckInException(draft, closeYmd, undefined))
+                  }
+                >
+                  Restaurar
+                </Button>
+              ) : null}
+              <Button
+                color="danger"
+                size="sm"
+                variant="light"
+                onPress={() =>
+                  onChange(setCheckInException(draft, closeYmd, null))
+                }
+              >
+                Quitar
+              </Button>
+            </li>
+          );
+        })}
+        {removed.map((ymd) => (
+          <li
+            key={ymd}
+            className="flex items-center gap-3 px-3 py-2 text-default-500"
+          >
+            <span className="min-w-0 flex-1 line-through">
+              {formatYmd(ymd)}
+            </span>
+            <span>Quitado</span>
+            <Button
+              size="sm"
+              variant="light"
+              onPress={() =>
+                onChange(setCheckInException(draft, ymd, undefined))
+              }
+            >
+              Restaurar
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1.5 text-xs text-default-500">
+        Cambia la fecha de cierre para mover uno, o quítalo. Se aplica al
+        guardar.
+      </p>
+    </div>
+  );
+}
+
 export function buildCheckinSchedulePayload(
   draft: CheckInSchedule
 ): CheckInSchedule {
@@ -870,6 +994,25 @@ export function CheckInScheduleEditor({
               </div>
             </div>
           </div>
+
+          {/* Primer check-in: solo por cliente. Sin fecha, el check-in sigue
+              el calendario general (comportamiento anterior). */}
+          {!isTemplate ? (
+            <Input
+              classNames={{ base: "sm:w-64" }}
+              description="Opcional. El primero se cierra ese día (o el siguiente día de cierre) y «cada N semanas» cuenta desde ahí."
+              label="Primer check-in"
+              size="sm"
+              type="date"
+              value={draft.first_close_date ?? ""}
+              onValueChange={(v) =>
+                updateDraft({ first_close_date: v || null })
+              }
+            />
+          ) : null}
+          {!isTemplate && draft.enabled ? (
+            <UpcomingCheckIns draft={draft} onChange={setDraft} />
+          ) : null}
 
           {/* Hora de cierre + Zona horaria + Se abre — una sola fila en sm+,
               se apila en móvil. */}

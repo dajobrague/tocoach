@@ -9,6 +9,7 @@ import {
 import {
   formatScheduleDescription,
   getCheckInStatus,
+  getUpcomingCheckIns,
 } from "@/lib/forms/schedule";
 
 // API endpoint to list clients filtered by trainer's tenant
@@ -77,6 +78,11 @@ export async function GET(request: NextRequest) {
         status: ReturnType<typeof getCheckInStatus>;
         customName: string;
         scheduleDescription: string;
+        timezone: string;
+        /** Ventana que el entrenador debe mirar: la abierta si está
+         *  pendiente; si no, la siguiente que aún no se ha abierto. */
+        nextOpensAt: string | null;
+        nextClosesAt: string | null;
       }
     >();
 
@@ -186,11 +192,20 @@ export async function GET(request: NextRequest) {
           );
           const responses = responsesByClient.get(id) ?? [];
           const status = getCheckInStatus(schedule, responses);
+          const upcoming = getUpcomingCheckIns(schedule, 2);
+          const nowMs = Date.now();
+          const next =
+            status === "pending"
+              ? upcoming[0]
+              : upcoming.find((o) => o.opensAt.getTime() > nowMs);
 
           checkInByClientId.set(id, {
             status,
             customName: schedule.custom_name,
             scheduleDescription: formatScheduleDescription(schedule),
+            timezone: schedule.timezone,
+            nextOpensAt: next?.opensAt.toISOString() ?? null,
+            nextClosesAt: next?.closesAt.toISOString() ?? null,
           });
         }
       }
@@ -229,6 +244,9 @@ export async function GET(request: NextRequest) {
                 status: checkIn.status,
                 customName: checkIn.customName,
                 scheduleDescription: checkIn.scheduleDescription,
+                timezone: checkIn.timezone,
+                nextOpensAt: checkIn.nextOpensAt,
+                nextClosesAt: checkIn.nextClosesAt,
               }
             : null,
         };
