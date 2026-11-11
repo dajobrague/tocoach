@@ -28,6 +28,7 @@ const STEPS = [
 
 function SetupWizardContent() {
   const { state } = useSetupWizard();
+  const [showPreview, setShowPreview] = useState(false);
   const router = useRouter();
 
   const renderCurrentStep = () => {
@@ -208,10 +209,36 @@ function SetupWizardContent() {
         </div>
       </div>
 
-      {/* Right Side - Live Preview: en móvil no cabe al lado del editor */}
-      <div className="hidden flex-col overflow-hidden md:flex md:w-1/2">
+      {/* Right Side - Live Preview: en móvil no cabe al lado del editor, así
+          que se abre a pantalla completa desde un botón flotante. */}
+      <div
+        className={
+          showPreview
+            ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-white md:static md:z-auto md:w-1/2"
+            : "hidden flex-col overflow-hidden md:flex md:w-1/2"
+        }
+      >
         <LivePreview />
       </div>
+      <Button
+        className="fixed bottom-4 right-4 z-[60] shadow-lg md:hidden"
+        color={showPreview ? "default" : "primary"}
+        radius="full"
+        startContent={
+          <Icon
+            aria-hidden
+            icon={
+              showPreview
+                ? "solar:close-circle-linear"
+                : "solar:smartphone-linear"
+            }
+            width={18}
+          />
+        }
+        onPress={() => setShowPreview((v) => !v)}
+      >
+        {showPreview ? "Cerrar vista previa" : "Ver vista previa"}
+      </Button>
     </div>
   );
 }
