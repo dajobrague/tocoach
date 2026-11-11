@@ -71,9 +71,11 @@ Server-only environment variables (see `.env.example`):
 
 `public/sw.js` controls bundle caching for the PWA. `next.config.js` forces `Cache-Control: no-store` on `/sw.js` and the registration uses `updateViaCache: "none"` (`components/service-worker-registration.tsx`). This is **load-bearing** — without it, browsers/CDNs pin clients to a stale service worker for up to 24h (the SW spec's hard cap) and they never see new deploys. Don't relax these headers.
 
-### Cron sidecar
+### Form reminders (hourly, in-process)
 
-`cron-service/` is a separate Node process (deployed alongside the web app) that pings `PUT /api/forms/notifications/create` hourly + at 08:00 daily. The Next.js app exposes cron endpoints under `app/api/cron/*`; `GET /api/cron/cleanup-otps` requires the `CRON_SECRET` shared secret (Bearer / `x-cron-secret` header / `?secret=` query).
+`instrumentation.ts` makes the web server call `PUT /api/forms/notifications/create` once an hour on the hour (production only). That endpoint creates the client bell notifications: check-in opened, check-in closing soon, and the 08:00 UTC daily-log reminder. In production it returns 401 unless the caller sends the per-process key (set by `instrumentation.ts`) or `CRON_SECRET` in `x-cron-secret`. The timer lives in the single web replica: a restart exactly on the hour skips that run.
+
+`cron-service/` is the old external sidecar for the same job. It was **never deployed** (Railway only runs the web service) and is now unused. The Next.js app also exposes `GET /api/cron/cleanup-otps`, which requires `CRON_SECRET` (Bearer / `x-cron-secret` header / `?secret=` query); nothing calls it on a schedule either.
 
 ## Code organization
 
