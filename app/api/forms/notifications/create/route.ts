@@ -350,7 +350,22 @@ export async function POST(request: NextRequest) {
  * Called every hour (e.g. pg_cron). `isDueNow` matches hour+minute in the client TZ;
  * hourly triggers only align when the schedule minute is :00.
  */
-export async function PUT(_request: NextRequest) {
+export async function PUT(request: NextRequest) {
+  // Solo el temporizador interno (instrumentation.ts) o quien tenga
+  // CRON_SECRET: esta ruta crea avisos para todos los clientes.
+  const provided = request.headers.get("x-cron-secret");
+  const allowed = [
+    (globalThis as { __formRemindersKey?: string }).__formRemindersKey,
+    process.env.CRON_SECRET?.trim(),
+  ].filter(Boolean);
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    (!provided || !allowed.includes(provided))
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = createSupabaseClient();
   const now = new Date();
   const errors: string[] = [];
