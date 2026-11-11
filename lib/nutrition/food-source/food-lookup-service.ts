@@ -286,7 +286,13 @@ function rankResults(query: string, results: FoodResult[]): FoodResult[] {
     const brokenEnergy =
       n.kcal === 0 && n.protein_g + n.carbs_g + n.fat_g > 1 ? 1 : 0;
 
-    return matchTier(normalizeFoodQuery(r.name), q) + brokenEnergy;
+    const match = matchTier(normalizeFoodQuery(r.name), q);
+    // A staple matching on a later word ("pechuga de pollo" for "pollo")
+    // ranks with names that start with the query, so branded dishes like
+    // "Pollo al curry" don't push the plain cuts down.
+    const stapleBoost = r.source === "seed" && match === 2 ? 1 : 0;
+
+    return match - stapleBoost + brokenEnergy;
   };
 
   return deduped.sort((a, b) => {
