@@ -112,6 +112,11 @@ describe("parseTimerLocal", () => {
       parseTimerLocal(
         JSON.stringify({ pausedAt: "x", pausedMs: -5, restEndsAt: 42 })
       )
-    ).toEqual({ pausedAt: null, pausedMs: 0, restEndsAt: 42 });
+    ).toEqual({
+      pausedAt: null,
+      pausedMs: 0,
+      restEndsAt: 42,
+      restSeconds: null,
+    });
   });
 });

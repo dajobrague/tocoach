@@ -16,12 +16,15 @@ export interface WorkoutTimerLocal {
   pausedMs: number;
   /** Fin del descanso en curso (epoch ms); null = sin descanso. */
   restEndsAt: number | null;
+  /** Duración del último descanso lanzado, para "Reiniciar". */
+  restSeconds: number | null;
 }
 
 export const EMPTY_TIMER_LOCAL: WorkoutTimerLocal = {
   pausedAt: null,
   pausedMs: 0,
   restEndsAt: null,
+  restSeconds: null,
 };
 
 export const REST_PRESETS_SECONDS = [60, 90, 120, 180] as const;
@@ -86,7 +89,7 @@ export function startRest(
   seconds: number,
   now: number
 ): WorkoutTimerLocal {
-  return { ...local, restEndsAt: now + seconds * 1000 };
+  return { ...local, restEndsAt: now + seconds * 1000, restSeconds: seconds };
 }
 
 /** +15 s al descanso en curso; sin descanso corriendo no hace nada. */
@@ -146,6 +149,7 @@ export function parseTimerLocal(raw: string | null): WorkoutTimerLocal {
       pausedAt: num(v.pausedAt),
       pausedMs: Math.max(0, num(v.pausedMs) ?? 0),
       restEndsAt: num(v.restEndsAt),
+      restSeconds: num(v.restSeconds),
     };
   } catch {
     return EMPTY_TIMER_LOCAL;

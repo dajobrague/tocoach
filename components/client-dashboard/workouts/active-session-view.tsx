@@ -32,11 +32,14 @@ import { toExerciseLike } from "./to-exercise-like";
 import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
+import { MuscleBody } from "@/components/shared/muscle-body";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
 import { logMatchesSlot } from "@/lib/training/log-attribution";
+import { muscleVolume } from "@/lib/training/muscle-volume";
+import { muscleLabel } from "@/lib/training/muscles";
 
 export interface ExerciseLike {
   order: number;
@@ -291,13 +294,19 @@ export function ActiveSessionView({
   const displayExerciseCount = total > 0 ? total : session.exercise_count;
 
   const typeStyle = getSessionTypeStyle(session.session_type);
+  const muscleInputs = allExercises.map((e) => ({
+    sets: e.sets ?? 0,
+    primary: e.primaryMuscles,
+    secondary: e.secondaryMuscles,
+  }));
+  const todayVolume = muscleVolume(muscleInputs);
 
   const isToday = scheduledDate === getLocalTodayYmd();
   const hasStartTime =
     schedState.data?.scheduled_time != null || timeDraft !== null;
 
   return (
-    <section className="flex w-full flex-col gap-6 px-4 pb-10 pt-4">
+    <section className="flex w-full flex-col gap-6 px-4 pb-10 pt-4 [html[data-rest-band]_&]:pt-[76px]">
       {/* Card de la sesión. Superficie neutra (no bloque de marca: con
           algunos temas un bloque grande de color pesa demasiado); la marca
           queda en la barra de progreso y el botón de empezar. */}
@@ -320,6 +329,44 @@ export function ActiveSessionView({
             </span>
           ) : null}
         </div>
+
+        {/* Músculos de hoy (JC, nov): arriba, banda estrecha con la figura a
+            la derecha; el desglose por series se abre al tocar. */}
+        {todayVolume.length > 0 && (!resolvedLoading || resolved) ? (
+          <details className="group rounded-medium bg-default-100">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3.5 py-1.5 [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-foreground">
+                  Músculos de hoy
+                </p>
+                <p className="truncate text-[13px] text-default-500">
+                  {todayVolume.map((v) => muscleLabel(v.id)).join(", ")}
+                </p>
+              </div>
+              <MuscleBody
+                client
+                className="w-5 shrink-0"
+                flip={false}
+                primary={todayVolume
+                  .filter((v) => v.sets >= todayVolume[0]!.sets / 2)
+                  .map((v) => v.id)}
+                secondary={todayVolume
+                  .filter((v) => v.sets < todayVolume[0]!.sets / 2)
+                  .map((v) => v.id)}
+              />
+              <Icon
+                aria-hidden
+                className="shrink-0 text-default-400 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                icon="solar:alt-arrow-down-linear"
+                width={18}
+              />
+            </summary>
+            <MuscleVolume
+              className="px-3.5 pb-3.5 pt-1"
+              exercises={muscleInputs}
+            />
+          </details>
+        ) : null}
 
         {total > 0 ? (
           <div
@@ -454,8 +501,8 @@ export function ActiveSessionView({
                 onPress={() => setIsFeedbackOpen(true)}
               >
                 {feedback.answered
-                  ? "Editar cómo te fue"
-                  : "Cuéntale cómo te fue"}
+                  ? "Editar formulario post-entreno"
+                  : "Formulario post-entreno"}
               </Button>
             </div>
           ) : null}
@@ -519,6 +566,11 @@ export function ActiveSessionView({
                   key={`${session.id}-${exercise.exercise_id ?? exercise.order}`}
                 >
                   <ExerciseRow
+                    clip={
+                      exercise.libraryExerciseId
+                        ? libraryMedia[exercise.libraryExerciseId]?.video
+                        : undefined
+                    }
                     exercise={exercise}
                     increaseWeight={
                       status !== "completed" &&
@@ -552,20 +604,6 @@ export function ActiveSessionView({
             })}
           </ul>
         )}
-
-        {!resolvedLoading || resolved ? (
-          <MuscleVolume
-            client
-            map
-            className="mt-4 rounded-large bg-content1 p-4 shadow-small"
-            exercises={allExercises.map((e) => ({
-              sets: e.sets ?? 0,
-              primary: e.primaryMuscles,
-              secondary: e.secondaryMuscles,
-            }))}
-            title="Músculos de hoy"
-          />
-        ) : null}
 
         {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
             sesiones ya completadas — el entrenamiento terminó. */}
@@ -624,6 +662,8 @@ interface RowProps {
   exercise: ExerciseLike & Record<string, unknown>;
   /** Póster del catálogo cuando el entrenador no subió imagen. */
   poster?: string | undefined;
+  /** Animación del catálogo: se reproduce en la miniatura si no hay imagen. */
+  clip?: string | undefined;
   /** El entrenador pidió subir peso en esta sesión. */
   increaseWeight: boolean;
   status: ExerciseStatus;
@@ -654,6 +694,7 @@ const STATUS_STYLE: Record<
 function ExerciseRow({
   exercise,
   poster,
+  clip,
   increaseWeight,
   status,
   onClick,
@@ -671,7 +712,24 @@ function ExerciseRow({
       type="button"
       onClick={onClick}
     >
-      {exercise.imageUrl || poster ? (
+      {!exercise.imageUrl && clip ? (
+        // Sin imagen del entrenador: la animación del catálogo en bucle. Con
+        // "reducir movimiento" el navegador no la arranca y queda el póster.
+        <video
+          loop
+          muted
+          playsInline
+          aria-hidden="true"
+          autoPlay={
+            typeof window !== "undefined" &&
+            !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          }
+          className="h-14 w-14 shrink-0 rounded-[14px] bg-white object-cover"
+          poster={poster}
+          preload="none"
+          src={clip}
+        />
+      ) : exercise.imageUrl || poster ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""

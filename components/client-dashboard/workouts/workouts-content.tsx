@@ -541,7 +541,10 @@ export function WorkoutsContent() {
           clientId={clientId}
           scheduledDate={selectedDate}
           sessionId={activeSession.id}
-          startTime={activeSchedState.data?.scheduled_time ?? null}
+          // Cronómetro de sesión oculto (JC, llamada de nov): no debe
+          // arrancar solo al empezar el entreno. Queda solo el descanso, a
+          // demanda. Restaurar: activeSchedState.data?.scheduled_time ?? null
+          startTime={null}
         />
       ) : null}
 

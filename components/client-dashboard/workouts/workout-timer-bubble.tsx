@@ -7,8 +7,9 @@
 //
 // - Cronómetro de sesión: desde la hora de inicio declarada en el servidor
 //   (ver lib/training/workout-timer.ts). Pausar/reanudar es local.
-// - Descanso: 1:00 / 1:30 / 2:00 / 3:00 y +15 s; al terminar vibra (si el
-//   dispositivo puede) y lo anuncia por una región viva.
+// - Descanso: 1:00 / 1:30 / 2:00 / 3:00; mientras corre es una banda fija
+//   arriba (+15 s, Reiniciar, Parar); al terminar vibra (si el dispositivo
+//   puede) y lo anuncia por una región viva.
 
 import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -118,6 +119,16 @@ export function WorkoutTimerBubble({
     }
   }, [rest.kind, local.restEndsAt, now]);
 
+  // Con la banda de descanso visible, la sesión deja hueco arriba para que
+  // no tape el título (ver active-session-view: html[data-rest-band]).
+  const bandVisible = rest.kind !== "idle";
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-rest-band", bandVisible);
+
+    return () => document.documentElement.removeAttribute("data-rest-band");
+  }, [bandVisible]);
+
   // Esc cierra el panel sin cerrar también la pantalla de sesión (que
   // escucha Esc en window, fase de burbuja).
   useEffect(() => {
@@ -140,55 +151,79 @@ export function WorkoutTimerBubble({
   const restLabel =
     rest.kind === "running" ? formatClock(rest.remainingMs, true) : null;
 
+  // Descanso en curso o recién terminado: banda fija arriba, siempre visible
+  // mientras el cliente registra series (JC, nov). Reiniciar repite la última
+  // duración sin volver a abrir el panel.
+  if (rest.kind !== "idle") {
+    const restart = () =>
+      update((prev, t) => startRest(prev, prev.restSeconds ?? 60, t));
+
+    return createPortal(
+      <div
+        aria-label="Descanso"
+        className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+60px)] z-[65] flex min-h-12 w-[calc(100%-1.5rem)] max-w-[416px] -translate-x-1/2 items-center gap-2 rounded-large bg-content1 py-1.5 pl-4 pr-2 shadow-medium ring-1 ring-default-200"
+        role="group"
+      >
+        <Icon
+          aria-hidden
+          className="shrink-0 text-primary"
+          icon={
+            rest.kind === "finished"
+              ? "solar:bell-bing-bold"
+              : "solar:hourglass-line-linear"
+          }
+          width={20}
+        />
+        <p className="min-w-0 flex-1 truncate font-heading text-xl tabular-nums text-foreground">
+          {rest.kind === "finished" ? "Descanso terminado" : restLabel}
+        </p>
+        {rest.kind === "running" ? (
+          <Button
+            aria-label={`Añadir ${REST_EXTEND_SECONDS} segundos`}
+            radius="full"
+            size="sm"
+            variant="flat"
+            onPress={() => update((prev, t) => extendRest(prev, t))}
+          >
+            +{REST_EXTEND_SECONDS} s
+          </Button>
+        ) : null}
+        <Button radius="full" size="sm" variant="flat" onPress={restart}>
+          Reiniciar
+        </Button>
+        <Button
+          radius="full"
+          size="sm"
+          variant="light"
+          onPress={() => update((prev) => clearRest(prev))}
+        >
+          {rest.kind === "finished" ? "Cerrar" : "Parar"}
+        </Button>
+        <span aria-live="assertive" className="sr-only" role="status">
+          {rest.kind === "finished" ? "Descanso terminado" : ""}
+        </span>
+      </div>,
+      document.body
+    );
+  }
+
   const bubbleAria =
-    rest.kind === "finished"
-      ? "Descanso terminado. Pulsa para quitar el aviso"
-      : rest.kind === "running"
-        ? `Descanso: quedan ${restLabel}. ${open ? "Cerrar" : "Abrir"} controles`
-        : elapsedLabel !== null
-          ? `Entreno: ${elapsedLabel}${paused ? ", en pausa" : ""}. ${open ? "Cerrar" : "Abrir"} controles`
-          : `Temporizador de descanso. ${open ? "Cerrar" : "Abrir"} controles`;
-
-  const onBubblePress = () => {
-    if (rest.kind === "finished") {
-      update((prev) => clearRest(prev));
-
-      return;
-    }
-    setOpen((v) => !v);
-  };
+    elapsedLabel !== null
+      ? `Entreno: ${elapsedLabel}${paused ? ", en pausa" : ""}. ${open ? "Cerrar" : "Abrir"} controles`
+      : `Temporizador de descanso. ${open ? "Cerrar" : "Abrir"} controles`;
 
   return createPortal(
     <div className="pointer-events-none fixed right-3 top-[calc(env(safe-area-inset-top)+60px)] z-[65] flex flex-col items-end gap-2">
       <button
         ref={buttonRef}
         aria-controls={open ? panelId : undefined}
-        aria-expanded={rest.kind === "finished" ? undefined : open}
+        aria-expanded={open}
         aria-label={bubbleAria}
-        className={`pointer-events-auto flex h-11 min-w-11 items-center gap-1.5 rounded-full px-3.5 text-[15px] font-semibold tabular-nums shadow-medium transition-transform active:scale-[0.97] motion-reduce:transform-none ${
-          rest.kind === "finished"
-            ? "bg-primary text-primary-foreground"
-            : "bg-content1 text-foreground ring-1 ring-default-200"
-        }`}
+        className="pointer-events-auto flex h-11 min-w-11 items-center gap-1.5 rounded-full bg-content1 px-3.5 text-[15px] font-semibold tabular-nums text-foreground shadow-medium ring-1 ring-default-200 transition-transform active:scale-[0.97] motion-reduce:transform-none"
         type="button"
-        onClick={onBubblePress}
+        onClick={() => setOpen((v) => !v)}
       >
-        {rest.kind === "finished" ? (
-          <>
-            <Icon aria-hidden icon="solar:bell-bing-bold" width={18} />
-            Descanso terminado
-          </>
-        ) : rest.kind === "running" ? (
-          <>
-            <Icon
-              aria-hidden
-              className="text-primary"
-              icon="solar:hourglass-line-linear"
-              width={18}
-            />
-            <span className="text-primary">{restLabel}</span>
-          </>
-        ) : elapsedLabel !== null ? (
+        {elapsedLabel !== null ? (
           <>
             <Icon
               aria-hidden
@@ -215,7 +250,7 @@ export function WorkoutTimerBubble({
         )}
       </button>
 
-      {open && rest.kind !== "finished" ? (
+      {open ? (
         <div
           aria-label="Cronómetro y descanso"
           className="pointer-events-auto w-64 space-y-4 rounded-large bg-content1 p-4 shadow-large ring-1 ring-default-200"
@@ -259,55 +294,27 @@ export function WorkoutTimerBubble({
 
           <div className="space-y-2">
             <p className="text-xs text-default-500">Descanso</p>
-            {rest.kind === "running" ? (
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-heading text-3xl tabular-nums text-primary">
-                  {restLabel}
-                </p>
-                <div className="flex gap-1.5">
-                  <Button
-                    aria-label={`Añadir ${REST_EXTEND_SECONDS} segundos`}
-                    radius="full"
-                    size="sm"
-                    variant="flat"
-                    onPress={() => update((prev, t) => extendRest(prev, t))}
-                  >
-                    +{REST_EXTEND_SECONDS} s
-                  </Button>
-                  <Button
-                    radius="full"
-                    size="sm"
-                    variant="light"
-                    onPress={() => update((prev) => clearRest(prev))}
-                  >
-                    Parar
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 gap-1.5">
-                {REST_PRESETS_SECONDS.map((sec) => (
-                  <Button
-                    key={sec}
-                    aria-label={`Descanso de ${formatClock(sec * 1000)}`}
-                    className="min-w-0 px-0 tabular-nums"
-                    radius="lg"
-                    size="sm"
-                    variant="flat"
-                    onPress={() => update((prev, t) => startRest(prev, sec, t))}
-                  >
-                    {formatClock(sec * 1000)}
-                  </Button>
-                ))}
-              </div>
-            )}
+            <div className="grid grid-cols-4 gap-1.5">
+              {REST_PRESETS_SECONDS.map((sec) => (
+                <Button
+                  key={sec}
+                  aria-label={`Descanso de ${formatClock(sec * 1000)}`}
+                  className="min-w-0 px-0 tabular-nums"
+                  radius="lg"
+                  size="sm"
+                  variant="flat"
+                  onPress={() => {
+                    setOpen(false);
+                    update((prev, t) => startRest(prev, sec, t));
+                  }}
+                >
+                  {formatClock(sec * 1000)}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
-
-      <span aria-live="assertive" className="sr-only" role="status">
-        {rest.kind === "finished" ? "Descanso terminado" : ""}
-      </span>
     </div>,
     document.body
   );
