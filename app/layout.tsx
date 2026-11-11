@@ -2,7 +2,7 @@ import "@/styles/globals.css";
 import { Link } from "@heroui/link";
 import clsx from "clsx";
 import { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { Providers } from "./providers";
 
@@ -22,6 +22,7 @@ import {
 } from "@/lib/tenant/icon-url";
 import { loadTenantContext } from "@/lib/tenant/loader";
 import { toClientSafe, type ClientTenantInfo } from "@/lib/tenant/types";
+import { CLIENT_SCHEME_COOKIE } from "@/lib/theme/brand-colors";
 import { renderInlineThemeCSS } from "@/lib/theme/render-css";
 
 // Function to check if the current route should not have a navbar
@@ -220,9 +221,20 @@ export default async function RootLayout({
   // /brands/db/... (DB lookup + @import en cadena, cache 60s, sin CDN)
   // sobra. Si la generación falla o el CSS trae algo sospechoso,
   // renderInlineThemeCSS devuelve null y caemos al <link> de siempre.
+  // Modo día/noche del cliente: cookie con path /{slug}, así que solo llega
+  // en el portal del cliente. Sin cookie manda el lienzo del entrenador.
+  const schemeCookie = isClientRoute
+    ? (await cookies()).get(CLIENT_SCHEME_COOKIE)?.value
+    : undefined;
+  const clientScheme =
+    schemeCookie === "dark" || schemeCookie === "light" ? schemeCookie : null;
   const inlineThemeCSS =
     useDatabaseTheme && activeTenantContext
-      ? renderInlineThemeCSS(activeTenantContext, tenantSlug ?? "unknown")
+      ? renderInlineThemeCSS(
+          activeTenantContext,
+          tenantSlug ?? "unknown",
+          clientScheme
+        )
       : null;
 
   // Choose CSS URL based on source

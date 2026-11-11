@@ -24,6 +24,8 @@ import {
   ClientSheetGrabber,
 } from "@/components/client-dashboard/client-sheet";
 import { IconTile } from "@/components/shared/icon-tile";
+import { SegmentedControl } from "@/components/shared/segmented-control";
+import { CLIENT_SCHEME_COOKIE } from "@/lib/theme/brand-colors";
 import { clearClientToken, clientFetch } from "@/lib/auth/client-token-storage";
 import { buildInitials, thumbnailUrl } from "@/lib/utils/avatar";
 
@@ -556,6 +558,8 @@ export function ProfileContent() {
             )}
           </div>
 
+          <AppearanceCard slug={pathname.split("/")[1] || ""} />
+
           <div className="overflow-hidden rounded-large bg-content1 shadow-small">
             <button
               className="flex min-h-14 w-full items-center justify-center gap-2 px-4 text-base font-semibold text-danger transition-colors active:bg-danger/10 [@media(hover:hover)]:hover:bg-danger/5"
@@ -701,5 +705,56 @@ function ActionRow({
         icon="solar:alt-arrow-right-linear"
       />
     </button>
+  );
+}
+
+const APPEARANCE_OPTIONS = [
+  { key: "auto", label: "Automático" },
+  { key: "light", label: "Claro" },
+  { key: "dark", label: "Oscuro" },
+] as const;
+
+type Appearance = (typeof APPEARANCE_OPTIONS)[number]["key"];
+
+/** Modo día/noche del cliente. "Automático" = el fondo que eligió su
+ *  entrenador. Se guarda en una cookie (el tema se pinta en el servidor) y
+ *  se recarga para aplicarlo. */
+function AppearanceCard({ slug }: { slug: string }) {
+  const [value, setValue] = useState<Appearance>("auto");
+
+  useEffect(() => {
+    const m = new RegExp(`(?:^|; )${CLIENT_SCHEME_COOKIE}=(light|dark)`).exec(
+      document.cookie
+    );
+
+    if (m) setValue(m[1] as Appearance);
+  }, []);
+
+  const choose = (next: Appearance) => {
+    // SameSite=None: el portal puede ir embebido en un iframe (como la sesión).
+    const attrs = `; path=/${slug}${
+      window.location.protocol === "https:" ? "; SameSite=None; Secure" : ""
+    }`;
+
+    document.cookie =
+      next === "auto"
+        ? `${CLIENT_SCHEME_COOKIE}=; max-age=0${attrs}`
+        : `${CLIENT_SCHEME_COOKIE}=${next}; max-age=31536000${attrs}`;
+    setValue(next);
+    window.location.reload();
+  };
+
+  return (
+    <div className="rounded-large bg-content1 p-4 shadow-small">
+      <p className="mb-3 text-[15px] font-semibold text-foreground">
+        Apariencia
+      </p>
+      <SegmentedControl
+        ariaLabel="Apariencia de la app"
+        options={APPEARANCE_OPTIONS}
+        value={value}
+        onChange={choose}
+      />
+    </div>
   );
 }

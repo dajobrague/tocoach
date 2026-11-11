@@ -26,9 +26,9 @@
 //     modo noche puede ignorar los neutros guardados (son de modo claro) y
 //     derivar el lienzo oscuro solo a partir de brand/accent.
 
-import { getContrastRatio } from "./contrast";
 import type { ThemeConfig } from "./schema";
 
+import { getContrastRatio } from "./contrast";
 import { defaultTheme } from "./schema";
 
 export type CanvasScheme = "light" | "dark";
@@ -57,6 +57,28 @@ export const DARK_NEUTRALS = {
 
 const neutralsFor = (scheme: CanvasScheme) =>
   scheme === "dark" ? DARK_NEUTRALS : DERIVED_NEUTRALS;
+
+/** Nombre de la cookie con el modo día/noche que eligió el cliente. */
+export const CLIENT_SCHEME_COOKIE = "tc_scheme";
+
+/**
+ * Lienzo forzado por el cliente (modo día/noche): la marca del entrenador
+ * queda intacta y solo cambian los neutros (texto, fondos, borde, relleno).
+ */
+export function withCanvasScheme(
+  colors: ThemeConfig["colors"],
+  scheme: CanvasScheme
+): ThemeConfig["colors"] {
+  const n = neutralsFor(scheme);
+
+  return {
+    ...colors,
+    text: { ...colors.text, ...n.text },
+    surface: { ...colors.surface, ...n.surface },
+    border: n.border,
+    fill: n.fill,
+  };
+}
 
 /**
  * true si el lienzo guardado (colors.surface["1"]) es oscuro, por luminancia

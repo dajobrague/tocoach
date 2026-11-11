@@ -16,6 +16,7 @@ import {
   pickForegroundHSL,
 } from "@/lib/theme/color-utils";
 import { brandInk, resolveClientSurface } from "@/lib/theme/client-surface";
+import { type CanvasScheme, withCanvasScheme } from "@/lib/theme/brand-colors";
 import { healThemeJson } from "@/lib/theme/heal";
 import { defaultTheme, validateTheme } from "@/lib/theme/schema";
 
@@ -409,10 +410,15 @@ ${
  */
 export function renderInlineThemeCSS(
   tenantContext: Pick<TenantContext, "theme_json" | "theme_slug"> | null,
-  host: string
+  host: string,
+  /** Modo día/noche elegido por el cliente; null = el lienzo del entrenador. */
+  scheme: CanvasScheme | null = null
 ): string | null {
   try {
-    const theme = resolveTenantTheme(tenantContext, host);
+    const resolved = resolveTenantTheme(tenantContext, host);
+    const theme = scheme
+      ? { ...resolved, colors: withCanvasScheme(resolved.colors, scheme) }
+      : resolved;
     const css = generateThemeCSS(theme);
 
     if (css.includes("<")) {
