@@ -34,7 +34,10 @@ import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { MuscleBody } from "@/components/shared/muscle-body";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
-import { useLibraryMedia } from "@/lib/hooks/use-library-media";
+import {
+  type LibraryMedia,
+  useLibraryMedia,
+} from "@/lib/hooks/use-library-media";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { isIncreaseWeightPending } from "@/lib/training/increase-weight";
 import { logMatchesSlot } from "@/lib/training/log-attribution";
@@ -301,6 +304,52 @@ export function ActiveSessionView({
   }));
   const todayVolume = muscleVolume(muscleInputs);
 
+  // Pantalla "Siguiente" (prototipo elegido, nov): se organiza alrededor del
+  // ejercicio que toca ahora (el que está en curso o, si no, el primero
+  // pendiente); el resto va en filas de una línea y los hechos se pliegan.
+  // Descartadas: tabla sin imágenes (pierde las animaciones) y cuadrícula de
+  // imágenes (el doble de scroll, descanso y etiquetas apretados).
+  const rows: FlowRow[] = allExercises.map((exercise) => {
+    const exerciseId = exercise.exercise_id ?? "";
+    // Log de ESTE slot (finalizado o no); misma atribución que `completed`.
+    const existingLog = exerciseId
+      ? logsForDate.find((log) => logMatchesSlot(log, exercise, session.id))
+      : undefined;
+    const status: ExerciseStatus = !existingLog
+      ? "not_started"
+      : existingLog.finalized_at
+        ? "completed"
+        : "in_progress";
+    const media = exercise.libraryExerciseId
+      ? libraryMedia[exercise.libraryExerciseId]
+      : undefined;
+
+    return {
+      key: `${session.id}-${exercise.exercise_id ?? exercise.order}`,
+      exercise,
+      status,
+      media,
+      increaseWeight:
+        status !== "completed" &&
+        isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate),
+      open: () =>
+        onLogExercise({
+          exercise: { ...exercise, libraryMedia: media },
+          sessionId: session.id,
+          scheduledDate,
+          existingLog: existingLog ?? null,
+        }),
+    };
+  });
+  const currentRow = sessionCompleted
+    ? undefined
+    : (rows.find((r) => r.status === "in_progress") ??
+      rows.find((r) => r.status === "not_started"));
+  const laterRows = rows.filter(
+    (r) => r !== currentRow && r.status !== "completed"
+  );
+  const doneRows = rows.filter((r) => r.status === "completed");
+
   const isToday = scheduledDate === getLocalTodayYmd();
   const hasStartTime =
     schedState.data?.scheduled_time != null || timeDraft !== null;
@@ -544,65 +593,61 @@ export function ActiveSessionView({
             Esta sesión no tiene ejercicios todavía.
           </div>
         ) : (
-          <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
-            {allExercises.map((exercise) => {
-              const exerciseId = exercise.exercise_id ?? "";
-              // Find the log for THIS slot (finalized or not); the status is
-              // derived from its finalized_at below. Same attribution rule as
-              // the `completed` count so banner and rows stay consistent.
-              const existingLog = exerciseId
-                ? logsForDate.find((log) =>
-                    logMatchesSlot(log, exercise, session.id)
-                  )
-                : undefined;
-              const status: ExerciseStatus = !existingLog
-                ? "not_started"
-                : existingLog.finalized_at
-                  ? "completed"
-                  : "in_progress";
+          <div className="flex flex-col gap-6">
+            {currentRow ? (
+              <FocusCard
+                primaryCta={hasStartTime || !isToday}
+                row={currentRow}
+              />
+            ) : null}
 
-              return (
-                <li
-                  key={`${session.id}-${exercise.exercise_id ?? exercise.order}`}
-                >
-                  <ExerciseRow
-                    clip={
-                      exercise.libraryExerciseId
-                        ? libraryMedia[exercise.libraryExerciseId]?.video
-                        : undefined
-                    }
-                    exercise={exercise}
-                    increaseWeight={
-                      status !== "completed" &&
-                      isIncreaseWeightPending(
-                        exercise.increaseWeightAfter,
-                        scheduledDate
-                      )
-                    }
-                    poster={
-                      exercise.libraryExerciseId
-                        ? libraryMedia[exercise.libraryExerciseId]?.poster
-                        : undefined
-                    }
-                    status={status}
-                    onClick={() =>
-                      onLogExercise({
-                        exercise: {
-                          ...exercise,
-                          libraryMedia: exercise.libraryExerciseId
-                            ? libraryMedia[exercise.libraryExerciseId]
-                            : undefined,
-                        },
-                        sessionId: session.id,
-                        scheduledDate,
-                        existingLog: existingLog ?? null,
-                      })
-                    }
+            {laterRows.length > 0 ? (
+              <div>
+                {currentRow ? (
+                  <h3 className="mb-2 font-heading text-lg text-foreground">
+                    Después
+                  </h3>
+                ) : null}
+                <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
+                  {laterRows.map((row) => (
+                    <li key={row.key}>
+                      <CompactRow row={row} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {doneRows.length > 0 ? (
+              <details className="group overflow-hidden rounded-large bg-content1 shadow-small">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-[15px] font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+                  <Icon
+                    aria-hidden
+                    className="text-success-700"
+                    icon="solar:check-circle-bold"
+                    width={20}
                   />
-                </li>
-              );
-            })}
-          </ul>
+                  <span className="flex-1 tabular-nums">
+                    {doneRows.length}{" "}
+                    {doneRows.length === 1 ? "hecho" : "hechos"}
+                  </span>
+                  <Icon
+                    aria-hidden
+                    className="text-default-400 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                    icon="solar:alt-arrow-down-linear"
+                    width={18}
+                  />
+                </summary>
+                <ul className="divide-y divide-default-100 border-t border-default-100">
+                  {doneRows.map((row) => (
+                    <li key={row.key}>
+                      <CompactRow row={row} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
         )}
 
         {/* Prestar un ejercicio de otra sesión (feature 15-jul). Oculto en
@@ -658,63 +703,134 @@ export function ActiveSessionView({
   );
 }
 
-interface RowProps {
+interface FlowRow {
+  key: string;
   exercise: ExerciseLike & Record<string, unknown>;
-  /** Póster del catálogo cuando el entrenador no subió imagen. */
-  poster?: string | undefined;
-  /** Animación del catálogo: se reproduce en la miniatura si no hay imagen. */
-  clip?: string | undefined;
+  status: ExerciseStatus;
+  /** Póster y animación del catálogo cuando el entrenador no subió imagen. */
+  media: LibraryMedia | undefined;
   /** El entrenador pidió subir peso en esta sesión. */
   increaseWeight: boolean;
-  status: ExerciseStatus;
-  onClick: () => void;
+  open: () => void;
 }
 
-const STATUS_STYLE: Record<
-  ExerciseStatus,
-  { icon: string; className: string; label: string }
-> = {
-  not_started: {
-    icon: "mdi:circle-outline",
-    className: "text-default-400",
-    label: "Pendiente",
-  },
-  in_progress: {
-    icon: "solar:clock-circle-linear",
-    className: "text-warning-600",
-    label: "En curso",
-  },
-  completed: {
-    icon: "solar:check-circle-bold",
-    className: "text-success-700",
-    label: "Hecho",
-  },
-};
-
-function ExerciseRow({
-  exercise,
-  poster,
-  clip,
-  increaseWeight,
-  status,
-  onClick,
-}: RowProps) {
-  const isCardio = isExerciseCardio(exercise);
-  const stats = formatExerciseStats(exercise, isCardio);
-  const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
-  const style = STATUS_STYLE[status];
+function ExerciseChips({ row }: { row: FlowRow }) {
+  const { exercise, increaseWeight } = row;
   const borrowedFrom = exercise.borrowedFromSessionName;
-  const typeStyle = getSessionTypeStyle(isCardio ? "cardio" : "strength");
+  const hasVideo = Boolean(exercise.videoUrl || exercise.uploadedVideoUrl);
+
+  if (!increaseWeight && !borrowedFrom && !hasVideo) return null;
 
   return (
-    <button
-      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
-      type="button"
-      onClick={onClick}
-    >
-      {!exercise.imageUrl && clip ? (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {increaseWeight ? (
+        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
+          <Icon aria-hidden icon="solar:arrow-up-linear" width={14} />
+          Sube peso
+        </span>
+      ) : null}
+      {borrowedFrom ? (
+        <span className="inline-flex h-6 max-w-full items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
+          <Icon
+            aria-hidden
+            className="shrink-0"
+            icon="solar:transfer-horizontal-linear"
+            width={14}
+          />
+          <span className="truncate">De: {borrowedFrom}</span>
+        </span>
+      ) : null}
+      {hasVideo ? (
+        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
+          <Icon aria-hidden icon="solar:videocamera-record-linear" width={14} />
+          Con video
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Lo que el cliente necesita para hacer el ejercicio, en celdas con rótulo. */
+function exerciseFacts(
+  exercise: ExerciseLike,
+  isCardio: boolean
+): Array<{ label: string; value: string }> {
+  const facts: Array<{ label: string; value: string }> = [];
+  const add = (label: string, value: string | null | undefined) => {
+    if (value) facts.push({ label, value });
+  };
+
+  if (isCardio) {
+    add("Duración", exercise.duration ? `${exercise.duration} min` : null);
+    add("Distancia", exercise.distance ? `${exercise.distance} km` : null);
+    add("Intensidad", exercise.intensity);
+    if (facts.length === 0) add("Tipo", exercise.cardioType);
+
+    return facts;
+  }
+
+  const sets = exercise.sets;
+  const reps = exercise.reps?.toString().trim();
+
+  // "12 | 12 | 10 | 8" = repeticiones distintas en cada serie.
+  if (reps && reps.includes("|")) {
+    add(
+      "Reps por serie",
+      reps
+        .split("|")
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .join(" · ")
+    );
+  } else if (sets && reps) {
+    add("Series × reps", `${sets} × ${reps}`);
+  } else if (sets) {
+    add("Series", String(sets));
+  } else {
+    add("Reps", reps);
+  }
+
+  const rest = exercise.rest?.toString().trim();
+
+  add("Descanso", rest ? (/^\d+$/.test(rest) ? `${rest} s` : rest) : null);
+  add("RIR", exercise.rir?.toString().trim());
+
+  const last = exercise.lastUsedWeights?.find((w) => w != null);
+
+  if (exercise.weightKg != null) add("Peso", `${exercise.weightKg} kg`);
+  else if (last != null) add("Última vez", `${last} kg`);
+
+  return facts;
+}
+
+/** El ejercicio que toca ahora: imagen grande, datos y un único botón. */
+function FocusCard({
+  row,
+  primaryCta,
+}: {
+  row: FlowRow;
+  /** Botón sólido; `false` mientras "Empezar entrenamiento" es la acción. */
+  primaryCta: boolean;
+}) {
+  const { exercise, media, status, open } = row;
+  const isCardio = isExerciseCardio(exercise);
+  const typeStyle = getSessionTypeStyle(isCardio ? "cardio" : "strength");
+  const facts = exerciseFacts(exercise, isCardio);
+  const mediaClass = "aspect-[16/10] w-full";
+
+  return (
+    <div className="overflow-hidden rounded-large bg-content1 shadow-small">
+      {exercise.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className={`${mediaClass} bg-default-100 object-cover`}
+          decoding="async"
+          src={exercise.imageUrl}
+        />
+      ) : media?.video ? (
         // Sin imagen del entrenador: la animación del catálogo en bucle. Con
-        // "reducir movimiento" el navegador no la arranca y queda el póster.
+        // "reducir movimiento" no arranca y queda el póster.
         <video
           loop
           muted
@@ -724,75 +840,101 @@ function ExerciseRow({
             typeof window !== "undefined" &&
             !window.matchMedia("(prefers-reduced-motion: reduce)").matches
           }
-          className="h-14 w-14 shrink-0 rounded-[14px] bg-white object-cover"
-          poster={poster}
-          preload="none"
-          src={clip}
+          className={`${mediaClass} bg-white object-contain`}
+          poster={media.poster}
+          src={media.video}
         />
-      ) : exercise.imageUrl || poster ? (
+      ) : media?.poster ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
-          className="h-14 w-14 shrink-0 rounded-[14px] bg-default-100 object-cover"
+          className={`${mediaClass} bg-white object-contain`}
           decoding="async"
-          loading="lazy"
-          src={exercise.imageUrl ?? poster}
+          src={media.poster}
         />
       ) : (
         <span
           aria-hidden
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] ${typeStyle.tileClass}`}
+          className={`flex h-24 w-full items-center justify-center ${typeStyle.tileClass}`}
         >
-          <Icon icon={typeStyle.icon} width={26} />
+          <Icon icon={typeStyle.icon} width={32} />
         </span>
       )}
-      <div className="min-w-0 flex-1 pt-0.5">
-        <p className="text-[15px] font-semibold leading-snug text-foreground">
+      <div className="p-[18px]">
+        <h3 className="text-balance font-heading text-xl leading-snug tracking-[-0.015em] text-foreground">
           {exercise.name}
-        </p>
-        {stats ? (
-          <p className="mt-0.5 text-[13px] leading-snug text-default-500 tabular-nums">
-            {stats}
-          </p>
+        </h3>
+        {facts.length > 0 ? (
+          <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2.5 rounded-medium bg-default-100 px-3.5 py-2.5">
+            {facts.map((f) => (
+              <div key={f.label} className="min-w-0">
+                <dt className="text-[11px] font-medium text-default-500">
+                  {f.label}
+                </dt>
+                <dd className="mt-0.5 text-[17px] font-semibold tabular-nums text-foreground">
+                  {f.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         ) : null}
-        {increaseWeight || borrowedFrom || hasVideo ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {increaseWeight ? (
-              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
-                <Icon aria-hidden icon="solar:arrow-up-linear" width={14} />
-                Sube peso
-              </span>
-            ) : null}
-            {borrowedFrom ? (
-              <span className="inline-flex h-6 max-w-full items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
-                <Icon
-                  aria-hidden
-                  className="shrink-0"
-                  icon="solar:transfer-horizontal-linear"
-                  width={14}
-                />
-                <span className="truncate">De: {borrowedFrom}</span>
-              </span>
-            ) : null}
-            {hasVideo ? (
-              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-default-100 px-2.5 text-xs font-semibold text-default-500">
-                <Icon
-                  aria-hidden
-                  icon="solar:videocamera-record-linear"
-                  width={14}
-                />
-                Con video
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+        <ExerciseChips row={row} />
+        <Button
+          fullWidth
+          className="mt-4 h-[52px] text-[17px] font-semibold"
+          color="primary"
+          radius="lg"
+          variant={primaryCta ? "solid" : "flat"}
+          onPress={open}
+        >
+          {status === "in_progress"
+            ? "Continuar registro"
+            : isCardio
+              ? "Registrar"
+              : "Registrar series"}
+        </Button>
       </div>
-      <span
-        className={`flex w-[54px] shrink-0 flex-col items-center gap-[3px] pt-1.5 ${style.className}`}
-      >
-        <Icon aria-hidden icon={style.icon} width={24} />
-        <span className="text-[11px] font-semibold">{style.label}</span>
+    </div>
+  );
+}
+
+/** Fila de una línea para lo que viene después y para lo ya hecho. */
+function CompactRow({ row }: { row: FlowRow }) {
+  const { exercise, status, increaseWeight, open } = row;
+  const stats = formatExerciseStats(exercise, isExerciseCardio(exercise));
+
+  return (
+    <button
+      className="flex min-h-[52px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
+      type="button"
+      onClick={open}
+    >
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block truncate text-[15px] font-medium ${
+            status === "completed" ? "text-default-600" : "text-foreground"
+          }`}
+        >
+          {exercise.name}
+        </span>
+        {stats ? (
+          <span className="block truncate text-[13px] tabular-nums text-default-500">
+            {stats}
+          </span>
+        ) : null}
       </span>
+      {increaseWeight ? (
+        <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
+          <Icon aria-hidden icon="solar:arrow-up-linear" width={14} />
+          Sube peso
+        </span>
+      ) : null}
+      <Icon
+        aria-hidden
+        className="shrink-0 text-default-300"
+        icon="solar:alt-arrow-right-linear"
+        width={18}
+      />
     </button>
   );
 }
