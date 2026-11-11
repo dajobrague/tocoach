@@ -800,6 +800,31 @@ export default function FormsTab({
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
+  // Enlace directo desde Inicio (?response=<id>): abre esa respuesta en
+  // cuanto la lista la trae, una sola vez, y limpia el parámetro para que
+  // cerrar el modal o recargar no la vuelva a abrir.
+  const deepLinkedResponse = useRef(false);
+
+  useEffect(() => {
+    if (deepLinkedResponse.current || responses.length === 0) return;
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get("response");
+
+    if (!wanted) return;
+    const match = responses.find((r) => String(r.id) === wanted);
+
+    if (!match) return;
+    deepLinkedResponse.current = true;
+    setViewingResponse({
+      id: match.id,
+      date: match.response_date,
+      answers: normalizeFormAnswers(match.answers) as Record<string, any>,
+      reviewedAt: match.reviewed_at ?? null,
+    });
+    url.searchParams.delete("response");
+    window.history.replaceState(null, "", url);
+  }, [responses]);
+
   // OLD Mock data - now replaced by API
   const mockCheckinResponses_OLD: any[] = [
     {

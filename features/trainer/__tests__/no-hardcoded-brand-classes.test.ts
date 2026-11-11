@@ -126,7 +126,8 @@ describe("perfil de cliente sin literales de color", () => {
 
     expect(src).not.toContain("window.location.href");
     expect(src).not.toContain("activeSection");
-    expect(src).toContain('router.push("/trainer/dashboard/clients")');
+    // Navega con <Link> (router de Next), sin recarga.
+    expect(src).toContain('href="/trainer/dashboard/clients"');
   });
 
   it("el raíl de tabs no usa confirm nativo (congela HeroUI hasta recargar)", () => {
