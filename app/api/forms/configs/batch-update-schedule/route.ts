@@ -1,3 +1,5 @@
+import type { CheckInSchedule } from "@/lib/forms/types";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
@@ -100,13 +102,61 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const { data: updatedRows, error: updateError } = await supabase
+    // Lo propio de cada cliente (primer check-in y check-ins movidos o
+    // quitados) no es parte del horario por defecto: se conserva. Esas filas
+    // se actualizan una a una; el resto, en bloque como siempre.
+    const { data: ownRows } = await supabase
+      .from("client_form_configs")
+      .select("id, schedule")
+      .eq("tenant_host", tenantHost)
+      .eq("form_type", "checkins")
+      .in("client_id", clientIds);
+    const kept = (ownRows ?? []).flatMap((row) => {
+      const prev = (row.schedule ?? {}) as Partial<CheckInSchedule>;
+
+      if (!prev.first_close_date && !prev.exceptions) return [];
+
+      return {
+        id: row.id as string,
+        schedule: {
+          ...validation.value,
+          ...(prev.first_close_date
+            ? { first_close_date: prev.first_close_date }
+            : {}),
+          ...(prev.exceptions ? { exceptions: prev.exceptions } : {}),
+        },
+      };
+    });
+    const keptIds = kept.map((k) => k.id);
+
+    let bulk = supabase
       .from("client_form_configs")
       .update({ schedule: validation.value })
       .eq("tenant_host", tenantHost)
       .eq("form_type", "checkins")
-      .in("client_id", clientIds)
-      .select("id");
+      .in("client_id", clientIds);
+
+    if (keptIds.length > 0) {
+      bulk = bulk.not("id", "in", `(${keptIds.join(",")})`);
+    }
+
+    const [bulkResult, ...keptResults] = await Promise.all([
+      bulk.select("id"),
+      ...kept.map((k) =>
+        supabase
+          .from("client_form_configs")
+          .update({ schedule: k.schedule })
+          .eq("id", k.id)
+          .eq("tenant_host", tenantHost)
+          .select("id")
+      ),
+    ]);
+    const updateError =
+      bulkResult.error ?? keptResults.find((r) => r.error)?.error ?? null;
+    const updatedRows = [
+      ...(bulkResult.data ?? []),
+      ...keptResults.flatMap((r) => r.data ?? []),
+    ];
 
     if (updateError) {
       console.error("[Forms Batch Schedule] Update error:", updateError);

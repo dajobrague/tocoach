@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkInReminderDue,
+  getCheckInStatus,
   getScheduleOrDefault,
   getUpcomingCheckIns,
   isDueNow,
@@ -144,5 +146,44 @@ describe("mover o quitar un check-in concreto", () => {
     expect(
       setCheckInException(twice, "2026-11-28", undefined).exceptions
     ).toEqual({});
+  });
+});
+
+describe("avisos del cron horario", () => {
+  // Abre lunes 12:30 Madrid (11:30Z): minuto que el cron antiguo nunca veía.
+  const s = { ...weekly, time: "12:30" };
+  const at = (iso: string) => checkInReminderDue(s, new Date(iso));
+
+  it("avisa de la apertura en la primera pasada tras abrir, una sola vez", () => {
+    expect(at("2026-11-16T11:00:00Z")).toBeNull();
+    expect(at("2026-11-16T12:00:00Z")?.kind).toBe("opened");
+    expect(at("2026-11-16T13:00:00Z")).toBeNull();
+  });
+
+  it("avisa del cierre 24 h antes, una sola vez", () => {
+    // Cierra miércoles 18 a las 11:30Z.
+    expect(at("2026-11-17T11:00:00Z")).toBeNull();
+    expect(at("2026-11-17T12:00:00Z")?.kind).toBe("closing");
+    expect(at("2026-11-17T13:00:00Z")).toBeNull();
+  });
+});
+
+describe("check-in sin enviar", () => {
+  const now = new Date("2026-11-20T10:00:00Z"); // viernes; cerró el miércoles 18
+
+  it("la última ventana cerrada sin respuesta → expired", () => {
+    expect(getCheckInStatus(weekly, [], now)).toBe("expired");
+  });
+
+  it("con respuesta (aunque llegue tarde) → not_due", () => {
+    expect(
+      getCheckInStatus(weekly, [{ submitted_at: "2026-11-19T09:00:00Z" }], now)
+    ).toBe("not_due");
+  });
+
+  it("cliente dado de alta después de esa apertura → not_due", () => {
+    expect(
+      getCheckInStatus(weekly, [], now, new Date("2026-11-19T00:00:00Z"))
+    ).toBe("not_due");
   });
 });

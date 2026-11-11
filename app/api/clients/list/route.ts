@@ -183,6 +183,12 @@ export async function GET(request: NextRequest) {
         };
 
         checkInByClientId = new Map();
+        const signUpById = new Map<number, string | null>(
+          clientRows.map((c: { id: number; sign_up_date?: string | null }) => [
+            c.id,
+            c.sign_up_date ?? null,
+          ])
+        );
 
         for (const id of clientIds) {
           const config = configByClientId.get(id);
@@ -191,7 +197,13 @@ export async function GET(request: NextRequest) {
             templateDefaultForClient(config)
           );
           const responses = responsesByClient.get(id) ?? [];
-          const status = getCheckInStatus(schedule, responses);
+          const signUp = signUpById.get(id);
+          const status = getCheckInStatus(
+            schedule,
+            responses,
+            new Date(),
+            signUp ? new Date(signUp) : undefined
+          );
           const upcoming = getUpcomingCheckIns(schedule, 2);
           const nowMs = Date.now();
           const next =

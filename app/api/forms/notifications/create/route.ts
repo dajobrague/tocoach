@@ -5,11 +5,17 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
+  type CheckInOccurrence,
+  checkInReminderDue,
+  formatCheckInInstant,
   getScheduleOrDefault,
   getSpanishWeekdayLabelForInstant,
   getWallClockWeekdayInTimezone,
-  isDueNow,
 } from "@/lib/forms/schedule";
+import {
+  fetchCheckinsTemplateDefaultSchedule,
+  resolveCheckInScheduleForApi,
+} from "@/lib/forms/schedule-validation";
 
 const ACTIVE_CLIENT_STATUSES = ["Activo", "Onboarding Completado"] as const;
 
@@ -31,7 +37,10 @@ type NotificationInsert = {
   tenant_slug: string;
   client_id: number;
   trainer_id?: string | undefined;
-  type: "form_weekly_available" | "form_daily_available";
+  type:
+    | "form_weekly_available"
+    | "form_weekly_expiring"
+    | "form_daily_available";
   title: string;
   message: string;
   icon: string;
@@ -379,35 +388,52 @@ export async function PUT(_request: NextRequest) {
       client_id: number;
       tenant_host: string;
       schedule: CheckInSchedule;
+      window: CheckInOccurrence;
     };
 
     const dueByClient = new Map<number, DueCheckin>();
+    const closingByClient = new Map<number, DueCheckin>();
+
+    // Clientes sin horario propio siguen el horario por defecto de su
+    // entrenador (igual que el resto de la app), no el del sistema.
+    const defaultByHost = new Map<string, unknown>();
+
+    await Promise.all(
+      [
+        ...new Set(
+          checkinRows
+            .filter((r) => r.schedule == null)
+            .map((r) => r.tenant_host)
+        ),
+      ].map(async (host) => {
+        defaultByHost.set(
+          host,
+          await fetchCheckinsTemplateDefaultSchedule(supabase, host, null)
+        );
+      })
+    );
 
     for (const row of checkinRows) {
       try {
-        if (row.schedule == null) {
-          console.warn(
-            `[FormNotifications:Cron] Client ${row.client_id} has no schedule, using defaults`
-          );
-        }
+        const { schedule: s } = resolveCheckInScheduleForApi(
+          row.schedule,
+          defaultByHost.get(row.tenant_host) ?? null
+        );
+        const due = s.enabled ? checkInReminderDue(s, now) : null;
 
-        const s = getScheduleOrDefault(row.schedule as CheckInSchedule | null);
-
-        if (!s.enabled) {
+        if (!due) {
           skippedNotDue++;
           continue;
         }
 
-        if (!isDueNow(s, now)) {
-          skippedNotDue++;
-          continue;
-        }
+        const target = due.kind === "opened" ? dueByClient : closingByClient;
 
-        if (!dueByClient.has(row.client_id)) {
-          dueByClient.set(row.client_id, {
+        if (!target.has(row.client_id)) {
+          target.set(row.client_id, {
             client_id: row.client_id,
             tenant_host: row.tenant_host,
             schedule: s,
+            window: due.window,
           });
         }
       } catch (e) {
@@ -417,11 +443,71 @@ export async function PUT(_request: NextRequest) {
       }
     }
 
+    // Aviso de cierre: solo a quien aún no ha enviado el check-in de esa
+    // ventana y no recibió ya este aviso.
+    const closingList = [...closingByClient.values()];
+    const closingIds = closingList.map((d) => d.client_id);
+    const closingSkip = new Set<number>();
+
+    if (closingIds.length > 0) {
+      const earliest = new Date(
+        Math.min(...closingList.map((d) => d.window.opensAt.getTime()))
+      ).toISOString();
+      const [answered, already] = await Promise.all([
+        supabase
+          .from("form_responses")
+          .select("client_id, submitted_at")
+          .eq("form_type", "checkins")
+          .in("client_id", closingIds)
+          .gte("submitted_at", earliest),
+        supabase
+          .from("notifications")
+          .select("client_id")
+          .eq("type", "form_weekly_expiring")
+          .gte("created_at", since23h)
+          .in("client_id", closingIds),
+      ]);
+
+      if (answered.error || already.error) {
+        // Sin poder comprobarlo no se avisa: mejor callar que molestar a
+        // quien ya lo envió.
+        errors.push(
+          `closing reminder check: ${(answered.error ?? already.error)?.message}`
+        );
+        closingIds.forEach((id) => closingSkip.add(id));
+      } else {
+        for (const r of answered.data ?? []) {
+          const d = closingByClient.get(r.client_id as number);
+
+          if (
+            d &&
+            new Date(r.submitted_at as string).getTime() >=
+              d.window.opensAt.getTime()
+          ) {
+            closingSkip.add(d.client_id);
+          }
+        }
+        for (const r of already.data ?? []) {
+          closingSkip.add(r.client_id as number);
+        }
+      }
+    }
+
+    const closingToSend = closingList.filter(
+      (d) => !closingSkip.has(d.client_id)
+    );
+
+    skippedDuplicates += closingList.length - closingToSend.length;
+
     const dueCheckinList = [...dueByClient.values()];
     const dueCheckinIds = dueCheckinList.map((d) => d.client_id);
 
     // Resolve trainer_id from tenant_host for all due check-ins
-    const tenantHosts = [...new Set(dueCheckinList.map((d) => d.tenant_host))];
+    const tenantHosts = [
+      ...new Set(
+        [...dueCheckinList, ...closingToSend].map((d) => d.tenant_host)
+      ),
+    ];
     const trainerByHost = new Map<string, string>();
 
     if (tenantHosts.length > 0) {
@@ -438,7 +524,7 @@ export async function PUT(_request: NextRequest) {
     // notifications.tenant_slug stores the SLUG (FK tenants(slug)); the
     // schedules only carry the host.
     const slugByHost = new Map<string, string>();
-    const hosts = [...new Set(dueCheckinList.map((d) => d.tenant_host))];
+    const hosts = tenantHosts;
 
     if (hosts.length > 0) {
       const { data: tenantRows } = await supabase
@@ -506,6 +592,27 @@ export async function PUT(_request: NextRequest) {
           },
         });
       }
+    }
+
+    for (const d of closingToSend) {
+      const s = d.schedule;
+
+      checkinInsertRows.push({
+        tenant_slug: slugByHost.get(d.tenant_host) ?? d.tenant_host,
+        client_id: d.client_id,
+        trainer_id: trainerByHost.get(d.tenant_host),
+        type: "form_weekly_expiring",
+        title: s.custom_name,
+        message: `Tu ${s.custom_name} se cierra el ${formatCheckInInstant(d.window.closesAt, s.timezone)}. Aún estás a tiempo.`,
+        icon: "solar:clock-circle-bold",
+        metadata: {
+          form_type: "checkins",
+          schedule_trigger: true,
+          closes_at: d.window.closesAt.toISOString(),
+          action: "open_form",
+          created_by: "system",
+        },
+      });
     }
 
     let triggered = await insertNotificationsResilient(

@@ -819,7 +819,9 @@ export function isCheckInDue(
 export function getCheckInStatus(
   schedule: CheckInScheduleInput,
   responses: { submitted_at: string }[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Alta del cliente: ventanas abiertas antes no cuentan como no enviadas. */
+  since?: Date
 ): "pending" | "completed" | "expired" | "not_due" | "disabled" {
   const s = getScheduleOrDefault(schedule);
 
@@ -836,6 +838,19 @@ export function getCheckInStatus(
     if (completed) return "completed";
 
     return "pending";
+  }
+
+  // Sin ventana abierta: si la última que se cerró quedó sin respuesta, el
+  // check-in está sin enviar ("expired") hasta que abra la siguiente. Una
+  // respuesta tardía (tras el cierre) también cuenta como enviada.
+  const last = findLastTriggerOnOrBefore(s, now);
+
+  if (
+    last.getTime() < t &&
+    (!since || last.getTime() >= since.getTime()) &&
+    !responses.some((r) => new Date(r.submitted_at).getTime() >= last.getTime())
+  ) {
+    return "expired";
   }
 
   const nextT = getNextCheckInDate(s, now);
@@ -882,6 +897,45 @@ export function getUpcomingCheckIns(
   }
 
   return out.slice(0, Math.max(0, count));
+}
+
+/** Ventana abierta en este momento, o null. */
+export function getOpenCheckIn(
+  schedule: CheckInScheduleInput,
+  now: Date = new Date()
+): CheckInOccurrence | null {
+  const open = findOpenCheckInWindow(getScheduleOrDefault(schedule), now);
+
+  return open ? { opensAt: open.periodStart, closesAt: open.deadline } : null;
+}
+
+const MS_HOUR = MS_PER_HOUR;
+
+/**
+ * Qué aviso toca en una pasada HORARIA del cron (cada ventana recibe cada
+ * aviso una sola vez, sea cual sea el minuto de apertura):
+ * - "opened": la ventana abrió en la última hora.
+ * - "closing": queda el margen de aviso (24 h, o la mitad del plazo si es
+ *   más corto) para el cierre.
+ */
+export function checkInReminderDue(
+  schedule: CheckInScheduleInput,
+  now: Date = new Date()
+): { kind: "opened" | "closing"; window: CheckInOccurrence } | null {
+  const window = getOpenCheckIn(schedule, now);
+
+  if (!window) return null;
+  const t = now.getTime();
+
+  if (t - window.opensAt.getTime() < MS_HOUR) return { kind: "opened", window };
+
+  const total = window.closesAt.getTime() - window.opensAt.getTime();
+  const lead = Math.min(24 * MS_HOUR, total / 2);
+  const remaining = window.closesAt.getTime() - t;
+
+  return remaining <= lead && remaining > lead - MS_HOUR
+    ? { kind: "closing", window }
+    : null;
 }
 
 /** "lun, 17 nov, 12:00" en la zona horaria del propio check-in. */
