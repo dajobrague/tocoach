@@ -125,7 +125,7 @@ function normalizeIntensity(value: string | undefined): string {
 const CATEGORY_LABELS: Record<string, string> = {
   strength: "Fuerza",
   cardio: "Cardio",
-  flexibility: "Flexibilidad",
+  flexibility: "Movilidad",
   balance: "Equilibrio",
   plyometric: "Pliometría",
   olympic: "Olímpico",

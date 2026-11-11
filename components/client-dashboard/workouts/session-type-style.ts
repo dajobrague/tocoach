@@ -59,7 +59,7 @@ export const SESSION_TYPE_STYLES: Record<SessionType, SessionTypeStyle> = {
     dotClass: "bg-rose-500",
   },
   flexibility: {
-    label: "Flexibilidad",
+    label: "Movilidad",
     icon: "solar:body-bold",
     chipClass: "bg-violet-500/15 text-foreground",
     tileClass: "bg-violet-500/15 text-violet-500",

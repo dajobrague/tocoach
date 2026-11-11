@@ -17,8 +17,6 @@ import {
   ModalBody,
   ModalContent,
   ModalHeader,
-  Select,
-  SelectItem,
   Spinner,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -37,6 +35,7 @@ import { MuscleMap } from "@/components/shared/muscle-map";
 import { MuscleBody } from "@/components/shared/muscle-body";
 import { IconTile } from "@/components/shared/icon-tile";
 import { OutlineChip } from "@/components/shared/outline-chip";
+import { SegmentedControl } from "@/components/shared/segmented-control";
 import {
   MuscleFilterSelect,
   type MuscleFilter,
@@ -398,28 +397,17 @@ export default function ExerciseLibraryContent() {
           />
           {/* Figura de las animaciones y del mapa muscular: mismo lenguaje que
               los otros filtros. */}
-          <Select
-            disallowEmptySelection
-            aria-label="Figura de las animaciones y del mapa muscular"
-            className="w-full sm:w-[140px]"
-            selectedKeys={[figureSex]}
-            startContent={
-              <Icon
-                className="text-default-400"
-                icon="solar:user-linear"
-                width={16}
-              />
-            }
-            variant="bordered"
-            onSelectionChange={(keys) => {
-              const [key] = keys === "all" ? [] : Array.from(keys);
-
-              if (key === "male" || key === "female") setFigureSex(key);
-            }}
-          >
-            <SelectItem key="male">Hombre</SelectItem>
-            <SelectItem key="female">Mujer</SelectItem>
-          </Select>
+          <SegmentedControl
+            ariaLabel="Figura de las animaciones y del mapa muscular"
+            className="sm:!w-auto"
+            options={[
+              { key: "male", label: "Hombre" },
+              { key: "female", label: "Mujer" },
+            ]}
+            size="md"
+            value={figureSex}
+            onChange={setFigureSex}
+          />
           {/* Renaming/removing a tag rewrites exercise arrays: reload page 1. */}
           <TagManagerButton
             iconOnly

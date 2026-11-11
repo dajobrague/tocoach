@@ -19,7 +19,7 @@ export function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
     strength: "Fuerza",
     cardio: "Cardio",
-    flexibility: "Flexibilidad",
+    flexibility: "Movilidad",
     balance: "Equilibrio",
     plyometric: "Pliométrico",
     olympic: "Olímpico",

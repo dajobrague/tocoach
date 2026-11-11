@@ -67,7 +67,7 @@ const TYPE_LABEL: Record<
 > = {
   strength: "Fuerza",
   cardio: "Cardio",
-  flexibility: "Flexibilidad",
+  flexibility: "Movilidad",
   sports: "Deportes",
   recovery: "Descanso activo",
   other: "Otro",

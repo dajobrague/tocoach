@@ -47,7 +47,7 @@ interface ExerciseLibraryFormModalProps {
 const ALL_CATEGORIES = [
   { key: "strength", label: "Fuerza" },
   { key: "cardio", label: "Cardio" },
-  { key: "flexibility", label: "Flexibilidad" },
+  { key: "flexibility", label: "Movilidad" },
   { key: "balance", label: "Equilibrio" },
   { key: "plyometric", label: "Pliométrico" },
   { key: "olympic", label: "Olímpico" },

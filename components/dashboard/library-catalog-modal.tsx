@@ -15,6 +15,7 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MuscleBody } from "@/components/shared/muscle-body";
+import { SegmentedControl } from "@/components/shared/segmented-control";
 import {
   setFigureSex,
   useFigureSex,
@@ -44,7 +45,7 @@ interface Props {
 const TYPES = [
   ["all", "Todos"],
   ["strength", "Fuerza"],
-  ["flexibility", "Flexibilidad"],
+  ["flexibility", "Movilidad"],
   ["cardio", "Cardio"],
   ["olympic", "Olímpico"],
   ["plyometric", "Pliométrico"],
@@ -355,29 +356,14 @@ export function LibraryCatalogModal({ isOpen, onClose, onAdded }: Props) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Select
-              disallowEmptySelection
-              aria-label="Figura de los ejercicios"
-              className="w-[140px]"
-              selectedKeys={[figureSex]}
-              startContent={
-                <Icon
-                  className="text-default-400"
-                  icon="solar:user-linear"
-                  width={16}
-                />
-              }
-              variant="bordered"
-              onSelectionChange={(keys) => {
-                const [key] = [...keys];
-
-                if (key === "male" || key === "female") setFigureSex(key);
-              }}
-            >
-              {FIGURES.map(([id, label]) => (
-                <SelectItem key={id}>{label}</SelectItem>
-              ))}
-            </Select>
+            <SegmentedControl
+              ariaLabel="Figura de los ejercicios"
+              className="!w-auto"
+              options={FIGURES.map(([key, label]) => ({ key, label }))}
+              size="md"
+              value={figureSex}
+              onChange={setFigureSex}
+            />
             <Button variant="bordered" onPress={onClose}>
               Cerrar
             </Button>

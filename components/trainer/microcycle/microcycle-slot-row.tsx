@@ -14,7 +14,7 @@ import { Icon } from "@iconify/react";
 const TYPE_LABEL: Record<SessionType, string> = {
   strength: "Fuerza",
   cardio: "Cardio",
-  flexibility: "Flexibilidad",
+  flexibility: "Movilidad",
   sports: "Deportes",
   recovery: "Descanso activo",
   other: "Otro",
