@@ -99,8 +99,24 @@ export function ExerciseMetricsPopover({
 }: Props) {
   const variant = category === "cardio" ? "cardio" : "strength";
 
+  // react-aria limita el alto al espacio libre (max-height inline en el
+  // wrapper), pero el scroll interno medía 520px fijos: en pantallas bajas el
+  // final del historial quedaba fuera de la ventana y, al desplazar la página
+  // para verlo, el popover se cierra (cierra al hacer scroll). El límite baja
+  // por cada capa con max-height: inherit + flex en columna.
   return (
-    <Popover placement="bottom-end" shouldBlockScroll={false}>
+    <Popover
+      classNames={{ base: "flex max-h-[inherit] flex-col" }}
+      motionProps={{
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "inherit",
+        },
+      }}
+      placement="bottom-end"
+      shouldBlockScroll={false}
+    >
       <PopoverTrigger>
         <Button
           isIconOnly
@@ -113,8 +129,8 @@ export function ExerciseMetricsPopover({
           <Icon icon="solar:chart-2-linear" width={16} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(600px,calc(100vw-2rem))] p-0">
-        <div className="w-full max-h-[520px] overflow-y-auto p-4 space-y-4 text-left">
+      <PopoverContent className="flex max-h-[inherit] w-[min(600px,calc(100vw-2rem))] flex-col p-0">
+        <div className="w-full min-h-0 max-h-[520px] overflow-y-auto p-4 space-y-4 text-left">
           <div>
             <p className="text-sm font-semibold text-gray-900">
               {exerciseName}
