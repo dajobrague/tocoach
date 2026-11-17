@@ -18,6 +18,7 @@ import { MonthGrid } from "./month-grid";
 import { useMonthMetrics } from "./use-month-metrics";
 import { useWeekMetrics } from "./use-week-metrics";
 import { WeekNavigator } from "./week-navigator";
+import { weekVolume } from "./volume";
 import { WeekStrip } from "./week-strip";
 
 import {
@@ -159,6 +160,9 @@ export function MetricsSection({ clientId, onSwitchToConfig }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         {view === "semana" ? (
           <WeekNavigator
+            volume={
+              week.data && !week.loading ? weekVolume(week.data.days) : null
+            }
             weekStartYmd={getLocalYmd(weekStart)}
             onPickDate={handlePickDate}
             onToday={handleToday}

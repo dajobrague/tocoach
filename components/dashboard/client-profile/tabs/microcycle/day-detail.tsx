@@ -26,6 +26,7 @@ import { allTimeMaxE1rm } from "../workouts/helpers";
 import { classificationLabel } from "./adherence";
 import { ExerciseMetricsPopover } from "./exercise-metrics-popover";
 import { buildLoggedExerciseGroups } from "./logged-view";
+import { logsVolume } from "./volume";
 import { WorkoutFeedbackSummary } from "./workout-feedback-summary";
 
 import { estimateOneRepMax } from "@/lib/training/e1rm";
@@ -652,9 +653,7 @@ function SessionCard({
     (acc, g) => acc + g.logs.reduce((sum, l) => sum + (l.sets?.length ?? 0), 0),
     0
   );
-  const volume = Math.round(
-    daySets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight_kg ?? 0), 0)
-  );
+  const volume = logsVolume(entry.logs);
   const maxKg = daySets.reduce(
     (acc, s) =>
       typeof s.weight_kg === "number" && s.weight_kg > acc ? s.weight_kg : acc,
