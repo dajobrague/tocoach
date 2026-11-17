@@ -16,6 +16,7 @@ import {
   createRecipe,
   resolveNativeAdd,
   deleteRecipe,
+  duplicateRecipe,
   removeIngredient,
   removeMedia,
   replaceIngredients,
@@ -55,6 +56,17 @@ export function useUpdateRecipe(recipeId: string) {
   return useMutation({
     mutationFn: (values: RecipeFormValues) => updateRecipe(recipeId, values),
     onSuccess: () => invalidateRecipe(client, recipeId),
+  });
+}
+
+export function useDuplicateRecipe() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (recipeId: string) => duplicateRecipe(recipeId),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["recipes"] });
+    },
   });
 }
 

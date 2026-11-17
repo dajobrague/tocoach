@@ -279,6 +279,15 @@ export function moveRecipe(
 }
 
 /** Soft-deletes (archives) a recipe so it leaves the library. */
+/** Copia la receta (ingredientes y fotos incluidos) y devuelve la copia. */
+export function duplicateRecipe(recipeId: string): Promise<RecipeDetail> {
+  return sendJson<RecipeDetail>(
+    `/api/recipes/${recipeId}/duplicate`,
+    "POST",
+    {}
+  );
+}
+
 export async function deleteRecipe(recipeId: string): Promise<void> {
   const response = await fetch(`/api/recipes/${recipeId}`, {
     method: "DELETE",

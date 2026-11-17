@@ -7,6 +7,7 @@ import type {
 } from "./recipe-api";
 
 import {
+  addToast,
   Button,
   Card,
   CardBody,
@@ -41,6 +42,7 @@ import { UnsavedChangesModal } from "./unsaved-changes-modal";
 import { useRecipe, useRecipeIngredients, useRecipeMedia } from "./use-recipe";
 import {
   useCreateRecipe,
+  useDuplicateRecipe,
   useRemoveMedia,
   useReplaceIngredients,
   useUpdateRecipe,
@@ -172,6 +174,7 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
   const mediaQuery = useRecipeMedia(recipeId);
 
   const update = useUpdateRecipe(recipeId);
+  const duplicate = useDuplicateRecipe();
   const replaceIngredients = useReplaceIngredients(recipeId);
   const uploadMedia = useUploadMedia(recipeId);
   const removeMedia = useRemoveMedia(recipeId);
@@ -341,8 +344,20 @@ function EditRecipeForm({ recipeId }: { recipeId: string }) {
     <EditorHeaderActions
       canSave={nameEmpty === false && isDirty}
       isDirty={isDirty}
+      isDuplicating={duplicate.isPending}
       isSaving={isSaving}
       onDelete={() => setDeleteOpen(true)}
+      onDuplicate={() =>
+        duplicate.mutate(recipeId, {
+          onSuccess: (copy) => router.push(`${RECIPES_PATH}/${copy.id}/edit`),
+          onError: () =>
+            addToast({
+              title: "No se pudo duplicar la receta",
+              description: "Inténtalo de nuevo.",
+              color: "danger",
+            }),
+        })
+      }
       onPreview={() => setPreviewOpen(true)}
       onSave={save}
     />
