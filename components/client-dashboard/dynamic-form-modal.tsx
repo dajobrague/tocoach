@@ -37,8 +37,6 @@ import {
 } from "@/lib/client/checkin-draft";
 import { getLocalTodayYmd } from "@/lib/forms/client-helpers";
 import { shouldShowQuestion as sharedShouldShowQuestion } from "@/lib/forms/conditional";
-// La heurística de pasos vive en lib/forms para que el server aplique la
-// misma regla (relax del required cuando el cliente no tiene NEAT cards).
 import { isStepsQuestion } from "@/lib/forms/neat-steps";
 import { dropPagesNotDue } from "@/lib/forms/page-cadence";
 import { getScheduleOrDefault } from "@/lib/forms/schedule";
@@ -110,7 +108,6 @@ export function DynamicFormModal({
   const [isViewMode, setIsViewMode] = useState(false);
   const [isEditingExisting, setIsEditingExisting] = useState(false);
   const [, setExistingResponseDate] = useState<string>("");
-  const [hasNeatCards, setHasNeatCards] = useState(true);
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(
     new Set()
   );
@@ -251,7 +248,6 @@ export function DynamicFormModal({
     const isCancelled = () => cancelled;
 
     setSubmitError(null);
-    checkNeatCards(isCancelled);
     fetchFormConfig(isCancelled);
     checkExistingResponse(isCancelled);
 
@@ -294,24 +290,6 @@ export function DynamicFormModal({
     targetDate,
     draftScope,
   ]);
-
-  const checkNeatCards = async (isCancelled?: () => boolean) => {
-    try {
-      const response = await clientFetch("/api/client/neat");
-
-      if (isCancelled?.()) return;
-      const data = await response.json();
-
-      if (isCancelled?.()) return;
-      if (data.success) {
-        setHasNeatCards((data.cards || []).length > 0);
-      }
-    } catch (error) {
-      if (isCancelled?.()) return;
-      console.error("Error checking NEAT cards:", error);
-      setHasNeatCards(true);
-    }
-  };
 
   const checkExistingResponse = async (isCancelled?: () => boolean) => {
     try {
@@ -438,13 +416,7 @@ export function DynamicFormModal({
               )
             : normalizedConfig;
 
-        // Filter to only enabled questions. NEAT-based filtering (steps
-        // question for clients without NEAT cards) is NOT applied here —
-        // `hasNeatCards` is resolved asynchronously and applying the filter
-        // at fetch time would race (initial state is `true` so the filter
-        // would become a no-op). Instead, we filter at render time in
-        // `visibleQuestions` below, which re-runs whenever `hasNeatCards`
-        // changes.
+        // Filter to only enabled questions.
         const enabledQuestionsRaw = structured.questions.filter(
           (q: QuestionConfig) => q.enabled
         );
@@ -537,16 +509,10 @@ export function DynamicFormModal({
   const shouldShowQuestion = (question: QuestionConfig): boolean =>
     sharedShouldShowQuestion(question, answers);
 
-  // Get visible questions for current view. NEAT filter applies at render
-  // time so it reacts to `hasNeatCards` resolving after mount.
-  const visibleQuestions = questions.filter((q) => {
-    if (!shouldShowQuestion(q)) return false;
-    if (formType === "habits" && !hasNeatCards && isStepsQuestion(q)) {
-      return false;
-    }
-
-    return true;
-  });
+  // Get visible questions for current view. La pregunta de pasos se muestra
+  // siempre que el entrenador la active: antes se ocultaba a los clientes sin
+  // NEAT cards y ~100 clientes nunca la vieron (tickets Pablo/Isaac/Adrián).
+  const visibleQuestions = questions.filter(shouldShowQuestion);
 
   // Organize questions into sections based on pages
   const sections = (() => {

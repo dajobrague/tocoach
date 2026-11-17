@@ -1,13 +1,9 @@
 // NEAT ↔ pregunta de pasos: heurística compartida cliente/servidor.
 //
-// El modal del cliente OCULTA la pregunta de pasos del formulario de hábitos
-// cuando el cliente no tiene NEAT cards configuradas (ver `visibleQuestions`
-// en dynamic-form-modal.tsx). Esa decisión es puramente client-side: el
-// validador del servidor (`validateFormResponse`) no sabe de NEAT cards, así
-// que si el trainer marcó "pasos" como required, el server rechazaba con 400
-// un formulario cuyo campo el cliente NUNCA pudo ver ni contestar — el bug
-// "mando enviar y no pasa nada". La heurística vive aquí para que ambos
-// lados apliquen exactamente el mismo criterio.
+// Antes el modal del cliente ocultaba la pregunta de pasos a clientes sin
+// NEAT cards; ya no (se ve siempre que esté activada). `relaxStepsRequirement`
+// sigue en el server sólo por bundles viejos cacheados que aún la ocultan.
+// `isStepsQuestion` también decide que la respuesta sea un entero.
 
 import type { QuestionConfig } from "./types";
 

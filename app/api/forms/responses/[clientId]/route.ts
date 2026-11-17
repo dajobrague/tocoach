@@ -567,12 +567,11 @@ export async function POST(
       );
     }
 
-    // El cliente OCULTA la pregunta de pasos cuando no hay NEAT cards (ver
-    // `visibleQuestions` en dynamic-form-modal.tsx), así que aquí no podemos
-    // exigirla: el cliente nunca pudo contestarla. Sin esta paridad, un
-    // "pasos" required + 0 NEAT cards bloqueaba el envío para siempre con un
-    // error sobre un campo invisible. Si la query falla, fail-open (se
-    // mantiene el required) — mismo criterio que el cliente.
+    // ponytail: el formulario del cliente ya NO oculta la pregunta de pasos a
+    // quien no tiene NEAT cards, pero un bundle viejo cacheado todavía puede
+    // ocultarla; sin este relax esos clientes recibirían 400 por un campo que
+    // no ven. Quitar cuando los bundles anteriores al fix hayan caducado.
+    // Si la query falla, fail-open (se mantiene el required).
     let effectiveQuestionsArray = questionsArray;
 
     if (form_type === "habits") {
