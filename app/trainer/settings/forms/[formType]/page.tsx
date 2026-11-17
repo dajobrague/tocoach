@@ -32,7 +32,11 @@ import {
   DEFAULT_HABIT_CONFIG,
 } from "@/lib/forms/defaults";
 import { HABIT_LOG_DAYS_OPTIONS } from "@/lib/forms/habit-log-days";
-import { isFormType } from "@/lib/forms/types";
+import {
+  DEFAULT_INTAKE_CONFIG,
+  INTAKE_FORM_TEMPLATE_NAME,
+} from "@/lib/forms/intake";
+import { isFormType, isTemplateOnlyForm } from "@/lib/forms/types";
 import {
   DEFAULT_WORKOUT_CONFIG,
   WORKOUT_FORM_TEMPLATE_NAME,
@@ -56,7 +60,51 @@ const FORM_TYPE_LABELS: Record<FormType, { title: string; subtitle: string }> =
       subtitle:
         "Preguntas cortas que tus clientes responden al marcar un entrenamiento como completado. Verás sus respuestas en el seguimiento de cada sesión.",
     },
+    intake: {
+      title: "Formulario inicial",
+      subtitle:
+        "Lo que quieres saber de cada cliente antes de diseñar su plan: objetivos, lesiones, alergias… Lo rellena una sola vez y verás sus respuestas en la pestaña Formularios de su perfil.",
+    },
   };
+
+/** Textos del interruptor de cabecera y del pie, por tipo de formulario. */
+const SWITCH_COPY: Record<
+  FormType,
+  { heading: string; description: string; aria: string; footer: string }
+> = {
+  checkins: {
+    heading: "Aplicar automáticamente a clientes nuevos",
+    description:
+      "Cuando está activo, cada cliente nuevo recibe esta plantilla al momento de registrarse. No afecta a clientes existentes.",
+    aria: "Aplicar a clientes nuevos",
+    footer:
+      "Los cambios se guardan automáticamente. Esto nunca reemplaza la configuración de clientes existentes; para aplicar esta plantilla a un cliente específico usa el botón en su perfil.",
+  },
+  habits: {
+    heading: "Aplicar automáticamente a clientes nuevos",
+    description:
+      "Cuando está activo, cada cliente nuevo recibe esta plantilla al momento de registrarse. No afecta a clientes existentes.",
+    aria: "Aplicar a clientes nuevos",
+    footer:
+      "Los cambios se guardan automáticamente. Esto nunca reemplaza la configuración de clientes existentes; para aplicar esta plantilla a un cliente específico usa el botón en su perfil.",
+  },
+  workout: {
+    heading: "Pedir al terminar cada entrenamiento",
+    description:
+      "Cuando está activo, todos tus clientes ven estas preguntas al marcar un entrenamiento como completado y pueden editarlas después.",
+    aria: "Activar formulario post-entreno",
+    footer:
+      "Los cambios se guardan automáticamente y se aplican a todos tus clientes desde su próximo entrenamiento.",
+  },
+  intake: {
+    heading: "Pedir a los clientes que aún no lo han rellenado",
+    description:
+      "Cuando está activo, cada cliente que todavía no lo haya enviado ve un aviso en su Inicio para rellenarlo. Solo se responde una vez.",
+    aria: "Activar formulario inicial",
+    footer:
+      "Los cambios se guardan automáticamente. Las respuestas ya enviadas no cambian; las preguntas nuevas solo las verá quien aún no lo haya rellenado.",
+  },
+};
 
 /**
  * Config inicial al auto-crear la plantilla cuando el tenant aún no tiene
@@ -67,6 +115,7 @@ const FORM_TYPE_LABELS: Record<FormType, { title: string; subtitle: string }> =
  */
 function buildDefaultQuestionsConfig(formType: FormType): FormConfigData {
   if (formType === "workout") return DEFAULT_WORKOUT_CONFIG;
+  if (formType === "intake") return DEFAULT_INTAKE_CONFIG;
 
   return formType === "checkins"
     ? DEFAULT_CHECKIN_CONFIG
@@ -77,6 +126,7 @@ const DEFAULT_TEMPLATE_NAMES: Record<FormType, string> = {
   checkins: "Plantilla de Check-in",
   habits: "Plantilla de Hábitos",
   workout: WORKOUT_FORM_TEMPLATE_NAME,
+  intake: INTAKE_FORM_TEMPLATE_NAME,
 };
 
 export default function TemplateFormEditorPage({
@@ -172,7 +222,7 @@ function TemplateEditor({ formType }: { formType: FormType }) {
             auto_apply_to_new_clients: false,
             // Post-entreno: opt-in. Se crea apagado y el entrenador lo
             // activa con el interruptor de esta página.
-            ...(formType === "workout" ? { is_active: false } : {}),
+            ...(isTemplateOnlyForm(formType) ? { is_active: false } : {}),
           }),
         });
 
@@ -220,7 +270,7 @@ function TemplateEditor({ formType }: { formType: FormType }) {
           credentials: "include",
           signal,
           body: JSON.stringify(
-            formType === "workout"
+            isTemplateOnlyForm(formType)
               ? { template_id: template.id, is_active: value }
               : { template_id: template.id, auto_apply_to_new_clients: value }
           ),
@@ -247,7 +297,7 @@ function TemplateEditor({ formType }: { formType: FormType }) {
     if (template) {
       setAutoApply(
         Boolean(
-          formType === "workout"
+          isTemplateOnlyForm(formType)
             ? template.is_active
             : template.auto_apply_to_new_clients
         )
@@ -405,14 +455,10 @@ function TemplateEditor({ formType }: { formType: FormType }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold text-gray-900">
-                {formType === "workout"
-                  ? "Pedir al terminar cada entrenamiento"
-                  : "Aplicar automáticamente a clientes nuevos"}
+                {SWITCH_COPY[formType].heading}
               </h2>
               <p className="mt-1 text-sm text-gray-600">
-                {formType === "workout"
-                  ? "Cuando está activo, todos tus clientes ven estas preguntas al marcar un entrenamiento como completado y pueden editarlas después."
-                  : "Cuando está activo, cada cliente nuevo recibe esta plantilla al momento de registrarse. No afecta a clientes existentes."}
+                {SWITCH_COPY[formType].description}
               </p>
             </div>
             <div className="flex flex-shrink-0 items-center gap-3">
@@ -421,11 +467,7 @@ function TemplateEditor({ formType }: { formType: FormType }) {
                 status={toggleSave.status}
               />
               <Switch
-                aria-label={
-                  formType === "workout"
-                    ? "Activar formulario post-entreno"
-                    : "Aplicar a clientes nuevos"
-                }
+                aria-label={SWITCH_COPY[formType].aria}
                 isDisabled={toggleSave.status === "saving"}
                 isSelected={autoApply}
                 onValueChange={onToggle}
@@ -519,11 +561,7 @@ function TemplateEditor({ formType }: { formType: FormType }) {
         </CardBody>
       </Card>
 
-      <p className="text-xs text-gray-500">
-        {formType === "workout"
-          ? "Los cambios se guardan automáticamente y se aplican a todos tus clientes desde su próximo entrenamiento."
-          : "Los cambios se guardan automáticamente. Esto nunca reemplaza la configuración de clientes existentes; para aplicar esta plantilla a un cliente específico usa el botón en su perfil."}
-      </p>
+      <p className="text-xs text-gray-500">{SWITCH_COPY[formType].footer}</p>
     </PageShell>
   );
 }

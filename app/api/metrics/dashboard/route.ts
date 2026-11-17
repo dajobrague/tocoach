@@ -310,7 +310,9 @@ export async function GET(request: NextRequest) {
           ? "check-in"
           : f.form_type === "workout"
             ? "formulario post-entreno"
-            : "formulario de hábitos";
+            : f.form_type === "intake"
+              ? "formulario inicial"
+              : "formulario de hábitos";
 
       events.push({
         id: `form-${f.id}`,

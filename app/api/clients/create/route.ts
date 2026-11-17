@@ -101,8 +101,9 @@ export async function POST(request: NextRequest) {
           .select("id, form_type, questions_config, default_schedule")
           .eq("tenant_host", tenantRow.host)
           .eq("is_active", true)
-          // El post-entreno no se copia por cliente (lib/forms/workout.ts).
-          .neq("form_type", "workout");
+          // Post-entreno y formulario inicial no se copian por cliente
+          // (la plantilla es la config; ver isTemplateOnlyForm).
+          .not("form_type", "in", "(workout,intake)");
 
         if (tplError) {
           console.warn(

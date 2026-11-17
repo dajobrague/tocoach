@@ -118,6 +118,12 @@ export const TRAINER_NAV: TrainerNavSection[] = [
             icon: "solar:dumbbell-large-minimalistic-linear",
             href: "/trainer/settings/forms/workout",
           },
+          {
+            key: "templates-intake-form",
+            title: "Formulario inicial",
+            icon: "solar:clipboard-list-linear",
+            href: "/trainer/settings/forms/intake",
+          },
         ],
       },
     ],

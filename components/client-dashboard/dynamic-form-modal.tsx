@@ -298,8 +298,12 @@ export function DynamicFormModal({
       // buscando "el día de mañana" en UTC y no encontraba el registro
       // recién enviado.
       const dateToCheck = targetDate || getLocalTodayYmd();
+      // Formulario inicial: una sola respuesta por cliente, sea del día que
+      // sea — se busca sin rango de fechas.
       const response = await clientFetch(
-        `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${dateToCheck}&end_date=${dateToCheck}`
+        formType === "intake"
+          ? `/api/forms/responses/${clientId}?form_type=intake`
+          : `/api/forms/responses/${clientId}?form_type=${formType}&start_date=${dateToCheck}&end_date=${dateToCheck}`
       );
 
       if (isCancelled?.()) return;
@@ -1312,7 +1316,9 @@ export function DynamicFormModal({
       ? (effectiveCheckinSchedule?.custom_name ?? "Check-in")
       : formType === "workout"
         ? "Cómo fue el entreno"
-        : "Registro diario";
+        : formType === "intake"
+          ? "Formulario inicial"
+          : "Registro diario";
   const dateFor = (ymd: string) =>
     new Date(`${ymd}T12:00:00`).toLocaleDateString("es-ES", {
       day: "numeric",
@@ -1324,7 +1330,7 @@ export function DynamicFormModal({
       ? dateFor(getLocalTodayYmd())
       : "";
   const dialogLabel =
-    targetDate && formType !== "workout"
+    targetDate && formType !== "workout" && formType !== "intake"
       ? `${formType === "checkins" ? formName : "Registro"} del ${dateLabel}`
       : formName;
   const showSteps = !isLoading && !configError && !isViewMode;

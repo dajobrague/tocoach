@@ -30,6 +30,7 @@ const TYPE_LABELS: Record<FormType, string> = {
   checkins: "Check-in",
   habits: "Hábitos diarios",
   workout: "Post-entreno",
+  intake: "Formulario inicial",
 };
 
 /**

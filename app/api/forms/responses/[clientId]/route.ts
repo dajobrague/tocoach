@@ -14,6 +14,7 @@ import {
   FormResponseSubmission,
   getEnabledQuestions,
   isFormType,
+  isTemplateOnlyForm,
   isStructuredConfig,
   normalizeFormAnswers,
   validateFormResponse,
@@ -141,7 +142,9 @@ export async function GET(
     // mismo contrato de orden que siempre devolvió este endpoint (los
     // consumers que quieren ascendente re-ordenan en local). Un caller
     // que pase start_date/end_date conserva su rango exacto sin cap.
-    if (!startDate && !endDate) {
+    // El formulario inicial es UNA fila por cliente, a veces de hace meses:
+    // sin ventana por defecto.
+    if (!startDate && !endDate && formType !== "intake") {
       const defaultStart = new Date(Date.now() - 90 * 86400000)
         .toISOString()
         .slice(0, 10);
@@ -379,21 +382,29 @@ export async function POST(
     // select still succeeds, so orphan answers are never dropped.
     // Misma clave que el UNIQUE: el post-entreno es por sesión programada
     // (puede haber dos el mismo día), el resto por día.
+    // Formulario inicial: UNA fila por cliente (índice único parcial). Si ya
+    // existe se edita esa misma, conservando su fecha original.
     const existingQuery = supabase
       .from("form_responses")
       .select("*")
       .eq("tenant_host", tenantHost)
       .eq("client_id", clientId)
-      .eq("form_type", form_type)
-      .eq("response_date", resolvedDate);
+      .eq("form_type", form_type);
     const { data: existingRow } = await (
-      workoutLink
-        ? existingQuery.eq(
-            "scheduled_session_id",
-            workoutLink.scheduled_session_id
-          )
-        : existingQuery.is("scheduled_session_id", null)
+      form_type === "intake"
+        ? existingQuery
+        : workoutLink
+          ? existingQuery
+              .eq("response_date", resolvedDate)
+              .eq("scheduled_session_id", workoutLink.scheduled_session_id)
+          : existingQuery
+              .eq("response_date", resolvedDate)
+              .is("scheduled_session_id", null)
     ).maybeSingle();
+    const responseDate: string =
+      form_type === "intake" && existingRow?.response_date
+        ? String(existingRow.response_date)
+        : resolvedDate;
 
     // Once the trainer reviewed a check-in it's locked for the client — the
     // trainer already gave feedback on that version. Checked BEFORE answer
@@ -421,23 +432,23 @@ export async function POST(
       );
     }
 
-    // Post-entreno: valida contra la plantilla ACTIVA del entrenador (no hay
-    // copia por cliente). Apagada → no se aceptan respuestas nuevas.
-    const configResult =
-      form_type === "workout"
-        ? await supabase
-            .from("form_templates")
-            .select("questions_config")
-            .eq("tenant_host", tenantHost)
-            .eq("form_type", "workout")
-            .eq("is_active", true)
-            .maybeSingle()
-        : await supabase
-            .from("client_form_configs")
-            .select("questions_config, schedule")
-            .eq("client_id", clientId)
-            .eq("form_type", form_type)
-            .maybeSingle();
+    // Post-entreno y formulario inicial: valida contra la plantilla ACTIVA
+    // del entrenador (no hay copia por cliente). Apagada → no se aceptan
+    // respuestas nuevas.
+    const configResult = isTemplateOnlyForm(form_type)
+      ? await supabase
+          .from("form_templates")
+          .select("questions_config")
+          .eq("tenant_host", tenantHost)
+          .eq("form_type", form_type)
+          .eq("is_active", true)
+          .maybeSingle()
+      : await supabase
+          .from("client_form_configs")
+          .select("questions_config, schedule")
+          .eq("client_id", clientId)
+          .eq("form_type", form_type)
+          .maybeSingle();
     // questions_config es JSONB sin tipar (lo validan los helpers de abajo).
     let configRow = configResult.data as {
       questions_config: QuestionConfig[] | FormConfigData;
@@ -468,7 +479,7 @@ export async function POST(
     // recién había creado al cliente sin haber guardado el editor de
     // formularios. La RPC también es idempotente, así que llamar
     // dos veces no duplica.
-    if (!configRow?.questions_config && form_type === "workout") {
+    if (!configRow?.questions_config && isTemplateOnlyForm(form_type)) {
       return NextResponse.json(
         {
           success: false,
@@ -628,7 +639,7 @@ export async function POST(
           tenant_host: tenantHost,
           client_id: clientId,
           form_type,
-          response_date: resolvedDate,
+          response_date: responseDate,
           answers: mergedAnswers,
           scheduled_session_id: workoutLink?.scheduled_session_id ?? null,
           metadata: workoutLink

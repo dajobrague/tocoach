@@ -7,6 +7,7 @@ import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
   isFormType,
+  isTemplateOnlyForm,
   validateQuestionsConfig,
   fetchCheckinsTemplateDefaultSchedule,
   validateCheckInScheduleInput,
@@ -159,21 +160,21 @@ export async function GET(
       );
     }
 
-    // Post-entreno: sin copia por cliente ni auto-creación — la plantilla
-    // ACTIVA del entrenador es la config. Apagada o inexistente → 404 y el
-    // portal no ofrece el formulario.
-    if (formType === "workout") {
+    // Post-entreno y formulario inicial: sin copia por cliente ni
+    // auto-creación — la plantilla ACTIVA del entrenador es la config.
+    // Apagada o inexistente → 404 y el portal no ofrece el formulario.
+    if (isTemplateOnlyForm(formType)) {
       const { data: template, error: templateError } = await supabase
         .from("form_templates")
         .select("id, questions_config")
         .eq("tenant_host", tenantHost)
-        .eq("form_type", "workout")
+        .eq("form_type", formType)
         .eq("is_active", true)
         .maybeSingle();
 
       if (templateError) {
         console.error(
-          "[Forms Configs] Error fetching workout template:",
+          `[Forms Configs] Error fetching ${formType} template:`,
           templateError
         );
 
@@ -193,7 +194,7 @@ export async function GET(
       return NextResponse.json({
         success: true,
         config: {
-          form_type: "workout",
+          form_type: formType,
           questions_config: template.questions_config,
           template_id: template.id,
         },

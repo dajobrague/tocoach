@@ -125,6 +125,40 @@ export function DashboardContent() {
       enabled: Boolean(clientId),
     });
 
+  // Formulario inicial: aviso mientras el entrenador lo tenga activado (la
+  // config responde 404 si no) y el cliente aún no lo haya enviado.
+  const { data: intakeStatus } = useQuery({
+    queryKey: ["client", "intake", clientId],
+    queryFn: async (): Promise<{ pending: boolean }> => {
+      try {
+        const config = await clientFetch(
+          `/api/forms/configs/${clientId}?form_type=intake`,
+          { cache: "no-store" }
+        );
+
+        if (!config.ok) return { pending: false };
+        const res = await clientFetch(
+          `/api/forms/responses/${clientId}?form_type=intake`,
+          { cache: "no-store" }
+        );
+        const body = await res.json().catch(() => null);
+
+        return {
+          pending:
+            res.ok &&
+            body?.success === true &&
+            Array.isArray(body.responses) &&
+            body.responses.length === 0,
+        };
+      } catch {
+        return { pending: false };
+      }
+    },
+    enabled: Boolean(clientId),
+    staleTime: 5 * 60_000,
+  });
+  const [showIntakeModal, setShowIntakeModal] = useState(false);
+
   const checkinSchedule = useMemo((): CheckInSchedule => {
     try {
       return getScheduleOrDefault(
@@ -459,6 +493,29 @@ export function DashboardContent() {
             </div>
           )}
 
+          {intakeStatus?.pending === true && (
+            <div className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small">
+              <IconTile icon="solar:clipboard-list-linear" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-foreground">
+                  Completa tu formulario inicial
+                </p>
+                <p className="mt-0.5 text-[13px] leading-snug text-default-500">
+                  Tu entrenador quiere conocerte para preparar tu plan
+                </p>
+              </div>
+              <Button
+                className="shrink-0 font-semibold"
+                color="primary"
+                radius="full"
+                size="sm"
+                onPress={() => setShowIntakeModal(true)}
+              >
+                Empezar
+              </Button>
+            </div>
+          )}
+
           {pendingReviewCheckin && (
             <div className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small">
               <IconTile icon="solar:clipboard-check-linear" />
@@ -633,6 +690,20 @@ export function DashboardContent() {
                   queryKey: ["client", "chartsSnapshot", String(clientId)],
                 }),
               ]);
+            }}
+          />
+        )}
+
+        {showIntakeModal && (
+          <DynamicFormModal
+            isOpen
+            clientId={clientId}
+            formType="intake"
+            onClose={() => setShowIntakeModal(false)}
+            onSuccess={async () => {
+              await queryClient.invalidateQueries({
+                queryKey: ["client", "intake", clientId],
+              });
             }}
           />
         )}

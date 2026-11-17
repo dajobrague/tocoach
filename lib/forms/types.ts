@@ -15,8 +15,18 @@ export type QuestionType =
  * del entrenador (`form_templates`, `is_active` = activado) es la fuente de
  * verdad, sin horario ni recordatorios. Ver `lib/forms/workout.ts`.
  */
-export const FORM_TYPES = ["checkins", "habits", "workout"] as const;
+export const FORM_TYPES = ["checkins", "habits", "workout", "intake"] as const;
 export type FormType = (typeof FORM_TYPES)[number];
+
+/**
+ * Formularios cuya configuración es la plantilla del entrenador (sin copia
+ * por cliente, sin horario ni recordatorios) y `form_templates.is_active` el
+ * interruptor: el post-entreno y el formulario inicial (`intake`, una sola
+ * respuesta por cliente). Ver `lib/forms/workout.ts` y `lib/forms/intake.ts`.
+ */
+export function isTemplateOnlyForm(formType: FormType): boolean {
+  return formType === "workout" || formType === "intake";
+}
 
 export function isFormType(raw: unknown): raw is FormType {
   return (FORM_TYPES as readonly unknown[]).includes(raw);

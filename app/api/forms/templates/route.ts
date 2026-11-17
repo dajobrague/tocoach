@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
-import { isFormType, validateQuestionsConfig } from "@/lib/forms";
+import {
+  isFormType,
+  isTemplateOnlyForm,
+  validateQuestionsConfig,
+} from "@/lib/forms";
 
 /**
  * GET /api/forms/templates
@@ -44,10 +48,10 @@ export async function GET(request: NextRequest) {
       .select("*")
       .eq("tenant_host", tenant.host);
 
-    // El post-entreno usa `is_active` como interruptor on/off del editor:
-    // el entrenador tiene que ver (y poder reactivar) su plantilla apagada.
-    // El resto de tipos solo lista las activas, como siempre.
-    if (formType !== "workout") {
+    // Post-entreno y formulario inicial usan `is_active` como interruptor
+    // on/off del editor: el entrenador tiene que ver (y poder reactivar) su
+    // plantilla apagada. El resto de tipos solo lista las activas.
+    if (!(isFormType(formType) && isTemplateOnlyForm(formType))) {
       query = query.eq("is_active", true);
     }
 

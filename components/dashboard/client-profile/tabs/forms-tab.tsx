@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApplyTemplateSection } from "@/components/dashboard/client-profile/tabs/apply-template-section";
+import { IntakeAnswersCard } from "@/components/dashboard/client-profile/tabs/intake-answers-card";
 import FormConfigEditor from "@/components/dashboard/client-profile/tabs/form-config-editor";
 import {
   buildCheckinSchedulePayload,
@@ -939,6 +940,8 @@ export default function FormsTab({
 
   return (
     <div className={`flex flex-col gap-6 ${showStickySaveBar ? "pb-24" : ""}`}>
+      <IntakeAnswersCard clientId={clientId} />
+
       {/* Tabs de tipos de formularios */}
       <div className="bg-white rounded-lg border border-gray-200">
         <Tabs
