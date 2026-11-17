@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import {
+  addClientDietPdf,
   deleteClientDietPdf,
-  getClientDietPdfWithSource,
-  upsertClientDietPdf,
+  listClientDietPdfs,
 } from "@/lib/nutrition/diet-fallback";
 import {
   dietPdfPrefix,
@@ -19,16 +19,19 @@ import {
 } from "@/lib/nutrition/recipes/recipe-request";
 
 const LOG_PREFIX = "[DietPdf API]";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The client's PDF diet, trainer-managed (v2 delivery ladder).
+ * The client's PDF diets, trainer-managed (v2 delivery ladder). A client can
+ * have several (e.g. training days + rest days).
  *
- * GET    /api/diet-pdf?clientId=123 — current PDF + source (v2 | legacy).
- * POST   /api/diet-pdf — multipart (clientId, pdf): upload + upsert. Replaces
- *        a previous v2 upload (its storage object is removed); a legacy PDF is
- *        merely shadowed — v2 never writes or deletes legacy data.
- * DELETE /api/diet-pdf?clientId=123 — remove the v2 PDF (row + object). The
- *        ladder then falls back to the legacy pointer, when one exists.
+ * GET    /api/diet-pdf?clientId=123 — the PDFs, upload order, with source
+ *        (v2 | legacy) and id (null for the read-only legacy one).
+ * POST   /api/diet-pdf — multipart (clientId, pdf): upload + add. A legacy PDF
+ *        is merely shadowed — v2 never writes or deletes legacy data.
+ * DELETE /api/diet-pdf?clientId=123&id=<uuid> — remove one v2 PDF (row +
+ *        object). With none left, the ladder falls back to the legacy one.
  */
 export async function GET(request: NextRequest) {
   const guard = await guardRecipeRequest();
@@ -44,13 +47,13 @@ export async function GET(request: NextRequest) {
       return invalidClientId();
     }
 
-    const pdf = await getClientDietPdfWithSource(
+    const pdfs = await listClientDietPdfs(
       createSupabaseClient(),
       guard.session.tenant_host,
       clientId
     );
 
-    return NextResponse.json({ success: true, data: pdf });
+    return NextResponse.json({ success: true, data: pdfs });
   } catch (error) {
     console.error(`${LOG_PREFIX} get error:`, {
       correlationId: guard.correlationId,
@@ -129,10 +132,10 @@ export async function POST(request: NextRequest) {
       data: { publicUrl },
     } = supabase.storage.from(NUTRITION_PDFS_BUCKET).getPublicUrl(storagePath);
 
-    let previousUrl: string | null = null;
+    let id: string;
 
     try {
-      ({ previousUrl } = await upsertClientDietPdf(
+      ({ id } = await addClientDietPdf(
         supabase,
         guard.session.tenant_host,
         clientId,
@@ -144,11 +147,9 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    await removeV2Object(supabase, guard.session.trainer_id, previousUrl);
-
     return NextResponse.json({
       success: true,
-      data: { url: publicUrl, name: displayName, source: "v2" },
+      data: { id, url: publicUrl, name: displayName, source: "v2" },
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} post error:`, {
@@ -176,10 +177,20 @@ export async function DELETE(request: NextRequest) {
       return invalidClientId();
     }
 
+    const pdfId = request.nextUrl.searchParams.get("id") ?? "";
+
+    if (UUID_RE.test(pdfId) === false) {
+      return NextResponse.json(
+        { success: false, error: "id inválido" },
+        { status: 400 }
+      );
+    }
+
     const { removedUrl } = await deleteClientDietPdf(
       supabase,
       guard.session.tenant_host,
-      clientId
+      clientId,
+      pdfId
     );
 
     await removeV2Object(supabase, guard.session.trainer_id, removedUrl);

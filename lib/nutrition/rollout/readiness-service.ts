@@ -86,7 +86,7 @@ export async function listClientReadiness(
 
   return clients.map((row) => {
     const clientId = row.id;
-    // Same precedence as getClientDietPdf: v2 upload first, newest legacy
+    // Same precedence as listClientDietPdfs: v2 upload first, newest legacy
     // pointer as the fallback (legacyPlans arrive newest-first).
     const pdf =
       v2Pdfs.get(clientId) ??

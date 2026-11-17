@@ -563,7 +563,7 @@ export function useDeleteDietPdf(clientId: number) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => deleteDietPdf(clientId),
+    mutationFn: (pdfId: string) => deleteDietPdf(clientId, pdfId),
     onSuccess: () =>
       client.invalidateQueries({ queryKey: dietPdfKey(clientId) }),
   });

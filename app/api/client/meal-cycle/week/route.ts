@@ -14,7 +14,7 @@ import {
   getClientNutritionVisibility,
   resolveVisibleSections,
 } from "@/lib/nutrition/delivery-visibility";
-import { getClientDietPdf } from "@/lib/nutrition/diet-fallback";
+import { getClientDietPdfs } from "@/lib/nutrition/diet-fallback";
 import { getMenuChoices } from "@/lib/nutrition/cycles/menu-choice-service";
 import { getClientSelections } from "@/lib/nutrition/cycles/option-selection";
 import { ClientGoalsService } from "@/lib/nutrition/goals/client-goals-service";
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       getClientNutritionVisibility(supabase, tenant?.host ?? "", clientId),
     ]);
 
-    const [overrides, logs, selections, goals, presets, choices, dietPdf] =
+    const [overrides, logs, selections, goals, presets, choices, dietPdfs] =
       await Promise.all([
         tree === null
           ? Promise.resolve([])
@@ -98,8 +98,8 @@ export async function GET(request: NextRequest) {
         // The PDF matters without a plan (the ladder's second rung) and
         // whenever the trainer explicitly chose to show it.
         tree === null || visibility?.includes("pdf") === true
-          ? getClientDietPdf(supabase, tenant?.host ?? "", clientId)
-          : Promise.resolve(null),
+          ? getClientDietPdfs(supabase, tenant?.host ?? "", clientId)
+          : Promise.resolve([]),
       ]);
     const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
 
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
     // (intersected with what has data), else the automatic delivery ladder.
     const sections = resolveVisibleSections(visibility, {
       plan: tree !== null,
-      pdf: dietPdf !== null,
+      pdf: dietPdfs.length > 0,
       goals: goals !== null || presets.length > 0,
     });
     const planVisible = sections.includes("plan");
@@ -145,7 +145,10 @@ export async function GET(request: NextRequest) {
     const fallback: ClientDietFallback | undefined =
       sections.includes("pdf") || sections.includes("goals") || tree === null
         ? {
-            pdf: sections.includes("pdf") ? dietPdf : null,
+            // `pdf` (el primero) sigue para bundles de cliente anteriores a
+            // `pdfs`, que solo sabían mostrar uno.
+            pdf: sections.includes("pdf") ? (dietPdfs[0] ?? null) : null,
+            pdfs: sections.includes("pdf") ? dietPdfs : [],
             presets: sections.includes("goals")
               ? presets.map(
                   ({ id, name, kcal, protein_g, carbs_g, fat_g }) => ({

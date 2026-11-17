@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  addClientDietPdf,
   deleteClientDietPdf,
-  getClientDietPdf,
-  getClientDietPdfWithSource,
-  upsertClientDietPdf,
+  getClientDietPdfs,
+  listClientDietPdfs,
 } from "../diet-fallback";
 
 import {
@@ -91,21 +91,26 @@ beforeAll(async () => {
   }
 });
 
+/** The first PDF the client would see (legacy cases have at most one). */
+async function firstPdf(tenantHost: string, id: number) {
+  return (await getClientDietPdfs(db, tenantHost, id))[0] ?? null;
+}
+
 beforeEach(cleanLegacyPlans);
 afterAll(async () => {
   await cleanLegacyPlans();
   await db.from("clients").delete().eq("id", OTHER_CLIENT_ID);
 });
 
-describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
+describe("getClientDietPdfs (legacy nutrition_plans fallback)", () => {
   it("returns null when the client has no plans at all", async () => {
-    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
+    expect(await firstPdf(TEST_TENANT_HOST, clientId)).toBeNull();
   });
 
   it("returns the active plan's PDF with its display name", async () => {
     await seedLegacyPlan();
 
-    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toEqual({
+    expect(await firstPdf(TEST_TENANT_HOST, clientId)).toEqual({
       url: "https://cdn.test/diet.pdf",
       name: "dieta-julio.pdf",
     });
@@ -114,7 +119,7 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
   it("falls back to a default filename when pdf_name is empty/null", async () => {
     await seedLegacyPlan({ pdf_name: null });
 
-    const result = await getClientDietPdf(db, TEST_TENANT_HOST, clientId);
+    const result = await firstPdf(TEST_TENANT_HOST, clientId);
 
     expect(result?.name).toBe("plan-nutricional.pdf");
   });
@@ -124,19 +129,19 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
     await seedLegacyPlan({ status: "paused" });
     await seedLegacyPlan({ is_template: true });
 
-    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
+    expect(await firstPdf(TEST_TENANT_HOST, clientId)).toBeNull();
   });
 
   it("ignores a legacy pdf_url that is not a web url", async () => {
     await seedLegacyPlan({ pdf_url: "javascript:alert(1)" });
 
-    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
+    expect(await firstPdf(TEST_TENANT_HOST, clientId)).toBeNull();
   });
 
   it("includes legacy rows where is_template is NULL", async () => {
     await seedLegacyPlan({ is_template: null });
 
-    const result = await getClientDietPdf(db, TEST_TENANT_HOST, clientId);
+    const result = await firstPdf(TEST_TENANT_HOST, clientId);
 
     expect(result?.url).toBe("https://cdn.test/diet.pdf");
   });
@@ -151,7 +156,7 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
       updated_at: "2026-07-01T00:00:00Z",
     });
 
-    const result = await getClientDietPdf(db, TEST_TENANT_HOST, clientId);
+    const result = await firstPdf(TEST_TENANT_HOST, clientId);
 
     expect(result?.url).toBe("https://cdn.test/new.pdf");
   });
@@ -161,16 +166,14 @@ describe("getClientDietPdf (legacy nutrition_plans fallback)", () => {
     // exist (nutrition_plans.tenant_host is an FK to tenants).
     await seedLegacyPlan({ client_id: OTHER_CLIENT_ID });
 
-    expect(await getClientDietPdf(db, TEST_TENANT_HOST, clientId)).toBeNull();
-    expect(
-      await getClientDietPdf(db, "ghost-tenant.local", clientId)
-    ).toBeNull();
+    expect(await firstPdf(TEST_TENANT_HOST, clientId)).toBeNull();
+    expect(await firstPdf("ghost-tenant.local", clientId)).toBeNull();
   });
 
   it("counts hybrid plans (structured + PDF) as PDF-bearing", async () => {
     await seedLegacyPlan({ plan_mode: "hybrid" });
 
-    const result = await getClientDietPdf(db, TEST_TENANT_HOST, clientId);
+    const result = await firstPdf(TEST_TENANT_HOST, clientId);
 
     expect(result).not.toBeNull();
   });
@@ -184,81 +187,79 @@ describe("client_diet_pdfs (v2 rung) precedence and writes", () => {
       .eq("tenant_host", TEST_TENANT_HOST);
   }
 
+  const add = (url: string, name: string) =>
+    addClientDietPdf(db, TEST_TENANT_HOST, clientId, { url, name });
+
   beforeEach(cleanV2Rows);
   afterAll(cleanV2Rows);
 
-  it("a v2 upload beats the legacy pointer", async () => {
+  it("v2 uploads beat the legacy pointer", async () => {
     await seedLegacyPlan({ pdf_url: "https://cdn.test/legacy.pdf" });
-    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
-      url: "https://cdn.test/v2.pdf",
-      name: "dieta-v2.pdf",
-    });
+    const { id } = await add("https://cdn.test/v2.pdf", "dieta-v2.pdf");
 
-    expect(
-      await getClientDietPdfWithSource(db, TEST_TENANT_HOST, clientId)
-    ).toEqual({
-      url: "https://cdn.test/v2.pdf",
-      name: "dieta-v2.pdf",
-      source: "v2",
-    });
+    expect(await listClientDietPdfs(db, TEST_TENANT_HOST, clientId)).toEqual([
+      {
+        id,
+        url: "https://cdn.test/v2.pdf",
+        name: "dieta-v2.pdf",
+        source: "v2",
+      },
+    ]);
   });
 
-  it("upsert replaces the previous upload and reports its url", async () => {
-    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
-      url: "https://cdn.test/first.pdf",
-      name: "primera.pdf",
-    });
+  it("keeps several PDFs per client, in upload order", async () => {
+    await add("https://cdn.test/entreno.pdf", "entreno.pdf");
+    await add("https://cdn.test/descanso.pdf", "descanso.pdf");
 
-    const { previousUrl } = await upsertClientDietPdf(
+    const pdfs = await getClientDietPdfs(db, TEST_TENANT_HOST, clientId);
+
+    expect(pdfs.map((p) => p.name)).toEqual(["entreno.pdf", "descanso.pdf"]);
+  });
+
+  it("deletes one PDF by id; the rest stay; the last one reveals legacy", async () => {
+    await seedLegacyPlan({ pdf_url: "https://cdn.test/legacy.pdf" });
+    const first = await add("https://cdn.test/a.pdf", "a.pdf");
+    const second = await add("https://cdn.test/b.pdf", "b.pdf");
+
+    const { removedUrl } = await deleteClientDietPdf(
       db,
       TEST_TENANT_HOST,
       clientId,
-      { url: "https://cdn.test/second.pdf", name: "segunda.pdf" }
+      first.id
     );
 
-    expect(previousUrl).toBe("https://cdn.test/first.pdf");
+    expect(removedUrl).toBe("https://cdn.test/a.pdf");
+    expect(
+      (await listClientDietPdfs(db, TEST_TENANT_HOST, clientId)).map(
+        (p) => p.name
+      )
+    ).toEqual(["b.pdf"]);
 
-    const current = await getClientDietPdfWithSource(
-      db,
-      TEST_TENANT_HOST,
-      clientId
-    );
+    await deleteClientDietPdf(db, TEST_TENANT_HOST, clientId, second.id);
 
-    expect(current?.url).toBe("https://cdn.test/second.pdf");
-  });
+    const after = await listClientDietPdfs(db, TEST_TENANT_HOST, clientId);
 
-  it("deleting the v2 row falls back to the legacy pointer", async () => {
-    await seedLegacyPlan({ pdf_url: "https://cdn.test/legacy.pdf" });
-    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
-      url: "https://cdn.test/v2.pdf",
-      name: "dieta-v2.pdf",
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({
+      id: null,
+      source: "legacy",
+      url: "https://cdn.test/legacy.pdf",
     });
-
-    const { removedUrl } = await deleteClientDietPdf(
-      db,
-      TEST_TENANT_HOST,
-      clientId
-    );
-
-    expect(removedUrl).toBe("https://cdn.test/v2.pdf");
-
-    const after = await getClientDietPdfWithSource(
-      db,
-      TEST_TENANT_HOST,
-      clientId
-    );
-
-    expect(after?.source).toBe("legacy");
-    expect(after?.url).toBe("https://cdn.test/legacy.pdf");
   });
 
-  it("deleting when nothing exists is a clean no-op", async () => {
+  it("deleting an id of another client (or none) is a clean no-op", async () => {
+    const { id } = await add("https://cdn.test/mine.pdf", "mine.pdf");
+
     const { removedUrl } = await deleteClientDietPdf(
       db,
       TEST_TENANT_HOST,
-      clientId
+      OTHER_CLIENT_ID,
+      id
     );
 
     expect(removedUrl).toBeNull();
+    expect(
+      await getClientDietPdfs(db, TEST_TENANT_HOST, clientId)
+    ).toHaveLength(1);
   });
 });

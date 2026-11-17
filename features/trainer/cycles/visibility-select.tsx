@@ -52,14 +52,14 @@ export function VisibilitySelect({
 }) {
   const { data, isPending } = useClientVisibility(clientId);
   const save = useSaveClientVisibility(clientId);
-  const { data: pdf } = useDietPdf(clientId);
+  const { data: pdfs } = useDietPdf(clientId);
   const { data: goals } = useClientGoals(clientId);
   const { data: presets } = useGoalPresets(clientId);
 
   const selected = data?.sections ?? [];
   const available: Record<NutritionSection, boolean> = {
     plan: hasActivePlan,
-    pdf: pdf !== null && pdf !== undefined,
+    pdf: (pdfs ?? []).length > 0,
     goals: (goals ?? null) !== null || (presets ?? []).length > 0,
   };
   // Unavailable sections are locked out unless already chosen (still

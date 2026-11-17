@@ -9,6 +9,8 @@ import { IconTile } from "@/components/shared/icon-tile";
 interface PdfDietViewProps {
   url: string;
   name: string;
+  /** Con varios PDFs, el título de sección va solo sobre el primero. */
+  showHeader?: boolean;
 }
 
 /**
@@ -18,10 +20,14 @@ interface PdfDietViewProps {
  * mobile browsers (especially iOS Safari) render embedded PDFs inconsistently
  * and the buttons must always be enough on their own.
  */
-export function PdfDietView({ url, name }: PdfDietViewProps) {
+export function PdfDietView({
+  url,
+  name,
+  showHeader = true,
+}: PdfDietViewProps) {
   return (
     <section>
-      <SectionHeader title="Tu plan en PDF" />
+      {showHeader ? <SectionHeader title="Tu plan en PDF" /> : null}
       <article className="rounded-large bg-content1 p-4 shadow-small">
         <div className="flex items-center gap-3">
           <IconTile icon="solar:document-text-linear" />

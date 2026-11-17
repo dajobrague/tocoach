@@ -630,18 +630,20 @@ export function assignDayTarget(
   );
 }
 
-/** The client's PDF diet as the trainer sees it (legacy = read-only origin). */
+/** One of the client's PDF diets as the trainer sees it (legacy = read-only
+ *  origin, id null). */
 export interface DietPdfInfo {
+  id: string | null;
   url: string;
   name: string;
   source: "v2" | "legacy";
 }
 
-export function fetchDietPdf(clientId: number): Promise<DietPdfInfo | null> {
-  return getJson<DietPdfInfo | null>(`/api/diet-pdf?clientId=${clientId}`);
+export function fetchDietPdf(clientId: number): Promise<DietPdfInfo[]> {
+  return getJson<DietPdfInfo[]>(`/api/diet-pdf?clientId=${clientId}`);
 }
 
-/** Upload/replace the client's PDF diet (multipart; 20MB server cap). */
+/** Add a PDF diet for the client (multipart; 20MB server cap). */
 export function uploadDietPdf(
   clientId: number,
   file: File
@@ -658,8 +660,11 @@ export function uploadDietPdf(
   }).then(readEnvelope<DietPdfInfo>);
 }
 
-export function deleteDietPdf(clientId: number): Promise<void> {
-  return sendJson<void>(`/api/diet-pdf?clientId=${clientId}`, "DELETE");
+export function deleteDietPdf(clientId: number, pdfId: string): Promise<void> {
+  return sendJson<void>(
+    `/api/diet-pdf?clientId=${clientId}&id=${encodeURIComponent(pdfId)}`,
+    "DELETE"
+  );
 }
 
 /** The trainer's saved visibility choice — null means "Automático". */

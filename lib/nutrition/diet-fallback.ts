@@ -16,76 +16,74 @@ export interface ClientDietPdfWithSource extends ClientDietPdf {
   source: "v2" | "legacy";
 }
 
+/** A PDF as the trainer manages it: `id` is the v2 row (null = legacy, read-only). */
+export interface ClientDietPdfItem extends ClientDietPdfWithSource {
+  id: string | null;
+}
+
 /**
- * The client's PDF diet, if any — the second rung of the nutrition delivery
- * ladder (active meal plan → PDF → goals-only → empty).
+ * The client's PDF diets — the second rung of the nutrition delivery ladder
+ * (active meal plan → PDF → goals-only → empty). A client can have several
+ * (e.g. training days + rest days), shown in upload order.
  *
  * Resolution order:
  * 1. `client_diet_pdfs` — PDFs uploaded through the v2 trainer UI.
- * 2. The LEGACY `nutrition_plans` pointer (any active, non-template plan
- *    carrying a pdf_url, newest first). This keeps the ~120 production
- *    clients whose diet is a PDF working the moment nutrition-v2 flips on,
- *    with no backfill and no legacy writes: v2 only reads the pointer; the
- *    file itself stays in the `nutrition-pdfs` bucket.
+ * 2. Only when there are none: the LEGACY `nutrition_plans` pointer (any
+ *    active, non-template plan carrying a pdf_url, newest first). This keeps
+ *    the production clients whose diet is a legacy PDF working with no
+ *    backfill and no legacy writes: v2 only reads the pointer.
  *
  * Tenant-scoped: `tenantHost` + `clientId` both come from the caller's session
  * context, never from request input.
  */
-export async function getClientDietPdf(
+export async function listClientDietPdfs(
   client: SupabaseClient,
   tenantHost: string,
   clientId: number
-): Promise<ClientDietPdf | null> {
-  const withSource = await getClientDietPdfWithSource(
-    client,
-    tenantHost,
-    clientId
-  );
-
-  return withSource === null
-    ? null
-    : { url: withSource.url, name: withSource.name };
-}
-
-/** {@link getClientDietPdf}, keeping which rung answered (trainer UI needs it). */
-export async function getClientDietPdfWithSource(
-  client: SupabaseClient,
-  tenantHost: string,
-  clientId: number
-): Promise<ClientDietPdfWithSource | null> {
+): Promise<ClientDietPdfItem[]> {
   if (tenantHost.length === 0) {
-    return null;
+    return [];
   }
 
-  const v2 = await readV2DietPdf(client, tenantHost, clientId);
+  const { data, error } = await client
+    .from(DIET_PDFS_TABLE)
+    .select("id, pdf_url, pdf_name")
+    .eq("tenant_host", tenantHost)
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: true });
 
-  if (v2 !== null) {
-    return { ...v2, source: "v2" };
+  if (error !== null) {
+    throw new Error(`listClientDietPdfs failed: ${error.message}`);
+  }
+
+  const v2: ClientDietPdfItem[] = [];
+
+  for (const row of data ?? []) {
+    const pdf = toDietPdf(row);
+
+    if (pdf !== null) {
+      v2.push({ ...pdf, id: String(row.id), source: "v2" });
+    }
+  }
+
+  if (v2.length > 0) {
+    return v2;
   }
 
   const legacy = await readLegacyDietPdf(client, tenantHost, clientId);
 
-  return legacy === null ? null : { ...legacy, source: "legacy" };
+  return legacy === null ? [] : [{ ...legacy, id: null, source: "legacy" }];
 }
 
-/** The v2 row for a client, or null. */
-async function readV2DietPdf(
+/** {@link listClientDietPdfs} as the client sees them (url + name only). */
+export async function getClientDietPdfs(
   client: SupabaseClient,
   tenantHost: string,
   clientId: number
-): Promise<ClientDietPdf | null> {
-  const { data, error } = await client
-    .from(DIET_PDFS_TABLE)
-    .select("pdf_url, pdf_name")
-    .eq("tenant_host", tenantHost)
-    .eq("client_id", clientId)
-    .maybeSingle();
+): Promise<ClientDietPdf[]> {
+  const items = await listClientDietPdfs(client, tenantHost, clientId);
 
-  if (error !== null) {
-    throw new Error(`readV2DietPdf failed: ${error.message}`);
-  }
-
-  return toDietPdf(data);
+  return items.map(({ url, name }) => ({ url, name }));
 }
 
 async function readLegacyDietPdf(
@@ -155,51 +153,49 @@ function isRenderableUrl(url: string): boolean {
   }
 }
 
-/**
- * Create or replace the client's v2 PDF diet (one per client). Returns the
- * PREVIOUS v2 url (for storage cleanup) — null on first upload. Never touches
- * the legacy pointer.
- */
-export async function upsertClientDietPdf(
+/** Add a v2 PDF diet for the client (they can have several). */
+export async function addClientDietPdf(
   client: SupabaseClient,
   tenantHost: string,
   clientId: number,
   pdf: ClientDietPdf
-): Promise<{ previousUrl: string | null }> {
-  const previous = await readV2DietPdf(client, tenantHost, clientId);
-
-  const { error } = await client.from(DIET_PDFS_TABLE).upsert(
-    {
+): Promise<{ id: string }> {
+  const { data, error } = await client
+    .from(DIET_PDFS_TABLE)
+    .insert({
       tenant_host: tenantHost,
       client_id: clientId,
       pdf_url: pdf.url,
       pdf_name: pdf.name,
-    },
-    { onConflict: "tenant_host,client_id" }
-  );
+    })
+    .select("id")
+    .single();
 
   if (error !== null) {
-    throw new Error(`upsertClientDietPdf failed: ${error.message}`);
+    throw new Error(`addClientDietPdf failed: ${error.message}`);
   }
 
-  return { previousUrl: previous?.url ?? null };
+  return { id: String(data.id) };
 }
 
 /**
- * Remove the client's v2 PDF diet. Returns the removed url (for storage
- * cleanup), or null when there was none. Legacy PDFs are untouched — after a
- * delete, the ladder falls back to the legacy pointer if one exists.
+ * Remove one of the client's v2 PDF diets. Returns the removed url (for
+ * storage cleanup), or null when no such row exists for this client. Legacy
+ * PDFs are untouched — once no v2 PDF is left, the ladder falls back to the
+ * legacy pointer if one exists.
  */
 export async function deleteClientDietPdf(
   client: SupabaseClient,
   tenantHost: string,
-  clientId: number
+  clientId: number,
+  pdfId: string
 ): Promise<{ removedUrl: string | null }> {
   const { data, error } = await client
     .from(DIET_PDFS_TABLE)
     .delete()
     .eq("tenant_host", tenantHost)
     .eq("client_id", clientId)
+    .eq("id", pdfId)
     .select("pdf_url")
     .maybeSingle();
 

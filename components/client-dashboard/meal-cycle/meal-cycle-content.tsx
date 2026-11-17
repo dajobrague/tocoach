@@ -1,5 +1,6 @@
 "use client";
 
+import type { ClientDietFallback } from "@/lib/nutrition/cycles/client-week";
 import type { MealSlotOptionRow } from "@/lib/nutrition/cycles/meal-slot-option-service";
 
 import { Button, Spinner } from "@heroui/react";
@@ -133,7 +134,7 @@ export function MealCycleContent() {
   // without `sections` (older server) walk the automatic ladder as before:
   // PDF, else goals-only, else empty.
   if (data === undefined || data === null || data.cycle === null) {
-    const pdf = data?.fallback?.pdf ?? null;
+    const pdfs = fallbackPdfs(data?.fallback);
     const presets = data?.fallback?.presets ?? [];
     const goals = data?.goals ?? null;
     const sections = data?.sections;
@@ -141,9 +142,9 @@ export function MealCycleContent() {
     const showGoals =
       sections !== undefined
         ? sections.includes("goals") && hasGoalsData
-        : pdf === null && hasGoalsData;
+        : pdfs.length === 0 && hasGoalsData;
     const showPdf =
-      pdf !== null && (sections === undefined || sections.includes("pdf"));
+      pdfs.length > 0 && (sections === undefined || sections.includes("pdf"));
 
     return (
       <MealCycleShell>
@@ -152,9 +153,7 @@ export function MealCycleContent() {
             {showGoals ? (
               <GoalsOnlyView goals={goals} presets={presets} />
             ) : null}
-            {showPdf && pdf !== null ? (
-              <PdfDietView name={pdf.name} url={pdf.url} />
-            ) : null}
+            {showPdf ? <PdfDietList pdfs={pdfs} /> : null}
           </div>
         ) : (
           <NutritionState
@@ -287,13 +286,8 @@ export function MealCycleContent() {
         )}
 
         {/* Trainer chose plan + PDF → the document rides along under the plan. */}
-        {data.sections?.includes("pdf") === true &&
-        data.fallback?.pdf !== null &&
-        data.fallback?.pdf !== undefined ? (
-          <PdfDietView
-            name={data.fallback.pdf.name}
-            url={data.fallback.pdf.url}
-          />
+        {data.sections?.includes("pdf") === true ? (
+          <PdfDietList pdfs={fallbackPdfs(data.fallback)} />
         ) : null}
 
         {/* Products-only shopping list for the active plan (Jul 28 call). */}
@@ -305,5 +299,29 @@ export function MealCycleContent() {
         onClose={() => setDetailOption(null)}
       />
     </MealCycleShell>
+  );
+}
+
+/** Los PDFs de la respuesta; las anteriores a `pdfs` solo traían `pdf`. */
+function fallbackPdfs(
+  fallback: ClientDietFallback | undefined
+): Array<{ url: string; name: string }> {
+  if (fallback?.pdfs !== undefined) return fallback.pdfs;
+
+  return fallback?.pdf ? [fallback.pdf] : [];
+}
+
+function PdfDietList({ pdfs }: { pdfs: Array<{ url: string; name: string }> }) {
+  return (
+    <>
+      {pdfs.map((pdf, index) => (
+        <PdfDietView
+          key={pdf.url}
+          name={pdf.name}
+          showHeader={index === 0}
+          url={pdf.url}
+        />
+      ))}
+    </>
   );
 }

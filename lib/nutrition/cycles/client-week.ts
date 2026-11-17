@@ -99,7 +99,10 @@ export interface ClientDietPreset extends NutritionGoals {
  * responses carry no extra weight.
  */
 export interface ClientDietFallback {
+  /** The first PDF — kept for client bundles older than `pdfs`. */
   pdf: { url: string; name: string } | null;
+  /** Every PDF the trainer shared, upload order (e.g. training + rest days). */
+  pdfs?: Array<{ url: string; name: string }>;
   presets: ClientDietPreset[];
 }
 

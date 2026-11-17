@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { listClientReadiness } from "../readiness-service";
 
-import { upsertClientDietPdf } from "@/lib/nutrition/diet-fallback";
+import { addClientDietPdf } from "@/lib/nutrition/diet-fallback";
 import { ClientGoalsService } from "@/lib/nutrition/goals/client-goals-service";
 import { MealCycleService } from "@/lib/nutrition/cycles/meal-cycle-service";
 import {
@@ -117,7 +117,7 @@ describe("listClientReadiness (integration, local DB)", () => {
     expect(await verdictOf(clientId)).toBe("goals");
 
     // A v2 PDF beats goals; the readiness row carries it for the preview.
-    await upsertClientDietPdf(db, TEST_TENANT_HOST, clientId, {
+    await addClientDietPdf(db, TEST_TENANT_HOST, clientId, {
       url: "https://cdn.test/rollout.pdf",
       name: "rollout.pdf",
     });
