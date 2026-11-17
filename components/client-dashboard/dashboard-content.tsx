@@ -297,7 +297,8 @@ export function DashboardContent() {
     return latest && !latest.reviewed_at ? latest : null;
   }, [showWeeklyBanner, checkinSchedule.enabled, weeklyResponses]);
 
-  // Sin check-in abierto por rellenar: cuándo se abre el siguiente.
+  // Sin check-in abierto por rellenar: el siguiente, por su día de revisión
+  // (el cierre, que es el día que el cliente conoce) y cuándo se abre.
   const nextCheckinLabel = useMemo(() => {
     if (isCheckinConfigLoading || isLoadingForms || showWeeklyBanner) {
       return null;
@@ -308,9 +309,13 @@ export function DashboardContent() {
         (o) => o.opensAt.getTime() > now
       );
 
-      return next
-        ? formatCheckInInstant(next.opensAt, checkinSchedule.timezone)
-        : null;
+      if (!next) return null;
+      const tz = checkinSchedule.timezone;
+      const reviewDay = formatCheckInInstant(next.closesAt, tz, false);
+
+      return reviewDay === formatCheckInInstant(next.opensAt, tz, false)
+        ? formatCheckInInstant(next.closesAt, tz)
+        : `${reviewDay} · se abre el ${formatCheckInInstant(next.opensAt, tz)}`;
     } catch {
       return null;
     }
