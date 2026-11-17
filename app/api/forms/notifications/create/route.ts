@@ -44,7 +44,10 @@ type NotificationInsert = {
   title: string;
   message: string;
   icon: string;
-  metadata: Record<string, unknown>;
+  // Las filas llevan trainer_id y la campana del entrenador muestra las que no
+  // tienen audience: sin "client" cada entrenador recibía los avisos de todos
+  // sus clientes.
+  metadata: Record<string, unknown> & { audience: "client" };
 };
 
 async function fetchCheckinConfigsWithClients(
@@ -312,6 +315,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           form_type,
           action: "open_form",
+          audience: "client",
           created_by: "system",
         },
       })
@@ -603,6 +607,7 @@ export async function PUT(request: NextRequest) {
             scheduled_day: getWallClockWeekdayInTimezone(now, s.timezone),
             scheduled_time: s.time,
             action: "open_form",
+            audience: "client",
             created_by: "system",
           },
         });
@@ -625,6 +630,7 @@ export async function PUT(request: NextRequest) {
           schedule_trigger: true,
           closes_at: d.window.closesAt.toISOString(),
           action: "open_form",
+          audience: "client",
           created_by: "system",
         },
       });
@@ -722,6 +728,7 @@ export async function PUT(request: NextRequest) {
                 metadata: {
                   form_type: "habits",
                   action: "open_form",
+                  audience: "client",
                   created_by: "system",
                 },
               });
