@@ -10,6 +10,8 @@ interface Props {
   onToday: () => void;
   /** Called with a Y-M-D string when the trainer picks any day in the popover. */
   onPickDate: (ymd: string) => void;
+  /** Volumen (kg·reps) de la semana mostrada; null mientras carga. */
+  volume: number | null;
 }
 
 function formatRange(weekStartYmd: string): string {
@@ -32,12 +34,28 @@ function formatRange(weekStartYmd: string): string {
   return `Semana del ${startStr} – ${endStr}`;
 }
 
-export function WeekNavigator({ weekStartYmd, onToday, onPickDate }: Props) {
+export function WeekNavigator({
+  weekStartYmd,
+  onToday,
+  onPickDate,
+  volume,
+}: Props) {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
-      <p className="text-sm font-semibold text-gray-800 tabular-nums">
-        {formatRange(weekStartYmd)}
-      </p>
+      <div>
+        <p className="text-sm font-semibold text-gray-800 tabular-nums">
+          {formatRange(weekStartYmd)}
+        </p>
+        {volume !== null && volume > 0 ? (
+          <p className="text-xs text-default-500 tabular-nums">
+            Volumen semanal{" "}
+            <span className="font-semibold text-gray-800">
+              {volume.toLocaleString("es-ES")}
+            </span>{" "}
+            kg·reps
+          </p>
+        ) : null}
+      </div>
 
       <div className="flex items-center gap-1 shrink-0">
         <HistoryDateFilter

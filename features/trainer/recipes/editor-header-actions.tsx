@@ -11,6 +11,9 @@ interface EditorHeaderActionsProps {
   onPreview: () => void;
   onSave: () => void;
   onDelete: () => void;
+  isDuplicating: boolean;
+  /** Copia la receta guardada y abre la copia. */
+  onDuplicate: () => void;
 }
 
 /** The recipe editor's sticky-header toolbar: dirty state + preview/save/delete. */
@@ -21,6 +24,8 @@ export function EditorHeaderActions({
   onPreview,
   onSave,
   onDelete,
+  isDuplicating,
+  onDuplicate,
 }: EditorHeaderActionsProps) {
   return (
     <div className="flex items-center gap-3">
@@ -63,6 +68,24 @@ export function EditorHeaderActions({
         onPress={onSave}
       >
         Guardar
+      </Button>
+      {/* Se copia lo guardado: con cambios pendientes la copia no los
+          llevaría, así que primero hay que guardar. */}
+      <Button
+        aria-label="Duplicar receta"
+        className="min-w-0 px-0 sm:px-4"
+        isDisabled={isDirty}
+        isLoading={isDuplicating}
+        startContent={
+          isDuplicating ? null : (
+            <Icon className="sm:-mr-1" icon="solar:copy-linear" width={18} />
+          )
+        }
+        title={isDirty ? "Guarda los cambios antes de duplicar" : undefined}
+        variant="bordered"
+        onPress={onDuplicate}
+      >
+        <span className="hidden sm:inline">Duplicar</span>
       </Button>
       <Button
         isIconOnly

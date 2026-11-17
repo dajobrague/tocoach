@@ -244,3 +244,35 @@ export function storagePathFromUrl(url: string): string | null {
 
   return url.slice(idx + marker.length);
 }
+
+/**
+ * Server-side storage copy (same bucket, no download/re-upload) of a recipe
+ * media object into `targetPrefix`: returns the new object's public URL, or
+ * null when the source is missing or the URL isn't a bucket object.
+ */
+export async function copyRecipeMediaObject(
+  client: SupabaseClient,
+  url: string,
+  targetPrefix: string
+): Promise<string | null> {
+  const sourcePath = storagePathFromUrl(url);
+
+  if (sourcePath === null) {
+    return null;
+  }
+
+  const targetPath = `${targetPrefix}/${randomUUID()}${extensionOf(sourcePath)}`;
+  const { error } = await client.storage
+    .from(BUCKET)
+    .copy(sourcePath, targetPath);
+
+  if (error !== null) {
+    console.warn(
+      `[RecipeMedia] copy skipped (${sourcePath}): ${error.message}`
+    );
+
+    return null;
+  }
+
+  return client.storage.from(BUCKET).getPublicUrl(targetPath).data.publicUrl;
+}

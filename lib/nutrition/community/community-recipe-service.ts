@@ -1,11 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { randomUUID } from "node:crypto";
-
 import { TagService } from "@/lib/library/tag-service";
 import {
   RECIPE_MEDIA_BUCKET,
-  storagePathFromUrl,
+  copyRecipeMediaObject,
 } from "@/lib/nutrition/recipes/recipe-media-service";
 import {
   RecipeService,
@@ -114,7 +112,12 @@ export class CommunityRecipeService {
     const media = await Promise.all(
       sourceMedia.map(async (item) => ({
         ...item,
-        url: (await this.copyObject(item.url, communityPrefix)) ?? item.url,
+        url:
+          (await copyRecipeMediaObject(
+            this.client,
+            item.url,
+            communityPrefix
+          )) ?? item.url,
       }))
     );
 
@@ -348,7 +351,8 @@ export class CommunityRecipeService {
 
     for (const item of source.media ?? []) {
       const ownedUrl =
-        (await this.copyObject(item.url, targetPrefix)) ?? item.url;
+        (await copyRecipeMediaObject(this.client, item.url, targetPrefix)) ??
+        item.url;
       const { error: mediaError } = await this.client.from(MEDIA_TABLE).insert({
         recipe_id: recipe.id,
         type: item.type,
@@ -365,45 +369,6 @@ export class CommunityRecipeService {
     }
 
     return recipe;
-  }
-
-  /**
-   * Server-side storage copy (same bucket, no download/re-upload): returns
-   * the new object's public URL, or null when the source is missing or the
-   * URL isn't a bucket object — callers fall back to the original URL.
-   */
-  private async copyObject(
-    url: string,
-    targetPrefix: string
-  ): Promise<string | null> {
-    const sourcePath = storagePathFromUrl(url);
-
-    if (sourcePath === null) {
-      return null;
-    }
-
-    const extension = sourcePath.includes(".")
-      ? sourcePath.slice(sourcePath.lastIndexOf("."))
-      : "";
-    const targetPath = `${targetPrefix}/${randomUUID()}${extension}`;
-
-    const { error } = await this.client.storage
-      .from(RECIPE_MEDIA_BUCKET)
-      .copy(sourcePath, targetPath);
-
-    if (error !== null) {
-      console.warn(
-        `[CommunityRecipes] media copy skipped (${sourcePath}): ${error.message}`
-      );
-
-      return null;
-    }
-
-    const {
-      data: { publicUrl },
-    } = this.client.storage.from(RECIPE_MEDIA_BUCKET).getPublicUrl(targetPath);
-
-    return publicUrl;
   }
 
   /** Best-effort removal of every object under a storage prefix. */
