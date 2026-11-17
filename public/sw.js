@@ -95,6 +95,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Otros orígenes (vídeos/fotos de Supabase Storage) y peticiones parciales
+  // (Range, típicas de <video>) van directas al navegador: aquí nunca se
+  // cachean y pasarlas por fetch() del SW frenaba la descarga por debajo del
+  // bitrate de los vídeos de clientes — se congelaban al reanudar (nov 2026).
+  if (
+    new URL(event.request.url).origin !== self.location.origin ||
+    event.request.headers.has("range")
+  ) {
+    return;
+  }
+
   // IMPORTANT: Skip caching for API routes - always fetch fresh data
   if (event.request.url.includes("/api/")) {
     event.respondWith(fetch(event.request));
