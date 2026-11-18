@@ -127,7 +127,10 @@ export default function WhatsNewDialog({
                   transition={{ duration: 0.45, ease: EASE }}
                 >
                   {item ? (
-                    <Scene id={item.scene} />
+                    // La escena manda en el escenario: ampliada en escritorio.
+                    <div className="flex w-full justify-center md:scale-[1.18]">
+                      <Scene id={item.scene} />
+                    </div>
                   ) : page.stage ? (
                     <Stage body={body} branding={branding} stage={page.stage} />
                   ) : null}
