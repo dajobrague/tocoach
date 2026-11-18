@@ -45,7 +45,7 @@ export const LATEST_RELEASE: WhatsNewRelease = {
         {
           icon: "solar:clipboard-list-linear",
           title: "Todo lo pendiente en un solo sitio",
-          text: "Debajo, una columna por tipo de trabajo: check-ins por revisar, check-ins sin enviar, vídeos, mensajes y sesiones sin terminar. Cada fila te lleva directo a lo que tienes que revisar; un check-in abre esa respuesta concreta.",
+          text: "Debajo, una columna por tipo de trabajo: check-ins por revisar y sin enviar, vídeos, mensajes y sesiones sin terminar. Cada fila te lleva directo a lo que hay que revisar.",
           action: { label: "Ir a Inicio", href: "/trainer/dashboard/inicio" },
         },
         {

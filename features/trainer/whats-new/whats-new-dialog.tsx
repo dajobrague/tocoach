@@ -92,7 +92,7 @@ export default function WhatsNewDialog({
       <ModalContent>
         <ModalBody>
           <div
-            className={`grid md:h-[min(600px,calc(100dvh-8rem))] ${
+            className={`grid md:h-[min(640px,calc(100dvh-8rem))] ${
               page.stage ? "md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]" : ""
             }`}
           >
