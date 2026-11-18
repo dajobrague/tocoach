@@ -75,7 +75,7 @@ export function ExportResponsesPopover({
           {clientId ? "Descargar" : "Descargar respuestas"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0">
+      <PopoverContent className="w-80 p-0">
         <div className="flex w-full flex-col gap-4 p-4">
           <div>
             <p className="text-sm font-semibold text-foreground">
