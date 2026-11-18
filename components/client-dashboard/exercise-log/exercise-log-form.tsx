@@ -46,6 +46,8 @@ interface Props {
   autoSaveState: "idle" | "saving" | "saved" | "error";
   // Columna RIR: solo si el entrenador lo prescribió.
   showRir: boolean;
+  // RIR que pide el entrenador ("2", "1-2"), para la explicación.
+  rirTarget: string;
   // Reps por lado (D / I): solo en ejercicios unilaterales.
   perSide: boolean;
 }
@@ -59,6 +61,7 @@ export function ExerciseLogForm({
   formTitle,
   autoSaveState,
   showRir,
+  rirTarget,
   perSide,
 }: Props) {
   const updateSet = (index: number, field: keyof SetDraft, value: string) => {
@@ -106,6 +109,7 @@ export function ExerciseLogForm({
             formData={formData}
             perSide={perSide}
             removeSet={removeSet}
+            rirTarget={rirTarget}
             setVideos={setVideos}
             showRir={showRir}
             updateSet={updateSet}
@@ -237,10 +241,12 @@ function StrengthFields({
   removeSet,
   setVideos,
   showRir,
+  rirTarget,
   perSide,
   onChange,
 }: {
   showRir: boolean;
+  rirTarget: string;
   perSide: boolean;
   formData: ExerciseLogFormDraft;
   updateSet: (index: number, field: keyof SetDraft, value: string) => void;
@@ -260,6 +266,24 @@ function StrengthFields({
 
   return (
     <>
+      {perSide ? (
+        <SetHelp icon="solar:transfer-horizontal-linear">
+          Este ejercicio se hace <b>por lados</b>: anota las repeticiones del
+          lado <b>derecho</b> y del <b>izquierdo</b> por separado.
+        </SetHelp>
+      ) : null}
+      {showRir ? (
+        <SetHelp icon="solar:info-circle-linear">
+          <b>RIR</b> = repeticiones que te quedaban en reserva. Al acabar cada
+          serie, elige cuántas más podrías haber hecho (0 = ni una más).
+          {rirTarget ? (
+            <>
+              {" "}
+              Tu entrenador te pide <b>{rirTarget}</b>.
+            </>
+          ) : null}
+        </SetHelp>
+      ) : null}
       <div className="flex flex-col gap-2">
         {/* Headers — afuera de las filas para que cada fila quede pareja
             y no haya doble texto (label flotante + placeholder) en la
@@ -270,7 +294,7 @@ function StrengthFields({
         >
           <span className="text-center">Serie</span>
           <span>Peso (kg)</span>
-          <span>{perSide ? "Reps D · I" : "Reps"}</span>
+          <span>{perSide ? "Reps der. · izq." : "Reps"}</span>
           {showRir ? <span className="text-center">RIR</span> : null}
           <span className="text-center">Vídeo</span>
           {hasMultipleSets ? <span /> : null}
@@ -322,6 +346,21 @@ function StrengthFields({
         onChange={onChange}
       />
     </>
+  );
+}
+
+// Explicación corta de RIR / por lados, solo cuando aparecen esas columnas.
+function SetHelp({ icon, children }: { icon: string; children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-medium bg-default-100 px-3 py-2.5 text-[13px] leading-snug text-default-600">
+      <Icon
+        aria-hidden
+        className="mt-px shrink-0 text-primary"
+        icon={icon}
+        width={16}
+      />
+      <span>{children}</span>
+    </p>
   );
 }
 

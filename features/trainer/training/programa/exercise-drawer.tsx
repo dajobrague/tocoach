@@ -629,7 +629,8 @@ export function ExerciseDrawer({
                   onValueChange={(value) => setField("rest", value)}
                 />
                 <Input
-                  label="RIR"
+                  description="Reps que debe dejar sin hacer (0 = al fallo). Tu cliente anotará las suyas en cada serie."
+                  label="RIR (reps en reserva)"
                   labelPlacement="outside"
                   placeholder="Ej: 2"
                   size="sm"
@@ -664,9 +665,10 @@ export function ExerciseDrawer({
                   }
                 >
                   <span className="text-sm">
-                    Por lado
+                    Por lado (derecha / izquierda)
                     <span className="block text-xs text-default-500">
-                      Unilateral: el cliente anota las reps de cada lado (D / I)
+                      Para ejercicios a una mano o una pierna: tu cliente
+                      anotará las repeticiones de cada lado por separado.
                     </span>
                   </span>
                 </Switch>

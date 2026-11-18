@@ -100,7 +100,7 @@ export function ExerciseSetRow({
               className={`${LOG_INPUT_CLASS} px-1 text-center`}
               enterKeyHint="next"
               inputMode="numeric"
-              placeholder="D"
+              placeholder="Der."
               type="number"
               value={set.reps}
               onChange={(e) => onUpdate("reps", e.target.value)}
@@ -111,7 +111,7 @@ export function ExerciseSetRow({
               className={`${LOG_INPUT_CLASS} px-1 text-center`}
               enterKeyHint={isLast ? "done" : "next"}
               inputMode="numeric"
-              placeholder="I"
+              placeholder="Izq."
               type="number"
               value={set.repsLeft ?? ""}
               onChange={(e) => onUpdate("repsLeft", e.target.value)}

@@ -175,12 +175,15 @@ function SetsTable({
                 }
               >
                 {set.metadata?.reps_left != null
-                  ? `D ${set.metadata.reps_right ?? "—"} · I ${set.metadata.reps_left}`
+                  ? `Der. ${set.metadata.reps_right ?? "—"} · Izq. ${set.metadata.reps_left}`
                   : (set.reps ?? "—")}
               </b>
               <span className="ml-1 text-[10.5px] text-gray-400">reps</span>
               {set.metadata?.rir != null ? (
-                <span className="ml-2 text-[10.5px] font-semibold text-gray-500">
+                <span
+                  className="ml-2 text-[10.5px] font-semibold text-gray-500"
+                  title={`Le quedaban ${set.metadata.rir} repeticiones en reserva`}
+                >
                   RIR {set.metadata.rir}
                 </span>
               ) : null}

@@ -851,6 +851,7 @@ export function ExerciseLogModal({
             Boolean(exercise?.perSide) ||
             formData.sets.some((s) => Boolean(s.repsLeft))
           }
+          rirTarget={exercise?.rir?.toString().trim() ?? ""}
           setVideos={setVideos}
           showRir={
             Boolean(exercise?.rir?.toString().trim()) ||
