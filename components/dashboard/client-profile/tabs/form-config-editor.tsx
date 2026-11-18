@@ -51,6 +51,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChoicesEditor } from "./choices-editor";
 
 import { IconPicker } from "@/components/ui/icon-picker";
+import {
+  conditionOptions,
+  conditionParentCandidates,
+  describeCondition,
+  removeConditionsOn,
+} from "@/lib/forms/conditional";
 import { normalizeFormConfig } from "@/lib/forms/types";
 import { parseNumberRange, withNumberRange } from "@/lib/forms/validation";
 
@@ -175,6 +181,117 @@ function ScaleLabelInputs({
   );
 }
 
+/**
+ * "Mostrar solo si…": la pregunta solo le sale al cliente cuando otra
+ * anterior (Sí/No u opciones) tiene la respuesta elegida.
+ */
+function ConditionModal({
+  config,
+  state,
+  onChange,
+  onSave,
+}: {
+  config: FormConfigData;
+  state: { questionId: string; parentId: string; valueKey: string } | null;
+  onChange: (
+    next: { questionId: string; parentId: string; valueKey: string } | null
+  ) => void;
+  onSave: (parentId: string, value: boolean | string) => void;
+}) {
+  const question = state
+    ? config.questions.find((q) => q.id === state.questionId)
+    : undefined;
+  const parents = state
+    ? conditionParentCandidates(config, state.questionId)
+    : [];
+  const parent = parents.find((p) => p.id === state?.parentId);
+  const options = parent ? conditionOptions(parent) : [];
+  const option = options.find((o) => o.key === state?.valueKey);
+
+  return (
+    <Modal
+      isOpen={state !== null}
+      placement="center"
+      size="md"
+      onClose={() => onChange(null)}
+    >
+      <ModalContent>
+        <ModalHeader className="flex flex-col gap-1">
+          Mostrar solo si…
+          <span className="text-sm font-normal text-gray-500">
+            «{question?.shortLabel || question?.label}» solo le aparecerá al
+            cliente según lo que responda antes. Por ejemplo: las preguntas
+            sobre la sesión, solo si ha entrenado.
+          </span>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
+          <Select
+            label="Cuando responda a"
+            selectedKeys={state ? [state.parentId] : []}
+            variant="bordered"
+            onSelectionChange={(keys) => {
+              const parentId = String(Array.from(keys)[0] ?? "");
+              const next = parents.find((p) => p.id === parentId);
+
+              if (!state || !next) return;
+              onChange({
+                ...state,
+                parentId,
+                valueKey: conditionOptions(next)[0]?.key ?? "",
+              });
+            }}
+          >
+            {parents.map((p) => (
+              <SelectItem key={p.id}>{p.shortLabel || p.label}</SelectItem>
+            ))}
+          </Select>
+          <Select
+            label={
+              parent?.type === "multi_choice"
+                ? "Y entre lo que marque esté"
+                : "Con la respuesta"
+            }
+            selectedKeys={state?.valueKey ? [state.valueKey] : []}
+            variant="bordered"
+            onSelectionChange={(keys) => {
+              if (!state) return;
+              onChange({
+                ...state,
+                valueKey: String(Array.from(keys)[0] ?? ""),
+              });
+            }}
+          >
+            {options.map((o) => (
+              <SelectItem key={o.key}>{o.label}</SelectItem>
+            ))}
+          </Select>
+          {parent && option ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Si en «{parent.shortLabel || parent.label}» responde{" "}
+              <b>{option.label}</b>, verá «
+              {question?.shortLabel || question?.label}». Si no, no le aparece.
+            </p>
+          ) : null}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="flat" onPress={() => onChange(null)}>
+            Cancelar
+          </Button>
+          <Button
+            className="bg-gray-900 font-semibold text-white"
+            isDisabled={!parent || !option}
+            onPress={() => {
+              if (parent && option) onSave(parent.id, option.value);
+            }}
+          >
+            Guardar
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────
 interface FormConfigEditorProps {
   initialConfig: QuestionConfig[] | FormConfigData;
@@ -253,6 +370,13 @@ export default function FormConfigEditor({
     isScale: boolean;
     scaleMinLabel: string;
     scaleMaxLabel: string;
+  } | null>(null);
+
+  // "Mostrar solo si…": pregunta que se edita + padre y respuesta elegidos.
+  const [conditionFor, setConditionFor] = useState<{
+    questionId: string;
+    parentId: string;
+    valueKey: string;
   } | null>(null);
 
   // Edit sub-question modal (rename only — id is immutable)
@@ -576,7 +700,39 @@ export default function FormConfigEditor({
   const deleteQuestion = (qId: string) => {
     emitChange({
       ...config,
-      questions: config.questions.filter((q) => q.id !== qId),
+      questions: removeConditionsOn(
+        config.questions.filter((q) => q.id !== qId),
+        qId
+      ),
+    });
+  };
+
+  const setCondition = (
+    qId: string,
+    parentId: string,
+    value: boolean | string
+  ) => {
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) =>
+        q.id === qId
+          ? { ...q, conditionalOn: parentId, conditionalValue: value }
+          : q
+      ),
+    });
+  };
+
+  const clearCondition = (qId: string) => {
+    const target = config.questions.find((q) => q.id === qId);
+
+    if (!target?.conditionalOn) return;
+    emitChange({
+      ...config,
+      questions: config.questions.map((q) =>
+        q.id === qId
+          ? (removeConditionsOn([q], target.conditionalOn as string)[0] ?? q)
+          : q
+      ),
     });
   };
 
@@ -1089,12 +1245,18 @@ export default function FormConfigEditor({
                                 {/* Conditional badge */}
                                 {question.conditionalOn && (
                                   <Chip
-                                    className="flex-shrink-0"
+                                    className="max-w-[16rem] flex-shrink-0"
                                     color="warning"
                                     size="sm"
+                                    title={
+                                      describeCondition(config, question) ??
+                                      undefined
+                                    }
                                     variant="flat"
                                   >
-                                    Condicional
+                                    <span className="block truncate">
+                                      {describeCondition(config, question)}
+                                    </span>
                                   </Chip>
                                 )}
 
@@ -1192,6 +1354,67 @@ export default function FormConfigEditor({
                                           action: () =>
                                             setEditingChoicesFor(question),
                                         });
+                                      }
+
+                                      if (question.type !== "group") {
+                                        const parents =
+                                          conditionParentCandidates(
+                                            config,
+                                            question.id
+                                          );
+                                        const current =
+                                          question.conditionalOn &&
+                                          parents.some(
+                                            (p) =>
+                                              p.id === question.conditionalOn
+                                          )
+                                            ? question.conditionalOn
+                                            : undefined;
+
+                                        if (parents.length > 0) {
+                                          menuItems.push({
+                                            key: "condition",
+                                            label: question.conditionalOn
+                                              ? "Cambiar cuándo aparece"
+                                              : "Mostrar solo si…",
+                                            icon: "solar:eye-closed-linear",
+                                            iconClass: "text-amber-600",
+                                            action: () => {
+                                              const parentId =
+                                                current ?? parents[0]!.id;
+                                              const parent = parents.find(
+                                                (p) => p.id === parentId
+                                              );
+                                              const options = parent
+                                                ? conditionOptions(parent)
+                                                : [];
+                                              const valueKey =
+                                                options.find(
+                                                  (o) =>
+                                                    o.value ===
+                                                    question.conditionalValue
+                                                )?.key ??
+                                                options[0]?.key ??
+                                                "";
+
+                                              setConditionFor({
+                                                questionId: question.id,
+                                                parentId,
+                                                valueKey,
+                                              });
+                                            },
+                                          });
+                                        }
+                                        if (question.conditionalOn) {
+                                          menuItems.push({
+                                            key: "condition-clear",
+                                            label: "Mostrar siempre",
+                                            icon: "solar:eye-linear",
+                                            iconClass: "text-gray-500",
+                                            action: () =>
+                                              clearCondition(question.id),
+                                          });
+                                        }
                                       }
 
                                       if (otherPages.length > 0) {
@@ -1597,6 +1820,17 @@ export default function FormConfigEditor({
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <ConditionModal
+        config={config}
+        state={conditionFor}
+        onChange={setConditionFor}
+        onSave={(parentId, value) => {
+          if (conditionFor)
+            setCondition(conditionFor.questionId, parentId, value);
+          setConditionFor(null);
+        }}
+      />
 
       {/* ────────────────────────────────────────────────────────────
           Delete Page Confirmation Modal

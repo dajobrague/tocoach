@@ -1,4 +1,4 @@
-import type { QuestionConfig } from "./types";
+import type { FormConfigData, QuestionConfig } from "./types";
 
 /**
  * Lógica condicional de visibilidad — fuente única de verdad.
@@ -60,4 +60,99 @@ export function shouldShowQuestion(
   }
 
   return Boolean(conditionalAnswer);
+}
+
+// ── Editor: "Mostrar solo si…" ──────────────────────────────────────────
+// Solo preguntas Sí/No y de opciones pueden controlar otra: su respuesta se
+// entiende sin ambigüedad (la regla numérica `<=` de arriba es legacy).
+
+const PARENT_TYPES = new Set(["boolean", "choice", "multi_choice"]);
+
+/** Preguntas en el orden en que las ve el cliente (páginas, luego lista). */
+function inFormOrder(config: FormConfigData): QuestionConfig[] {
+  const firstPage = config.pages[0]?.id;
+  const pages = [...config.pages].sort((a, b) => a.order - b.order);
+
+  return pages.flatMap((page) =>
+    config.questions.filter((q) => (q.pageId || firstPage) === page.id)
+  );
+}
+
+/**
+ * Preguntas que pueden controlar a `childId`: Sí/No u opciones, activas y
+ * ANTERIORES en el formulario (el cliente las responde antes; además así no
+ * puede haber ciclos).
+ */
+export function conditionParentCandidates(
+  config: FormConfigData,
+  childId: string
+): QuestionConfig[] {
+  const ordered = inFormOrder(config);
+  const childIndex = ordered.findIndex((q) => q.id === childId);
+
+  return ordered
+    .slice(0, Math.max(childIndex, 0))
+    .filter((q) => q.enabled && PARENT_TYPES.has(q.type));
+}
+
+export interface ConditionOption {
+  /** Clave para un Select: "true" / "false" o el id de la opción. */
+  key: string;
+  value: boolean | string;
+  label: string;
+}
+
+export function conditionOptions(parent: QuestionConfig): ConditionOption[] {
+  if (parent.type === "boolean") {
+    return [
+      { key: "true", value: true, label: "Sí" },
+      { key: "false", value: false, label: "No" },
+    ];
+  }
+
+  return (parent.choices ?? []).map((c) => ({
+    key: c.id,
+    value: c.id,
+    label: c.label,
+  }));
+}
+
+/** «Solo si «¿Has entrenado hoy?»: Sí» — null si no es condicional. */
+export function describeCondition(
+  config: FormConfigData,
+  question: QuestionConfig
+): string | null {
+  if (!question.conditionalOn) return null;
+  const parent = config.questions.find((q) => q.id === question.conditionalOn);
+
+  if (!parent) return "Condicional";
+  const option = conditionOptions(parent).find(
+    (o) => o.value === question.conditionalValue
+  );
+  const title = parent.shortLabel || parent.label;
+
+  if (!option) return `Solo si «${title}»`;
+
+  return parent.type === "multi_choice"
+    ? `Solo si «${title}» incluye ${option.label}`
+    : `Solo si «${title}»: ${option.label}`;
+}
+
+/**
+ * Al borrar una pregunta, sus dependientes dejan de ser condicionales: con
+ * el padre ausente quedarían ocultas para siempre.
+ */
+export function removeConditionsOn(
+  questions: QuestionConfig[],
+  parentId: string
+): QuestionConfig[] {
+  return questions.map((q) => {
+    if (q.conditionalOn !== parentId) return q;
+    const { conditionalOn: _on, conditionalValue: _value, ...rest } = q;
+
+    void _on;
+    void _value;
+
+    return rest;
+  });
 }
