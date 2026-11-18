@@ -72,6 +72,18 @@ export default function WhatsNewDialog({
     [pages.length]
   );
 
+  // Cada novedad se enseña ITEM_SECONDS y pasa a la siguiente (en bucle).
+  // Con movimiento reducido no avanza sola: se elige a mano.
+  useEffect(() => {
+    if (reduce || items.length < 2) return;
+    const t = window.setTimeout(
+      () => setActive((a) => (a + 1) % items.length),
+      ITEM_SECONDS * 1000
+    );
+
+    return () => window.clearTimeout(t);
+  }, [index, active, items.length, reduce]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") go(index + 1);
@@ -236,9 +248,6 @@ export default function WhatsNewDialog({
                                         duration: ITEM_SECONDS,
                                         ease: "linear",
                                       }}
-                                      onAnimationComplete={() =>
-                                        setActive((a) => (a + 1) % items.length)
-                                      }
                                     />
                                   ) : null}
                                 </div>

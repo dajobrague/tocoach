@@ -37,7 +37,7 @@ export const LATEST_RELEASE: WhatsNewRelease = {
   id: "2026-11-18-novedades",
   pages: [
     {
-      label: "Inicio y gráficas",
+      label: "Inicio",
       title: "Tu Inicio, convertido en tablero",
       items: [
         {
@@ -166,7 +166,7 @@ export const LATEST_RELEASE: WhatsNewRelease = {
       ],
     },
     {
-      label: "Más mejoras",
+      label: "Y además",
       title: "Y además",
       items: [
         {

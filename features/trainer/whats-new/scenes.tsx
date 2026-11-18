@@ -100,7 +100,7 @@ function Surface({
   return (
     <div
       data-ui
-      className={`w-full max-w-[380px] rounded-large bg-content1 p-5 text-left ${className}`}
+      className={`w-full max-w-[400px] rounded-large bg-content1 p-6 text-left ${className}`}
     >
       {children}
     </div>
@@ -212,7 +212,7 @@ function WeekFigures() {
   ];
 
   return (
-    <Surface className="max-w-[420px]">
+    <Surface className="max-w-[440px]">
       <p className="text-sm font-semibold text-foreground">Esta semana</p>
       <div className="mt-4 grid grid-cols-3 gap-4">
         {figures.map((f, i) => (
@@ -252,7 +252,7 @@ function PendingBoard() {
   ];
 
   return (
-    <Surface className="max-w-[420px]">
+    <Surface className="max-w-[440px]">
       <p className="text-sm font-semibold text-foreground">Pendientes</p>
       <div className="mt-4 grid grid-cols-2 gap-3">
         {cols.map((col, c) => (
