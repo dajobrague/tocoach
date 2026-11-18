@@ -1015,7 +1015,7 @@ export default function FormsTab({
             }
           />
         </Tabs>
-        {selectedView === "responses" ? (
+        {selectedView === "responses" && displayResponses.length > 0 ? (
           <ExportResponsesPopover
             clientId={clientId}
             formType={selectedFormType}
