@@ -29,6 +29,7 @@ describe("buildResponsesCsv", () => {
           ],
         }),
         q({ id: "notes", label: "Notas" }),
+        q({ id: "notes2", label: "Notas" }),
       ],
       [
         {
@@ -56,9 +57,9 @@ describe("buildResponsesCsv", () => {
 
     expect(csv.startsWith("﻿")).toBe(true);
     expect(csv.slice(1).split("\r\n")).toEqual([
-      "Timestamp,Email Address,¿Entrenaste?,¿Dónde te duele?,Notas,old_q,ID de respuesta",
-      "2026-07-01 10:00:00,,No,,,,r1",
-      '2026-10-27 15:21:03,a@x.com,Sí,"Rodilla, Espalda","dijo ""ok"", bien",4,r2',
+      "Timestamp,Email Address,¿Entrenaste?,¿Dónde te duele?,Notas,Notas (2),Pregunta eliminada (old_q),ID de respuesta",
+      "2026-07-01 10:00:00,,No,,,,,r1",
+      '2026-10-27 15:21:03,a@x.com,Sí,"Rodilla, Espalda","dijo ""ok"", bien",,4,r2',
       "",
     ]);
   });

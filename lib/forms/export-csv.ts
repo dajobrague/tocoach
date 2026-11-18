@@ -70,11 +70,21 @@ export function buildResponsesCsv(
     }
   }
 
+  // Títulos repetidos (dos preguntas con el mismo texto) → «(2)», «(3)».
+  const used = new Map<string, number>();
+  const unique = (title: string) => {
+    const n = (used.get(title) ?? 0) + 1;
+
+    used.set(title, n);
+
+    return n === 1 ? title : `${title} (${n})`;
+  };
   const header = [
     "Timestamp",
     "Email Address",
-    ...columns.map((q) => q.fullQuestion?.trim() || q.label),
-    ...extra,
+    ...columns.map((q) => unique(q.fullQuestion?.trim() || q.label)),
+    // Respuestas a preguntas que ya no están en ningún formulario.
+    ...extra.map((key) => unique(`Pregunta eliminada (${key})`)),
     "ID de respuesta",
   ];
   const rows = [...responses]
