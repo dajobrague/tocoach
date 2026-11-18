@@ -1,6 +1,6 @@
 import type { FormConfigData, QuestionConfig } from "@/lib/forms/types";
 
-import { RATING_MAX, flattenQuestions } from "@/lib/forms/types";
+import { RATING_MAX, SCALE_MAX, flattenQuestions } from "@/lib/forms/types";
 
 /**
  * Formulario post-entreno (`form_type = 'workout'`).
@@ -119,6 +119,8 @@ function formatAnswer(q: QuestionConfig, answer: unknown): string | null {
   switch (q.type) {
     case "rating":
       return typeof answer === "number" ? `${answer}/${RATING_MAX}` : null;
+    case "scale":
+      return typeof answer === "number" ? `${answer}/${SCALE_MAX}` : null;
     case "number": {
       if (typeof answer !== "number" || Number.isNaN(answer)) return null;
       const n = answer.toLocaleString("es-ES", { maximumFractionDigits: 2 });

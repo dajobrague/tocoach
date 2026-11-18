@@ -21,6 +21,7 @@ import {
   NumberRow,
   PhotoTile,
   RatingInput,
+  ScaleInput,
   TextInput,
 } from "@/components/client-dashboard/dynamic-form-fields";
 import {
@@ -999,6 +1000,18 @@ export function DynamicFormModal({
             disabled={isViewMode}
             label={question.label}
             showHint={!isViewMode && !compact}
+            value={value}
+            onChange={set}
+          />
+        );
+
+      case "scale":
+        return (
+          <ScaleInput
+            disabled={isViewMode}
+            label={question.label}
+            maxLabel={question.scaleMaxLabel}
+            minLabel={question.scaleMinLabel}
             value={value}
             onChange={set}
           />

@@ -132,7 +132,7 @@ export interface FormTemplateRow {
  * multi_choice` — only `number` and `rating` produce numeric answers
  * suitable for charting.
  */
-const NUMERIC_QUESTION_TYPES = new Set(["number", "rating"]);
+const NUMERIC_QUESTION_TYPES = new Set(["number", "rating", "scale"]);
 
 /**
  * Question types that surface as photo-timeline sources. Only `photo` at
@@ -206,7 +206,9 @@ export function buildFormQuestionAdaptersFromTemplates(
             ? { kind: "photo" as const }
             : isRating
               ? { kind: "rating" as const }
-              : {}),
+              : qType === "scale"
+                ? { kind: "scale" as const }
+                : {}),
         })
       );
     }

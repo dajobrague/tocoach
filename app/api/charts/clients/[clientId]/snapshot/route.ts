@@ -535,7 +535,9 @@ export async function GET(
     // Metadata de las preguntas del tenant (unit / y_max / rating) para
     // que el portal cliente resuelva los adapters igual que el trainer.
     const sources = tenantQuestions.questions
-      .filter((q) => q.type === "number" || q.type === "rating")
+      .filter(
+        (q) => q.type === "number" || q.type === "rating" || q.type === "scale"
+      )
       .map(
         (q) =>
           buildFormQuestionAdapter({
@@ -544,6 +546,7 @@ export async function GET(
             label: q.label ?? q.id,
             ...(q.unit !== null ? { unit: q.unit } : {}),
             ...(q.type === "rating" ? { kind: "rating" as const } : {}),
+            ...(q.type === "scale" ? { kind: "scale" as const } : {}),
           }).metadata
       );
 

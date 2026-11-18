@@ -2,6 +2,7 @@
 
 export type QuestionType =
   | "rating"
+  | "scale"
   | "number"
   | "text"
   | "boolean"
@@ -15,6 +16,10 @@ export type QuestionType =
  * del entrenador (`form_templates`, `is_active` = activado) es la fuente de
  * verdad, sin horario ni recordatorios. Ver `lib/forms/workout.ts`.
  */
+/** Rango de las preguntas `scale` (dolor, esfuerzo…: escala clínica 0–10). */
+export const SCALE_MIN = 0;
+export const SCALE_MAX = 10;
+
 export const FORM_TYPES = ["checkins", "habits", "workout", "intake"] as const;
 export type FormType = (typeof FORM_TYPES)[number];
 
@@ -155,6 +160,12 @@ export interface QuestionConfig {
    */
   min?: number;
   max?: number;
+  /**
+   * Solo `scale` (0–10, el cliente toca un número): texto opcional de los
+   * extremos, p. ej. «Ningún dolor» / «Peor dolor imaginable».
+   */
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
   enabled: boolean;
   required: boolean;
   conditionalOn?: string;

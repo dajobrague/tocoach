@@ -32,7 +32,7 @@ import type { AdapterContext, DataAdapter } from "./types";
 
 import { averageInWindow, generateBuckets } from "./bucketing";
 
-import { RATING_MAX } from "@/lib/forms/types";
+import { RATING_MAX, SCALE_MAX } from "@/lib/forms/types";
 
 export interface FormQuestionAdapterSpec {
   /** The form_type the question lives in. */
@@ -48,7 +48,7 @@ export interface FormQuestionAdapterSpec {
    * routes through a photo timeline path instead of numeric bucketing.
    * Defaults to numeric.
    */
-  kind?: "numeric" | "photo" | "rating";
+  kind?: "numeric" | "photo" | "rating" | "scale";
   /**
    * Other questions with the same measurement (ChartConfig.also_from). Their
    * values fill the days on which this question has none; this question
@@ -168,6 +168,7 @@ export function buildFormQuestionAdapter(
     label: spec.label,
     ...(spec.unit !== undefined ? { unit: spec.unit } : {}),
     ...(isRating ? { y_max: RATING_MAX, rating: true as const } : {}),
+    ...(spec.kind === "scale" ? { y_max: SCALE_MAX } : {}),
     category: spec.formType === "checkins" ? "checkin" : "habit",
     dimensions: isPhoto ? "photo" : 1,
     default_chart_type: isPhoto ? "photo_timeline" : "area",

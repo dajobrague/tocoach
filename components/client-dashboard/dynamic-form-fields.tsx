@@ -110,6 +110,69 @@ export function RatingInput({
   );
 }
 
+// ── Escala 0–10 ─────────────────────────────────────────────────────
+// Dolor, esfuerzo… El cliente toca un número (nada que teclear, sin 15 ni
+// 3,5). Dos filas en el móvil para que cada botón sea tocable; una en
+// pantallas anchas. Los textos de los extremos los pone el entrenador.
+const SCALE_VALUES = Array.from({ length: 11 }, (_, i) => i);
+
+export function ScaleInput({
+  disabled,
+  label,
+  minLabel,
+  maxLabel,
+  value,
+  onChange,
+}: {
+  disabled: boolean;
+  label: string;
+  minLabel: string | undefined;
+  maxLabel: string | undefined;
+  value: unknown;
+  onChange: (v: number) => void;
+}) {
+  const current = typeof value === "number" ? value : null;
+
+  return (
+    <div className="space-y-2">
+      <div
+        aria-label={label}
+        className="grid grid-cols-6 gap-1.5 sm:grid-cols-11"
+        role="radiogroup"
+      >
+        {SCALE_VALUES.map((n) => (
+          <button
+            key={n}
+            aria-checked={current === n}
+            aria-label={`${n} de 10`}
+            className={`h-12 rounded-xl text-[17px] font-bold tabular-nums ${PRESS} disabled:cursor-default ${
+              current === n
+                ? "bg-primary text-primary-foreground"
+                : "bg-default-100 text-foreground"
+            }`}
+            disabled={disabled}
+            role="radio"
+            type="button"
+            onClick={() => onChange(n)}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      {minLabel || maxLabel ? (
+        <div className="flex justify-between gap-4 text-[13px] leading-snug text-default-500">
+          <span>{minLabel ? `0 = ${minLabel}` : ""}</span>
+          <span className="text-right">
+            {maxLabel ? `10 = ${maxLabel}` : ""}
+          </span>
+        </div>
+      ) : (
+        <FieldHint>Toca un número del 0 al 10</FieldHint>
+      )}
+    </div>
+  );
+}
+
 // ── Number ──────────────────────────────────────────────────────────
 // Input de texto con teclado numérico (inputMode) en vez de type="number":
 // acepta coma decimal ("61,8") y guarda un número, que es lo que exige la

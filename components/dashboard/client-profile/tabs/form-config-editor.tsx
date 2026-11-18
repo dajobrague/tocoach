@@ -95,6 +95,7 @@ function SortableItem({
 // ── Type helpers ──────────────────────────────────────────────────────
 const TYPE_LABELS: Record<QuestionType, string> = {
   rating: "Valoración",
+  scale: "Escala 0–10",
   number: "Número",
   text: "Texto",
   boolean: "Sí/No",
@@ -106,6 +107,7 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 
 const TYPE_CHIP_STYLES: Record<QuestionType, string> = {
   rating: "bg-amber-100 text-amber-800",
+  scale: "bg-rose-100 text-rose-800",
   number: "bg-blue-100 text-blue-800",
   text: "bg-gray-100 text-gray-700",
   boolean: "bg-emerald-100 text-emerald-800",
@@ -114,6 +116,64 @@ const TYPE_CHIP_STYLES: Record<QuestionType, string> = {
   choice: "bg-indigo-100 text-indigo-800",
   multi_choice: "bg-violet-100 text-violet-800",
 };
+
+/** Textos de los extremos de una escala 0–10; vacío = sin texto. */
+function withScaleLabels(
+  q: QuestionConfig,
+  minLabel: string,
+  maxLabel: string
+): QuestionConfig {
+  const { scaleMinLabel: _min, scaleMaxLabel: _max, ...rest } = q;
+
+  void _min;
+  void _max;
+
+  return {
+    ...rest,
+    ...(minLabel.trim() ? { scaleMinLabel: minLabel.trim() } : {}),
+    ...(maxLabel.trim() ? { scaleMaxLabel: maxLabel.trim() } : {}),
+  };
+}
+
+/** Textos opcionales del 0 y del 10, con vista previa de lo que verá el cliente. */
+function ScaleLabelInputs({
+  minLabel,
+  maxLabel,
+  onChange,
+}: {
+  minLabel: string;
+  maxLabel: string;
+  onChange: (minLabel: string, maxLabel: string) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+      <p className="text-xs text-gray-600">
+        Tu cliente tocará un número del 0 al 10. Explica qué significan los
+        extremos (opcional):
+      </p>
+      <div className="flex gap-3">
+        <Input
+          label="Qué significa 0"
+          maxLength={40}
+          placeholder="Ej: Ningún dolor"
+          size="sm"
+          value={minLabel}
+          variant="bordered"
+          onValueChange={(v) => onChange(v, maxLabel)}
+        />
+        <Input
+          label="Qué significa 10"
+          maxLength={40}
+          placeholder="Ej: Peor dolor imaginable"
+          size="sm"
+          value={maxLabel}
+          variant="bordered"
+          onValueChange={(v) => onChange(minLabel, v)}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ── Props ─────────────────────────────────────────────────────────────
 interface FormConfigEditorProps {
@@ -189,6 +249,10 @@ export default function FormConfigEditor({
     isNumber: boolean;
     min: string;
     max: string;
+    /** Solo preguntas `scale`: textos de los extremos. */
+    isScale: boolean;
+    scaleMinLabel: string;
+    scaleMaxLabel: string;
   } | null>(null);
 
   // Edit sub-question modal (rename only — id is immutable)
@@ -218,6 +282,8 @@ export default function FormConfigEditor({
     unit: "",
     min: "",
     max: "",
+    scaleMinLabel: "",
+    scaleMaxLabel: "",
     icon: "solar:question-circle-bold",
     choices: [] as ChoiceOption[],
   });
@@ -481,15 +547,21 @@ export default function FormConfigEditor({
     qId: string,
     label: string,
     fullQuestion: string,
-    range?: Pick<QuestionConfig, "min" | "max">
+    range?: Pick<QuestionConfig, "min" | "max">,
+    scaleLabels?: { min: string; max: string }
   ) => {
     emitChange({
       ...config,
       questions: config.questions.map((q) => {
         if (q.id !== qId) return q;
-        const renamed = { ...q, label, fullQuestion };
+        let renamed: QuestionConfig = { ...q, label, fullQuestion };
 
-        return range ? withNumberRange(renamed, range) : renamed;
+        if (range) renamed = withNumberRange(renamed, range);
+        if (scaleLabels) {
+          renamed = withScaleLabels(renamed, scaleLabels.min, scaleLabels.max);
+        }
+
+        return renamed;
       }),
     });
   };
@@ -532,7 +604,7 @@ export default function FormConfigEditor({
           .filter((c) => c.label.trim())
           .map((c) => ({ ...c, label: c.label.trim() }))
       : undefined;
-    const q: QuestionConfig = {
+    const base: QuestionConfig = {
       id: `custom_${Date.now()}`,
       label: newQ.label.trim(),
       fullQuestion: newQ.fullQuestion.trim() || newQ.label.trim(),
@@ -545,6 +617,10 @@ export default function FormConfigEditor({
       required: false,
       pageId: selectedPageId,
     };
+    const q =
+      newQ.type === "scale"
+        ? withScaleLabels(base, newQ.scaleMinLabel, newQ.scaleMaxLabel)
+        : base;
 
     emitChange({ ...config, questions: [...config.questions, q] });
     setNewQ({
@@ -554,6 +630,8 @@ export default function FormConfigEditor({
       unit: "",
       min: "",
       max: "",
+      scaleMinLabel: "",
+      scaleMaxLabel: "",
       icon: "solar:question-circle-bold",
       choices: [],
     });
@@ -1092,6 +1170,12 @@ export default function FormConfigEditor({
                                                 question.max !== undefined
                                                   ? String(question.max)
                                                   : "",
+                                              isScale:
+                                                question.type === "scale",
+                                              scaleMinLabel:
+                                                question.scaleMinLabel ?? "",
+                                              scaleMaxLabel:
+                                                question.scaleMaxLabel ?? "",
                                             }),
                                         },
                                       ];
@@ -1445,6 +1529,9 @@ export default function FormConfigEditor({
                 <SelectItem key="text">Texto</SelectItem>
                 <SelectItem key="number">Número</SelectItem>
                 <SelectItem key="rating">Valoración (1-5)</SelectItem>
+                <SelectItem key="scale">
+                  Escala 0–10 (dolor, esfuerzo…)
+                </SelectItem>
                 <SelectItem key="boolean">Sí / No</SelectItem>
                 <SelectItem key="choice">Opciones (elige una)</SelectItem>
                 <SelectItem key="multi_choice">
@@ -1468,6 +1555,16 @@ export default function FormConfigEditor({
                 max={newQ.max}
                 min={newQ.min}
                 onChange={(min, max) => setNewQ({ ...newQ, min, max })}
+              />
+            )}
+
+            {newQ.type === "scale" && (
+              <ScaleLabelInputs
+                maxLabel={newQ.scaleMaxLabel}
+                minLabel={newQ.scaleMinLabel}
+                onChange={(scaleMinLabel, scaleMaxLabel) =>
+                  setNewQ({ ...newQ, scaleMinLabel, scaleMaxLabel })
+                }
               />
             )}
 
@@ -1621,6 +1718,17 @@ export default function FormConfigEditor({
                 }
               />
             ) : null}
+            {editingQuestion?.isScale ? (
+              <ScaleLabelInputs
+                maxLabel={editingQuestion.scaleMaxLabel}
+                minLabel={editingQuestion.scaleMinLabel}
+                onChange={(scaleMinLabel, scaleMaxLabel) =>
+                  setEditingQuestion((prev) =>
+                    prev ? { ...prev, scaleMinLabel, scaleMaxLabel } : null
+                  )
+                }
+              />
+            ) : null}
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setEditingQuestion(null)}>
@@ -1645,7 +1753,13 @@ export default function FormConfigEditor({
                     editingQuestion.id,
                     editingQuestion.label.trim(),
                     editingQuestion.fullQuestion.trim(),
-                    rangeResult?.ok ? rangeResult.range : undefined
+                    rangeResult?.ok ? rangeResult.range : undefined,
+                    editingQuestion.isScale
+                      ? {
+                          min: editingQuestion.scaleMinLabel,
+                          max: editingQuestion.scaleMaxLabel,
+                        }
+                      : undefined
                   );
                   setEditingQuestion(null);
                 }

@@ -6,6 +6,8 @@ import {
   FormResponseSubmission,
   QuestionConfig,
   ValidationError,
+  SCALE_MAX,
+  SCALE_MIN,
   ValidationResult,
   isStructuredConfig,
 } from "./types";
@@ -41,6 +43,7 @@ export function validateQuestionConfig(question: any): ValidationResult {
   // Type validation
   const validTypes = [
     "rating",
+    "scale",
     "number",
     "text",
     "boolean",
@@ -133,6 +136,18 @@ export function validateQuestionConfig(question: any): ValidationResult {
             });
           });
         }
+      });
+    }
+  }
+
+  // Escala 0–10: textos de los extremos opcionales y cortos.
+  for (const key of ["scaleMinLabel", "scaleMaxLabel"] as const) {
+    const v = question[key];
+
+    if (v !== undefined && (typeof v !== "string" || v.length > 60)) {
+      errors.push({
+        field: key,
+        message: `${key} debe ser un texto de 60 caracteres como máximo`,
       });
     }
   }
@@ -425,6 +440,20 @@ function pushAnswerTypeErrors(
         errors.push({
           field: fieldId,
           message: `${label} debe ser un número entre 1 y 5`,
+        });
+      }
+      break;
+
+    case "scale":
+      if (
+        typeof answer !== "number" ||
+        !Number.isInteger(answer) ||
+        answer < SCALE_MIN ||
+        answer > SCALE_MAX
+      ) {
+        errors.push({
+          field: fieldId,
+          message: `${label} debe ser un número entero entre ${SCALE_MIN} y ${SCALE_MAX}`,
         });
       }
       break;

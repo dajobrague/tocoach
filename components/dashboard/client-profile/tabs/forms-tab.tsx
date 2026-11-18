@@ -1453,22 +1453,24 @@ export default function FormsTab({
                                   ? question.fullQuestion
                                   : question.type === "rating"
                                     ? "Califica del 1 al 5"
-                                    : question.type === "number"
-                                      ? `Ingresa el valor en ${question.unit || ""}`
-                                      : question.type === "text"
-                                        ? "Escribe tus comentarios"
-                                        : question.type === "boolean"
-                                          ? "Selecciona Sí o No"
-                                          : question.type === "photo"
-                                            ? "Sube una foto"
-                                            : question.type === "group"
-                                              ? `${question.subQuestions?.filter((sq) => sq.enabled).length || 0} elementos`
-                                              : question.type === "choice"
-                                                ? "Selecciona una opción"
-                                                : question.type ===
-                                                    "multi_choice"
-                                                  ? "Selecciona una o varias opciones"
-                                                  : ""}
+                                    : question.type === "scale"
+                                      ? "Toca un número del 0 al 10"
+                                      : question.type === "number"
+                                        ? `Ingresa el valor en ${question.unit || ""}`
+                                        : question.type === "text"
+                                          ? "Escribe tus comentarios"
+                                          : question.type === "boolean"
+                                            ? "Selecciona Sí o No"
+                                            : question.type === "photo"
+                                              ? "Sube una foto"
+                                              : question.type === "group"
+                                                ? `${question.subQuestions?.filter((sq) => sq.enabled).length || 0} elementos`
+                                                : question.type === "choice"
+                                                  ? "Selecciona una opción"
+                                                  : question.type ===
+                                                      "multi_choice"
+                                                    ? "Selecciona una o varias opciones"
+                                                    : ""}
                               </p>
                             </div>
                           </div>
@@ -1843,6 +1845,25 @@ export default function FormsTab({
                 return (
                   <p className="text-sm font-semibold text-gray-900">
                     {answer} {q.unit || ""}
+                  </p>
+                );
+              }
+              if (q.type === "scale") {
+                const extreme =
+                  answer === 0
+                    ? q.scaleMinLabel
+                    : answer === 10
+                      ? q.scaleMaxLabel
+                      : undefined;
+
+                return (
+                  <p className="text-sm font-semibold text-gray-900">
+                    {answer}/10
+                    {extreme ? (
+                      <span className="ml-1.5 font-normal text-gray-500">
+                        ({extreme})
+                      </span>
+                    ) : null}
                   </p>
                 );
               }
