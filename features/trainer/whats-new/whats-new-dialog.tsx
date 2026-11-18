@@ -1,9 +1,10 @@
 "use client";
 
-// Diálogo de Novedades: a la izquierda un escenario con el producto de verdad
-// (el cuerpo sombreado, los clips del catálogo, las series por músculo, el
-// sticker con la marca del entrenador); a la derecha qué cambia y dónde
-// encontrarlo. Se carga solo cuando toca enseñarlo (ver whats-new-modal).
+// Diálogo de Novedades. Dos tipos de página: con escena (a la izquierda el
+// producto de verdad: el cuerpo sombreado, los clips del catálogo, el sticker
+// con la marca; a la derecha qué cambia) o lista (varias novedades a lo
+// ancho, cada una con su icono y explicación). Se carga solo cuando toca
+// enseñarlo (ver whats-new-modal).
 
 import type { WhatsNewRelease, WhatsNewStage } from "./releases";
 
@@ -90,27 +91,33 @@ export default function WhatsNewDialog({
     >
       <ModalContent>
         <ModalBody>
-          <div className="grid md:h-[min(560px,calc(100dvh-8rem))] md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
+          <div
+            className={`grid md:h-[min(600px,calc(100dvh-8rem))] ${
+              page.stage ? "md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]" : ""
+            }`}
+          >
             {/* Escenario */}
-            <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8">
-              <AnimatePresence initial={false} mode="wait">
-                <motion.div
-                  key={page.stage}
-                  {...enter}
-                  className="flex w-full items-center justify-center"
-                  transition={{ duration: 0.45, ease: EASE }}
-                >
-                  <Stage body={body} branding={branding} stage={page.stage} />
-                </motion.div>
-              </AnimatePresence>
-            </div>
+            {page.stage ? (
+              <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8">
+                <AnimatePresence initial={false} mode="wait">
+                  <motion.div
+                    key={page.label}
+                    {...enter}
+                    className="flex w-full items-center justify-center"
+                    transition={{ duration: 0.45, ease: EASE }}
+                  >
+                    <Stage body={body} branding={branding} stage={page.stage} />
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            ) : null}
 
             {/* Texto */}
-            <div className="flex flex-col px-7 pb-6 pt-7 sm:px-9">
+            <div className="flex min-h-0 flex-col px-7 pb-6 pt-7 sm:px-9">
               <nav aria-label="Novedades" className="flex gap-1.5 pr-8">
                 {pages.map((p, i) => (
                   <button
-                    key={p.stage}
+                    key={p.label}
                     aria-current={i === index ? "step" : undefined}
                     className="group min-w-0 flex-1 py-1 focus-visible:outline-none"
                     type="button"
@@ -140,9 +147,9 @@ export default function WhatsNewDialog({
 
               <AnimatePresence initial={false} mode="wait">
                 <motion.div
-                  key={page.stage}
+                  key={page.label}
                   animate={{ opacity: 1, x: 0 }}
-                  className="mt-7 flex flex-1 flex-col"
+                  className="mt-7 flex min-h-0 flex-1 flex-col"
                   exit={{ opacity: 0, x: reduce ? 0 : -6 }}
                   initial={{ opacity: 0, x: reduce ? 0 : 10 }}
                   transition={{ duration: 0.3, ease: EASE }}
@@ -150,9 +157,56 @@ export default function WhatsNewDialog({
                   <h2 className="font-heading text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground [text-wrap:balance]">
                     {page.title}
                   </h2>
-                  <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-default-600">
-                    {page.text}
-                  </p>
+                  {page.text ? (
+                    <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-default-600">
+                      {page.text}
+                    </p>
+                  ) : null}
+                  {page.items ? (
+                    <ul className="-mr-3 mt-6 grid min-h-0 flex-1 content-start gap-x-8 gap-y-6 overflow-y-auto pr-3 sm:grid-cols-2">
+                      {page.items.map((item, i) => (
+                        <motion.li
+                          key={item.title}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="flex gap-3"
+                          initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+                          transition={{
+                            duration: 0.3,
+                            ease: EASE,
+                            delay: 0.05 + i * 0.04,
+                          }}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium bg-primary/10 text-primary">
+                            <Icon icon={item.icon} width={18} />
+                          </span>
+                          <div className="min-w-0">
+                            <h3 className="text-[15px] font-semibold leading-snug text-foreground">
+                              {item.title}
+                            </h3>
+                            <p className="mt-1 text-sm leading-relaxed text-default-600">
+                              {item.text}
+                            </p>
+                            {item.action ? (
+                              <button
+                                className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  router.push(item.action!.href);
+                                }}
+                              >
+                                {item.action.label}
+                                <Icon
+                                  icon="solar:arrow-right-linear"
+                                  width={16}
+                                />
+                              </button>
+                            ) : null}
+                          </div>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {page.action ? (
                     <Button
                       className="mt-6 self-start px-0 font-medium data-[hover=true]:bg-transparent data-[hover=true]:underline"
