@@ -184,6 +184,8 @@ export interface WorkoutExercise {
   rest: string;
   /** RIR (reps in reserve) prescrito — texto libre, vive en metadata.rir. */
   rir?: string;
+  /** Unilateral: el cliente registra reps por lado (metadata.per_side). */
+  perSide?: boolean;
   /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
   increaseWeightAfter?: string;
   trainingSystem: string;

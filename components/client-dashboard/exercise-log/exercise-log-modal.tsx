@@ -358,6 +358,8 @@ export function ExerciseLogModal({
         reps: s.reps ? parseInt(s.reps) : null,
         weight: s.weight || null,
         videoUrl: s.videoUrl || null,
+        rir: s.rir ? parseInt(s.rir) : null,
+        repsLeft: s.repsLeft ? parseInt(s.repsLeft) : null,
       }));
     }
 
@@ -845,7 +847,15 @@ export function ExerciseLogModal({
           formData={formData}
           formTitle={formTitle}
           isCardio={isCardio}
+          perSide={
+            Boolean(exercise?.perSide) ||
+            formData.sets.some((s) => Boolean(s.repsLeft))
+          }
           setVideos={setVideos}
+          showRir={
+            Boolean(exercise?.rir?.toString().trim()) ||
+            formData.sets.some((s) => Boolean(s.rir))
+          }
           onChange={handleUserFormChange}
         />
 

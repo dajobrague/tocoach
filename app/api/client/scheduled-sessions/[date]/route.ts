@@ -68,6 +68,7 @@ interface ResolvedExercise {
   tempo: string | null;
   training_system: string | null;
   rir: string | null;
+  per_side: boolean;
   /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
   increase_weight_after: string | null;
   /**
@@ -546,6 +547,7 @@ function makeResolvedDay(
         tempo: readStr("tempo"),
         training_system: readStr("training_system"),
         rir: readStr("rir"),
+        per_side: meta.per_side === true,
         increase_weight_after: readStr(INCREASE_WEIGHT_KEY),
         // Se completa después con enrichWithLastUsedWeights — la query
         // necesita el supabase client y el clientId, que viven en el GET

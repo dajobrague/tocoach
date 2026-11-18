@@ -64,6 +64,8 @@ export interface ExerciseLike {
   rest?: string;
   /** RIR (reps in reserve) prescrito — texto libre. */
   rir?: string;
+  /** Unilateral: el cliente registra reps por lado (metadata.per_side). */
+  perSide?: boolean;
   /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
   increaseWeightAfter?: string;
   tempo?: string;

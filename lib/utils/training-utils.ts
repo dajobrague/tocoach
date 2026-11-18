@@ -354,6 +354,7 @@ export function transformToWorkoutProgram(
             tempo: coaching.tempo,
             rest: coaching.rest,
             rir: coaching.rir,
+            ...(se.metadata?.per_side === true ? { perSide: true } : {}),
             ...(typeof se.metadata?.[INCREASE_WEIGHT_KEY] === "string"
               ? { increaseWeightAfter: se.metadata[INCREASE_WEIGHT_KEY] }
               : {}),

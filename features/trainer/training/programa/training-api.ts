@@ -76,6 +76,7 @@ export interface ExercisePrescription {
   tempo?: string;
   rest?: string;
   rir?: string;
+  perSide?: boolean;
   trainingSystem?: string;
   // Cardio — duration en minutos, distance en km, bpm min/max
   duration?: number;
@@ -410,6 +411,7 @@ function exerciseBody(input: UpdateExerciseInput): Record<string, unknown> {
   if (input.tempo !== undefined) body.tempo = input.tempo;
   if (input.rest !== undefined) body.rest = input.rest;
   if (input.rir !== undefined) body.rir = input.rir;
+  if (input.perSide !== undefined) body.perSide = input.perSide;
   if (input.trainingSystem !== undefined)
     body.trainingSystem = input.trainingSystem;
   if (input.duration !== undefined) body.duration = input.duration;

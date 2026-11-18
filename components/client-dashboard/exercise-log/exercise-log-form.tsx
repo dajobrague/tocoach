@@ -44,6 +44,10 @@ interface Props {
   formTitle: string;
   // Estado del autosave para mostrar inline al lado del título.
   autoSaveState: "idle" | "saving" | "saved" | "error";
+  // Columna RIR: solo si el entrenador lo prescribió.
+  showRir: boolean;
+  // Reps por lado (D / I): solo en ejercicios unilaterales.
+  perSide: boolean;
 }
 
 export function ExerciseLogForm({
@@ -54,6 +58,8 @@ export function ExerciseLogForm({
   setVideos,
   formTitle,
   autoSaveState,
+  showRir,
+  perSide,
 }: Props) {
   const updateSet = (index: number, field: keyof SetDraft, value: string) => {
     const newSets = [...formData.sets];
@@ -98,8 +104,10 @@ export function ExerciseLogForm({
           <StrengthFields
             addSet={addSet}
             formData={formData}
+            perSide={perSide}
             removeSet={removeSet}
             setVideos={setVideos}
+            showRir={showRir}
             updateSet={updateSet}
             onChange={onChange}
           />
@@ -228,8 +236,12 @@ function StrengthFields({
   addSet,
   removeSet,
   setVideos,
+  showRir,
+  perSide,
   onChange,
 }: {
+  showRir: boolean;
+  perSide: boolean;
   formData: ExerciseLogFormDraft;
   updateSet: (index: number, field: keyof SetDraft, value: string) => void;
   addSet: () => void;
@@ -238,7 +250,13 @@ function StrengthFields({
   onChange: (next: ExerciseLogFormDraft) => void;
 }) {
   const hasMultipleSets = formData.sets.length > 1;
-  const grid = hasMultipleSets ? SET_GRID_MANY : SET_GRID_ONE;
+  const grid = showRir
+    ? hasMultipleSets
+      ? SET_GRID_MANY_RIR
+      : SET_GRID_ONE_RIR
+    : hasMultipleSets
+      ? SET_GRID_MANY
+      : SET_GRID_ONE;
 
   return (
     <>
@@ -252,7 +270,8 @@ function StrengthFields({
         >
           <span className="text-center">Serie</span>
           <span>Peso (kg)</span>
-          <span>Reps</span>
+          <span>{perSide ? "Reps D · I" : "Reps"}</span>
+          {showRir ? <span className="text-center">RIR</span> : null}
           <span className="text-center">Vídeo</span>
           {hasMultipleSets ? <span /> : null}
         </div>
@@ -265,7 +284,9 @@ function StrengthFields({
             index={index}
             isLast={index === formData.sets.length - 1}
             isUploading={setVideos.uploadingIndex === index}
+            perSide={perSide}
             set={set}
+            showRir={showRir}
             onPickVideo={(file) => setVideos.onPickFile(index, file)}
             onRemove={() => removeSet(index)}
             onRemoveVideo={() => setVideos.onRemove(index)}
@@ -308,6 +329,10 @@ const SET_GRID_MANY =
   "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_44px_36px] items-center gap-2";
 const SET_GRID_ONE =
   "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_44px] items-center gap-2";
+const SET_GRID_MANY_RIR =
+  "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_56px_44px_36px] items-center gap-2";
+const SET_GRID_ONE_RIR =
+  "grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_56px_44px] items-center gap-2";
 
 // Indicador inline de autosave al lado del título "Tus números de hoy".
 // Solo aparece mientras está guardando, después del guardado exitoso, o si

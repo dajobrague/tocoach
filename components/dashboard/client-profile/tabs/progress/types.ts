@@ -5,6 +5,12 @@ export interface ExerciseLogSet {
   weight_kg: number | null;
   /** Per-set video uploaded by the client (added in migration 091). */
   video_url?: string | null;
+  /** rir (0–5) y, en ejercicios por lado, reps_left / reps_right. */
+  metadata?: {
+    rir?: number;
+    reps_left?: number;
+    reps_right?: number;
+  } | null;
 }
 
 export interface ExerciseLog {

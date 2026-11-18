@@ -137,3 +137,26 @@ describe("buildBaseFormData — prefill de lastUsedWeights", () => {
     expect(form.sets.map((s) => s.weight)).toEqual(["10", "12", "14"]);
   });
 });
+
+describe("buildBaseFormData — RIR y reps por lado guardados", () => {
+  it("reabre el lado derecho real (no el mejor lado de la columna reps) y el RIR", () => {
+    const form = buildBaseFormData(exercise(), {
+      finalized_at: "2026-11-18T10:00:00Z",
+      sets: [
+        {
+          reps: 10, // max(D 8, I 10)
+          weight_kg: 20,
+          metadata: { reps_right: 8, reps_left: 10, rir: 2 },
+        },
+        { reps: 12, weight_kg: 20, metadata: {} },
+      ],
+    });
+
+    expect(form.sets[0]).toMatchObject({ reps: "8", repsLeft: "10", rir: "2" });
+    expect(form.sets[1]).toEqual({
+      reps: "12",
+      weight: "20",
+      videoUrl: undefined,
+    });
+  });
+});

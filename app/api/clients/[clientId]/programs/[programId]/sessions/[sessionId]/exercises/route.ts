@@ -84,6 +84,7 @@ export async function POST(
       rest,
       trainingSystem,
       rir,
+      perSide,
       // Cardio-specific fields
       duration,
       distance,
@@ -213,6 +214,7 @@ export async function POST(
         training_system: trainingSystem,
         rest_description: rest,
         rir: rir || null,
+        ...(perSide === true ? { per_side: true } : {}),
       };
     }
 
@@ -296,6 +298,7 @@ export async function PUT(
       rest,
       trainingSystem,
       rir,
+      perSide,
       // Cardio-specific fields
       duration,
       distance,
@@ -446,6 +449,7 @@ export async function PUT(
         training_system: trainingSystem,
         rest_description: rest,
         rir: rir || null,
+        ...(perSide === true ? { per_side: true } : {}),
         ...(pendingIncrease ? { [INCREASE_WEIGHT_KEY]: pendingIncrease } : {}),
       };
     }

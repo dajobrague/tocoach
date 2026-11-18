@@ -1,5 +1,6 @@
 // Una fila del formulario de fuerza: número de serie · peso · reps ·
-// botón de video. Sin check por serie ni temporizador de descanso (a
+// botón de video. Solo si el entrenador lo pide: RIR por serie (prescribió
+// RIR) y reps por lado D / I (ejercicio unilateral). Sin check por serie ni temporizador de descanso (a
 // propósito: registro simple). El video es por SERIE — el state vive en
 // formData.sets[index].videoUrl|videoPath y se sube via useSetVideos.
 //
@@ -22,6 +23,9 @@ import { useRef, useState } from "react";
 import { LOG_INPUT_CLASS, type SetDraftWithTarget } from "./helpers";
 import { SetVideoPreview } from "./set-video-preview";
 
+// Repeticiones en reserva: 0 = al fallo. Más de 5 no aporta.
+const RIR_OPTIONS = ["0", "1", "2", "3", "4", "5"];
+
 interface Props {
   index: number;
   /** Grid compartido con la cabecera (StrengthFields). */
@@ -31,7 +35,12 @@ interface Props {
   set: SetDraftWithTarget;
   canRemove: boolean;
   isUploading: boolean;
-  onUpdate: (field: "reps" | "weight", value: string) => void;
+  showRir: boolean;
+  perSide: boolean;
+  onUpdate: (
+    field: "reps" | "weight" | "rir" | "repsLeft",
+    value: string
+  ) => void;
   onRemove: () => void;
   onPickVideo: (file: File) => void;
   onRemoveVideo: () => void;
@@ -44,6 +53,8 @@ export function ExerciseSetRow({
   set,
   canRemove,
   isUploading,
+  showRir,
+  perSide,
   onUpdate,
   onRemove,
   onPickVideo,
@@ -81,17 +92,59 @@ export function ExerciseSetRow({
         {/* Prescripción no numérica ("8-12") como placeholder: el input
             number no puede mostrarla como value y guardarla persistiría
             el límite inferior sin que el cliente registrara nada. */}
-        <input
-          aria-label={`Repeticiones de la serie ${index + 1}`}
-          autoComplete="off"
-          className={`${LOG_INPUT_CLASS} text-center`}
-          enterKeyHint={isLast ? "done" : "next"}
-          inputMode="numeric"
-          placeholder={set.repsPlaceholder ?? "Reps"}
-          type="number"
-          value={set.reps}
-          onChange={(e) => onUpdate("reps", e.target.value)}
-        />
+        {perSide ? (
+          <div className="grid min-w-0 grid-cols-2 gap-1">
+            <input
+              aria-label={`Repeticiones lado derecho, serie ${index + 1}`}
+              autoComplete="off"
+              className={`${LOG_INPUT_CLASS} px-1 text-center`}
+              enterKeyHint="next"
+              inputMode="numeric"
+              placeholder="D"
+              type="number"
+              value={set.reps}
+              onChange={(e) => onUpdate("reps", e.target.value)}
+            />
+            <input
+              aria-label={`Repeticiones lado izquierdo, serie ${index + 1}`}
+              autoComplete="off"
+              className={`${LOG_INPUT_CLASS} px-1 text-center`}
+              enterKeyHint={isLast ? "done" : "next"}
+              inputMode="numeric"
+              placeholder="I"
+              type="number"
+              value={set.repsLeft ?? ""}
+              onChange={(e) => onUpdate("repsLeft", e.target.value)}
+            />
+          </div>
+        ) : (
+          <input
+            aria-label={`Repeticiones de la serie ${index + 1}`}
+            autoComplete="off"
+            className={`${LOG_INPUT_CLASS} text-center`}
+            enterKeyHint={isLast ? "done" : "next"}
+            inputMode="numeric"
+            placeholder={set.repsPlaceholder ?? "Reps"}
+            type="number"
+            value={set.reps}
+            onChange={(e) => onUpdate("reps", e.target.value)}
+          />
+        )}
+        {showRir ? (
+          <select
+            aria-label={`RIR de la serie ${index + 1}`}
+            className={`${LOG_INPUT_CLASS} appearance-none px-1 text-center`}
+            value={set.rir ?? ""}
+            onChange={(e) => onUpdate("rir", e.target.value)}
+          >
+            <option value="">–</option>
+            {RIR_OPTIONS.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <input
           ref={fileRef}
           accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.mov,.webm,.m4v"

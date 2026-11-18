@@ -174,9 +174,16 @@ function SetsTable({
                     : undefined
                 }
               >
-                {set.reps ?? "—"}
+                {set.metadata?.reps_left != null
+                  ? `D ${set.metadata.reps_right ?? "—"} · I ${set.metadata.reps_left}`
+                  : (set.reps ?? "—")}
               </b>
               <span className="ml-1 text-[10.5px] text-gray-400">reps</span>
+              {set.metadata?.rir != null ? (
+                <span className="ml-2 text-[10.5px] font-semibold text-gray-500">
+                  RIR {set.metadata.rir}
+                </span>
+              ) : null}
             </span>
             <span className={`${cell} px-2.5 py-1.5 text-gray-900`}>
               <b className="font-bold">

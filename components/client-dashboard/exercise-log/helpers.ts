@@ -16,6 +16,10 @@ export interface ExerciseShape {
   tempo?: string;
   rest?: string;
   trainingSystem?: string;
+  /** RIR prescrito por el entrenador: activa el selector de RIR por serie. */
+  rir?: string;
+  /** Ejercicio unilateral: reps por lado (D / I) en cada serie. */
+  perSide?: boolean;
   /** Uniform prescribed weight (from the session template). */
   weightKg?: number | null;
   /**
@@ -176,14 +180,23 @@ export function buildBaseFormData(
       ));
 
   if (hasUsableExistingSets) {
-    sets = existingLog.sets.map((s: any) => ({
-      reps: s.reps != null ? String(s.reps) : "",
-      weight: s.weight_kg != null ? String(s.weight_kg) : "",
-      videoUrl:
-        typeof s.video_url === "string" && s.video_url.length > 0
-          ? s.video_url
-          : undefined,
-    }));
+    sets = existingLog.sets.map((s: any) => {
+      const meta = s.metadata ?? {};
+      // Por lado: la columna reps guarda el mejor lado; el derecho real
+      // vive en metadata.reps_right.
+      const reps = meta.reps_right ?? s.reps;
+
+      return {
+        reps: reps != null ? String(reps) : "",
+        weight: s.weight_kg != null ? String(s.weight_kg) : "",
+        videoUrl:
+          typeof s.video_url === "string" && s.video_url.length > 0
+            ? s.video_url
+            : undefined,
+        ...(meta.rir != null ? { rir: String(meta.rir) } : {}),
+        ...(meta.reps_left != null ? { repsLeft: String(meta.reps_left) } : {}),
+      };
+    });
 
     // Compat con logs viejos que tenían un solo video por ejercicio
     // (exercise_logs.video_url). Si el log existente trae video legacy

@@ -25,6 +25,7 @@ import {
   SelectItem,
   Spinner,
   Textarea,
+  Switch,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
@@ -69,6 +70,7 @@ interface FormState {
   reps: string;
   rest: string;
   rir: string;
+  perSide: boolean;
   tempo: string;
   trainingSystem: string;
   duration: string;
@@ -84,6 +86,7 @@ const EMPTY_FORM: FormState = {
   reps: "",
   rest: "",
   rir: "",
+  perSide: false,
   tempo: "",
   trainingSystem: "",
   duration: "",
@@ -147,6 +150,7 @@ function formFromExercise(exercise: WorkoutExercise): FormState {
     reps: exercise.reps,
     rest: exercise.rest,
     rir: exercise.rir ?? "",
+    perSide: exercise.perSide === true,
     tempo: exercise.tempo,
     trainingSystem: exercise.trainingSystem,
     duration: numberToField(exercise.duration),
@@ -324,6 +328,7 @@ export function ExerciseDrawer({
         tempo: form.tempo.trim(),
         rest: form.rest.trim(),
         rir: form.rir.trim(),
+        perSide: form.perSide,
         trainingSystem: form.trainingSystem.trim(),
         notes: form.notes.trim(),
       };
@@ -650,6 +655,21 @@ export function ExerciseDrawer({
                   variant="bordered"
                   onValueChange={(value) => setField("trainingSystem", value)}
                 />
+                <Switch
+                  className="col-span-2"
+                  isSelected={form.perSide}
+                  size="sm"
+                  onValueChange={(value) =>
+                    setForm((prev) => ({ ...prev, perSide: value }))
+                  }
+                >
+                  <span className="text-sm">
+                    Por lado
+                    <span className="block text-xs text-default-500">
+                      Unilateral: el cliente anota las reps de cada lado (D / I)
+                    </span>
+                  </span>
+                </Switch>
                 <Textarea
                   className="col-span-2"
                   label="Notas"

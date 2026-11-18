@@ -44,6 +44,14 @@ function buildSetsFromLegacy(log: any) {
   }));
 }
 
+/** Entero 0..max desde el body, o null (vacío / no numérico / fuera de rango). */
+function smallInt(value: unknown, max: number): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -76,7 +84,7 @@ export async function GET(
     let query = supabase
       .from("exercise_logs")
       .select(
-        "*, exercises(id, name, category), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url)"
+        "*, exercises(id, name, category), scheduled_sessions!inner(scheduled_date, session_id), exercise_log_sets(id, set_number, reps, weight_kg, video_url, metadata)"
       )
       .eq("client_id", clientId)
       .order("completed_at", { ascending: false });
@@ -449,21 +457,40 @@ export async function POST(
         .delete()
         .eq("exercise_log_id", exerciseLog.id);
 
-      const setRows = sets.map((s: any, i: number) => ({
-        exercise_log_id: exerciseLog.id,
-        set_number: i + 1,
-        reps: s.reps != null ? parseInt(s.reps) : null,
-        weight_kg: parseWeightKg(String(s.weight ?? "")),
-        video_url:
-          typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0
-            ? s.videoUrl
-            : null,
-      }));
+      const setRows = sets.map((s: any, i: number) => {
+        const right = smallInt(s.reps, 1000);
+        const left = smallInt(s.repsLeft, 1000);
+        const rir = smallInt(s.rir, 10);
+        const metadata: Record<string, number> = {};
+
+        if (rir !== null) metadata.rir = rir;
+        // Por lado: reps guarda el mejor lado (progresión, récords y volumen
+        // siguen leyendo una sola cifra); el detalle va en metadata.
+        if (left !== null) {
+          metadata.reps_left = left;
+          if (right !== null) metadata.reps_right = right;
+        }
+
+        return {
+          exercise_log_id: exerciseLog.id,
+          set_number: i + 1,
+          reps:
+            left !== null && right !== null
+              ? Math.max(left, right)
+              : (right ?? left),
+          weight_kg: parseWeightKg(String(s.weight ?? "")),
+          video_url:
+            typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0
+              ? s.videoUrl
+              : null,
+          metadata,
+        };
+      });
 
       const { data: insertedSets, error: setsError } = await supabase
         .from("exercise_log_sets")
         .insert(setRows)
-        .select("id, set_number, reps, weight_kg, video_url");
+        .select("id, set_number, reps, weight_kg, video_url, metadata");
 
       if (setsError) {
         console.error("[Exercise Logs API] Error saving sets:", setsError);

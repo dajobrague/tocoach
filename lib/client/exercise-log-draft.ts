@@ -15,6 +15,10 @@ export type SetDraft = {
   // antes de hacer Save. Ambos quedan undefined cuando no hay video.
   videoUrl?: string;
   videoPath?: string;
+  /** RIR elegido (0–5); solo si el entrenador prescribió RIR. */
+  rir?: string;
+  /** Reps del lado izquierdo; solo en ejercicios "por lado" (reps = derecho). */
+  repsLeft?: string;
 };
 
 export type ExerciseLogFormDraft = {
