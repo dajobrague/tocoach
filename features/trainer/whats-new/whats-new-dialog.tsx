@@ -14,6 +14,8 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { SCENE_CLIP_SLUGS, Scene } from "./scenes";
+
 import { ensureShareFonts } from "@/components/share-card/fonts";
 import { Sticker } from "@/components/share-card/sticker";
 import { MuscleBody } from "@/components/shared/muscle-body";
@@ -34,6 +36,8 @@ import {
 import { muscleLabel } from "@/lib/training/muscles";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+// Segundos que se enseña cada novedad antes de pasar a la siguiente.
+const ITEM_SECONDS = 6;
 
 export default function WhatsNewDialog({
   release,
@@ -45,8 +49,12 @@ export default function WhatsNewDialog({
   const router = useRouter();
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
+  // Novedad que se enseña dentro de una página de lista.
+  const [active, setActive] = useState(0);
   const { pages } = release;
   const page = pages[index];
+  const items = page?.items ?? [];
+  const item = items[active];
   const last = index === pages.length - 1;
   // Precarga: clips, fuentes y firma del sticker listos antes de llegar.
   const branding = useShareBranding();
@@ -54,8 +62,13 @@ export default function WhatsNewDialog({
 
   useLibraryMedia(CLIPS.map((c) => c.slug));
 
+  useLibraryMedia(SCENE_CLIP_SLUGS);
+
   const go = useCallback(
-    (next: number) => setIndex(Math.max(0, Math.min(pages.length - 1, next))),
+    (next: number) => {
+      setIndex(Math.max(0, Math.min(pages.length - 1, next)));
+      setActive(0);
+    },
     [pages.length]
   );
 
@@ -86,31 +99,29 @@ export default function WhatsNewDialog({
       classNames={{ base: "overflow-hidden", body: "p-0" }}
       placement="center"
       scrollBehavior="inside"
-      size="4xl"
+      size="5xl"
       onClose={onClose}
     >
       <ModalContent>
         <ModalBody>
-          <div
-            className={`grid md:h-[min(640px,calc(100dvh-8rem))] ${
-              page.stage ? "md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]" : ""
-            }`}
-          >
-            {/* Escenario */}
-            {page.stage ? (
-              <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8">
-                <AnimatePresence initial={false} mode="wait">
-                  <motion.div
-                    key={page.label}
-                    {...enter}
-                    className="flex w-full items-center justify-center"
-                    transition={{ duration: 0.45, ease: EASE }}
-                  >
+          <div className="grid md:h-[min(620px,calc(100dvh-8rem))] md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            {/* Escenario: la escena en vivo o el fragmento de la novedad activa */}
+            <div className="relative flex min-h-[360px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8 md:px-10">
+              <AnimatePresence initial={false} mode="wait">
+                <motion.div
+                  key={`${page.label}:${item ? active : ""}`}
+                  {...enter}
+                  className="flex w-full items-center justify-center"
+                  transition={{ duration: 0.45, ease: EASE }}
+                >
+                  {item ? (
+                    <Scene id={item.scene} />
+                  ) : page.stage ? (
                     <Stage body={body} branding={branding} stage={page.stage} />
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            ) : null}
+                  ) : null}
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
             {/* Texto */}
             <div className="flex min-h-0 flex-col px-7 pb-6 pt-7 sm:px-9">
@@ -162,50 +173,81 @@ export default function WhatsNewDialog({
                       {page.text}
                     </p>
                   ) : null}
-                  {page.items ? (
-                    <ul className="-mr-3 mt-6 grid min-h-0 flex-1 content-start gap-x-8 gap-y-6 overflow-y-auto pr-3 sm:grid-cols-2">
-                      {page.items.map((item, i) => (
-                        <motion.li
-                          key={item.title}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex gap-3"
-                          initial={{ opacity: 0, y: reduce ? 0 : 6 }}
-                          transition={{
-                            duration: 0.3,
-                            ease: EASE,
-                            delay: 0.05 + i * 0.04,
-                          }}
-                        >
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium bg-primary/10 text-primary">
-                            <Icon icon={item.icon} width={18} />
-                          </span>
-                          <div className="min-w-0">
-                            <h3 className="text-[15px] font-semibold leading-snug text-foreground">
-                              {item.title}
-                            </h3>
-                            <p className="mt-1 text-sm leading-relaxed text-default-600">
-                              {item.text}
-                            </p>
-                            {item.action ? (
-                              <button
-                                className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                                type="button"
-                                onClick={() => {
-                                  onClose();
-                                  router.push(item.action!.href);
-                                }}
-                              >
-                                {item.action.label}
-                                <Icon
-                                  icon="solar:arrow-right-linear"
-                                  width={16}
-                                />
-                              </button>
-                            ) : null}
-                          </div>
-                        </motion.li>
-                      ))}
-                    </ul>
+                  {item ? (
+                    <ol className="-mx-3 mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto">
+                      {items.map((it, i) => {
+                        const on = i === active;
+
+                        return (
+                          <li
+                            key={it.title}
+                            className={`rounded-medium transition-colors duration-300 ${
+                              on ? "bg-default-100" : ""
+                            }`}
+                          >
+                            <button
+                              aria-expanded={on}
+                              className={`w-full rounded-medium px-3 pb-2 pt-2.5 text-left text-[15px] font-semibold leading-snug transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
+                                on
+                                  ? "text-foreground"
+                                  : "text-default-500 hover:text-foreground"
+                              }`}
+                              type="button"
+                              onClick={() => setActive(i)}
+                            >
+                              {it.title}
+                            </button>
+                            {/* Se abre con grid-rows 0fr → 1fr: altura real, sin medir. */}
+                            <div
+                              className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                                on ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                              }`}
+                            >
+                              <div className="overflow-hidden px-3">
+                                <p className="text-sm leading-relaxed text-default-600">
+                                  {it.text}
+                                </p>
+                                {it.action ? (
+                                  <button
+                                    className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                                    tabIndex={on ? 0 : -1}
+                                    type="button"
+                                    onClick={() => {
+                                      onClose();
+                                      router.push(it.action!.href);
+                                    }}
+                                  >
+                                    {it.action.label}
+                                    <Icon
+                                      icon="solar:arrow-right-linear"
+                                      width={16}
+                                    />
+                                  </button>
+                                ) : null}
+                                {/* Tiempo de esta novedad: al llenarse pasa a la siguiente. */}
+                                <div className="mb-3 mt-3 h-0.5 overflow-hidden rounded-full bg-default-200">
+                                  {on && !reduce ? (
+                                    <motion.span
+                                      key={`${index}:${active}`}
+                                      animate={{ scaleX: 1 }}
+                                      className="block h-full origin-left bg-primary"
+                                      initial={{ scaleX: 0 }}
+                                      transition={{
+                                        duration: ITEM_SECONDS,
+                                        ease: "linear",
+                                      }}
+                                      onAnimationComplete={() =>
+                                        setActive((a) => (a + 1) % items.length)
+                                      }
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
                   ) : null}
                   {page.action ? (
                     <Button
