@@ -34,7 +34,7 @@ export const LATEST_RELEASE: WhatsNewRelease = {
   id: "2026-11-18-novedades",
   pages: [
     {
-      label: "Inicio",
+      label: "Inicio y gráficas",
       title: "Tu Inicio, convertido en tablero",
       items: [
         {
@@ -47,6 +47,15 @@ export const LATEST_RELEASE: WhatsNewRelease = {
           title: "Todo lo pendiente en un solo sitio",
           text: "Debajo, una columna por tipo de trabajo: check-ins por revisar, check-ins sin enviar, vídeos, mensajes y sesiones sin terminar. Cada fila te lleva directo a lo que tienes que revisar; un check-in abre esa respuesta concreta.",
           action: { label: "Ir a Inicio", href: "/trainer/dashboard/inicio" },
+        },
+        {
+          icon: "solar:graph-up-linear",
+          title: "Una gráfica con datos de dos formularios",
+          text: "Si pasas una medida (por ejemplo el peso) del check-in al registro diario, la gráfica no pierde el histórico: en el editor de la gráfica, «Incluir también datos de» suma la misma medida del otro formulario.",
+          action: {
+            label: "Abrir mis gráficas",
+            href: "/trainer/dashboard/charts-template",
+          },
         },
       ],
     },
@@ -154,18 +163,9 @@ export const LATEST_RELEASE: WhatsNewRelease = {
       ],
     },
     {
-      label: "Gráficas y app",
-      title: "Gráficas y la app de tu cliente",
+      label: "Más mejoras",
+      title: "Y además",
       items: [
-        {
-          icon: "solar:graph-up-linear",
-          title: "Una gráfica con datos de dos formularios",
-          text: "Si pasas una medida (por ejemplo el peso) del check-in al registro diario, la gráfica no pierde el histórico: en el editor de la gráfica, «Incluir también datos de» suma la misma medida del otro formulario.",
-          action: {
-            label: "Abrir mis gráficas",
-            href: "/trainer/dashboard/charts-template",
-          },
-        },
         {
           icon: "solar:moon-linear",
           title: "Modo oscuro para tus clientes",
@@ -176,15 +176,9 @@ export const LATEST_RELEASE: WhatsNewRelease = {
           title: "Vista previa real en el asistente",
           text: "Al configurar tu marca ves la app de tu cliente tal cual, con tus colores, tu tipografía y tu logo. También desde el móvil.",
         },
-      ],
-    },
-    {
-      label: "Arreglos",
-      title: "Y además, arreglado",
-      items: [
         {
           icon: "solar:videocamera-record-linear",
-          title: "Vídeos",
+          title: "Vídeos sin cortes",
           text: "Los vídeos de tus clientes ya no se quedan congelados al reproducirlos.",
         },
         {
