@@ -31,6 +31,7 @@ import {
   CheckInScheduleEditor,
   validateCheckinScheduleDraft,
 } from "@/components/trainer/checkin-schedule-editor";
+import { ExportResponsesPopover } from "@/components/trainer/forms/export-responses-popover";
 import { countAnswerKeys, normalizeFormAnswers } from "@/lib/forms";
 import { alertAfterPress, confirmAfterPress } from "@/lib/ui/native-dialog";
 import {
@@ -981,7 +982,7 @@ export default function FormsTab({
       </div>
 
       {/* Sub-tabs: Respuestas vs Configuración */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="flex items-center justify-between gap-3 bg-white rounded-lg border border-gray-200 pr-4">
         <Tabs
           classNames={{
             tabList: "px-6",
@@ -1014,6 +1015,12 @@ export default function FormsTab({
             }
           />
         </Tabs>
+        {selectedView === "responses" ? (
+          <ExportResponsesPopover
+            clientId={clientId}
+            formType={selectedFormType}
+          />
+        ) : null}
       </div>
 
       {/* RESPUESTAS VIEW */}

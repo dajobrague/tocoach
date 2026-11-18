@@ -15,9 +15,9 @@ const PAGE = 1000;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * GET /api/forms/export?form_type=checkins[&from=YYYY-MM-DD][&to=YYYY-MM-DD]
+ * GET /api/forms/export?form_type=checkins[&from=YYYY-MM-DD][&to=YYYY-MM-DD][&client_id=N]
  * Descarga en CSV las respuestas de un formulario de todos los clientes del
- * entrenador. Solo la cuenta del entrenador (son datos de salud).
+ * entrenador (o de uno, con client_id). Solo la cuenta del entrenador (son datos de salud).
  */
 export async function GET(request: NextRequest) {
   const correlationId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -34,8 +34,10 @@ export async function GET(request: NextRequest) {
   const formType = params.get("form_type");
   const from = params.get("from");
   const to = params.get("to");
+  const clientId = params.get("client_id");
 
   if (
+    (clientId !== null && !/^\d+$/.test(clientId)) ||
     !formType ||
     !isFormType(formType) ||
     (from && !YMD.test(from)) ||
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
 
       if (from) query = query.gte("response_date", from);
       if (to) query = query.lte("response_date", to);
+      if (clientId) query = query.eq("client_id", Number(clientId));
       const { data, error } = await query;
 
       if (error) throw error;
@@ -139,7 +142,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="respuestas-${formType}-${today}.csv"`,
+        "content-disposition": `attachment; filename="respuestas-${formType}${clientId ? `-cliente-${clientId}` : ""}-${today}.csv"`,
         "cache-control": "no-store",
       },
     });

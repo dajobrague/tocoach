@@ -17,11 +17,11 @@ import {
   Skeleton,
   Switch,
 } from "@heroui/react";
-import { Icon } from "@iconify/react";
 import { notFound, useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import FormConfigEditor from "@/components/dashboard/client-profile/tabs/form-config-editor";
+import { ExportResponsesPopover } from "@/components/trainer/forms/export-responses-popover";
 import { InstantSaveBadge } from "@/components/shared/instant-save-badge";
 import {
   CheckInScheduleEditor,
@@ -444,11 +444,14 @@ function TemplateEditor({ formType }: { formType: FormType }) {
 
   return (
     <PageShell>
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-          {labels.title}
-        </h1>
-        <p className="mt-2 text-gray-600">{labels.subtitle}</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+            {labels.title}
+          </h1>
+          <p className="mt-2 text-gray-600">{labels.subtitle}</p>
+        </div>
+        <ExportResponsesPopover formType={formType} />
       </div>
 
       <Card>
@@ -562,72 +565,8 @@ function TemplateEditor({ formType }: { formType: FormType }) {
         </CardBody>
       </Card>
 
-      <ExportResponsesCard formType={formType} />
-
       <p className="text-xs text-gray-500">{SWITCH_COPY[formType].footer}</p>
     </PageShell>
-  );
-}
-
-// Descarga CSV con el formato de las hojas de Google Forms. Fechas opcionales
-// (por día de la respuesta); vacías = todas.
-function ExportResponsesCard({ formType }: { formType: FormType }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const query = new URLSearchParams({ form_type: formType });
-
-  if (from) query.set("from", from);
-  if (to) query.set("to", to);
-  const invalid = from !== "" && to !== "" && from > to;
-
-  return (
-    <Card>
-      <CardBody className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">
-            Descargar respuestas
-          </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Un archivo CSV con las respuestas de todos tus clientes: una fila
-            por respuesta, con la fecha y hora, el email del cliente y una
-            columna por pregunta. Se abre con Excel o Google Sheets. Deja las
-            fechas vacías para descargarlas todas.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-            Desde
-            <input
-              className="h-10 rounded-medium border border-gray-200 px-3 text-sm text-gray-900"
-              max={to || undefined}
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-            Hasta
-            <input
-              className="h-10 rounded-medium border border-gray-200 px-3 text-sm text-gray-900"
-              min={from || undefined}
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </label>
-          <a
-            aria-disabled={invalid}
-            className={`inline-flex h-10 items-center gap-2 rounded-medium bg-default-100 px-4 text-sm font-semibold text-gray-900 hover:bg-default-200 ${
-              invalid ? "pointer-events-none opacity-50" : ""
-            }`}
-            href={`/api/forms/export?${query.toString()}`}
-          >
-            <Icon icon="solar:download-minimalistic-linear" width={18} />
-            Descargar CSV
-          </a>
-        </div>
-      </CardBody>
-    </Card>
   );
 }
 
