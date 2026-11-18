@@ -359,7 +359,9 @@ function materializeWithCap(
   ctx: AdapterContext,
   rangeKey: string
 ): { buckets: BucketedPoint[]; aggregationFallback: boolean } {
-  const adapter = resolveAdapter(chart.source);
+  const adapter = resolveAdapter(chart.source, {
+    alsoFrom: chart.also_from,
+  });
 
   if (!adapter) {
     // Orphan source — return empty buckets; the surface will render the

@@ -228,10 +228,16 @@ export function ChartEditPanel({
     // destructuring them out of the spread (omit-key semantics under
     // exactOptionalPropertyTypes).
     if (wantsMulti) {
-      const { target_zone: _tz, show_average_line: _avg, ...rest } = config;
+      const {
+        target_zone: _tz,
+        show_average_line: _avg,
+        also_from: _also,
+        ...rest
+      } = config;
 
       void _tz;
       void _avg;
+      void _also;
       onChange({
         ...rest,
         source: ref,
@@ -243,8 +249,12 @@ export function ChartEditPanel({
 
       return;
     }
+    // Las fuentes combinadas eran de la métrica anterior: se descartan.
+    const { also_from: _also, ...base } = config;
+
+    void _also;
     onChange({
-      ...config,
+      ...base,
       source: ref,
       chart_type: newChartType,
       color: newColor,
@@ -252,6 +262,21 @@ export function ChartEditPanel({
       label: config.label || newSource.label.toUpperCase(),
     });
   };
+
+  // Otras preguntas con la misma medida (mismo tipo: puntuación con
+  // puntuación, número con número) que pueden rellenar los días sin dato.
+  const mergeCandidates =
+    config.source.kind === "form_question" &&
+    currentSource !== undefined &&
+    currentSource.dimensions === 1
+      ? sources.filter(
+          (s) =>
+            s.id.startsWith("form_q:") &&
+            s.dimensions === 1 &&
+            Boolean(s.rating) === Boolean(currentSource.rating) &&
+            adapterKey(s) !== adapterKey(currentSource)
+        )
+      : [];
 
   const handleChartTypeChange = (next: ChartType): void => {
     const nextWantsMulti =
@@ -380,6 +405,68 @@ export function ChartEditPanel({
               })}
             </Select>
           </div>
+
+          {mergeCandidates.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+                Incluir también datos de
+              </p>
+              <Select
+                aria-label="Incluir también datos de"
+                placeholder="Ninguna otra pregunta"
+                selectedKeys={(config.also_from ?? []).map(
+                  (s) => `form_q:${s.form_type}:${s.question_id}`
+                )}
+                selectionMode="multiple"
+                size="sm"
+                onSelectionChange={(keys) => {
+                  const picked = (
+                    keys === "all"
+                      ? mergeCandidates.map(adapterKey)
+                      : [...keys].map(String)
+                  )
+                    .slice(0, 3)
+                    .flatMap((key) => {
+                      const parsed = parseFormQuestionAdapterId(key);
+
+                      return parsed
+                        ? [
+                            {
+                              form_type: parsed.formType,
+                              question_id: parsed.questionId,
+                            },
+                          ]
+                        : [];
+                    });
+
+                  if (picked.length > 0) {
+                    update({ also_from: picked });
+                  } else {
+                    const { also_from: _also, ...rest } = config;
+
+                    void _also;
+                    onChange(rest as ChartConfig);
+                  }
+                }}
+              >
+                {mergeCandidates.map((s) => (
+                  <SelectItem key={adapterKey(s)} textValue={s.label}>
+                    <div className="flex items-center gap-2">
+                      <span>{s.label}</span>
+                      <span className="text-[9px] uppercase tracking-wider text-foreground/50 bg-default-100 px-1.5 py-0.5 rounded">
+                        {s.category === "checkin" ? "Check-in" : "Hábitos"}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </Select>
+              <p className="mt-1 text-[11px] leading-snug text-foreground/50">
+                Para no perder el histórico si mueves una pregunta de
+                formulario: se usan en los días sin dato de la métrica
+                principal.
+              </p>
+            </div>
+          ) : null}
 
           {/* LABEL */}
           <div>

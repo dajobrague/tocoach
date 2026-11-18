@@ -182,6 +182,14 @@ export interface ChartConfig {
    * field existed keeps its existing behavior.
    */
   visibility?: "shared" | "trainer_only";
+  /**
+   * Other form questions holding the same measurement (e.g. the check-in
+   * weight on a daily-habits weight chart). They fill the days on which the
+   * main source has no value — the main source wins on shared days. Lets a
+   * trainer move a question between forms without the client's chart
+   * losing its history. Numeric form_question charts only.
+   */
+  also_from?: Array<{ form_type: FormType; question_id: string }>;
 }
 
 export interface ChartsDocument {

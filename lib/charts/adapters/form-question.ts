@@ -49,6 +49,12 @@ export interface FormQuestionAdapterSpec {
    * Defaults to numeric.
    */
   kind?: "numeric" | "photo" | "rating";
+  /**
+   * Other questions with the same measurement (ChartConfig.also_from). Their
+   * values fill the days on which this question has none; this question
+   * wins on shared days. Numeric only.
+   */
+  mergeFrom?: ReadonlyArray<{ formType: FormType; questionId: string }>;
 }
 
 const ES_SHORT_MONTHS = [
@@ -88,6 +94,57 @@ function shortEsDateLabel(ymd: string): string {
 }
 
 const FALLBACK_COLOR: ColorToken = "neutral-slate";
+
+const responsesOf = (ctx: AdapterContext, formType: FormType) =>
+  formType === "checkins"
+    ? ctx.formResponses.checkins
+    : ctx.formResponses.habits;
+
+const hasNumber = (r: FormResponse, questionId: string): boolean => {
+  const raw = r.answers?.[questionId];
+
+  return (
+    raw !== null &&
+    raw !== undefined &&
+    raw !== "" &&
+    Number.isFinite(Number(raw))
+  );
+};
+
+/**
+ * The main question's responses plus, for each day on which it has no
+ * value, the first `mergeFrom` question that has one — re-keyed under the
+ * main question id so the usual resolver/bucketing apply unchanged.
+ */
+export function mergeResponses(
+  ctx: AdapterContext,
+  spec: Pick<FormQuestionAdapterSpec, "formType" | "questionId" | "mergeFrom">
+): FormResponse[] {
+  const main = responsesOf(ctx, spec.formType);
+
+  if (!spec.mergeFrom || spec.mergeFrom.length === 0) return main;
+
+  const covered = new Set(
+    main
+      .filter((r) => hasNumber(r, spec.questionId))
+      .map((r) => r.response_date)
+  );
+  const extra: FormResponse[] = [];
+
+  for (const source of spec.mergeFrom) {
+    for (const r of responsesOf(ctx, source.formType)) {
+      if (!r.response_date || covered.has(r.response_date)) continue;
+      if (!hasNumber(r, source.questionId)) continue;
+      covered.add(r.response_date);
+      extra.push({
+        ...r,
+        answers: { [spec.questionId]: r.answers?.[source.questionId] },
+      });
+    }
+  }
+
+  return extra.length === 0 ? main : [...main, ...extra];
+}
 
 /**
  * Build a runtime adapter for a single form question. Stable id is
@@ -140,10 +197,7 @@ export function buildFormQuestionAdapter(
       // somehow got chart_type !== "photo_timeline" renders as no-data
       // rather than crashing.
       if (isPhoto) return [];
-      const responses =
-        spec.formType === "checkins"
-          ? ctx.formResponses.checkins
-          : ctx.formResponses.habits;
+      const responses = mergeResponses(ctx, spec);
       const buckets = generateBuckets(
         ctx.range,
         aggregation,

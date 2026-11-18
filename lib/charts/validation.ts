@@ -137,9 +137,48 @@ export const chartConfigSchema = z
     // chart is dropped from any snapshot/list response served to a client
     // session — see lib/charts/server/visibility.ts.
     visibility: z.enum(["shared", "trainer_only"]).optional(),
+    // Otras preguntas con la misma medida (p. ej. el peso del check-in en
+    // un chart del peso de hábitos): rellenan los días en que la fuente
+    // principal no tiene dato. Ver adapters/form-question.ts.
+    also_from: z
+      .array(
+        z.object({
+          form_type: formTypeSchema,
+          question_id: z.string().min(1),
+        })
+      )
+      .max(3)
+      .optional(),
   })
   .superRefine((cfg, ctx) => {
     const multiDim = isMultiDim(cfg.chart_type);
+
+    if (cfg.also_from && cfg.also_from.length > 0) {
+      const source = cfg.source;
+
+      if (
+        source.kind !== "form_question" ||
+        cfg.chart_type === "photo_timeline"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["also_from"],
+          message: "also_from is only allowed on numeric form_question charts",
+        });
+      } else if (
+        cfg.also_from.some(
+          (extra) =>
+            extra.form_type === source.form_type &&
+            extra.question_id === source.question_id
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["also_from"],
+          message: "also_from cannot repeat the chart's own source",
+        });
+      }
+    }
 
     // color shape ↔ chart-type dimensionality
     if (multiDim && !Array.isArray(cfg.color)) {

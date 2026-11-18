@@ -20,7 +20,12 @@
  * the registry available.
  */
 
-import type { ChartDataSource, ChartType, FormType } from "./types";
+import type {
+  ChartConfig,
+  ChartDataSource,
+  ChartType,
+  FormType,
+} from "./types";
 import type { CatalogId, DataSourceRef } from "./types";
 import type { DataAdapter } from "./adapters/types";
 import type { ChartConfigInput } from "./validation";
@@ -72,6 +77,8 @@ export function resolveAdapter(
      * conoce; si la fuente está aquí, su metadata manda.
      */
     sources?: ReadonlyArray<ChartDataSource> | undefined;
+    /** ChartConfig.also_from — merged into the numeric series. */
+    alsoFrom?: ChartConfig["also_from"];
   }
 ): DataAdapter | undefined {
   if (ref.kind === "catalog") {
@@ -87,6 +94,14 @@ export function resolveAdapter(
     questionId: ref.question_id,
     label: ref.question_id, // placeholder; real label is on ChartConfig
     ...(isPhoto ? { kind: "photo" as const } : {}),
+    ...(hint?.alsoFrom && hint.alsoFrom.length > 0
+      ? {
+          mergeFrom: hint.alsoFrom.map((s) => ({
+            formType: s.form_type,
+            questionId: s.question_id,
+          })),
+        }
+      : {}),
   });
   const known = hint?.sources?.find((s) => s.id === shell.metadata.id);
 
