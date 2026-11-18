@@ -116,7 +116,7 @@ export default function WhatsNewDialog({
     >
       <ModalContent>
         <ModalBody>
-          <div className="grid md:h-[min(620px,calc(100dvh-8rem))] md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div className="grid md:h-[min(620px,calc(100dvh-8rem))] md:grid-cols-[minmax(0,1.04fr)_minmax(0,1fr)]">
             {/* Escenario: la escena en vivo o el fragmento de la novedad activa */}
             <div className="relative flex min-h-[360px] items-center justify-center overflow-hidden bg-default-100 px-6 py-8 md:px-10">
               <AnimatePresence initial={false} mode="wait">
@@ -140,7 +140,7 @@ export default function WhatsNewDialog({
 
             {/* Texto */}
             <div className="flex min-h-0 flex-col px-7 pb-6 pt-7 sm:px-9">
-              <nav aria-label="Novedades" className="flex gap-1.5 pr-8">
+              <nav aria-label="Novedades" className="flex gap-1 pr-8">
                 {pages.map((p, i) => (
                   <button
                     key={p.label}
@@ -159,7 +159,7 @@ export default function WhatsNewDialog({
                       }`}
                     />
                     <span
-                      className={`mt-2 block truncate text-left text-xs transition-colors ${
+                      className={`mt-2 block truncate text-left text-[11px] transition-colors ${
                         i === index
                           ? "font-medium text-foreground"
                           : "text-default-500 group-hover:text-default-700"

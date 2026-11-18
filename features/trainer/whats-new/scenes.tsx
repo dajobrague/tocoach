@@ -773,7 +773,7 @@ function SessionFocus() {
       </Rise>
       <Rise delay={0.12}>
         <div className="overflow-hidden rounded-large bg-content1">
-          <div className="aspect-[16/10] bg-white">
+          <div className="aspect-[2/1] bg-white">
             {clip?.video ? (
               <video
                 aria-hidden
@@ -802,7 +802,7 @@ function SessionFocus() {
           </div>
         </div>
       </Rise>
-      {["Remo con barra", "Fondos en paralelas"].map((name, i) => (
+      {["Remo con barra"].map((name, i) => (
         <Rise key={name} delay={0.25 + i * 0.08}>
           <div className="flex items-center justify-between rounded-medium bg-content1 px-4 py-2.5">
             <span className="text-sm text-foreground">{name}</span>
@@ -825,7 +825,7 @@ function RirSides() {
     <Surface>
       <p className="text-sm font-semibold text-foreground">Zancada búlgara</p>
       <p className="text-xs text-default-500">Por lado · RIR 1–2</p>
-      <div className="mt-4 grid grid-cols-[28px_1fr_1fr_1fr_52px] gap-1.5 text-xs font-semibold text-default-500">
+      <div className="mt-4 grid grid-cols-[40px_1fr_1fr_1fr_52px] gap-1.5 text-xs font-semibold text-default-500">
         <span className="text-center">Serie</span>
         <span>Peso</span>
         <span>Der.</span>
@@ -836,7 +836,7 @@ function RirSides() {
         {sets.map((s, i) => (
           <div
             key={s[0]}
-            className="grid grid-cols-[28px_1fr_1fr_1fr_52px] gap-1.5"
+            className="grid grid-cols-[40px_1fr_1fr_1fr_52px] gap-1.5"
           >
             <span className="flex h-10 items-center justify-center rounded-medium bg-default-100 text-sm font-bold text-default-500">
               {s[0]}
