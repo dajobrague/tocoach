@@ -30,31 +30,72 @@ interface Return {
   onRemove: (setIndex: number) => Promise<void>;
 }
 
+/**
+ * Sube el vídeo de una serie. Avisa al usuario si falla y devuelve null.
+ * Lo usan este hook (un ejercicio) y la pantalla de biserie (varios).
+ */
+export async function uploadSetVideo(
+  clientId: string,
+  file: File
+): Promise<{ url: string; path: string } | null> {
+  try {
+    const fd = new FormData();
+
+    fd.append("file", file);
+    const response = await clientFetch(
+      `/api/clients/${clientId}/exercise-logs/upload-video`,
+      { method: "POST", body: fd }
+    );
+    const data = await response.json();
+
+    if (!data.success) {
+      addToast({
+        title: "No se pudo subir el vídeo",
+        description: data.error || "Inténtalo de nuevo.",
+        color: "danger",
+      });
+
+      return null;
+    }
+
+    return { url: data.url, path: data.path };
+  } catch (err) {
+    console.error("[useSetVideos] upload error:", err);
+    addToast({
+      title: "No se pudo subir el vídeo",
+      description: "Revisa tu conexión e inténtalo de nuevo.",
+      color: "danger",
+    });
+
+    return null;
+  }
+}
+
+/** Limpieza best-effort del vídeo en storage (los huérfanos no rompen nada). */
+export async function deleteSetVideo(
+  clientId: string,
+  videoPath: string
+): Promise<void> {
+  try {
+    await clientFetch(
+      `/api/clients/${clientId}/exercise-logs/upload-video?path=${encodeURIComponent(videoPath)}`,
+      { method: "DELETE" }
+    );
+  } catch {
+    // ignorar — el cleanup de huérfanos puede correr aparte
+  }
+}
+
 export function useSetVideos({ clientId, setFormData }: Args): Return {
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   const onPickFile = useCallback(
     async (setIndex: number, file: File) => {
+      setUploadingIndex(setIndex);
       try {
-        setUploadingIndex(setIndex);
-        const fd = new FormData();
+        const uploaded = await uploadSetVideo(clientId, file);
 
-        fd.append("file", file);
-        const response = await clientFetch(
-          `/api/clients/${clientId}/exercise-logs/upload-video`,
-          { method: "POST", body: fd }
-        );
-        const data = await response.json();
-
-        if (!data.success) {
-          addToast({
-            title: "No se pudo subir el vídeo",
-            description: data.error || "Inténtalo de nuevo.",
-            color: "danger",
-          });
-
-          return;
-        }
+        if (!uploaded) return;
         setFormData((prev) => {
           const sets = [...prev.sets];
           const target = sets[setIndex];
@@ -62,18 +103,11 @@ export function useSetVideos({ clientId, setFormData }: Args): Return {
           if (!target) return prev;
           sets[setIndex] = {
             ...target,
-            videoUrl: data.url,
-            videoPath: data.path,
+            videoUrl: uploaded.url,
+            videoPath: uploaded.path,
           };
 
           return { ...prev, sets };
-        });
-      } catch (err) {
-        console.error("[useSetVideos] upload error:", err);
-        addToast({
-          title: "No se pudo subir el vídeo",
-          description: "Revisa tu conexión e inténtalo de nuevo.",
-          color: "danger",
         });
       } finally {
         setUploadingIndex(null);
@@ -103,16 +137,7 @@ export function useSetVideos({ clientId, setFormData }: Args): Return {
       // Best-effort cleanup en storage. Si videoPath no existe (caso
       // legacy o video que vino del servidor sin path local), no
       // intentamos borrar — la URL queda huérfana pero no rompe nada.
-      if (videoPath) {
-        try {
-          await clientFetch(
-            `/api/clients/${clientId}/exercise-logs/upload-video?path=${encodeURIComponent(videoPath)}`,
-            { method: "DELETE" }
-          );
-        } catch {
-          // ignorar — el cleanup de huérfanos puede correr aparte
-        }
-      }
+      if (videoPath) await deleteSetVideo(clientId, videoPath);
     },
     [clientId, setFormData]
   );

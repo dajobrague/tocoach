@@ -44,6 +44,13 @@ interface Props {
   onRemove: () => void;
   onPickVideo: (file: File) => void;
   onRemoveVideo: () => void;
+  /**
+   * Sin la celda del número de serie: en la pantalla de biserie el número
+   * va en la cabecera del bloque, no en cada fila.
+   */
+  hideIndex?: boolean;
+  /** Nombre del ejercicio para las etiquetas accesibles (biserie). */
+  ariaContext?: string;
 }
 
 export function ExerciseSetRow({
@@ -59,7 +66,10 @@ export function ExerciseSetRow({
   onRemove,
   onPickVideo,
   onRemoveVideo,
+  hideIndex = false,
+  ariaContext,
 }: Props) {
+  const ctx = ariaContext ? `, ${ariaContext}` : "";
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const hasVideo = Boolean(set.videoUrl);
@@ -76,11 +86,13 @@ export function ExerciseSetRow({
   return (
     <>
       <div className={gridClass}>
-        <span className="flex h-[52px] items-center justify-center rounded-xl bg-default-100 text-[15px] font-bold tabular-nums text-default-500">
-          {index + 1}
-        </span>
+        {hideIndex ? null : (
+          <span className="flex h-[52px] items-center justify-center rounded-xl bg-default-100 text-[15px] font-bold tabular-nums text-default-500">
+            {index + 1}
+          </span>
+        )}
         <input
-          aria-label={`Peso de la serie ${index + 1}, en kilos`}
+          aria-label={`Peso de la serie ${index + 1}, en kilos${ctx}`}
           autoComplete="off"
           className={`${LOG_INPUT_CLASS} text-center`}
           enterKeyHint="next"
@@ -95,7 +107,7 @@ export function ExerciseSetRow({
         {perSide ? (
           <div className="grid min-w-0 grid-cols-2 gap-1">
             <input
-              aria-label={`Repeticiones lado derecho, serie ${index + 1}`}
+              aria-label={`Repeticiones lado derecho, serie ${index + 1}${ctx}`}
               autoComplete="off"
               className={`${LOG_INPUT_CLASS} px-1 text-center`}
               enterKeyHint="next"
@@ -106,7 +118,7 @@ export function ExerciseSetRow({
               onChange={(e) => onUpdate("reps", e.target.value)}
             />
             <input
-              aria-label={`Repeticiones lado izquierdo, serie ${index + 1}`}
+              aria-label={`Repeticiones lado izquierdo, serie ${index + 1}${ctx}`}
               autoComplete="off"
               className={`${LOG_INPUT_CLASS} px-1 text-center`}
               enterKeyHint={isLast ? "done" : "next"}
@@ -119,7 +131,7 @@ export function ExerciseSetRow({
           </div>
         ) : (
           <input
-            aria-label={`Repeticiones de la serie ${index + 1}`}
+            aria-label={`Repeticiones de la serie ${index + 1}${ctx}`}
             autoComplete="off"
             className={`${LOG_INPUT_CLASS} text-center`}
             enterKeyHint={isLast ? "done" : "next"}
@@ -132,7 +144,7 @@ export function ExerciseSetRow({
         )}
         {showRir ? (
           <select
-            aria-label={`RIR de la serie ${index + 1}`}
+            aria-label={`RIR de la serie ${index + 1}${ctx}`}
             className={`${LOG_INPUT_CLASS} appearance-none px-1 text-center`}
             value={set.rir ?? ""}
             onChange={(e) => onUpdate("rir", e.target.value)}
@@ -161,7 +173,9 @@ export function ExerciseSetRow({
         <Button
           isIconOnly
           aria-label={
-            hasVideo ? "Ver video de esta serie" : "Subir video de esta serie"
+            hasVideo
+              ? `Ver video de esta serie${ctx}`
+              : `Subir video de esta serie${ctx}`
           }
           // Cámara en tinte de marca para invitar a grabar (37% de los
           // clientes activos lo usa); con vídeo, sólido con ▶ para ver

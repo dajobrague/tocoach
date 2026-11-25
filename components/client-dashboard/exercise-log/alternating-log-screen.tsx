@@ -5,9 +5,10 @@
 // Por debajo sigue habiendo UN log por ejercicio (mismo writer y mismo body
 // que ExerciseLogModal), así que historial, récords y gráficas no cambian.
 //
-// ponytail: aquí solo se teclean kilos y repeticiones. Vídeo por serie, RIR,
-// reps por lado y notas siguen en la ficha de cada ejercicio (se abre tocando
-// su nombre); lo que ya tuviera el log se conserva al guardar desde aquí.
+// Cada serie de cada ejercicio usa la misma fila que el registro individual
+// (ExerciseSetRow): vídeo por serie, RIR y repeticiones por lado cuando el
+// entrenador los activó. Historial y vídeo de demostración siguen en la ficha
+// del ejercicio, que se abre tocando su nombre.
 
 /* eslint-disable no-console */
 "use client";
@@ -18,7 +19,9 @@ import { addToast, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { buildBaseFormData, defaultSet, LOG_INPUT_CLASS } from "./helpers";
+import { ExerciseSetRow } from "./exercise-set-row";
+import { buildBaseFormData, defaultSet } from "./helpers";
+import { deleteSetVideo, uploadSetVideo } from "./hooks/use-set-videos";
 
 import { ClientScreen } from "@/components/client-dashboard/client-screen";
 import { clientFetch } from "@/lib/auth/client-token-storage";
@@ -36,6 +39,10 @@ export interface AlternatingMember {
     sets?: number;
     reps?: string;
     rest?: string;
+    /** RIR prescrito: activa el selector de RIR por serie. */
+    rir?: string;
+    /** Unilateral: repeticiones por lado (derecho / izquierdo). */
+    perSide?: boolean;
     borrowedFromSessionName?: string;
   } & Record<string, unknown>;
   existingLog: any;
@@ -51,13 +58,22 @@ interface Props {
   onSuccess: () => void;
   /** Abre el siguiente ejercicio pendiente tras el grupo, si lo hay. */
   onNext?: (() => void) | undefined;
-  /** Abre la ficha completa de un miembro (vídeo, historial, RIR…). */
+  /** Abre la ficha de un miembro (vídeo de demostración, historial). */
   onOpenMember: (index: number) => void;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const ROW = "grid grid-cols-[minmax(0,1fr)_84px_72px] items-center gap-2";
+// Mismas columnas que el registro individual, sin la del número de serie.
+const GRID =
+  "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-center gap-2";
+const GRID_RIR =
+  "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_56px_44px] items-center gap-2";
+
+const HELP =
+  "flex items-start gap-2 rounded-medium bg-default-100 px-3 py-2.5 text-[13px] leading-snug text-default-600";
+const NOTES_CLASS =
+  "min-h-20 w-full rounded-medium border border-default-200 bg-content1 px-4 py-3 text-[17px] text-foreground caret-primary outline-none transition-[border-color,box-shadow] placeholder:text-default-400 focus:border-primary focus:ring-4 focus:ring-primary/20 motion-reduce:transition-none";
 
 export function AlternatingLogScreen({
   isOpen,
@@ -77,11 +93,13 @@ export function AlternatingLogScreen({
       (m) => buildBaseFormData(m.exercise as never, m.existingLog).sets
     )
   );
-  const notesRef = useRef(
+  const [notes, setNotes] = useState<string[]>(() =>
     members.map(
       (m) => buildBaseFormData(m.exercise as never, m.existingLog).notes
     )
   );
+  // Serie que está subiendo vídeo ("miembro-serie"), para su spinner.
+  const [uploading, setUploading] = useState<string | null>(null);
   // Solo se autoguardan los ejercicios que el cliente ha tocado: las reps
   // prellenadas de la prescripción no son un registro.
   const dirtyRef = useRef(new Set<number>());
@@ -91,7 +109,6 @@ export function AlternatingLogScreen({
   const [justFinalized, setJustFinalized] = useState(false);
   // Reintenta el autosave si quedaron cambios hechos durante un guardado.
   const [retry, setRetry] = useState(0);
-  const formRef = useRef<HTMLFormElement>(null);
 
   const rounds = Math.max(...sets.map((s) => s.length), 0);
   const rest = restWithUnit(members[members.length - 1]?.exercise.rest);
@@ -125,6 +142,68 @@ export function AlternatingLogScreen({
     );
   };
 
+  // Quitar una serie la quita de todos los ejercicios del grupo.
+  const removeRound = (round: number) => {
+    if (rounds <= 1) return;
+    members.forEach((_, i) => dirtyRef.current.add(i));
+    setJustFinalized(false);
+    setSets((prev) => prev.map((list) => list.filter((_, r) => r !== round)));
+  };
+
+  const pickVideo = async (member: number, round: number, file: File) => {
+    setUploading(`${member}-${round}`);
+    try {
+      const uploaded = await uploadSetVideo(clientId, file);
+
+      if (uploaded) {
+        update(member, round, {
+          videoUrl: uploaded.url,
+          videoPath: uploaded.path,
+        });
+      }
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const removeVideo = (member: number, round: number) => {
+    const videoPath = sets[member]?.[round]?.videoPath;
+
+    dirtyRef.current.add(member);
+    setJustFinalized(false);
+    setSets((prev) =>
+      prev.map((list, m) =>
+        m !== member
+          ? list
+          : list.map((set, r) => {
+              if (r !== round) return set;
+              // Sin las claves de vídeo (no se pueden dejar en undefined).
+              const { videoUrl: _u, videoPath: _p, ...rest } = set;
+
+              void _u;
+              void _p;
+
+              return rest;
+            })
+      )
+    );
+    if (videoPath) void deleteSetVideo(clientId, videoPath);
+  };
+
+  // Columnas extra por ejercicio: solo si el entrenador las activó (o el
+  // registro ya trae datos de ese tipo).
+  const options = members.map((m, i) => ({
+    showRir:
+      Boolean(String(m.exercise.rir ?? "").trim()) ||
+      (sets[i] ?? []).some((set) => Boolean(set.rir)),
+    perSide:
+      m.exercise.perSide === true ||
+      (sets[i] ?? []).some((set) => Boolean(set.repsLeft)),
+  }));
+  const rirTargets = members
+    .filter((m) => String(m.exercise.rir ?? "").trim())
+    .map((m) => `${String(m.exercise.rir).trim()} en ${m.exercise.name}`);
+
   const saveMembers = useCallback(
     async (indexes: number[], finalize: boolean): Promise<boolean> => {
       const results = await Promise.all(
@@ -145,7 +224,7 @@ export function AlternatingLogScreen({
                   sessionExerciseId:
                     member.exercise.session_exercise_id ?? null,
                   scheduledDate,
-                  notes: notesRef.current[index] ?? "",
+                  notes: notes[index] ?? "",
                   videoUrl: null,
                   borrowedFromSessionName:
                     member.exercise.borrowedFromSessionName ?? null,
@@ -194,7 +273,7 @@ export function AlternatingLogScreen({
 
       return ok;
     },
-    [clientId, members, onSuccess, scheduledDate, sessionId, sets]
+    [clientId, members, notes, onSuccess, scheduledDate, sessionId, sets]
   );
 
   // Autosave con el mismo debounce que el registro de un ejercicio.
@@ -212,7 +291,7 @@ export function AlternatingLogScreen({
     }, 1500);
 
     return () => window.clearTimeout(t);
-  }, [sets, isOpen, isFinalizing, saveMembers, retry]);
+  }, [sets, notes, isOpen, isFinalizing, saveMembers, retry]);
 
   // Cerrar con cambios aún en el debounce: se guardan antes de salir.
   const handleClose = () => {
@@ -248,17 +327,6 @@ export function AlternatingLogScreen({
     } finally {
       setIsFinalizing(false);
     }
-  };
-
-  // Enter pasa al siguiente campo en vez de enviar a medias.
-  const focusNextField = (current: HTMLInputElement) => {
-    const fields = [
-      ...(formRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
-    ];
-    const next = fields[fields.indexOf(current) + 1];
-
-    if (next) next.focus();
-    else current.blur();
   };
 
   return (
@@ -306,7 +374,7 @@ export function AlternatingLogScreen({
               <Button
                 className="h-[52px] text-[17px] font-semibold"
                 color="primary"
-                isDisabled={isFinalizing}
+                isDisabled={isFinalizing || uploading !== null}
                 isLoading={isFinalizing}
                 radius="lg"
                 onPress={handleFinalize}
@@ -322,8 +390,8 @@ export function AlternatingLogScreen({
       onClose={handleClose}
     >
       <div className="flex flex-col gap-6 px-4 pb-8 pt-4 [html[data-rest-band]_&]:pt-[76px]">
-        {/* Qué se alterna. Cada fila abre la ficha del ejercicio: vídeo,
-            historial y los detalles que aquí no se teclean. */}
+        {/* Qué se alterna. Cada fila abre la ficha del ejercicio: vídeo de
+            demostración del entrenador e historial. */}
         <div className="flex flex-col gap-2">
           <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
             {members.map((member, index) => (
@@ -359,7 +427,6 @@ export function AlternatingLogScreen({
         </div>
 
         <form
-          ref={formRef}
           className="flex flex-col gap-4"
           onSubmit={(e) => e.preventDefault()}
         >
@@ -370,93 +437,183 @@ export function AlternatingLogScreen({
             <SaveStatus state={saveState} />
           </div>
 
-          <div
-            aria-hidden
-            className={`${ROW} text-xs font-semibold text-default-500`}
-          >
-            <span />
-            <span>Peso (kg)</span>
-            <span>Reps</span>
-          </div>
+          {options.some((o) => o.perSide) ? (
+            <p className={HELP}>
+              <Icon
+                aria-hidden
+                className="mt-px shrink-0 text-primary"
+                icon="solar:transfer-horizontal-linear"
+                width={16}
+              />
+              <span>
+                Donde veas <b>Der.</b> e <b>Izq.</b>, anota las repeticiones de
+                cada lado por separado.
+              </span>
+            </p>
+          ) : null}
+          {options.some((o) => o.showRir) ? (
+            <p className={HELP}>
+              <Icon
+                aria-hidden
+                className="mt-px shrink-0 text-primary"
+                icon="solar:info-circle-linear"
+                width={16}
+              />
+              <span>
+                <b>RIR</b> = repeticiones que te quedaban en reserva. Al acabar
+                cada serie, elige cuántas más podrías haber hecho (0 = ni una
+                más).
+                {rirTargets.length > 0 ? (
+                  <>
+                    {" "}
+                    Tu entrenador te pide <b>{rirTargets.join(" y ")}</b>.
+                  </>
+                ) : null}
+              </span>
+            </p>
+          ) : null}
 
           {Array.from({ length: rounds }, (_, round) => (
-            <fieldset
+            <section
               key={round}
-              className="flex flex-col gap-2 border-t border-default-100 pt-4 first:border-t-0 first:pt-0"
+              aria-label={`Serie ${round + 1}`}
+              className="flex flex-col gap-3 border-t border-default-100 pt-4 first:border-t-0 first:pt-0"
             >
-              <legend className="float-left mb-2 w-full text-[13px] font-semibold text-default-500">
-                Serie {round + 1}
-              </legend>
+              <div className="flex min-h-9 items-center justify-between gap-2">
+                <h3 className="text-[15px] font-semibold text-foreground">
+                  Serie {round + 1}
+                </h3>
+                {rounds > 1 ? (
+                  <button
+                    aria-label={`Quitar la serie ${round + 1}`}
+                    className="flex h-9 w-9 items-center justify-center rounded-[10px] text-default-500 active:bg-default-100"
+                    type="button"
+                    onClick={() => removeRound(round)}
+                  >
+                    <Icon
+                      icon="solar:trash-bin-minimalistic-linear"
+                      width={18}
+                    />
+                  </button>
+                ) : null}
+              </div>
               {members.map((member, index) => {
                 const set = sets[index]?.[round];
-                const fieldId = `alt-${index}-${round}`;
+                const { showRir, perSide } = options[index] ?? {
+                  showRir: false,
+                  perSide: false,
+                };
+                const grid = showRir ? GRID_RIR : GRID;
 
                 return (
-                  <div key={fieldId} className={`${ROW} clear-both`}>
-                    <span className="line-clamp-2 text-[15px] font-medium leading-snug text-foreground">
+                  <div
+                    key={member.exercise.session_exercise_id ?? index}
+                    className="flex flex-col gap-1.5"
+                  >
+                    <p className="truncate text-[13px] font-medium text-default-600">
                       {member.exercise.name}
-                    </span>
+                    </p>
+                    {/* Cabeceras solo en la primera serie: debajo se repite
+                        la misma rejilla. */}
+                    {round === 0 && set ? (
+                      <div
+                        aria-hidden
+                        className={`${grid} text-xs font-semibold text-default-500`}
+                      >
+                        <span>Peso (kg)</span>
+                        <span>{perSide ? "Reps der. · izq." : "Reps"}</span>
+                        {showRir ? (
+                          <span className="text-center">RIR</span>
+                        ) : null}
+                        <span className="text-center">Vídeo</span>
+                      </div>
+                    ) : null}
                     {set ? (
-                      <>
-                        <input
-                          aria-label={`Peso en kilos, ${member.exercise.name}, serie ${round + 1}`}
-                          autoComplete="off"
-                          className={LOG_INPUT_CLASS}
-                          enterKeyHint="next"
-                          id={`${fieldId}-kg`}
-                          inputMode="decimal"
-                          placeholder="kg"
-                          type="text"
-                          value={set.weight}
-                          onChange={(e) =>
-                            update(index, round, { weight: e.target.value })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              focusNextField(e.currentTarget);
-                            }
-                          }}
-                        />
-                        <input
-                          aria-label={`Repeticiones, ${member.exercise.name}, serie ${round + 1}`}
-                          autoComplete="off"
-                          className={LOG_INPUT_CLASS}
-                          enterKeyHint="next"
-                          id={`${fieldId}-reps`}
-                          inputMode="numeric"
-                          placeholder={set.repsPlaceholder ?? ""}
-                          type="text"
-                          value={set.reps}
-                          onChange={(e) =>
-                            update(index, round, { reps: e.target.value })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              focusNextField(e.currentTarget);
-                            }
-                          }}
-                        />
-                      </>
+                      <ExerciseSetRow
+                        hideIndex
+                        ariaContext={member.exercise.name}
+                        canRemove={false}
+                        gridClass={grid}
+                        index={round}
+                        isLast={
+                          round === rounds - 1 && index === members.length - 1
+                        }
+                        isUploading={uploading === `${index}-${round}`}
+                        perSide={perSide}
+                        set={set}
+                        showRir={showRir}
+                        onPickVideo={(file) =>
+                          void pickVideo(index, round, file)
+                        }
+                        onRemove={() => undefined}
+                        onRemoveVideo={() => removeVideo(index, round)}
+                        onUpdate={(field, value) =>
+                          update(index, round, { [field]: value })
+                        }
+                      />
                     ) : (
                       // Prescripción con menos series que su compañero.
-                      <span className="col-span-2 text-[13px] text-default-400">
+                      <p className="text-[13px] text-default-400">
                         No tiene esta serie
-                      </span>
+                      </p>
                     )}
                   </div>
                 );
               })}
-            </fieldset>
+            </section>
           ))}
+
+          {!sets.some((list) => list.some((set) => set.videoUrl)) ? (
+            <p className="flex items-start gap-2 text-[13px] leading-snug text-default-500">
+              <Icon
+                aria-hidden
+                className="mt-px shrink-0 text-primary"
+                icon="solar:videocamera-record-linear"
+                width={16}
+              />
+              Graba una serie y tu entrenador revisará tu técnica.
+            </p>
+          ) : null}
 
           <button
             className="flex h-12 w-full items-center justify-center gap-2 rounded-medium bg-default-100 text-[15px] font-semibold text-foreground active:scale-[0.97] motion-reduce:transform-none [@media(hover:hover)]:hover:bg-default-200"
             type="button"
             onClick={addRound}
           >
-            <Icon aria-hidden icon="solar:add-circle-linear" width={18} />
+            <Icon aria-hidden icon="solar:add-linear" width={18} />
             Añadir serie
           </button>
+
+          {members.map((member, index) => {
+            const id = `alt-notes-${index}`;
+
+            return (
+              <div key={id} className="flex flex-col gap-2">
+                <label
+                  className="text-[13px] font-semibold text-default-500"
+                  htmlFor={id}
+                >
+                  Notas · {member.exercise.name}
+                </label>
+                <textarea
+                  className={NOTES_CLASS}
+                  id={id}
+                  placeholder="Sensaciones, molestias, ajustes…"
+                  rows={2}
+                  value={notes[index] ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    dirtyRef.current.add(index);
+                    setJustFinalized(false);
+                    setNotes((prev) =>
+                      prev.map((n, i) => (i === index ? value : n))
+                    );
+                  }}
+                />
+              </div>
+            );
+          })}
         </form>
       </div>
     </ClientScreen>
