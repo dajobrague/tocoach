@@ -78,6 +78,16 @@ export default function FormsTab({
     reviewedAt: string | null;
   } | null>(null);
   const [isTogglingReviewed, setIsTogglingReviewed] = useState(false);
+  // Corrección de una respuesta por el entrenador (un 7,4 que era 74).
+  const [editingAnswer, setEditingAnswer] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
+  const [isSavingAnswer, setIsSavingAnswer] = useState(false);
+
+  useEffect(() => {
+    if (!viewingResponse) setEditingAnswer(null);
+  }, [viewingResponse]);
 
   // Dirty tracking for the config editor
   const [isConfigDirty, setIsConfigDirty] = useState(false);
@@ -426,6 +436,86 @@ export default function FormsTab({
       fetchResponses();
     }
   }, [clientId, selectedFormType, selectedView]);
+
+  const saveAnswerEdit = async (question: QuestionConfig) => {
+    if (!viewingResponse || !editingAnswer) return;
+    const raw = editingAnswer.value.trim();
+    let value: number | string = raw;
+
+    if (question.type !== "text") {
+      const parsed = Number(raw.replace(",", "."));
+      const [min, max] =
+        question.type === "rating"
+          ? [1, 5]
+          : question.type === "scale"
+            ? [0, 10]
+            : [-Infinity, Infinity];
+      const wholeOnly = question.type !== "number";
+
+      if (
+        raw === "" ||
+        !Number.isFinite(parsed) ||
+        parsed < min ||
+        parsed > max ||
+        (wholeOnly && !Number.isInteger(parsed))
+      ) {
+        addToast({
+          title: "Valor no válido",
+          description: wholeOnly
+            ? `Escribe un número entero entre ${min} y ${max}.`
+            : "Escribe un número.",
+          color: "danger",
+        });
+
+        return;
+      }
+      // Se guarda con el mismo tipo que envió el cliente.
+      value =
+        typeof viewingResponse.answers[question.id] === "string"
+          ? String(parsed)
+          : parsed;
+    }
+
+    setIsSavingAnswer(true);
+    try {
+      const res = await fetch(
+        `/api/forms/responses/${clientId}/${viewingResponse.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answer_patch: { [question.id]: value } }),
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al guardar");
+      }
+      const answers = normalizeFormAnswers(data.response.answers) as Record<
+        string,
+        any
+      >;
+      const responseId = viewingResponse.id;
+
+      setResponses((prev) =>
+        prev.map((r) => (r.id === responseId ? { ...r, answers } : r))
+      );
+      setViewingResponse((prev) => (prev ? { ...prev, answers } : prev));
+      setEditingAnswer(null);
+      // Las gráficas leen las respuestas en vivo: basta con refrescarlas.
+      void queryClient.invalidateQueries({
+        queryKey: ["charts", "snapshot", String(clientId)],
+      });
+    } catch (error) {
+      addToast({
+        title: "No se pudo guardar la corrección",
+        description: error instanceof Error ? error.message : undefined,
+        color: "danger",
+      });
+    } finally {
+      setIsSavingAnswer(false);
+    }
+  };
 
   // Revisar un check-in lo bloquea para el cliente; quitar la revisión se
   // lo vuelve a abrir.
@@ -1981,6 +2071,74 @@ export default function FormsTab({
               return <p className="text-sm text-gray-800">{String(answer)}</p>;
             };
 
+            // Respuesta + lápiz para corregirla. Solo números y texto: son
+            // los que el cliente teclea (y donde se cuelan los errores).
+            const renderEditableAnswer = (q: QuestionConfig) => {
+              const answer = displayAnswers[q.id];
+              const editable =
+                answer !== undefined &&
+                answer !== null &&
+                ["number", "scale", "rating", "text"].includes(q.type);
+
+              if (!editable) return renderAnswer(q);
+
+              if (editingAnswer?.id === q.id) {
+                const Field = q.type === "text" ? Textarea : Input;
+
+                return (
+                  <div className="flex flex-col gap-2">
+                    <Field
+                      autoFocus
+                      aria-label={q.label}
+                      inputMode={q.type === "text" ? "text" : "decimal"}
+                      size="sm"
+                      value={editingAnswer.value}
+                      variant="bordered"
+                      onValueChange={(value) =>
+                        setEditingAnswer({ id: q.id, value })
+                      }
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        color="primary"
+                        isLoading={isSavingAnswer}
+                        size="sm"
+                        onPress={() => saveAnswerEdit(q)}
+                      >
+                        Guardar
+                      </Button>
+                      <Button
+                        isDisabled={isSavingAnswer}
+                        size="sm"
+                        variant="light"
+                        onPress={() => setEditingAnswer(null)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">{renderAnswer(q)}</div>
+                  <Button
+                    isIconOnly
+                    aria-label={`Corregir ${q.label}`}
+                    className="-mt-1 shrink-0 text-default-500"
+                    size="sm"
+                    variant="light"
+                    onPress={() =>
+                      setEditingAnswer({ id: q.id, value: String(answer) })
+                    }
+                  >
+                    <Icon icon="solar:pen-linear" width={16} />
+                  </Button>
+                </div>
+              );
+            };
+
             return (
               <>
                 <ModalHeader>
@@ -2073,7 +2231,7 @@ export default function FormsTab({
                                       <p className="text-xs font-semibold text-gray-500 mb-1">
                                         {question.label}
                                       </p>
-                                      {renderAnswer(question)}
+                                      {renderEditableAnswer(question)}
                                     </div>
                                   </div>
                                 ) : (
@@ -2111,7 +2269,7 @@ export default function FormsTab({
                                                 {sub.label}
                                               </p>
                                             </div>
-                                            {renderAnswer(sub)}
+                                            {renderEditableAnswer(sub)}
                                           </div>
                                         ))}
                                     </div>

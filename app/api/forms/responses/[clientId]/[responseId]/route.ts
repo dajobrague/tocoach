@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
+import { normalizeFormAnswers } from "@/lib/forms/answers-normalize";
+
+const MAX_PATCH_TEXT = 5000;
+
+/**
+ * Corrección del entrenador (JC, nov): un cliente escribe 7,4 en vez de 74 y
+ * la gráfica y la media se distorsionan. Solo se pueden corregir respuestas
+ * que ya existen en el registro, con un número o un texto.
+ */
+function parseAnswerPatch(
+  raw: unknown
+): Record<string, number | string> | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const entries = Object.entries(raw as Record<string, unknown>);
+
+  if (entries.length === 0) return null;
+  const ok = entries.every(
+    ([, v]) =>
+      (typeof v === "number" && Number.isFinite(v)) ||
+      (typeof v === "string" && v.length <= MAX_PATCH_TEXT)
+  );
+
+  return ok
+    ? (Object.fromEntries(entries) as Record<string, number | string>)
+    : null;
+}
 
 /**
  * PUT /api/forms/responses/[clientId]/[responseId]
@@ -70,20 +98,80 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { answers, metadata, reviewed } = body;
+    const { answers, metadata, reviewed, answer_patch } = body;
 
     // `reviewed` alone toggles the check-in review state (locks/unlocks
-    // client edits); otherwise this is a full answers update.
-    if (!answers && typeof reviewed !== "boolean") {
+    // client edits); `answer_patch` corrects individual answers; otherwise
+    // this is a full answers update.
+    if (
+      !answers &&
+      answer_patch === undefined &&
+      typeof reviewed !== "boolean"
+    ) {
       return NextResponse.json(
         { success: false, error: "Respuestas requeridas" },
         { status: 400 }
       );
     }
 
-    const update = answers
-      ? { answers, metadata: metadata || {} }
-      : { reviewed_at: reviewed ? new Date().toISOString() : null };
+    let update: Record<string, unknown>;
+
+    if (answer_patch !== undefined) {
+      const patch = parseAnswerPatch(answer_patch);
+
+      if (!patch) {
+        return NextResponse.json(
+          { success: false, error: "Corrección inválida" },
+          { status: 400 }
+        );
+      }
+
+      const { data: existing } = await supabase
+        .from("form_responses")
+        .select("answers, metadata")
+        .eq("id", responseId)
+        .eq("client_id", clientId)
+        .eq("tenant_host", tenantHost)
+        .maybeSingle();
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, error: "Respuesta no encontrada" },
+          { status: 404 }
+        );
+      }
+
+      const current = normalizeFormAnswers(existing.answers);
+
+      if (Object.keys(patch).some((key) => !(key in current))) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Solo se pueden corregir respuestas que el cliente envió",
+          },
+          { status: 400 }
+        );
+      }
+
+      const previousMetadata =
+        existing.metadata !== null &&
+        typeof existing.metadata === "object" &&
+        !Array.isArray(existing.metadata)
+          ? (existing.metadata as Record<string, unknown>)
+          : {};
+
+      update = {
+        answers: { ...current, ...patch },
+        metadata: {
+          ...previousMetadata,
+          edited_by_trainer_at: new Date().toISOString(),
+        },
+      };
+    } else if (answers) {
+      update = { answers, metadata: metadata || {} };
+    } else {
+      update = { reviewed_at: reviewed ? new Date().toISOString() : null };
+    }
 
     // Update response
     const { data: response, error } = await supabase

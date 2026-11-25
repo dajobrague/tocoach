@@ -4,7 +4,7 @@ import { Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
@@ -129,7 +129,7 @@ export function DashboardContent() {
   // config responde 404 si no) y el cliente aún no lo haya enviado.
   const { data: intakeStatus } = useQuery({
     queryKey: ["client", "intake", clientId],
-    queryFn: async (): Promise<{ pending: boolean }> => {
+    queryFn: async (): Promise<{ pending: boolean; awaiting?: boolean }> => {
       try {
         const config = await clientFetch(
           `/api/forms/configs/${clientId}?form_type=intake`,
@@ -142,13 +142,15 @@ export function DashboardContent() {
           { cache: "no-store" }
         );
         const body = await res.json().catch(() => null);
+        const sent =
+          res.ok && body?.success === true && Array.isArray(body.responses)
+            ? (body.responses as { reviewed_at?: string | null }[])
+            : null;
 
         return {
-          pending:
-            res.ok &&
-            body?.success === true &&
-            Array.isArray(body.responses) &&
-            body.responses.length === 0,
+          pending: sent !== null && sent.length === 0,
+          // Enviado y aún sin revisar por el entrenador.
+          awaiting: Boolean(sent?.[0]) && !sent?.[0]?.reviewed_at,
         };
       } catch {
         return { pending: false };
@@ -158,6 +160,16 @@ export function DashboardContent() {
     staleTime: 5 * 60_000,
   });
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+  // Es lo primero que ve un cliente nuevo (JC, nov): se abre solo una vez;
+  // si lo cierra, queda el aviso de Inicio.
+  const intakeAutoOpened = useRef(false);
+
+  useEffect(() => {
+    if (intakeStatus?.pending === true && !intakeAutoOpened.current) {
+      intakeAutoOpened.current = true;
+      setShowIntakeModal(true);
+    }
+  }, [intakeStatus?.pending]);
 
   const checkinSchedule = useMemo((): CheckInSchedule => {
     try {
@@ -513,6 +525,23 @@ export function DashboardContent() {
               >
                 Empezar
               </Button>
+            </div>
+          )}
+
+          {intakeStatus?.awaiting === true && (
+            <div
+              className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small"
+              role="status"
+            >
+              <IconTile icon="solar:clipboard-check-linear" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-foreground">
+                  Muchas gracias por tus respuestas
+                </p>
+                <p className="mt-0.5 text-[13px] leading-snug text-default-500">
+                  Con esta información ya me pondré a trabajar en tus planes
+                </p>
+              </div>
             </div>
           )}
 

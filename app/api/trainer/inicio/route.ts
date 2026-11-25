@@ -297,6 +297,36 @@ export async function GET() {
       };
     });
 
+    // ── Formularios iniciales sin revisar ───────────────────────────────
+    // Sin ventana de días: hay uno por cliente y el entrenador lo necesita
+    // para preparar el plan (JC, nov).
+    if (tenantHost && clientIds.length > 0) {
+      const { data: intakes } = await supabase
+        .from("form_responses")
+        .select("id, client_id, submitted_at")
+        .eq("tenant_host", tenantHost)
+        .eq("form_type", "intake")
+        .is("reviewed_at", null)
+        .in("client_id", clientIds);
+
+      for (const r of (intakes ?? []) as {
+        id: string;
+        client_id: number;
+        submitted_at: string;
+      }[]) {
+        const clientId = Number(r.client_id);
+
+        review.push({
+          id: `intake-${r.id}`,
+          clientId,
+          client: nameOf.get(clientId) ?? "",
+          detail: "Formulario inicial",
+          at: r.submitted_at,
+          href: profile(clientId, "tab=forms"),
+        });
+      }
+    }
+
     // ── Clientes ────────────────────────────────────────────────────────
     const monthAgo = addDays(today, -30);
     const current = weekly[weekly.length - 1] ?? { due: 0, received: 0 };

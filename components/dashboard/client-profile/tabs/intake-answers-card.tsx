@@ -6,14 +6,16 @@
 
 import type { FormTemplate } from "@/lib/forms/types";
 
-import { Card, CardBody } from "@heroui/react";
+import { Button, Card, CardBody, Chip, addToast } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // El resumen legible del post-entreno sirve para cualquier formulario.
 import { summarizeWorkoutAnswers } from "@/lib/forms/workout";
 
 interface IntakeResponse {
+  id: string;
+  reviewed_at?: string | null;
   response_date: string;
   answers?: Record<string, unknown>;
 }
@@ -52,6 +54,39 @@ export function IntakeAnswersCard({ clientId }: { clientId: string }) {
     enabled: active,
   });
 
+  // Revisarlo lo quita de "por revisar" en Inicio y del aviso del cliente.
+  const queryClient = useQueryClient();
+  const markReviewed = useMutation({
+    mutationFn: async (responseId: string) => {
+      const res = await fetch(
+        `/api/forms/responses/${clientId}/${responseId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewed: true }),
+        }
+      );
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok || body?.success !== true) {
+        throw new Error(body?.error || "Error al actualizar");
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["trainer", "intake-response", clientId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["trainer", "inicio"] });
+    },
+    onError: (error) => {
+      addToast({
+        title: "No se pudo marcar como revisado",
+        description: error instanceof Error ? error.message : undefined,
+        color: "danger",
+      });
+    },
+  });
+
   if (!active || !template || responseQuery.isPending) return null;
   const response = responseQuery.data;
   const lines = response
@@ -81,6 +116,29 @@ export function IntakeAnswersCard({ clientId }: { clientId: string }) {
                 })}`
               : "Pendiente: el cliente aún no lo ha rellenado"}
           </span>
+          {response ? (
+            response.reviewed_at ? (
+              <Chip
+                className="ml-auto"
+                color="success"
+                size="sm"
+                variant="flat"
+              >
+                Revisado
+              </Chip>
+            ) : (
+              <Button
+                className="ml-auto"
+                color="primary"
+                isLoading={markReviewed.isPending}
+                size="sm"
+                variant="flat"
+                onPress={() => markReviewed.mutate(response.id)}
+              >
+                Marcar revisado
+              </Button>
+            )
+          ) : null}
         </div>
 
         {lines.length > 0 ? (

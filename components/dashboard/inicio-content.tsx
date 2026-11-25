@@ -317,7 +317,7 @@ export default function InicioContent() {
             <div className="grid grid-cols-1 gap-px overflow-hidden rounded-large border border-default-200 bg-default-200 md:grid-cols-2 xl:grid-cols-[minmax(0,1.7fr)_repeat(4,minmax(0,1fr))]">
               <Column
                 lead
-                label="Check-ins por revisar"
+                label="Check-ins y formularios por revisar"
                 list={pending?.review ?? []}
                 loading={loading}
                 now={clock}
