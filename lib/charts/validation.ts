@@ -149,6 +149,9 @@ export const chartConfigSchema = z
       )
       .max(3)
       .optional(),
+    // Pestaña de la gráfica. Tiene que estar en el esquema: zod descarta las
+    // claves desconocidas al leer y al guardar.
+    section: z.string().trim().min(1).max(40).optional(),
   })
   .superRefine((cfg, ctx) => {
     const multiDim = isMultiDim(cfg.chart_type);

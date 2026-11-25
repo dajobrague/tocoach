@@ -27,6 +27,7 @@ import type {
 } from "@/lib/charts/types";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { ChartCard } from "@/components/charts/chart-card";
 import { iconForChartType, isBucketsEmpty } from "@/components/charts/utils";
@@ -34,6 +35,8 @@ import { IconTile } from "@/components/shared/icon-tile";
 import { sentenceCaseIfShouting } from "@/lib/utils";
 import { clientFetch } from "@/lib/auth/client-token-storage";
 import { resolveAdapter } from "@/lib/charts/registry";
+import { chartSections, sectionOf } from "@/lib/charts/sections";
+import { SegmentedControl } from "@/components/shared/segmented-control";
 
 interface SnapshotResponse {
   success: boolean;
@@ -111,6 +114,7 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
   });
 
   const periodLabel = PERIOD_LABELS[selectedPeriod] ?? selectedPeriod;
+  const [sectionTab, setSectionTab] = useState<string | null>(null);
 
   if (query.isLoading) {
     return (
@@ -186,11 +190,29 @@ export function ChartsSection({ clientId, selectedPeriod }: Props) {
     e.chart.chart_type !== "photo_timeline" &&
     !!e.adapter &&
     isBucketsEmpty(e.buckets);
-  const visibleCharts = enriched.filter((e) => !isEmpty(e));
-  const pendingCharts = enriched.filter(isEmpty);
+  // Pestañas por sección (JC, nov): una a la vez, para no hacer scroll por
+  // todas las gráficas. Sin secciones definidas no hay pestañas.
+  const sections = chartSections(effective_charts.charts);
+  const activeSection =
+    sectionTab !== null && sections.includes(sectionTab)
+      ? sectionTab
+      : (sections[0] ?? null);
+  const inTab = (e: Enriched) =>
+    activeSection === null || sectionOf(e.chart) === activeSection;
+  const visibleCharts = enriched.filter((e) => inTab(e) && !isEmpty(e));
+  const pendingCharts = enriched.filter((e) => inTab(e) && isEmpty(e));
 
   return (
     <div className="space-y-3">
+      {activeSection !== null ? (
+        <SegmentedControl
+          ariaLabel="Sección de gráficas"
+          className="overflow-x-auto"
+          options={sections.map((name) => ({ key: name, label: name }))}
+          value={activeSection}
+          onChange={setSectionTab}
+        />
+      ) : null}
       {visibleCharts.map(
         ({ chart, buckets: chartBuckets, photos, adapter, series }) => (
           <ChartCard

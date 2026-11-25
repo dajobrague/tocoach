@@ -42,6 +42,7 @@ import {
 import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 
+import { GENERAL_SECTION } from "@/lib/charts/sections";
 import { COLOR_TOKENS, resolveColor } from "@/lib/charts/palette";
 import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 
@@ -130,6 +131,8 @@ interface Props {
   onClose: () => void;
   /** "Discard" reverts the local edits to the last saved version. */
   onDiscard?: () => void;
+  /** Secciones que ya existen en el documento, como sugerencias. */
+  sections?: readonly string[];
 }
 
 function dataSourceRefKey(ref: DataSourceRef): string {
@@ -184,6 +187,7 @@ export function ChartEditPanel({
   onChange,
   onClose,
   onDiscard,
+  sections,
 }: Props) {
   // Find the resolved adapter for the current config (for series count, unit, etc.)
   const currentSource = useMemo(() => {
@@ -479,6 +483,37 @@ export function ChartEditPanel({
               value={config.label}
               onValueChange={(v) => update({ label: v })}
             />
+          </div>
+
+          {/* SECCIÓN — pestaña en la que se agrupa la gráfica. */}
+          <div>
+            <p className="text-[10px] font-semibold tracking-wider text-foreground/50 uppercase mb-1.5">
+              Sección
+            </p>
+            <Input
+              aria-label="Sección de la gráfica"
+              description="Las gráficas de una misma sección se ven juntas en una pestaña."
+              list="chart-section-names"
+              maxLength={40}
+              placeholder={GENERAL_SECTION}
+              size="sm"
+              value={config.section ?? ""}
+              onValueChange={(v) => {
+                if (v.trim() === "") {
+                  const { section: _s, ...rest } = config;
+
+                  void _s;
+                  onChange(rest as ChartConfig);
+                } else {
+                  update({ section: v });
+                }
+              }}
+            />
+            <datalist id="chart-section-names">
+              {(sections ?? []).map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </div>
 
           {/* CHART TYPE — hidden entirely for photo sources because

@@ -54,6 +54,12 @@ import { RANGE_DAYS, getEffectiveAggregation } from "@/lib/charts/aggregation";
 import { resolveAdapter } from "@/lib/charts/registry";
 import { parseFormQuestionAdapterId } from "@/lib/charts/adapters/form-question";
 import { buildStarterDocument } from "@/lib/charts/starter";
+import {
+  GENERAL_SECTION,
+  chartSections,
+  sectionOf,
+} from "@/lib/charts/sections";
+import { SegmentedControl } from "@/components/shared/segmented-control";
 
 type SurfaceMode = "trainer-template" | "trainer-client" | "client-readonly";
 
@@ -119,6 +125,9 @@ function formTypeLabel(source: ChartDataSource): string | null {
   return null;
 }
 
+/** Clave de la pestaña "Todas" (un nombre de sección nunca empieza por \0). */
+const ALL_SECTIONS = "\0all";
+
 export function ChartSurface({ mode, clientId }: Props) {
   // Period selector for trainer-client / client-readonly. Trainer-template
   // never queries the snapshot — it always renders synthesized demo data.
@@ -147,6 +156,8 @@ export function ChartSurface({ mode, clientId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showApplyToAll, setShowApplyToAll] = useState(false);
   const [editMode, setEditMode] = useState(mode === "trainer-template");
+  // Pestaña de sección activa; null = "Todas".
+  const [sectionTab, setSectionTab] = useState<string | null>(null);
 
   // Pick the active query based on mode for initial load.
   const activeQuery = mode === "trainer-template" ? tplQuery : clientQuery;
@@ -240,6 +251,11 @@ export function ChartSurface({ mode, clientId }: Props) {
 
     return m;
   }, [sources]);
+
+  const sections = useMemo(() => chartSections(doc?.charts ?? []), [doc]);
+  // Una pestaña que deja de existir (se renombró o se vació) vuelve a Todas.
+  const activeSection =
+    sectionTab !== null && sections.includes(sectionTab) ? sectionTab : null;
 
   const editing = useMemo(() => {
     if (!doc || !editingId) return null;
@@ -410,6 +426,11 @@ export function ChartSurface({ mode, clientId }: Props) {
     if (!source) return;
     const newChart = buildAddChartConfig(source, doc.charts.length);
 
+    // Añadida desde una pestaña → nace en esa sección.
+    if (activeSection !== null && activeSection !== GENERAL_SECTION) {
+      newChart.section = activeSection;
+    }
+
     if (visibility === "trainer_only") {
       newChart.visibility = "trainer_only";
     }
@@ -445,6 +466,11 @@ export function ChartSurface({ mode, clientId }: Props) {
 
     if (!current) return;
     const currentIsPrivate = current.visibility === "trainer_only";
+    // Con una pestaña abierta se ordena dentro de ella: el vecino es la
+    // siguiente gráfica de la misma sección, no una que no se está viendo.
+    const sameGroup = (c: ChartConfig) =>
+      (c.visibility === "trainer_only") === currentIsPrivate &&
+      (activeSection === null || sectionOf(c) === sectionOf(current));
 
     // Move only within the same visibility group: find the nearest
     // chart in the same section (skipping over charts from the other
@@ -457,7 +483,7 @@ export function ChartSurface({ mode, clientId }: Props) {
         const c = doc.charts[i];
 
         if (!c) continue;
-        if ((c.visibility === "trainer_only") === currentIsPrivate) {
+        if (sameGroup(c)) {
           target = i;
           break;
         }
@@ -467,7 +493,7 @@ export function ChartSurface({ mode, clientId }: Props) {
         const c = doc.charts[i];
 
         if (!c) continue;
-        if ((c.visibility === "trainer_only") === currentIsPrivate) {
+        if (sameGroup(c)) {
           target = i;
           break;
         }
@@ -685,12 +711,28 @@ export function ChartSurface({ mode, clientId }: Props) {
           The split is purely a render concern; the underlying doc.charts
           array stays a single flat list, and visibility is a property on
           each chart (handleMove and handleChartChange respect the group). */}
+      {sections.length > 0 ? (
+        <SegmentedControl
+          ariaLabel="Sección de gráficas"
+          className="mb-5 !w-auto max-w-full overflow-x-auto"
+          options={[
+            { key: ALL_SECTIONS, label: "Todas" },
+            ...sections.map((name) => ({ key: name, label: name })),
+          ]}
+          size="md"
+          value={activeSection ?? ALL_SECTIONS}
+          onChange={(key) => setSectionTab(key === ALL_SECTIONS ? null : key)}
+        />
+      ) : null}
+
       {(() => {
+        const inTab = (d: (typeof renderData)[number]) =>
+          activeSection === null || sectionOf(d.chart) === activeSection;
         const sharedRender = renderData.filter(
-          (d) => d.chart.visibility !== "trainer_only"
+          (d) => d.chart.visibility !== "trainer_only" && inTab(d)
         );
         const privateRender = renderData.filter(
-          (d) => d.chart.visibility === "trainer_only"
+          (d) => d.chart.visibility === "trainer_only" && inTab(d)
         );
 
         const renderCard = (
@@ -889,6 +931,7 @@ export function ChartSurface({ mode, clientId }: Props) {
         config={editing}
         isOpen={!!editing}
         saveState={autosave.state}
+        sections={sections}
         sources={sourcesForEdit}
         onChange={handleChartChange}
         onClose={() => setEditingId(null)}

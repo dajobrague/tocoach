@@ -190,6 +190,11 @@ export interface ChartConfig {
    * losing its history. Numeric form_question charts only.
    */
   also_from?: Array<{ form_type: FormType; question_id: string }>;
+  /**
+   * Pestaña en la que se agrupa la gráfica (texto libre del entrenador).
+   * Sin sección → "General". Ver lib/charts/sections.ts.
+   */
+  section?: string;
 }
 
 export interface ChartsDocument {
