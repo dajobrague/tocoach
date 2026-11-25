@@ -32,7 +32,16 @@ export type SceneId =
   | "dark-mode"
   | "brand-preview"
   | "video"
-  | "details";
+  | "details"
+  | "group-make"
+  | "group-drag"
+  | "group-client"
+  | "group-info"
+  | "next-exercise"
+  | "share-logo"
+  | "fix-answer"
+  | "plan-access"
+  | "chart-sections";
 
 export const SCENE_CLIP_SLUGS = ["bench-press"] as const;
 
@@ -84,6 +93,24 @@ export function Scene({ id }: { id: SceneId }) {
       return <VideoScene />;
     case "details":
       return <Details />;
+    case "group-make":
+      return <GroupMake />;
+    case "group-drag":
+      return <GroupDrag />;
+    case "group-client":
+      return <GroupClient />;
+    case "group-info":
+      return <GroupInfo />;
+    case "next-exercise":
+      return <NextExercise />;
+    case "share-logo":
+      return <ShareLogo />;
+    case "fix-answer":
+      return <FixAnswer />;
+    case "plan-access":
+      return <PlanAccess />;
+    case "chart-sections":
+      return <ChartSections />;
   }
 }
 
@@ -1217,6 +1244,418 @@ function Details() {
             </p>
           </Rise>
         ))}
+      </div>
+    </Surface>
+  );
+}
+
+// ── Biseries, triseries y circuitos (nov 25) ────────────────────────────
+
+const GROUP_ROWS = [
+  ["Press de banca", "3 × 12"],
+  ["Remo con barra", "3 × 12"],
+  ["Fondos en paralelas", "4 × 10"],
+] as const;
+
+/** «Hacer biserie»: se marcan los ejercicios seguidos y se confirma. */
+function GroupMake() {
+  const second = useAfter(0.9);
+
+  return (
+    <Surface>
+      <div className="space-y-1.5">
+        {GROUP_ROWS.map(([name, dose], i) => {
+          const on = i === 0 || (i === 1 && second);
+
+          return (
+            <div
+              key={name}
+              className={`flex items-center gap-2.5 rounded-medium border px-3 py-2 transition-colors duration-300 ${
+                on
+                  ? "border-primary bg-primary/10"
+                  : "border-default-200 bg-content1"
+              }`}
+            >
+              <span
+                className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors duration-300 ${
+                  on
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-default-300"
+                }`}
+              >
+                {on ? <Icon icon="solar:unread-linear" width={12} /> : null}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {name}
+              </span>
+              <span className="text-xs tabular-nums text-default-500">
+                {dose}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-center gap-2 rounded-medium bg-default-100 py-1.5 pl-3 pr-1.5">
+        <span className="min-w-0 flex-1 text-xs text-default-600">
+          {second ? "2 ejercicios, alternando" : "Elige también el de al lado"}
+        </span>
+        <span
+          className={`rounded-medium px-3 py-1.5 text-xs font-semibold transition-opacity duration-300 ${
+            second ? "opacity-100" : "opacity-40"
+          } bg-primary text-primary-foreground`}
+        >
+          Hacer biserie
+        </span>
+      </div>
+    </Surface>
+  );
+}
+
+/** Arrastrar: la bandeja de la biserie con su zona punteada para añadir. */
+function GroupDrag() {
+  const over = useAfter(1);
+
+  return (
+    <div data-ui className="w-full max-w-[400px] space-y-1.5 text-left">
+      <Rise>
+        <div className="rounded-large bg-default-100 p-1.5">
+          <div className="flex items-center justify-between px-1 pb-1.5 text-xs">
+            <span className="text-default-500">
+              <b className="font-semibold text-foreground">
+                {over ? "Triserie" : "Biserie"}
+              </b>{" "}
+              · una serie de cada uno, alternando
+            </span>
+            <span className="font-medium text-default-500">Deshacer</span>
+          </div>
+          <div className="space-y-1.5">
+            {GROUP_ROWS.slice(0, 2).map(([name, dose]) => (
+              <div
+                key={name}
+                className="flex items-center justify-between rounded-small bg-content1 px-3 py-2"
+              >
+                <span className="text-sm font-medium text-foreground">
+                  {name}
+                </span>
+                <span className="text-xs tabular-nums text-default-500">
+                  {dose}
+                </span>
+              </div>
+            ))}
+            <div
+              className={`flex h-10 items-center justify-center rounded-small border border-dashed text-xs font-medium transition-colors duration-300 ${
+                over
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-default-400 bg-content1 text-default-500"
+              }`}
+            >
+              Suelta aquí para hacer triserie
+            </div>
+          </div>
+        </div>
+      </Rise>
+      <Rise delay={0.2}>
+        <div
+          className={`flex items-center justify-between rounded-large bg-content1 px-3 py-2 shadow-medium transition-transform duration-700 motion-reduce:transition-none ${
+            over ? "-translate-y-[52px]" : ""
+          }`}
+          style={{ opacity: 0.85 }}
+        >
+          <span className="text-sm font-medium text-foreground">
+            {GROUP_ROWS[2][0]}
+          </span>
+          <span className="text-xs tabular-nums text-default-500">
+            {GROUP_ROWS[2][1]}
+          </span>
+        </div>
+      </Rise>
+    </div>
+  );
+}
+
+/** El cliente la registra por series: una de cada ejercicio. */
+function GroupClient() {
+  const typed = useAfter(0.8);
+  const cell =
+    "flex h-10 items-center justify-center rounded-medium bg-default-100 text-sm tabular-nums text-foreground transition-opacity duration-300";
+
+  return (
+    <Surface className="max-w-[340px]">
+      <p className="font-heading text-lg font-semibold text-foreground">
+        Biserie
+      </p>
+      <p className="text-xs text-default-500">
+        Alterna una serie de cada ejercicio
+      </p>
+      {["Serie 1", "Serie 2"].map((serie, r) => (
+        <div key={serie} className="mt-4">
+          <p className="text-sm font-semibold text-foreground">{serie}</p>
+          {GROUP_ROWS.slice(0, 2).map(([name], i) => {
+            const show = typed || r === 0;
+
+            return (
+              <div key={name} className="mt-2">
+                <p className="text-xs font-medium text-default-600">{name}</p>
+                <div className="mt-1 grid grid-cols-[1fr_1fr_40px] gap-1.5">
+                  <span className={`${cell} ${show ? "" : "opacity-40"}`}>
+                    {show ? (i === 0 ? "60 kg" : "50 kg") : "kg"}
+                  </span>
+                  <span className={cell}>12</span>
+                  <span className="flex h-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Icon icon="solar:videocamera-record-linear" width={18} />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </Surface>
+  );
+}
+
+/** «Cómo se hace»: hoja con la imagen, el vídeo y tu nota. */
+function GroupInfo() {
+  const media = useLibraryMedia(SCENE_CLIP_SLUGS);
+  const clip = media["bench-press"];
+
+  return (
+    <div
+      data-ui
+      className="w-full max-w-[340px] overflow-hidden rounded-t-[24px] bg-content1 text-left"
+    >
+      <span className="mx-auto mt-2 block h-1 w-9 rounded-full bg-default-300" />
+      <div className="relative mt-2 aspect-[2/1] bg-white">
+        {clip?.video ? (
+          <video
+            aria-hidden
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-cover"
+            poster={clip.poster}
+            src={clip.video}
+          />
+        ) : (
+          <div className="h-full w-full animate-pulse bg-default-100 motion-reduce:animate-none" />
+        )}
+        <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white">
+          <Icon icon="solar:play-bold" width={12} />
+          Ver vídeo
+        </span>
+      </div>
+      <div className="space-y-2.5 p-4">
+        <p className="font-heading text-lg font-semibold text-foreground">
+          Press de banca
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          <Chip tone="muted">3 series</Chip>
+          <Chip tone="muted">12 reps</Chip>
+          <Chip tone="muted">RIR 2</Chip>
+        </div>
+        <Rise delay={0.4}>
+          <div className="rounded-medium bg-default-100 p-3">
+            <p className="text-xs font-semibold text-foreground">
+              Nota del entrenador
+            </p>
+            <p className="mt-0.5 text-xs text-default-600">
+              Escápulas atrás y baja la barra en tres segundos.
+            </p>
+          </div>
+        </Rise>
+      </div>
+    </div>
+  );
+}
+
+/** Al finalizar un ejercicio: «Siguiente» lleva al que toca. */
+function NextExercise() {
+  const done = useAfter(0.7);
+
+  return (
+    <Surface className="max-w-[340px]">
+      <p className="text-sm font-semibold text-foreground">Press de banca</p>
+      <p className="text-xs text-default-500">3 series registradas</p>
+      <p
+        className={`mt-4 flex items-center justify-center gap-1.5 text-xs text-default-500 transition-opacity duration-300 ${
+          done ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <Icon
+          className="text-success"
+          icon="solar:check-circle-bold"
+          width={14}
+        />
+        Ejercicio guardado
+      </p>
+      <div className="mt-2 grid grid-cols-[44px_1fr_1.6fr] gap-2">
+        <span className="flex h-11 items-center justify-center rounded-medium bg-default-100 text-foreground">
+          <Icon icon="solar:share-linear" width={18} />
+        </span>
+        <span className="flex h-11 items-center justify-center rounded-medium bg-default-100 text-sm font-semibold text-foreground">
+          Cerrar
+        </span>
+        <span className="flex h-11 items-center justify-center gap-1 rounded-medium bg-primary text-sm font-semibold text-primary-foreground">
+          {done ? "Siguiente" : "Finalizado"}
+          {done ? (
+            <Icon icon="solar:alt-arrow-right-linear" width={16} />
+          ) : null}
+        </span>
+      </div>
+    </Surface>
+  );
+}
+
+/** La tarjeta para compartir pinta el logo tal cual, sin recorte. */
+function ShareLogo() {
+  return (
+    <div
+      data-ui
+      className="w-full max-w-[300px] rounded-large bg-foreground p-6 text-center text-background"
+    >
+      <p className="text-xs opacity-70">Press de banca</p>
+      <p className="mt-1 font-heading text-4xl font-semibold tabular-nums">
+        60 kg × 12
+      </p>
+      <Rise delay={0.3}>
+        <div className="mt-6 flex items-center justify-center gap-2.5">
+          {/* Un logo apaisado, entero: antes se recortaba en un círculo. */}
+          <span className="flex h-8 w-14 items-center justify-center rounded-[4px] bg-primary text-[10px] font-bold text-primary-foreground">
+            LOGO
+          </span>
+          <span className="font-heading text-lg font-semibold">TU MARCA</span>
+        </div>
+      </Rise>
+    </div>
+  );
+}
+
+// ── Formularios y acceso ───────────────────────────────────────────────
+
+/** Corregir una respuesta mal tecleada desde la ficha. */
+function FixAnswer() {
+  const fixed = useAfter(1.1);
+
+  return (
+    <Surface>
+      <p className="text-xs font-semibold text-default-500">Peso corporal</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className="font-heading text-2xl font-semibold tabular-nums text-foreground">
+          <span
+            className={`transition-opacity duration-300 ${
+              fixed ? "opacity-40 line-through" : ""
+            }`}
+          >
+            7,4 kg
+          </span>
+          {fixed ? <span className="ml-2 text-primary">74 kg</span> : null}
+        </p>
+        <span className="flex h-8 w-8 items-center justify-center rounded-medium bg-default-100 text-default-600">
+          <Icon icon="solar:pen-linear" width={15} />
+        </span>
+      </div>
+      <p className="mt-3 text-xs text-default-500">
+        {fixed
+          ? "La gráfica y la media se recalculan al guardar."
+          : "Tu cliente se equivocó al escribirlo."}
+      </p>
+    </Surface>
+  );
+}
+
+/** Cliente nuevo: no ve el plan hasta «Dar acceso al plan». */
+function PlanAccess() {
+  const given = useAfter(1.2);
+
+  return (
+    <div data-ui className="w-full max-w-[380px] space-y-2.5 text-left">
+      <Rise>
+        <div className="flex flex-wrap items-center gap-2 rounded-large bg-content1 px-4 py-3">
+          <span className="font-heading text-base font-semibold text-foreground">
+            Ana Ruiz
+          </span>
+          <Chip tone="success">Activo</Chip>
+          <span
+            className={`ml-auto inline-flex items-center gap-1 rounded-medium px-3 py-1.5 text-xs font-semibold transition-colors duration-300 ${
+              given
+                ? "bg-success/15 text-success-700"
+                : "bg-primary text-primary-foreground"
+            }`}
+          >
+            <Icon
+              icon={
+                given ? "solar:check-circle-bold" : "solar:lock-unlocked-linear"
+              }
+              width={14}
+            />
+            {given ? "Acceso dado" : "Dar acceso al plan"}
+          </span>
+        </div>
+      </Rise>
+      <Rise delay={0.15}>
+        <div className="flex items-center gap-3 rounded-large bg-content1 px-4 py-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium bg-primary/10 text-primary">
+            <Icon
+              icon={given ? "solar:dumbbell-linear" : "solar:hourglass-linear"}
+              width={18}
+            />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-foreground">
+              {given
+                ? "Tu entrenamiento de hoy"
+                : "Tu plan está en preparación"}
+            </span>
+            <span className="block text-xs text-default-500">
+              {given
+                ? "Tu cliente ya ve Entrenar y Nutrición"
+                : "Lo que ve tu cliente mientras tanto"}
+            </span>
+          </span>
+        </div>
+      </Rise>
+    </div>
+  );
+}
+
+/** Gráficas agrupadas en pestañas por sección. */
+function ChartSections() {
+  const second = useAfter(1.2);
+  const tabs = ["Medidas", "Energía", "Entreno"];
+  const active = second ? 1 : 0;
+
+  return (
+    <Surface>
+      <div className="flex rounded-medium bg-default-100 p-1">
+        {tabs.map((tab, i) => (
+          <span
+            key={tab}
+            className={`flex-1 rounded-small py-1.5 text-center text-xs transition-colors duration-300 ${
+              i === active
+                ? "bg-content1 font-semibold text-foreground"
+                : "text-default-500"
+            }`}
+          >
+            {tab}
+          </span>
+        ))}
+      </div>
+      <p className="mt-4 text-xs font-semibold text-default-500">
+        {second ? "Niveles de energía" : "Peso corporal"}
+      </p>
+      <p className="font-heading text-2xl font-semibold tabular-nums text-foreground">
+        {second ? "4,2 de 5" : "74,3 kg"}
+      </p>
+      <div className="mt-3">
+        <Bars
+          key={active}
+          values={
+            second
+              ? [3, 4, 4, 5, 4, 4, 5]
+              : [76, 75.6, 75.1, 74.9, 74.6, 74.4, 74.3]
+          }
+        />
       </div>
     </Surface>
   );

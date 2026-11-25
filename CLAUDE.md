@@ -77,6 +77,12 @@ Server-only environment variables (see `.env.example`):
 
 `cron-service/` is the old external sidecar for the same job. It was **never deployed** (Railway only runs the web service) and is now unused. The Next.js app also exposes `GET /api/cron/cleanup-otps`, which requires `CRON_SECRET` (Bearer / `x-cron-secret` header / `?secret=` query); nothing calls it on a schedule either.
 
+### Training groups and plan access (Nov 2026)
+
+- **Biserie / triserie / circuito**: 2–6 consecutive strength exercises of a session share a key in `session_exercises.metadata.alt_group`; the group is the run of neighbours with that key (no table). Logic and wording live in `lib/training/alt-groups.ts`. The exercise `PUT` route rebuilds `metadata` from the form, so any new metadata key must be preserved there explicitly, as `alt_group` is. Details: `docs/development/release-2026-11-25.md`.
+- **`clients.portal_locked`**: hides training and nutrition from a new client until the trainer presses "Dar acceso al plan". It is enforced in the client UI only (`ClientDataProvider`, bottom nav); the API routes do not check it.
+- **"What's new" modal**: `features/trainer/whats-new/releases.ts`. A new release means a new `id` and pages; each item points at a scene in `scenes.tsx`.
+
 ## Code organization
 
 - `app/` — App Router routes. Three top-level audience trees (`trainer/`, `admin/`, `[slug]/`) plus `api/` and `(public)/`.
