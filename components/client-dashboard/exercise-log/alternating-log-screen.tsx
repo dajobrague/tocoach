@@ -22,6 +22,7 @@ import { buildBaseFormData, defaultSet, LOG_INPUT_CLASS } from "./helpers";
 
 import { ClientScreen } from "@/components/client-dashboard/client-screen";
 import { clientFetch } from "@/lib/auth/client-token-storage";
+import { restWithUnit } from "@/lib/training/alt-groups";
 
 export interface AlternatingMember {
   exercise: {
@@ -89,7 +90,7 @@ export function AlternatingLogScreen({
   const formRef = useRef<HTMLFormElement>(null);
 
   const rounds = Math.max(...sets.map((s) => s.length), 0);
-  const rest = members[members.length - 1]?.exercise.rest;
+  const rest = restWithUnit(members[members.length - 1]?.exercise.rest);
 
   const update = (
     member: number,

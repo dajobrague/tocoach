@@ -81,3 +81,8 @@ export function toggleLinkWithNext(
 
   return next.map((k, i) => (inRun.has(i) ? k : null));
 }
+
+/** "90" → "90s": hay descansos guardados como número suelto. */
+export function restWithUnit(rest: string | undefined): string | undefined {
+  return rest && /^\d+$/.test(rest.trim()) ? `${rest.trim()}s` : rest;
+}

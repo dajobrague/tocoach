@@ -31,7 +31,7 @@ import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 
-import { altGroupRuns } from "@/lib/training/alt-groups";
+import { altGroupRuns, restWithUnit } from "@/lib/training/alt-groups";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { MuscleBody } from "@/components/shared/muscle-body";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
@@ -1000,7 +1000,7 @@ function GroupFocusCard({
   const lead = rows[0];
 
   if (!lead) return null;
-  const rest = rows[rows.length - 1]?.exercise.rest;
+  const rest = restWithUnit(rows[rows.length - 1]?.exercise.rest);
   const started = rows.some((r) => r.status !== "not_started");
 
   return (
