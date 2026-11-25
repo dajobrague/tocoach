@@ -65,6 +65,9 @@ export function TrainerVideoPlayer({ videoUrl, title, onClose }: Props) {
 
   return createPortal(
     <div
+      // Marca para las hojas que lo abren (ExerciseInfoSheet): tocar dentro
+      // del visor no es "tocar fuera" de la hoja.
+      data-video-viewer
       className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
       style={{ height: "100dvh" }}
       onClick={(e) => e.stopPropagation()}

@@ -52,6 +52,12 @@ export function ExerciseInfoSheet({ exercise, onClose, onOpenFull }: Props) {
       hideCloseButton
       classNames={{ base: "bg-background" }}
       isOpen={exercise !== null}
+      // El visor de vídeo se pinta fuera de la hoja (portal a pantalla
+      // completa): sin esto, tocar en él —incluido su botón de cerrar—
+      // contaba como tocar fuera y cerraba también la hoja.
+      shouldCloseOnInteractOutside={(element) =>
+        !element.closest("[data-video-viewer]")
+      }
       size="xl"
       onClose={onClose}
     >
