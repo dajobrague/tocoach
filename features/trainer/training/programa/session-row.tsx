@@ -40,7 +40,7 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
 import { CATEGORY_VISUAL, prescriptionLine } from "./programa-format";
 import { useExerciseMutations } from "./use-training";
@@ -48,11 +48,9 @@ import { useExerciseMutations } from "./use-training";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import {
+  ALT_GROUP_MAX,
   altGroupName,
   altGroupRuns,
-  canLinkWithNext,
-  isLinkedWithNext,
-  toggleLinkWithNext,
 } from "@/lib/training/alt-groups";
 import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/tabs/microcycle/exercise-metrics-popover";
 
@@ -180,26 +178,75 @@ export function SessionRow({
     });
   };
 
-  // Series alternas: une este ejercicio con el siguiente (o los separa).
+  // Biserie / triserie: 2–3 ejercicios seguidos que el cliente hace
+  // alternando una serie de cada uno. Se crean eligiéndolos en la lista
+  // ("Hacer biserie") y se deshacen desde la cabecera del grupo.
   const groupKeys = session.exercises.map((e) => e.altGroup ?? null);
   const groupRuns = altGroupRuns(groupKeys);
-  const handleToggleLink = (index: number) => {
-    const next = toggleLinkWithNext(
-      groupKeys,
-      index,
-      crypto.randomUUID().slice(0, 8)
+  const runAt = (index: number) =>
+    groupRuns.find(([a, b]) => index >= a && index <= b);
+  // Se puede agrupar: fuerza, guardado y aún suelto.
+  const canPick = (index: number) => {
+    const exercise = session.exercises[index];
+
+    return (
+      exercise !== undefined &&
+      exercise.id !== undefined &&
+      exercise.category !== "cardio" &&
+      runAt(index) === undefined
     );
-    const payload = session.exercises.flatMap((exercise, i) =>
-      exercise.id !== undefined && next[i] !== groupKeys[i]
-        ? [{ id: exercise.id, alt_group: next[i] ?? null }]
-        : []
-    );
+  };
+  const canGroupSomething = session.exercises.some(
+    (_, index) => canPick(index) && canPick(index + 1)
+  );
+  const [isPicking, setIsPicking] = useState(false);
+  // Siempre un tramo seguido [primero, último]: elegir el 1º y el 3º
+  // incluye el de en medio, que es lo único que tiene sentido.
+  const [picked, setPicked] = useState<[number, number] | null>(null);
+  const pickedCount = picked ? picked[1] - picked[0] + 1 : 0;
+
+  const stopPicking = () => {
+    setIsPicking(false);
+    setPicked(null);
+  };
+  const handlePick = (index: number) => {
+    setPicked((prev) => {
+      if (!prev) return [index, index];
+      const [a, b] = prev;
+
+      if (index >= a && index <= b) {
+        if (a === b) return null;
+
+        return index === a ? [a + 1, b] : [a, index - 1];
+      }
+      const first = Math.min(a, index);
+      const last = Math.max(b, index);
+      let fits = last - first + 1 <= ALT_GROUP_MAX;
+
+      for (let i = first; i <= last; i++) fits = fits && canPick(i);
+
+      return fits ? [first, last] : [index, index];
+    });
+  };
+  const saveGroups = (indexes: number[], key: string | null) => {
+    const payload = indexes.flatMap((i) => {
+      const id = session.exercises[i]?.id;
+
+      return id !== undefined ? [{ id, alt_group: key }] : [];
+    });
 
     if (payload.length === 0) return;
     setActionError(null);
     mutations.setExerciseGroups.mutate(payload, {
       onError: () => setActionError("No se pudo guardar el cambio"),
     });
+  };
+  const range = (first: number, last: number) =>
+    Array.from({ length: last - first + 1 }, (_, i) => first + i);
+  const confirmGroup = () => {
+    if (!picked || pickedCount < 2) return;
+    saveGroups(range(picked[0], picked[1]), crypto.randomUUID().slice(0, 8));
+    stopPicking();
   };
 
   // Foto propia del entrenador; si no hay, póster del catálogo.
@@ -317,63 +364,133 @@ export function SessionRow({
               Esta sesión aún no tiene ejercicios.
             </p>
           )}
-          <DndContext
-            collisionDetection={closestCenter}
-            sensors={sensors}
-            onDragEnd={handleExerciseDragEnd}
-          >
-            <SortableContext
-              items={session.exercises.map(exerciseKey)}
-              strategy={verticalListSortingStrategy}
+          {isPicking ? (
+            // Modo elegir: la lista deja de ser arrastrable y cada fila es
+            // una casilla. Los que no se pueden agrupar quedan atenuados.
+            <div
+              aria-label="Elige los ejercicios que se alternan"
+              className="flex flex-col gap-1.5"
+              role="group"
             >
               {session.exercises.map((exercise, index) => {
-                const line = prescriptionLine(exercise, session.sessionType);
-                const run = groupRuns.find(
-                  ([a, b]) => index >= a && index <= b
-                );
-                const nextExercise = session.exercises[index + 1];
-                const linked = isLinkedWithNext(groupKeys, index);
-                // La pastilla nombra el resultado: "Hacer biserie", "Hacer
-                // triserie" (unir a una biserie), "Deshacer biserie" o
-                // "Dejar en biserie" (sacar uno de una triserie).
-                const sizeAt = (i: number) => {
-                  const r = groupRuns.find(([a, b]) => i >= a && i <= b);
-
-                  return r ? r[1] - r[0] + 1 : 1;
-                };
-                const seamLabel = !linked
-                  ? `Hacer ${altGroupName(sizeAt(index) + sizeAt(index + 1)).toLowerCase()}`
-                  : sizeAt(index) >= 3
-                    ? "Dejar en biserie"
-                    : "Deshacer biserie";
-                // Solo fuerza con fuerza: el cardio no se registra por series.
-                const linkable =
-                  nextExercise !== undefined &&
-                  exercise.id !== undefined &&
-                  nextExercise.id !== undefined &&
-                  exercise.category !== "cardio" &&
-                  nextExercise.category !== "cardio";
-                const isCopy =
-                  exercise.id !== undefined &&
-                  exercise.id === recentlyDuplicatedExerciseId;
+                const selected =
+                  picked !== null && index >= picked[0] && index <= picked[1];
+                const grouped = runAt(index);
 
                 return (
-                  <Fragment key={exerciseKey(exercise)}>
-                    {/* El borde une a los ejercicios del grupo; el padding
-                      negativo lo prolonga por el hueco entre filas. */}
+                  <button
+                    key={exerciseKey(exercise)}
+                    aria-checked={selected}
+                    className={`flex w-full items-center gap-2.5 rounded-large border px-2.5 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selected
+                        ? "border-primary bg-primary/10"
+                        : "border-default-200 bg-content1 enabled:hover:bg-default-50"
+                    }`}
+                    disabled={!canPick(index)}
+                    role="checkbox"
+                    type="button"
+                    onClick={() => handlePick(index)}
+                  >
+                    <span
+                      aria-hidden
+                      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors duration-150 ${
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-default-300 bg-content1"
+                      }`}
+                    >
+                      {selected ? (
+                        <svg
+                          fill="none"
+                          height="12"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                          viewBox="0 0 24 24"
+                          width="12"
+                        >
+                          <path d="M5 12.5l4.5 4.5L19 7.5" />
+                        </svg>
+                      ) : null}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {exercise.name}
+                      </span>
+                      <span className="truncate text-xs tabular-nums text-default-500">
+                        {prescriptionLine(exercise, session.sessionType)}
+                      </span>
+                    </span>
+                    {grouped ? (
+                      <span className="shrink-0 text-xs text-default-500">
+                        Ya en{" "}
+                        {altGroupName(
+                          grouped[1] - grouped[0] + 1
+                        ).toLowerCase()}
+                      </span>
+                    ) : exercise.category === "cardio" ? (
+                      <span className="shrink-0 text-xs text-default-500">
+                        Cardio
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <DndContext
+              collisionDetection={closestCenter}
+              sensors={sensors}
+              onDragEnd={handleExerciseDragEnd}
+            >
+              <SortableContext
+                items={session.exercises.map(exerciseKey)}
+                strategy={verticalListSortingStrategy}
+              >
+                {session.exercises.map((exercise, index) => {
+                  const line = prescriptionLine(exercise, session.sessionType);
+                  const run = runAt(index);
+                  const isCopy =
+                    exercise.id !== undefined &&
+                    exercise.id === recentlyDuplicatedExerciseId;
+
+                  return (
+                    // Un grupo es UNA bandeja: las filas de la biserie
+                    // comparten fondo y cabecera (nombre + Deshacer). El
+                    // margen negativo cierra el hueco entre sus miembros.
                     <div
+                      key={exerciseKey(exercise)}
                       className={
                         run
-                          ? `border-l-2 border-primary pl-2.5 ${
-                              index < run[1] ? "-mb-1.5 pb-1.5" : ""
+                          ? `bg-default-100 px-1.5 ${
+                              index === run[0] ? "rounded-t-large pt-1.5" : ""
+                            } ${
+                              index === run[1]
+                                ? "rounded-b-large pb-1.5"
+                                : "-mb-1.5 pb-1.5"
                             }`
                           : undefined
                       }
                     >
                       {run && index === run[0] ? (
-                        <p className="pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
-                          {altGroupName(run[1] - run[0] + 1)}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 pb-1.5 pl-1">
+                          <p className="min-w-0 truncate text-xs text-default-500">
+                            <span className="font-semibold text-foreground">
+                              {altGroupName(run[1] - run[0] + 1)}
+                            </span>{" "}
+                            · una serie de cada uno, alternando
+                          </p>
+                          <button
+                            className="shrink-0 rounded-small px-1.5 py-0.5 text-xs font-medium text-default-500 transition-colors duration-150 hover:bg-default-200 hover:text-foreground"
+                            type="button"
+                            onClick={() =>
+                              saveGroups(range(run[0], run[1]), null)
+                            }
+                          >
+                            Deshacer
+                          </button>
+                        </div>
                       ) : null}
                       <SortableExerciseRow id={exerciseKey(exercise)}>
                         {({ dragHandleProps: exerciseHandle }) => (
@@ -594,52 +711,11 @@ export function SessionRow({
                         )}
                       </SortableExerciseRow>
                     </div>
-                    {/* Unir / separar: el control vive en la costura entre los
-                      dos ejercicios a los que afecta (alto cero, no añade
-                      separación entre filas). Con el grupo lleno no se
-                      ofrece. */}
-                    {linkable && canLinkWithNext(groupKeys, index) ? (
-                      <div className="relative z-10 -my-[3px] h-0">
-                        <button
-                          aria-label={
-                            linked
-                              ? `${seamLabel}: separar ${exercise.name} de ${nextExercise.name}`
-                              : `${seamLabel} con ${exercise.name} y ${nextExercise.name}`
-                          }
-                          // Eslabón pequeño sobre la línea izquierda, en la
-                          // costura entre las dos filas; el texto solo
-                          // aparece al pasar el ratón o con el foco.
-                          className={`group absolute left-px top-1/2 flex h-[22px] -translate-x-[11px] -translate-y-1/2 items-center rounded-full border bg-white text-[11px] font-medium transition-colors duration-150 active:scale-[0.97] motion-reduce:transform-none ${
-                            linked
-                              ? "border-primary text-primary"
-                              : "border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-900"
-                          }`}
-                          title={
-                            linked
-                              ? "Separar estos dos ejercicios"
-                              : "Unir estos ejercicios: el cliente alterna una serie de cada uno"
-                          }
-                          type="button"
-                          onClick={() => handleToggleLink(index)}
-                        >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                            <Icon
-                              aria-hidden
-                              icon="solar:link-linear"
-                              width={12}
-                            />
-                          </span>
-                          <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity,padding] duration-150 group-hover:max-w-40 group-hover:pr-2.5 group-hover:opacity-100 group-focus-visible:max-w-40 group-focus-visible:pr-2.5 group-focus-visible:opacity-100 motion-reduce:transition-none">
-                            {seamLabel}
-                          </span>
-                        </button>
-                      </div>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </SortableContext>
-          </DndContext>
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          )}
 
           <MuscleVolume
             className="mt-1 rounded-large border border-gray-200 bg-white p-3"
@@ -657,14 +733,52 @@ export function SessionRow({
             </div>
           )}
 
-          <button
-            className="flex w-full items-center justify-center gap-1.5 rounded-large border border-dashed border-gray-300 py-2 text-xs font-medium text-default-500 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-default-700"
-            type="button"
-            onClick={onAddExercise}
-          >
-            <Icon icon="solar:add-circle-bold" width={15} />
-            Añadir ejercicio
-          </button>
+          {isPicking ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-large bg-default-100 py-1.5 pl-3 pr-1.5">
+              <p
+                aria-live="polite"
+                className="min-w-0 flex-1 text-xs text-default-600"
+              >
+                {pickedCount === 0
+                  ? "Elige 2 o 3 ejercicios seguidos"
+                  : pickedCount === 1
+                    ? "Elige también el de al lado"
+                    : `${pickedCount} ejercicios: una serie de cada uno, alternando`}
+              </p>
+              <Button size="sm" variant="light" onPress={stopPicking}>
+                Cancelar
+              </Button>
+              <Button
+                color="primary"
+                isDisabled={pickedCount < 2}
+                size="sm"
+                onPress={confirmGroup}
+              >
+                Hacer {altGroupName(Math.max(pickedCount, 2)).toLowerCase()}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-1.5">
+              <button
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-large border border-dashed border-gray-300 py-2 text-xs font-medium text-default-500 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-default-700"
+                type="button"
+                onClick={onAddExercise}
+              >
+                <Icon icon="solar:add-circle-bold" width={15} />
+                Añadir ejercicio
+              </button>
+              {canGroupSomething ? (
+                <button
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-large border border-dashed border-gray-300 py-2 text-xs font-medium text-default-500 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-default-700"
+                  type="button"
+                  onClick={() => setIsPicking(true)}
+                >
+                  <Icon icon="solar:link-linear" width={15} />
+                  Hacer biserie
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       )}
 

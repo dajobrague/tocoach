@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  altGroupName,
+  altGroupRestLine,
   altGroupRuns,
-  canLinkWithNext,
-  toggleLinkWithNext,
+  restWithUnit,
 } from "../alt-groups";
 
-describe("series alternas", () => {
+describe("biserie / triserie", () => {
   it("a group is a run of neighbours sharing a key", () => {
     expect(altGroupRuns(["a", "a", null, "b", "b", "b"])).toEqual([
       [0, 1],
@@ -16,26 +17,14 @@ describe("series alternas", () => {
     expect(altGroupRuns(["a", null, "a"])).toEqual([]);
   });
 
-  it("links two loose exercises and unlinks them again", () => {
-    const linked = toggleLinkWithNext([null, null, null], 0, "k1");
-
-    expect(linked).toEqual(["k1", "k1", null]);
-    expect(toggleLinkWithNext(linked, 0, "k2")).toEqual([null, null, null]);
-  });
-
-  it("grows to three and refuses a fourth", () => {
-    const three = toggleLinkWithNext(["k1", "k1", null, null], 1, "k2");
-
-    expect(three).toEqual(["k1", "k1", "k1", null]);
-    expect(canLinkWithNext(three, 2)).toBe(false);
-    expect(toggleLinkWithNext(three, 2, "k3")).toEqual(three);
-  });
-
-  it("splitting the middle of three keeps the pair", () => {
-    expect(toggleLinkWithNext(["k1", "k1", "k1"], 0, "k2")).toEqual([
-      null,
-      "k2",
-      "k2",
-    ]);
+  it("names the group by its size and words the rest after it", () => {
+    expect(altGroupName(2)).toBe("Biserie");
+    expect(altGroupName(3)).toBe("Triserie");
+    expect(altGroupRestLine(3, restWithUnit("90"))).toBe(
+      "Alterna una serie de cada ejercicio. Descansa 90s después de hacer los tres."
+    );
+    expect(altGroupRestLine(2, undefined)).toBe(
+      "Alterna una serie de cada ejercicio."
+    );
   });
 });

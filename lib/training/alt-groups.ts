@@ -23,65 +23,6 @@ export function altGroupRuns(keys: readonly Key[]): Array<[number, number]> {
   return runs;
 }
 
-/** Extremos de la racha a la que pertenece `index` (él solo si va suelto). */
-function runOf(keys: readonly Key[], index: number): [number, number] {
-  return (
-    altGroupRuns(keys).find(([a, b]) => index >= a && index <= b) ?? [
-      index,
-      index,
-    ]
-  );
-}
-
-export function isLinkedWithNext(keys: readonly Key[], index: number): boolean {
-  return Boolean(keys[index]) && keys[index] === keys[index + 1];
-}
-
-/** ¿Se puede unir `index` con el siguiente sin pasar de tres? */
-export function canLinkWithNext(keys: readonly Key[], index: number): boolean {
-  if (index < 0 || index >= keys.length - 1) return false;
-  if (isLinkedWithNext(keys, index)) return true;
-  const [a] = runOf(keys, index);
-  const [, b] = runOf(keys, index + 1);
-
-  return b - a + 1 <= ALT_GROUP_MAX;
-}
-
-/**
- * Une `index` con el siguiente, o los separa si ya estaban unidos. Devuelve
- * las claves de toda la sesión, con null en los que quedan sueltos.
- */
-export function toggleLinkWithNext(
-  keys: readonly Key[],
-  index: number,
-  newKey: string
-): Array<string | null> {
-  const next: Array<string | null> = keys.map((k) => k ?? null);
-
-  if (!canLinkWithNext(keys, index)) return next;
-
-  if (isLinkedWithNext(keys, index)) {
-    const [, b] = runOf(keys, index);
-
-    for (let i = index + 1; i <= b; i++) next[i] = newKey;
-  } else {
-    const [a] = runOf(keys, index);
-    const [, b] = runOf(keys, index + 1);
-    const key = next[index] ?? next[index + 1] ?? newKey;
-
-    for (let i = a; i <= b; i++) next[i] = key;
-  }
-
-  // Quien se queda sin vecino de su clave va suelto.
-  const inRun = new Set<number>();
-
-  for (const [a, b] of altGroupRuns(next)) {
-    for (let i = a; i <= b; i++) inRun.add(i);
-  }
-
-  return next.map((k, i) => (inRun.has(i) ? k : null));
-}
-
 /** "90" → "90s": hay descansos guardados como número suelto. */
 export function restWithUnit(rest: string | undefined): string | undefined {
   return rest && /^\d+$/.test(rest.trim()) ? `${rest.trim()}s` : rest;
