@@ -30,6 +30,8 @@ interface Props {
   /** Animación del catálogo: solo si no hay imagen ni vídeo del entrenador. */
   libraryMedia?: LibraryMedia | undefined;
   onClose: () => void;
+  /** Avisa cuando se abre o se cierra el visor de vídeo a pantalla completa. */
+  onVideoOpenChange?: (open: boolean) => void;
 }
 
 export function ExerciseLogHero({
@@ -39,9 +41,14 @@ export function ExerciseLogHero({
   exerciseName,
   libraryMedia,
   onClose,
+  onVideoOpenChange,
 }: Props) {
   const typeStyle = getSessionTypeStyle(isCardio ? "cardio" : "strength");
-  const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [isVideoOpen, setIsVideoOpenState] = useState(false);
+  const setIsVideoOpen = (open: boolean) => {
+    setIsVideoOpenState(open);
+    onVideoOpenChange?.(open);
+  };
   const embed = videoUrl ? getVideoEmbed(videoUrl) : null;
 
   return (

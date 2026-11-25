@@ -8,6 +8,7 @@
 import type { LibraryMedia } from "@/lib/hooks/use-library-media";
 
 import { ModalBody, ModalContent } from "@heroui/react";
+import { useState } from "react";
 
 import { ExerciseLogHero } from "./exercise-log-hero";
 import { ExerciseTargetSection } from "./exercise-target-section";
@@ -46,18 +47,18 @@ interface Props {
 
 export function ExerciseInfoSheet({ exercise, onClose, onOpenFull }: Props) {
   const note = exercise?.notes || exercise?.description || null;
+  const [videoOpen, setVideoOpen] = useState(false);
 
   return (
     <ClientSheet
       hideCloseButton
       classNames={{ base: "bg-background" }}
+      // Con el vídeo abierto la hoja no se puede cerrar "tocando fuera": el
+      // visor se pinta fuera de ella a pantalla completa, y tocar en él
+      // —incluido su botón de cerrar— cerraba también la hoja.
+      isDismissable={!videoOpen}
+      isKeyboardDismissDisabled={videoOpen}
       isOpen={exercise !== null}
-      // El visor de vídeo se pinta fuera de la hoja (portal a pantalla
-      // completa): sin esto, tocar en él —incluido su botón de cerrar—
-      // contaba como tocar fuera y cerraba también la hoja.
-      shouldCloseOnInteractOutside={(element) =>
-        !element.closest("[data-video-viewer]")
-      }
       size="xl"
       onClose={onClose}
     >
@@ -75,6 +76,7 @@ export function ExerciseInfoSheet({ exercise, onClose, onOpenFull }: Props) {
                   exercise.uploadedVideoUrl || exercise.videoUrl || null
                 }
                 onClose={onClose}
+                onVideoOpenChange={setVideoOpen}
               />
               <div className="flex flex-col gap-4 px-4 pb-6 pt-4">
                 <h2 className="text-balance font-heading text-[22px] leading-tight tracking-[-0.015em] text-foreground">
