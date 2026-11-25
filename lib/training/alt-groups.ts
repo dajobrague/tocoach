@@ -51,13 +51,18 @@ export function regroupAfterMove(
     next[movedIndex] = null;
   }
 
+  return { keys: clearLoneKeys(next) };
+}
+
+/** Quien se queda sin vecino de su clave va suelto. */
+export function clearLoneKeys(keys: readonly Key[]): Array<string | null> {
   const inRun = new Set<number>();
 
-  for (const [a, b] of altGroupRuns(next)) {
+  for (const [a, b] of altGroupRuns(keys)) {
     for (let i = a; i <= b; i++) inRun.add(i);
   }
 
-  return { keys: next.map((k, i) => (inRun.has(i) ? k : null)) };
+  return keys.map((k, i) => (inRun.has(i) ? (k ?? null) : null));
 }
 
 /** "90" → "90s": hay descansos guardados como número suelto. */

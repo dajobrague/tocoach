@@ -13,7 +13,9 @@ import {
   closestCenter,
   DndContext,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -51,6 +53,7 @@ import {
   ALT_GROUP_MAX,
   altGroupName,
   altGroupRuns,
+  clearLoneKeys,
   regroupAfterMove,
 } from "@/lib/training/alt-groups";
 import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/tabs/microcycle/exercise-metrics-popover";
@@ -75,6 +78,26 @@ interface SessionRowProps {
   onAddExercise: () => void;
   onEditExercise: (exercise: WorkoutExercise) => void;
   onExerciseDuplicated: (sessionExerciseId: string) => void;
+}
+
+const DROP_ZONE_PREFIX = "alt-group-end:";
+
+/** Hueco punteado al final de una biserie donde soltar un ejercicio más. */
+function GroupDropZone({ id, label }: { id: string; label: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mt-1.5 flex h-11 items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
+        isOver
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-default-400 text-default-500"
+      }`}
+    >
+      {label}
+    </div>
+  );
 }
 
 function SortableExerciseRow({
@@ -144,21 +167,15 @@ export function SessionRow({
   const exerciseKey = (exercise: WorkoutExercise) =>
     exercise.id ?? `exercise-${exercise.order}`;
 
-  const handleExerciseDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  // Ejercicio que se está arrastrando: mientras dura, las biseries con hueco
+  // enseñan una zona punteada al final para soltarlo dentro.
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
 
-    if (over === null || active.id === over.id) return;
-
-    const oldIndex = session.exercises.findIndex(
-      (exercise) => exerciseKey(exercise) === active.id
-    );
-    const newIndex = session.exercises.findIndex(
-      (exercise) => exerciseKey(exercise) === over.id
-    );
-
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const reordered = arrayMove(session.exercises, oldIndex, newIndex);
+  // Guarda el nuevo orden y, si cambian, los grupos, en una sola petición.
+  const commitOrder = (
+    reordered: WorkoutExercise[],
+    keys: Array<string | null>
+  ) => {
     const payload = reordered.flatMap((exercise, index) =>
       exercise.id !== undefined
         ? [{ id: exercise.id, exercise_order: index + 1 }]
@@ -172,6 +189,64 @@ export function SessionRow({
       return;
     }
 
+    const groups = reordered.flatMap((exercise, index) => {
+      const key = keys[index] ?? null;
+
+      return exercise.id !== undefined && key !== (exercise.altGroup ?? null)
+        ? [{ id: exercise.id, alt_group: key }]
+        : [];
+    });
+
+    setActionError(null);
+    mutations.reorderExercises.mutate(
+      { reorder: payload, groups },
+      { onError: () => setActionError("No se pudo reordenar los ejercicios") }
+    );
+  };
+
+  const handleExerciseDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    setDraggingKey(null);
+    if (over === null || active.id === over.id) return;
+
+    const oldIndex = session.exercises.findIndex(
+      (exercise) => exerciseKey(exercise) === active.id
+    );
+
+    if (oldIndex === -1) return;
+
+    // Soltado en la zona punteada de una biserie: pasa a ser su último
+    // ejercicio (y la biserie, triserie).
+    if (typeof over.id === "string" && over.id.startsWith(DROP_ZONE_PREFIX)) {
+      const groupKey = over.id.slice(DROP_ZONE_PREFIX.length);
+      const last = session.exercises.findLastIndex(
+        (exercise) => exercise.altGroup === groupKey
+      );
+
+      if (last === -1) return;
+      const target = oldIndex < last ? last : last + 1;
+      const reordered = arrayMove(session.exercises, oldIndex, target);
+
+      commitOrder(
+        reordered,
+        clearLoneKeys(
+          reordered.map((e, i) =>
+            i === target ? groupKey : (e.altGroup ?? null)
+          )
+        )
+      );
+
+      return;
+    }
+
+    const newIndex = session.exercises.findIndex(
+      (exercise) => exerciseKey(exercise) === over.id
+    );
+
+    if (newIndex === -1) return;
+
+    const reordered = arrayMove(session.exercises, oldIndex, newIndex);
     // Soltar un ejercicio entre dos de una biserie lo mete en ella (pasa a
     // triserie); sacarlo lo deja suelto. Ver regroupAfterMove.
     const moved = reordered[newIndex];
@@ -191,20 +266,7 @@ export function SessionRow({
       return;
     }
 
-    const groups = reordered.flatMap((exercise, index) => {
-      const key = regrouped.keys[index] ?? null;
-
-      return exercise.id !== undefined && key !== (exercise.altGroup ?? null)
-        ? [{ id: exercise.id, alt_group: key }]
-        : [];
-    });
-
-    setActionError(null);
-
-    mutations.reorderExercises.mutate(
-      { reorder: payload, groups },
-      { onError: () => setActionError("No se pudo reordenar los ejercicios") }
-    );
+    commitOrder(reordered, regrouped.keys);
   };
 
   // Biserie / triserie: 2–3 ejercicios seguidos que el cliente hace
@@ -276,6 +338,34 @@ export function SessionRow({
     if (!picked || pickedCount < 2) return;
     saveGroups(range(picked[0], picked[1]), crypto.randomUUID().slice(0, 8));
     stopPicking();
+  };
+
+  // Zona punteada al final de una biserie mientras se arrastra un ejercicio
+  // de fuera que cabe en ella.
+  const dropZoneFor = (index: number, run: [number, number] | undefined) => {
+    if (!run || index !== run[1] || draggingKey === null) return null;
+    const dragged = session.exercises.find(
+      (e) => exerciseKey(e) === draggingKey
+    );
+    const groupKey = session.exercises[index]?.altGroup;
+    const size = run[1] - run[0] + 1;
+
+    if (
+      !dragged ||
+      !groupKey ||
+      dragged.category === "cardio" ||
+      dragged.altGroup === groupKey ||
+      size >= ALT_GROUP_MAX
+    ) {
+      return null;
+    }
+
+    return (
+      <GroupDropZone
+        id={`${DROP_ZONE_PREFIX}${groupKey}`}
+        label={`Suelta aquí para hacer ${altGroupName(size + 1).toLowerCase()}`}
+      />
+    );
   };
 
   // Foto propia del entrenador; si no hay, póster del catálogo.
@@ -495,7 +585,14 @@ export function SessionRow({
             <DndContext
               collisionDetection={closestCenter}
               sensors={sensors}
+              // La zona punteada aparece al empezar a arrastrar y desplaza
+              // las filas: hay que volver a medir durante el arrastre.
+              measuring={{
+                droppable: { strategy: MeasuringStrategy.Always },
+              }}
+              onDragCancel={() => setDraggingKey(null)}
               onDragEnd={handleExerciseDragEnd}
+              onDragStart={(event) => setDraggingKey(String(event.active.id))}
             >
               <SortableContext
                 items={session.exercises.map(exerciseKey)}
@@ -763,6 +860,7 @@ export function SessionRow({
                           </div>
                         )}
                       </SortableExerciseRow>
+                      {dropZoneFor(index, run)}
                     </div>
                   );
                 })}
