@@ -19,6 +19,7 @@ import { addToast, Button } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ExerciseInfoSheet } from "./exercise-info-sheet";
 import { ExerciseSetRow } from "./exercise-set-row";
 import { buildBaseFormData, defaultSet } from "./helpers";
 import { deleteSetVideo, uploadSetVideo } from "./hooks/use-set-videos";
@@ -98,6 +99,8 @@ export function AlternatingLogScreen({
       (m) => buildBaseFormData(m.exercise as never, m.existingLog).notes
     )
   );
+  // Ejercicio cuya hoja "cómo se hace" está abierta.
+  const [infoIndex, setInfoIndex] = useState<number | null>(null);
   // Serie que está subiendo vídeo ("miembro-serie"), para su spinner.
   const [uploading, setUploading] = useState<string | null>(null);
   // Solo se autoguardan los ejercicios que el cliente ha tocado: las reps
@@ -390,8 +393,8 @@ export function AlternatingLogScreen({
       onClose={handleClose}
     >
       <div className="flex flex-col gap-6 px-4 pb-8 pt-4 [html[data-rest-band]_&]:pt-[76px]">
-        {/* Qué se alterna. Cada fila abre la ficha del ejercicio: vídeo de
-            demostración del entrenador e historial. */}
+        {/* Qué se alterna. Cada fila abre la hoja "cómo se hace": imagen,
+            vídeo de demostración y nota del entrenador. */}
         <div className="flex flex-col gap-2">
           <ul className="divide-y divide-default-100 overflow-hidden rounded-large bg-content1 shadow-small">
             {members.map((member, index) => (
@@ -399,7 +402,7 @@ export function AlternatingLogScreen({
                 <button
                   className="flex min-h-[52px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-default-100 [@media(hover:hover)]:hover:bg-default-50"
                   type="button"
-                  onClick={() => onOpenMember(index)}
+                  onClick={() => setInfoIndex(index)}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-medium text-foreground">
@@ -510,9 +513,20 @@ export function AlternatingLogScreen({
                     key={member.exercise.session_exercise_id ?? index}
                     className="flex flex-col gap-1.5"
                   >
-                    <p className="truncate text-[13px] font-medium text-default-600">
-                      {member.exercise.name}
-                    </p>
+                    <button
+                      aria-label={`Cómo se hace: ${member.exercise.name}`}
+                      className="-my-1 flex min-h-8 items-center gap-1.5 self-start rounded-small text-left text-[13px] font-medium text-default-600 active:text-foreground"
+                      type="button"
+                      onClick={() => setInfoIndex(index)}
+                    >
+                      <span className="truncate">{member.exercise.name}</span>
+                      <Icon
+                        aria-hidden
+                        className="shrink-0 text-primary"
+                        icon="solar:info-circle-linear"
+                        width={15}
+                      />
+                    </button>
                     {/* Cabeceras solo en la primera serie: debajo se repite
                         la misma rejilla. */}
                     {round === 0 && set ? (
@@ -616,6 +630,20 @@ export function AlternatingLogScreen({
           })}
         </form>
       </div>
+      <ExerciseInfoSheet
+        exercise={
+          infoIndex === null
+            ? null
+            : ((members[infoIndex]?.exercise as never) ?? null)
+        }
+        onClose={() => setInfoIndex(null)}
+        onOpenFull={() => {
+          const index = infoIndex;
+
+          setInfoIndex(null);
+          if (index !== null) onOpenMember(index);
+        }}
+      />
     </ClientScreen>
   );
 }
