@@ -44,6 +44,7 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Fragment, useState } from "react";
 
 import { CATEGORY_VISUAL, prescriptionLine } from "./programa-format";
@@ -109,10 +110,9 @@ const collisionDetection: CollisionDetection = (args) => {
 const EASE_OUT = "ease-[cubic-bezier(0.32,0.72,0,1)]";
 
 /**
- * Hueco punteado donde soltar un ejercicio durante un arrastre. Siempre está
- * montado y se abre/cierra con una transición (el alto vía grid-rows, sin
- * animar `height`): así las filas no pegan un salto al empezar a arrastrar,
- * y cerrar es algo más rápido que abrir.
+ * Hueco punteado donde soltar un ejercicio durante un arrastre. Entra con
+ * una transición corta de opacidad y transform; al soltar desaparece sin más
+ * (la lista ya se está reordenando).
  *  - inside:  al final de la bandeja de un grupo (añadir uno más)
  *  - outside: justo debajo de la bandeja (sacar un ejercicio)
  *  - row:     al final de una fila suelta (hacer una biserie nueva)
@@ -129,6 +129,7 @@ function GroupDropZone({
   variant: "inside" | "outside" | "row";
 }) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !open });
+  const reduceMotion = useReducedMotion();
   // Radio derivado del contenedor: bandeja 14 − 6 de margen = 8; fila
   // 14 − 4 = 10; fuera de la bandeja, el de una fila suelta.
   const radius =
@@ -173,23 +174,21 @@ function GroupDropZone({
     );
   }
 
+  // Estas dos ocupan sitio en la lista. Su alto NO se anima: dnd-kit mide la
+  // fila arrastrada al empezar y un desplazamiento progresivo la descoloca.
+  // Aparecen de golpe en el layout (un único salto, que dnd-kit compensa) y
+  // lo que entra suave es el contenido, solo con opacidad y transform.
+  if (!open) return null;
+
   return (
-    <div
-      aria-hidden={!open}
-      // `outside` es hermano de las filas en una lista con gap: el margen
-      // negativo anula ese gap cuando está cerrado.
-      className={`grid transition-[grid-template-rows,opacity] ${EASE_OUT} motion-reduce:transition-none ${
-        variant === "outside" ? "-mt-1.5" : ""
-      } ${
-        open
-          ? "grid-rows-[1fr] opacity-100 duration-200"
-          : "pointer-events-none grid-rows-[0fr] opacity-0 duration-150"
-      }`}
+    <motion.div
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      className={variant === "inside" ? "pt-1.5" : undefined}
+      initial={reduceMotion ? false : { opacity: 0, y: -4, scale: 0.98 }}
+      transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
     >
-      <div className="min-h-0 overflow-hidden">
-        <div className="pt-1.5">{box}</div>
-      </div>
-    </div>
+      {box}
+    </motion.div>
   );
 }
 
@@ -216,7 +215,9 @@ function SortableExerciseRow({
     <div
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform),
+        // Translate, no Transform: las filas de dentro de una bandeja son más
+        // estrechas y Transform escalaría la fila al cruzar de un sitio a otro.
+        transform: CSS.Translate.toString(transform),
         transition,
         // Algo translúcida: deja ver la zona punteada sobre la que pasa.
         opacity: isDragging ? 0.75 : 1,
