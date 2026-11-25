@@ -51,6 +51,7 @@ import {
   ALT_GROUP_MAX,
   altGroupName,
   altGroupRuns,
+  regroupAfterMove,
 } from "@/lib/training/alt-groups";
 import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/tabs/microcycle/exercise-metrics-popover";
 
@@ -171,11 +172,39 @@ export function SessionRow({
       return;
     }
 
+    // Soltar un ejercicio entre dos de una biserie lo mete en ella (pasa a
+    // triserie); sacarlo lo deja suelto. Ver regroupAfterMove.
+    const moved = reordered[newIndex];
+    const regrouped = regroupAfterMove(
+      reordered.map((e) => e.altGroup ?? null),
+      newIndex,
+      moved !== undefined && moved.category !== "cardio"
+    );
+
+    if ("refused" in regrouped) {
+      setActionError(
+        regrouped.refused === "full"
+          ? "Una triserie admite tres ejercicios como máximo"
+          : "El cardio no puede formar parte de una biserie"
+      );
+
+      return;
+    }
+
+    const groups = reordered.flatMap((exercise, index) => {
+      const key = regrouped.keys[index] ?? null;
+
+      return exercise.id !== undefined && key !== (exercise.altGroup ?? null)
+        ? [{ id: exercise.id, alt_group: key }]
+        : [];
+    });
+
     setActionError(null);
 
-    mutations.reorderExercises.mutate(payload, {
-      onError: () => setActionError("No se pudo reordenar los ejercicios"),
-    });
+    mutations.reorderExercises.mutate(
+      { reorder: payload, groups },
+      { onError: () => setActionError("No se pudo reordenar los ejercicios") }
+    );
   };
 
   // Biserie / triserie: 2–3 ejercicios seguidos que el cliente hace

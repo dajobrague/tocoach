@@ -491,12 +491,14 @@ export function reorderExercises(
   clientId: string,
   programId: string,
   sessionId: string,
-  reorder: ExerciseOrderItem[]
+  reorder: ExerciseOrderItem[],
+  /** Arrastrar dentro o fuera de una biserie cambia también el grupo. */
+  groups: ExerciseGroupItem[] = []
 ): Promise<void> {
   return sendJson<void>(
     `${base(clientId)}/${programId}/sessions/${sessionId}/exercises`,
     "PATCH",
-    { reorder }
+    groups.length > 0 ? { reorder, groups } : { reorder }
   );
 }
 

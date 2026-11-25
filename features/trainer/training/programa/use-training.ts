@@ -248,9 +248,14 @@ export function useExerciseMutations(
     onSettled: invalidate,
   });
   const reorderExercisesM = useMutation({
-    mutationFn: (reorder: ExerciseOrderItem[]) =>
-      reorderExercises(clientId, programId, sessionId, reorder),
-    onMutate: async (reorder) => {
+    mutationFn: ({
+      reorder,
+      groups,
+    }: {
+      reorder: ExerciseOrderItem[];
+      groups?: ExerciseGroupItem[];
+    }) => reorderExercises(clientId, programId, sessionId, reorder, groups),
+    onMutate: async ({ reorder, groups }) => {
       await qc.cancelQueries({ queryKey: programsKey(clientId) });
 
       const previous = qc.getQueryData<WorkoutProgram[]>(programsKey(clientId));
@@ -258,7 +263,12 @@ export function useExerciseMutations(
       if (previous !== undefined) {
         qc.setQueryData<WorkoutProgram[]>(
           programsKey(clientId),
-          applyExerciseReorder(previous, programId, sessionId, reorder)
+          applyExerciseGroups(
+            applyExerciseReorder(previous, programId, sessionId, reorder),
+            programId,
+            sessionId,
+            groups ?? []
+          )
         );
       }
 

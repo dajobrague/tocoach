@@ -23,6 +23,43 @@ export function altGroupRuns(keys: readonly Key[]): Array<[number, number]> {
   return runs;
 }
 
+/**
+ * Claves tras arrastrar un ejercicio, con la lista YA en su nuevo orden:
+ *  - soltado entre dos miembros de un grupo → entra en él (la biserie pasa a
+ *    triserie); si el grupo está lleno o el ejercicio no puede agruparse
+ *    (cardio), el movimiento se rechaza;
+ *  - sacado de su grupo (ya sin vecinos de su clave) → queda suelto;
+ *  - el grupo que se queda con un solo ejercicio se deshace.
+ */
+export function regroupAfterMove(
+  keys: readonly Key[],
+  movedIndex: number,
+  canJoin: boolean
+): { keys: Array<string | null> } | { refused: "full" | "not-allowed" } {
+  const next: Array<string | null> = keys.map((k) => k ?? null);
+  const before = next[movedIndex - 1] ?? null;
+  const after = next[movedIndex + 1] ?? null;
+  const own = next[movedIndex] ?? null;
+
+  if (before && before === after && own !== before) {
+    if (!canJoin) return { refused: "not-allowed" };
+    const others = next.filter((k, i) => i !== movedIndex && k === before);
+
+    if (others.length >= ALT_GROUP_MAX) return { refused: "full" };
+    next[movedIndex] = before;
+  } else if (own && own !== before && own !== after) {
+    next[movedIndex] = null;
+  }
+
+  const inRun = new Set<number>();
+
+  for (const [a, b] of altGroupRuns(next)) {
+    for (let i = a; i <= b; i++) inRun.add(i);
+  }
+
+  return { keys: next.map((k, i) => (inRun.has(i) ? k : null)) };
+}
+
 /** "90" → "90s": hay descansos guardados como número suelto. */
 export function restWithUnit(rest: string | undefined): string | undefined {
   return rest && /^\d+$/.test(rest.trim()) ? `${rest.trim()}s` : rest;
