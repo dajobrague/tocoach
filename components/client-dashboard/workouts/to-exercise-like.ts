@@ -52,6 +52,7 @@ export function toExerciseLike(r: ResolvedExercise): ExerciseLike {
   if (r.training_system) out.trainingSystem = r.training_system;
   if (r.rir) out.rir = r.rir;
   if (r.per_side) out.perSide = true;
+  if (r.alt_group) out.altGroup = r.alt_group;
   if (r.increase_weight_after) {
     out.increaseWeightAfter = r.increase_weight_after;
   }

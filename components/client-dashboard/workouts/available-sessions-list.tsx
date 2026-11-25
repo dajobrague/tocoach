@@ -28,6 +28,18 @@ export interface OpenLogPayload {
   existingLog: unknown | null;
   /** Abre el siguiente ejercicio pendiente de la sesión, si lo hay. */
   onNext?: (() => void) | undefined;
+  /**
+   * Series alternas: los ejercicios del grupo, en orden. Con esto se abre la
+   * pantalla de rondas en vez del registro de un solo ejercicio.
+   */
+  group?:
+    | Array<{
+        exercise: { order: number; name: string } & Record<string, unknown>;
+        existingLog: unknown | null;
+      }>
+    | undefined;
+  /** Abre la ficha de un miembro del grupo. */
+  onOpenMember?: ((index: number) => void) | undefined;
 }
 
 interface Props {

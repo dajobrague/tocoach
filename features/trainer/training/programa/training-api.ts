@@ -500,6 +500,64 @@ export function reorderExercises(
   );
 }
 
+/** Series alternas: clave de grupo por ejercicio (null = suelto). */
+export interface ExerciseGroupItem {
+  id: string;
+  alt_group: string | null;
+}
+
+export function setExerciseGroups(
+  clientId: string,
+  programId: string,
+  sessionId: string,
+  groups: ExerciseGroupItem[]
+): Promise<void> {
+  return sendJson<void>(
+    `${base(clientId)}/${programId}/sessions/${sessionId}/exercises`,
+    "PATCH",
+    { groups }
+  );
+}
+
+/** Aplica en cache las claves de grupo según el payload de PATCH. */
+export function applyExerciseGroups(
+  programs: WorkoutProgram[],
+  programId: string,
+  sessionId: string,
+  groups: ExerciseGroupItem[]
+): WorkoutProgram[] {
+  const keyById = new Map(groups.map((g) => [g.id, g.alt_group]));
+
+  return programs.map((program) =>
+    program.programId !== programId
+      ? program
+      : {
+          ...program,
+          sessions: program.sessions.map((session) =>
+            session.id !== sessionId
+              ? session
+              : {
+                  ...session,
+                  exercises: session.exercises.map((exercise) => {
+                    if (
+                      exercise.id === undefined ||
+                      !keyById.has(exercise.id)
+                    ) {
+                      return exercise;
+                    }
+                    const { altGroup: _old, ...rest } = exercise;
+                    const key = keyById.get(exercise.id);
+
+                    void _old;
+
+                    return key ? { ...rest, altGroup: key } : rest;
+                  }),
+                }
+          ),
+        }
+  );
+}
+
 // ─── Biblioteca y plantillas ────────────────────────────────────────────────
 
 /** Busca/lista la biblioteca del trainer (sin filtro de categoría = todas). */

@@ -31,6 +31,7 @@ import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 
+import { altGroupRuns } from "@/lib/training/alt-groups";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { MuscleBody } from "@/components/shared/muscle-body";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
@@ -66,6 +67,8 @@ export interface ExerciseLike {
   rir?: string;
   /** Unilateral: el cliente registra reps por lado (metadata.per_side). */
   perSide?: boolean;
+  /** Series alternas: clave compartida con sus vecinos (metadata.alt_group). */
+  altGroup?: string;
   /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
   increaseWeightAfter?: string;
   tempo?: string;
@@ -335,6 +338,7 @@ export function ActiveSessionView({
         status !== "completed" &&
         isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate),
       existingLog,
+      grouped: false,
       open: () => openRow(index),
     };
   });
@@ -342,7 +346,32 @@ export function ActiveSessionView({
   // "Siguiente" (JC, nov): al finalizar un ejercicio se pasa al siguiente
   // pendiente en el orden del entrenador, sin volver a esta pantalla. Solo
   // hacia delante: los que quedan detrás siguen a la vista al cerrar.
+  // Series alternas: rachas de ejercicios de fuerza vecinos con la misma
+  // clave. Tocar cualquiera de ellos abre la pantalla de rondas del grupo.
+  const groupRuns = altGroupRuns(
+    rows.map((r) =>
+      isExerciseCardio(r.exercise) ? null : (r.exercise.altGroup ?? null)
+    )
+  );
+  const runOfRow = (index: number) =>
+    groupRuns.find(([a, b]) => index >= a && index <= b);
+
+  for (const [a, b] of groupRuns) {
+    for (let i = a; i <= b; i++) {
+      const row = rows[i];
+
+      if (row) row.grouped = true;
+    }
+  }
+
   function openRow(index: number) {
+    const run = runOfRow(index);
+
+    if (run) openGroup(run);
+    else openSingle(index);
+  }
+
+  function openSingle(index: number) {
     const row = rows[index];
 
     if (!row) return;
@@ -358,14 +387,48 @@ export function ActiveSessionView({
       onNext: nextIndex === -1 ? undefined : () => openRow(nextIndex),
     });
   }
+
+  function openGroup([first, last]: [number, number]) {
+    const members = rows.slice(first, last + 1);
+    const lead = members[0];
+
+    if (!lead) return;
+    const nextIndex = rows.findIndex(
+      (r, i) => i > last && r.status !== "completed"
+    );
+
+    onLogExercise({
+      exercise: { ...lead.exercise, libraryMedia: lead.media },
+      sessionId: session.id,
+      scheduledDate,
+      existingLog: lead.existingLog ?? null,
+      onNext: nextIndex === -1 ? undefined : () => openRow(nextIndex),
+      group: members.map((m) => ({
+        exercise: { ...m.exercise, libraryMedia: m.media },
+        existingLog: m.existingLog ?? null,
+      })),
+      onOpenMember: (i) => openSingle(first + i),
+    });
+  }
   const currentRow = sessionCompleted
     ? undefined
     : (rows.find((r) => r.status === "in_progress") ??
       rows.find((r) => r.status === "not_started"));
+  // Si el que toca es parte de unas series alternas, el grupo entero va
+  // junto en la tarjeta principal (aunque algún miembro ya esté hecho).
+  const currentRun = currentRow
+    ? runOfRow(rows.indexOf(currentRow))
+    : undefined;
+  const currentGroup = currentRun
+    ? rows.slice(currentRun[0], currentRun[1] + 1)
+    : [];
   const laterRows = rows.filter(
-    (r) => r !== currentRow && r.status !== "completed"
+    (r) =>
+      r !== currentRow && r.status !== "completed" && !currentGroup.includes(r)
   );
-  const doneRows = rows.filter((r) => r.status === "completed");
+  const doneRows = rows.filter(
+    (r) => r.status === "completed" && !currentGroup.includes(r)
+  );
 
   const isToday = scheduledDate === getLocalTodayYmd();
   const hasStartTime =
@@ -611,7 +674,12 @@ export function ActiveSessionView({
           </div>
         ) : (
           <div className="flex flex-col gap-6">
-            {currentRow ? (
+            {currentRow && currentGroup.length > 0 ? (
+              <GroupFocusCard
+                primaryCta={hasStartTime || !isToday}
+                rows={currentGroup}
+              />
+            ) : currentRow ? (
               <FocusCard
                 primaryCta={hasStartTime || !isToday}
                 row={currentRow}
@@ -729,6 +797,8 @@ interface FlowRow {
   /** El entrenador pidió subir peso en esta sesión. */
   increaseWeight: boolean;
   existingLog: ExerciseLogLike | undefined;
+  /** Parte de unas series alternas: `open` abre la pantalla de rondas. */
+  grouped: boolean;
   open: () => void;
 }
 
@@ -916,6 +986,100 @@ function FocusCard({
   );
 }
 
+/**
+ * Tarjeta principal de unas series alternas: los ejercicios del grupo juntos
+ * y un solo botón, porque se registran en una misma pantalla por rondas.
+ */
+function GroupFocusCard({
+  rows,
+  primaryCta,
+}: {
+  rows: FlowRow[];
+  primaryCta: boolean;
+}) {
+  const lead = rows[0];
+
+  if (!lead) return null;
+  const rest = rows[rows.length - 1]?.exercise.rest;
+  const started = rows.some((r) => r.status !== "not_started");
+
+  return (
+    <div className="rounded-large bg-content1 p-[18px] shadow-small">
+      <p className="flex items-center gap-1.5 text-[13px] font-medium text-default-500">
+        <Icon
+          aria-hidden
+          className="text-primary"
+          icon="solar:link-linear"
+          width={16}
+        />
+        {rows.length} ejercicios por turnos
+      </p>
+      <h3 className="mt-px font-heading text-xl leading-snug tracking-[-0.015em] text-foreground">
+        Series alternas
+      </h3>
+      <ul className="mt-3 divide-y divide-default-200/70 rounded-medium bg-default-100">
+        {rows.map((row) => {
+          const thumb = row.exercise.imageUrl ?? row.media?.poster;
+          const stats = formatExerciseStats(row.exercise, false);
+
+          return (
+            <li key={row.key} className="flex items-center gap-3 px-3 py-2.5">
+              {thumb ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="h-11 w-11 shrink-0 rounded-[10px] bg-white object-cover"
+                  decoding="async"
+                  src={thumb}
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-content1 text-default-400"
+                >
+                  <Icon icon="solar:dumbbell-linear" width={20} />
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-foreground">
+                  {row.exercise.name}
+                </span>
+                {stats ? (
+                  <span className="block truncate text-[13px] tabular-nums text-default-500">
+                    {stats}
+                  </span>
+                ) : null}
+              </span>
+              {row.status === "completed" ? (
+                <Icon
+                  aria-label="Hecho"
+                  className="shrink-0 text-success-700"
+                  icon="solar:check-circle-bold"
+                  width={18}
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-3 text-[13px] leading-snug text-default-500">
+        Haz una serie de cada uno y repite
+        {rest ? `. Descansa ${rest} al acabar cada ronda` : ""}.
+      </p>
+      <Button
+        fullWidth
+        className="mt-4 h-[52px] text-[17px] font-semibold"
+        color="primary"
+        radius="lg"
+        variant={primaryCta ? "solid" : "flat"}
+        onPress={lead.open}
+      >
+        {started ? "Continuar rondas" : "Registrar rondas"}
+      </Button>
+    </div>
+  );
+}
+
 /** Fila de una línea para lo que viene después y para lo ya hecho. */
 function CompactRow({ row }: { row: FlowRow }) {
   const { exercise, status, increaseWeight, open } = row;
@@ -945,6 +1109,12 @@ function CompactRow({ row }: { row: FlowRow }) {
         <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 text-xs font-semibold text-success-700">
           <Icon aria-hidden icon="solar:arrow-up-linear" width={14} />
           Sube peso
+        </span>
+      ) : null}
+      {row.grouped ? (
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-default-500">
+          <Icon aria-hidden icon="solar:link-linear" width={14} />
+          Alternas
         </span>
       ) : null}
       <Icon

@@ -41,6 +41,9 @@ import {
   listProgramTemplates,
   reorderExercises,
   reorderSessions,
+  setExerciseGroups,
+  applyExerciseGroups,
+  type ExerciseGroupItem,
   saveProgramAsTemplate,
   searchExerciseLibrary,
   updateExercise,
@@ -269,7 +272,33 @@ export function useExerciseMutations(
     onSettled: invalidate,
   });
 
+  const setExerciseGroupsM = useMutation({
+    mutationFn: (groups: ExerciseGroupItem[]) =>
+      setExerciseGroups(clientId, programId, sessionId, groups),
+    onMutate: async (groups) => {
+      await qc.cancelQueries({ queryKey: programsKey(clientId) });
+
+      const previous = qc.getQueryData<WorkoutProgram[]>(programsKey(clientId));
+
+      if (previous !== undefined) {
+        qc.setQueryData<WorkoutProgram[]>(
+          programsKey(clientId),
+          applyExerciseGroups(previous, programId, sessionId, groups)
+        );
+      }
+
+      return { previous };
+    },
+    onError: (_error, _groups, context) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData(programsKey(clientId), context.previous);
+      }
+    },
+    onSettled: invalidate,
+  });
+
   return {
+    setExerciseGroups: setExerciseGroupsM,
     addExercise: addExerciseM,
     updateExercise: updateExerciseM,
     deleteExercise: deleteExerciseM,

@@ -47,6 +47,12 @@ import { useExerciseMutations } from "./use-training";
 
 import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
+import {
+  altGroupRuns,
+  canLinkWithNext,
+  isLinkedWithNext,
+  toggleLinkWithNext,
+} from "@/lib/training/alt-groups";
 import { ExerciseMetricsPopover } from "@/components/dashboard/client-profile/tabs/microcycle/exercise-metrics-popover";
 
 interface SessionRowProps {
@@ -170,6 +176,29 @@ export function SessionRow({
 
     mutations.reorderExercises.mutate(payload, {
       onError: () => setActionError("No se pudo reordenar los ejercicios"),
+    });
+  };
+
+  // Series alternas: une este ejercicio con el siguiente (o los separa).
+  const groupKeys = session.exercises.map((e) => e.altGroup ?? null);
+  const groupRuns = altGroupRuns(groupKeys);
+  const handleToggleLink = (index: number) => {
+    const next = toggleLinkWithNext(
+      groupKeys,
+      index,
+      crypto.randomUUID().slice(0, 8)
+    );
+    const payload = session.exercises.flatMap((exercise, i) =>
+      exercise.id !== undefined && next[i] !== groupKeys[i]
+        ? [{ id: exercise.id, alt_group: next[i] ?? null }]
+        : []
+    );
+
+    if (payload.length === 0) return;
+    setActionError(null);
+    mutations.setExerciseGroups.mutate(payload, {
+      onError: () =>
+        setActionError("No se pudieron guardar las series alternas"),
     });
   };
 
@@ -297,227 +326,292 @@ export function SessionRow({
               items={session.exercises.map(exerciseKey)}
               strategy={verticalListSortingStrategy}
             >
-              {session.exercises.map((exercise) => {
+              {session.exercises.map((exercise, index) => {
                 const line = prescriptionLine(exercise, session.sessionType);
+                const run = groupRuns.find(
+                  ([a, b]) => index >= a && index <= b
+                );
+                const nextExercise = session.exercises[index + 1];
+                const linked = isLinkedWithNext(groupKeys, index);
+                // Solo fuerza con fuerza: el cardio no se registra por series.
+                const linkable =
+                  nextExercise !== undefined &&
+                  exercise.id !== undefined &&
+                  nextExercise.id !== undefined &&
+                  exercise.category !== "cardio" &&
+                  nextExercise.category !== "cardio";
                 const isCopy =
                   exercise.id !== undefined &&
                   exercise.id === recentlyDuplicatedExerciseId;
 
                 return (
-                  <SortableExerciseRow
+                  // El borde une a los ejercicios del grupo; el padding
+                  // negativo lo prolonga por el hueco entre filas.
+                  <div
                     key={exerciseKey(exercise)}
-                    id={exerciseKey(exercise)}
+                    className={
+                      run
+                        ? `border-l-2 border-primary pl-2.5 ${
+                            index < run[1] ? "-mb-1.5 pb-1.5" : ""
+                          }`
+                        : undefined
+                    }
                   >
-                    {({ dragHandleProps: exerciseHandle }) => (
-                      <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
-                        <button
-                          aria-label={`Reordenar ${exercise.name}`}
-                          className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
-                          type="button"
-                          {...exerciseHandle}
-                        >
-                          <Icon icon="solar:hamburger-menu-linear" width={14} />
-                        </button>
-                        {thumbOf(exercise) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            alt=""
-                            className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
-                            loading="lazy"
-                            src={thumbOf(exercise)}
-                          />
-                        ) : (
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
+                    {run && index === run[0] ? (
+                      <p className="pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
+                        Series alternas · {run[1] - run[0] + 1} ejercicios
+                      </p>
+                    ) : null}
+                    <SortableExerciseRow id={exerciseKey(exercise)}>
+                      {({ dragHandleProps: exerciseHandle }) => (
+                        <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
+                          <button
+                            aria-label={`Reordenar ${exercise.name}`}
+                            className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
+                            type="button"
+                            {...exerciseHandle}
+                          >
                             <Icon
-                              className="text-default-400"
-                              icon={
-                                exercise.category === "cardio"
-                                  ? "solar:heart-pulse-linear"
-                                  : "solar:dumbbell-linear"
-                              }
-                              width={16}
+                              icon="solar:hamburger-menu-linear"
+                              width={14}
                             />
-                          </span>
-                        )}
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-sm font-medium text-gray-900">
-                              {exercise.name}
-                            </span>
-                            {isCopy && (
-                              <Chip
-                                className="h-[18px] shrink-0 bg-amber-50 px-1 text-amber-700"
-                                size="sm"
-                                variant="flat"
-                              >
-                                <span className="text-[10px] font-medium">
-                                  Copia
-                                </span>
-                              </Chip>
-                            )}
-                          </span>
-                          {line.length > 0 && (
-                            <span className="text-xs text-default-500 tabular-nums">
-                              {line}
+                          </button>
+                          {thumbOf(exercise) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
+                              loading="lazy"
+                              src={thumbOf(exercise)}
+                            />
+                          ) : (
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
+                              <Icon
+                                className="text-default-400"
+                                icon={
+                                  exercise.category === "cardio"
+                                    ? "solar:heart-pulse-linear"
+                                    : "solar:dumbbell-linear"
+                                }
+                                width={16}
+                              />
                             </span>
                           )}
-                        </div>
-                        <ExerciseMetricsPopover
-                          category={exercise.category}
-                          exerciseName={exercise.name}
-                          logs={
-                            exercise.exercise_id !== undefined
-                              ? getLogsForExercise(exercise.exercise_id)
-                              : []
-                          }
-                        />
-                        <Button
-                          isIconOnly
-                          aria-label={`Duplicar ${exercise.name}`}
-                          isDisabled={
-                            exercise.id === undefined ||
-                            mutations.duplicateExercise.isPending
-                          }
-                          size="sm"
-                          title="Duplicar ejercicio"
-                          variant="light"
-                          onPress={() => {
-                            if (exercise.id === undefined) return;
-                            setActionError(null);
-                            mutations.duplicateExercise.mutate(exercise.id, {
-                              onSuccess: (row) => onExerciseDuplicated(row.id),
-                              onError: () =>
-                                setActionError(
-                                  "No se pudo duplicar el ejercicio"
-                                ),
-                            });
-                          }}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:copy-linear"
-                            width={15}
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate text-sm font-medium text-gray-900">
+                                {exercise.name}
+                              </span>
+                              {isCopy && (
+                                <Chip
+                                  className="h-[18px] shrink-0 bg-amber-50 px-1 text-amber-700"
+                                  size="sm"
+                                  variant="flat"
+                                >
+                                  <span className="text-[10px] font-medium">
+                                    Copia
+                                  </span>
+                                </Chip>
+                              )}
+                            </span>
+                            {line.length > 0 && (
+                              <span className="text-xs text-default-500 tabular-nums">
+                                {line}
+                              </span>
+                            )}
+                          </div>
+                          <ExerciseMetricsPopover
+                            category={exercise.category}
+                            exerciseName={exercise.name}
+                            logs={
+                              exercise.exercise_id !== undefined
+                                ? getLogsForExercise(exercise.exercise_id)
+                                : []
+                            }
                           />
-                        </Button>
-                        {/* JC, 22 sep: llevarse un ejercicio de Empuje B a
+                          <Button
+                            isIconOnly
+                            aria-label={`Duplicar ${exercise.name}`}
+                            isDisabled={
+                              exercise.id === undefined ||
+                              mutations.duplicateExercise.isPending
+                            }
+                            size="sm"
+                            title="Duplicar ejercicio"
+                            variant="light"
+                            onPress={() => {
+                              if (exercise.id === undefined) return;
+                              setActionError(null);
+                              mutations.duplicateExercise.mutate(exercise.id, {
+                                onSuccess: (row) =>
+                                  onExerciseDuplicated(row.id),
+                                onError: () =>
+                                  setActionError(
+                                    "No se pudo duplicar el ejercicio"
+                                  ),
+                              });
+                            }}
+                          >
+                            <Icon
+                              className="text-gray-600"
+                              icon="solar:copy-linear"
+                              width={15}
+                            />
+                          </Button>
+                          {/* JC, 22 sep: llevarse un ejercicio de Empuje B a
                             la A sin rehacerlo. Copia/mueve al FINAL de la
                             sesión destino con la prescripción completa. */}
-                        {siblingSessions.length > 0 && (
-                          <Dropdown placement="bottom-end">
-                            <DropdownTrigger>
-                              <Button
-                                isIconOnly
-                                aria-label={`Mover o copiar ${exercise.name} a otra sesión`}
-                                isDisabled={
-                                  exercise.id === undefined ||
-                                  mutations.copyExerciseTo.isPending
-                                }
-                                size="sm"
-                                title="Mover o copiar a otra sesión"
-                                variant="light"
-                              >
-                                <Icon
-                                  className="text-gray-600"
-                                  icon="solar:transfer-horizontal-linear"
-                                  width={15}
-                                />
-                              </Button>
-                            </DropdownTrigger>
-                            <DropdownMenu
-                              aria-label="Sesión destino"
-                              items={siblingSessions.flatMap((target) => [
-                                {
-                                  key: `move:${target.id}`,
-                                  target,
-                                  move: true,
-                                },
-                                {
-                                  key: `copy:${target.id}`,
-                                  target,
-                                  move: false,
-                                },
-                              ])}
-                              onAction={(key) => {
-                                const [mode, targetSessionId] =
-                                  String(key).split(":");
-
-                                if (
-                                  exercise.id === undefined ||
-                                  targetSessionId === undefined
-                                )
-                                  return;
-                                setActionError(null);
-                                mutations.copyExerciseTo.mutate(
+                          {siblingSessions.length > 0 && (
+                            <Dropdown placement="bottom-end">
+                              <DropdownTrigger>
+                                <Button
+                                  isIconOnly
+                                  aria-label={`Mover o copiar ${exercise.name} a otra sesión`}
+                                  isDisabled={
+                                    exercise.id === undefined ||
+                                    mutations.copyExerciseTo.isPending
+                                  }
+                                  size="sm"
+                                  title="Mover o copiar a otra sesión"
+                                  variant="light"
+                                >
+                                  <Icon
+                                    className="text-gray-600"
+                                    icon="solar:transfer-horizontal-linear"
+                                    width={15}
+                                  />
+                                </Button>
+                              </DropdownTrigger>
+                              <DropdownMenu
+                                aria-label="Sesión destino"
+                                items={siblingSessions.flatMap((target) => [
                                   {
-                                    sessionExerciseId: exercise.id,
-                                    targetSessionId,
-                                    move: mode === "move",
+                                    key: `move:${target.id}`,
+                                    target,
+                                    move: true,
                                   },
                                   {
-                                    onError: (error) =>
-                                      setActionError(
-                                        error instanceof Error
-                                          ? error.message
-                                          : "No se pudo mover el ejercicio"
-                                      ),
-                                  }
-                                );
-                              }}
+                                    key: `copy:${target.id}`,
+                                    target,
+                                    move: false,
+                                  },
+                                ])}
+                                onAction={(key) => {
+                                  const [mode, targetSessionId] =
+                                    String(key).split(":");
+
+                                  if (
+                                    exercise.id === undefined ||
+                                    targetSessionId === undefined
+                                  )
+                                    return;
+                                  setActionError(null);
+                                  mutations.copyExerciseTo.mutate(
+                                    {
+                                      sessionExerciseId: exercise.id,
+                                      targetSessionId,
+                                      move: mode === "move",
+                                    },
+                                    {
+                                      onError: (error) =>
+                                        setActionError(
+                                          error instanceof Error
+                                            ? error.message
+                                            : "No se pudo mover el ejercicio"
+                                        ),
+                                    }
+                                  );
+                                }}
+                              >
+                                {(item) => (
+                                  <DropdownItem
+                                    key={item.key}
+                                    startContent={
+                                      <Icon
+                                        className="text-gray-500"
+                                        icon={
+                                          item.move
+                                            ? "solar:arrow-right-linear"
+                                            : "solar:copy-linear"
+                                        }
+                                        width={14}
+                                      />
+                                    }
+                                  >
+                                    {item.move ? "Mover a" : "Copiar a"}{" "}
+                                    <strong>{item.target.name}</strong>
+                                  </DropdownItem>
+                                )}
+                              </DropdownMenu>
+                            </Dropdown>
+                          )}
+                          <Button
+                            isIconOnly
+                            aria-label={`Editar ${exercise.name}`}
+                            size="sm"
+                            title="Editar ejercicio"
+                            variant="light"
+                            onPress={() => onEditExercise(exercise)}
+                          >
+                            <Icon
+                              className="text-gray-600"
+                              icon="solar:pen-linear"
+                              width={15}
+                            />
+                          </Button>
+                          {linkable ? (
+                            <Button
+                              isIconOnly
+                              aria-label={
+                                linked
+                                  ? `Dejar de alternar ${exercise.name} con ${nextExercise.name}`
+                                  : `Alternar ${exercise.name} con ${nextExercise.name}`
+                              }
+                              aria-pressed={linked}
+                              isDisabled={!canLinkWithNext(groupKeys, index)}
+                              size="sm"
+                              title={
+                                linked
+                                  ? "Dejar de alternar con el siguiente"
+                                  : canLinkWithNext(groupKeys, index)
+                                    ? "Alternar con el siguiente (series alternas)"
+                                    : "Máximo tres ejercicios por grupo"
+                              }
+                              variant="light"
+                              onPress={() => handleToggleLink(index)}
                             >
-                              {(item) => (
-                                <DropdownItem
-                                  key={item.key}
-                                  startContent={
-                                    <Icon
-                                      className="text-gray-500"
-                                      icon={
-                                        item.move
-                                          ? "solar:arrow-right-linear"
-                                          : "solar:copy-linear"
-                                      }
-                                      width={14}
-                                    />
-                                  }
-                                >
-                                  {item.move ? "Mover a" : "Copiar a"}{" "}
-                                  <strong>{item.target.name}</strong>
-                                </DropdownItem>
-                              )}
-                            </DropdownMenu>
-                          </Dropdown>
-                        )}
-                        <Button
-                          isIconOnly
-                          aria-label={`Editar ${exercise.name}`}
-                          size="sm"
-                          title="Editar ejercicio"
-                          variant="light"
-                          onPress={() => onEditExercise(exercise)}
-                        >
-                          <Icon
-                            className="text-gray-600"
-                            icon="solar:pen-linear"
-                            width={15}
-                          />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          aria-label={`Eliminar ${exercise.name}`}
-                          isDisabled={exercise.id === undefined}
-                          size="sm"
-                          title="Eliminar ejercicio"
-                          variant="light"
-                          onPress={() => setDeleteTarget(exercise)}
-                        >
-                          <Icon
-                            className="text-gray-600 hover:text-danger"
-                            icon="solar:trash-bin-trash-linear"
-                            width={15}
-                          />
-                        </Button>
-                      </div>
-                    )}
-                  </SortableExerciseRow>
+                              <Icon
+                                className={
+                                  linked ? "text-primary" : "text-gray-600"
+                                }
+                                icon={
+                                  linked
+                                    ? "solar:link-bold"
+                                    : "solar:link-linear"
+                                }
+                                width={15}
+                              />
+                            </Button>
+                          ) : null}
+                          <Button
+                            isIconOnly
+                            aria-label={`Eliminar ${exercise.name}`}
+                            isDisabled={exercise.id === undefined}
+                            size="sm"
+                            title="Eliminar ejercicio"
+                            variant="light"
+                            onPress={() => setDeleteTarget(exercise)}
+                          >
+                            <Icon
+                              className="text-gray-600 hover:text-danger"
+                              icon="solar:trash-bin-trash-linear"
+                              width={15}
+                            />
+                          </Button>
+                        </div>
+                      )}
+                    </SortableExerciseRow>
+                  </div>
                 );
               })}
             </SortableContext>

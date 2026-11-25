@@ -39,6 +39,7 @@ import { ClientBottomNav } from "@/components/client-dashboard/bottom-nav";
 import { useClientData } from "@/components/client-dashboard/client-data-provider";
 import { ClientPage } from "@/components/client-dashboard/client-page";
 import { ClientScreen } from "@/components/client-dashboard/client-screen";
+import { AlternatingLogScreen } from "@/components/client-dashboard/exercise-log/alternating-log-screen";
 import { ExerciseLogModal } from "@/components/client-dashboard/exercise-log/exercise-log-modal";
 import { CenteredState } from "@/components/shared/centered-state";
 import { IconTile } from "@/components/shared/icon-tile";
@@ -576,7 +577,7 @@ export function WorkoutsContent() {
             ?.exercise_id ?? ""
         }
         existingLog={selectedExercise?.existingLog ?? null}
-        isOpen={isLogModalOpen}
+        isOpen={isLogModalOpen && !selectedExercise?.group}
         scheduledDate={selectedExercise?.scheduledDate ?? ""}
         sessionExerciseId={
           (
@@ -590,6 +591,26 @@ export function WorkoutsContent() {
         onNext={selectedExercise?.onNext}
         onSuccess={handleLogModalSuccess}
       />
+
+      {/* Series alternas: el grupo se registra por rondas en su pantalla. */}
+      {selectedExercise?.group ? (
+        <AlternatingLogScreen
+          key={selectedExercise.group
+            .map((m) =>
+              String(m.exercise.session_exercise_id ?? m.exercise.name)
+            )
+            .join("|")}
+          clientId={clientId}
+          isOpen={isLogModalOpen}
+          members={selectedExercise.group}
+          scheduledDate={selectedExercise.scheduledDate}
+          sessionId={selectedExercise.sessionId}
+          onClose={handleLogModalClose}
+          onNext={selectedExercise.onNext}
+          onOpenMember={(index) => selectedExercise.onOpenMember?.(index)}
+          onSuccess={handleLogModalSuccess}
+        />
+      ) : null}
 
       {microcycle ? (
         <MicrocycleReferenceModal

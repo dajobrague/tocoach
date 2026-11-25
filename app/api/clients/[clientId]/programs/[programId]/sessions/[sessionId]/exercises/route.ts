@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrainerSession } from "@/lib/auth/session";
 import { createSupabaseClient } from "@/lib/clients/supabase-api";
 import { INCREASE_WEIGHT_KEY } from "@/lib/training/increase-weight";
+import { ALT_GROUP_KEY } from "@/lib/training/alt-groups";
 
 // PUT/DELETE mutan por el id del slot (query param), así que antes de tocar
 // la fila se verifica la cadena completa slot → sesión → programa →
@@ -451,6 +452,11 @@ export async function PUT(
         rir: rir || null,
         ...(perSide === true ? { per_side: true } : {}),
         ...(pendingIncrease ? { [INCREASE_WEIGHT_KEY]: pendingIncrease } : {}),
+        // Series alternas: editar la prescripción no saca al ejercicio de
+        // su grupo.
+        ...(typeof sessionExercise.metadata?.[ALT_GROUP_KEY] === "string"
+          ? { [ALT_GROUP_KEY]: sessionExercise.metadata[ALT_GROUP_KEY] }
+          : {}),
       };
     }
 
@@ -602,9 +608,12 @@ export async function PATCH(
 
     const { sessionId } = await params;
     const body = await request.json();
-    const { reorder } = body;
+    // `groups` (series alternas) y `reorder` son independientes: llega uno
+    // u otro.
+    const groups: unknown = body.groups;
+    const reorder = Array.isArray(body.reorder) ? body.reorder : [];
 
-    if (!reorder || !Array.isArray(reorder)) {
+    if (!Array.isArray(body.reorder) && !Array.isArray(groups)) {
       return NextResponse.json(
         { success: false, error: "Se requiere un array de reorder" },
         { status: 400 }
@@ -624,6 +633,74 @@ export async function PATCH(
         { success: false, error: "Sesión no encontrada o no autorizada" },
         { status: 404 }
       );
+    }
+
+    if (Array.isArray(groups)) {
+      const wanted = new Map<string, string | null>();
+
+      for (const item of groups as Array<{
+        id?: unknown;
+        alt_group?: unknown;
+      }>) {
+        const key = item?.alt_group;
+
+        if (
+          typeof item?.id !== "string" ||
+          !(key === null || (typeof key === "string" && key.length <= 40))
+        ) {
+          return NextResponse.json(
+            { success: false, error: "Grupo no válido" },
+            { status: 400 }
+          );
+        }
+        wanted.set(item.id, key || null);
+      }
+
+      // metadata es JSONB: se lee y se reescribe solo la clave del grupo.
+      const { data: rows, error: rowsError } = await supabase
+        .from("session_exercises")
+        .select("id, metadata")
+        .eq("session_id", sessionId)
+        .in("id", [...wanted.keys()]);
+
+      if (rowsError) {
+        console.error("[Exercises API] Error loading groups:", rowsError);
+
+        return NextResponse.json(
+          { success: false, error: "Error al guardar las series alternas" },
+          { status: 500 }
+        );
+      }
+
+      const groupResults = await Promise.all(
+        (rows ?? []).map((row) => {
+          const { [ALT_GROUP_KEY]: _old, ...rest } = (row.metadata ??
+            {}) as Record<string, unknown>;
+          const key = wanted.get(row.id) ?? null;
+
+          void _old;
+
+          return supabase
+            .from("session_exercises")
+            .update({
+              metadata: key ? { ...rest, [ALT_GROUP_KEY]: key } : rest,
+            })
+            .eq("id", row.id)
+            .eq("session_id", sessionId);
+        })
+      );
+
+      if (groupResults.some((r) => r.error)) {
+        console.error(
+          "[Exercises API] Error saving groups:",
+          groupResults.filter((r) => r.error).map((r) => r.error)
+        );
+
+        return NextResponse.json(
+          { success: false, error: "Error al guardar las series alternas" },
+          { status: 500 }
+        );
+      }
     }
 
     // Batch update exercise_order for each exercise

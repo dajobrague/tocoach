@@ -51,6 +51,7 @@ export interface ResolvedExercise {
   training_system: string | null;
   rir: string | null;
   per_side?: boolean;
+  alt_group?: string | null;
   /** "Subir peso": día que revisó el entrenador (YYYY-MM-DD) o null. */
   increase_weight_after?: string | null;
   /**

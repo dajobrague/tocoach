@@ -355,6 +355,10 @@ export function transformToWorkoutProgram(
             rest: coaching.rest,
             rir: coaching.rir,
             ...(se.metadata?.per_side === true ? { perSide: true } : {}),
+            ...(typeof se.metadata?.alt_group === "string" &&
+            se.metadata.alt_group
+              ? { altGroup: se.metadata.alt_group }
+              : {}),
             ...(typeof se.metadata?.[INCREASE_WEIGHT_KEY] === "string"
               ? { increaseWeightAfter: se.metadata[INCREASE_WEIGHT_KEY] }
               : {}),

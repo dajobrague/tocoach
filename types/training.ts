@@ -186,6 +186,8 @@ export interface WorkoutExercise {
   rir?: string;
   /** Unilateral: el cliente registra reps por lado (metadata.per_side). */
   perSide?: boolean;
+  /** Series alternas: clave compartida con sus vecinos (metadata.alt_group). */
+  altGroup?: string;
   /** "Subir peso": día que revisó el entrenador (lib/training/increase-weight). */
   increaseWeightAfter?: string;
   trainingSystem: string;
