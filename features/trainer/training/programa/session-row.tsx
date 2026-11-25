@@ -606,10 +606,13 @@ export function SessionRow({
                               ? `${seamLabel}: separar ${exercise.name} de ${nextExercise.name}`
                               : `${seamLabel} con ${exercise.name} y ${nextExercise.name}`
                           }
-                          className={`absolute left-1/2 top-1/2 flex h-6 -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border bg-white px-2.5 text-[11px] font-medium transition-colors duration-150 active:scale-[0.97] motion-reduce:transform-none ${
+                          // Eslabón pequeño sobre la línea izquierda, en la
+                          // costura entre las dos filas; el texto solo
+                          // aparece al pasar el ratón o con el foco.
+                          className={`group absolute left-px top-1/2 flex h-[22px] -translate-x-[11px] -translate-y-1/2 items-center rounded-full border bg-white text-[11px] font-medium transition-colors duration-150 active:scale-[0.97] motion-reduce:transform-none ${
                             linked
-                              ? "border-primary text-primary hover:bg-gray-50"
-                              : "border-gray-200 text-gray-600 hover:border-gray-400 hover:text-gray-900"
+                              ? "border-primary text-primary"
+                              : "border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-900"
                           }`}
                           title={
                             linked
@@ -619,16 +622,16 @@ export function SessionRow({
                           type="button"
                           onClick={() => handleToggleLink(index)}
                         >
-                          <Icon
-                            aria-hidden
-                            icon={
-                              linked
-                                ? "solar:unlink-linear"
-                                : "solar:link-linear"
-                            }
-                            width={12}
-                          />
-                          {seamLabel}
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                            <Icon
+                              aria-hidden
+                              icon="solar:link-linear"
+                              width={12}
+                            />
+                          </span>
+                          <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity,padding] duration-150 group-hover:max-w-40 group-hover:pr-2.5 group-hover:opacity-100 group-focus-visible:max-w-40 group-focus-visible:pr-2.5 group-focus-visible:opacity-100 motion-reduce:transition-none">
+                            {seamLabel}
+                          </span>
                         </button>
                       </div>
                     ) : null}
