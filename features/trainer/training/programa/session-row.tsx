@@ -381,7 +381,7 @@ export function SessionRow({
                   <button
                     key={exerciseKey(exercise)}
                     aria-checked={selected}
-                    className={`flex w-full items-center gap-2.5 rounded-large border px-2.5 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`flex min-h-[54px] w-full items-center gap-2.5 rounded-large border px-2.5 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
                       selected
                         ? "border-primary bg-primary/10"
                         : "border-default-200 bg-content1 enabled:hover:bg-default-50"
@@ -437,6 +437,30 @@ export function SessionRow({
                   </button>
                 );
               })}
+              {/* Junto a las casillas: qué se ha elegido y confirmar. */}
+              <div className="flex flex-wrap items-center gap-2 rounded-large bg-default-100 py-1.5 pl-3 pr-1.5">
+                <p
+                  aria-live="polite"
+                  className="min-w-0 flex-1 text-xs text-default-600"
+                >
+                  {pickedCount === 0
+                    ? "Elige 2 o 3 ejercicios seguidos"
+                    : pickedCount === 1
+                      ? "Elige también el de al lado"
+                      : `${pickedCount} ejercicios: una serie de cada uno, alternando`}
+                </p>
+                <Button size="sm" variant="light" onPress={stopPicking}>
+                  Cancelar
+                </Button>
+                <Button
+                  color="primary"
+                  isDisabled={pickedCount < 2}
+                  size="sm"
+                  onPress={confirmGroup}
+                >
+                  Hacer {altGroupName(Math.max(pickedCount, 2)).toLowerCase()}
+                </Button>
+              </div>
             </div>
           ) : (
             <DndContext
@@ -733,31 +757,7 @@ export function SessionRow({
             </div>
           )}
 
-          {isPicking ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-large bg-default-100 py-1.5 pl-3 pr-1.5">
-              <p
-                aria-live="polite"
-                className="min-w-0 flex-1 text-xs text-default-600"
-              >
-                {pickedCount === 0
-                  ? "Elige 2 o 3 ejercicios seguidos"
-                  : pickedCount === 1
-                    ? "Elige también el de al lado"
-                    : `${pickedCount} ejercicios: una serie de cada uno, alternando`}
-              </p>
-              <Button size="sm" variant="light" onPress={stopPicking}>
-                Cancelar
-              </Button>
-              <Button
-                color="primary"
-                isDisabled={pickedCount < 2}
-                size="sm"
-                onPress={confirmGroup}
-              >
-                Hacer {altGroupName(Math.max(pickedCount, 2)).toLowerCase()}
-              </Button>
-            </div>
-          ) : (
+          {isPicking ? null : (
             <div className="flex gap-1.5">
               <button
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-large border border-dashed border-gray-300 py-2 text-xs font-medium text-default-500 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-default-700"
