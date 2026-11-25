@@ -316,7 +316,7 @@ export function AlternatingLogScreen({
       title="Series alternas"
       onClose={handleClose}
     >
-      <div className="flex flex-col gap-6 px-4 pb-8 pt-4">
+      <div className="flex flex-col gap-6 px-4 pb-8 pt-4 [html[data-rest-band]_&]:pt-[76px]">
         {/* Qué se alterna. Cada fila abre la ficha del ejercicio: vídeo,
             historial y los detalles que aquí no se teclean. */}
         <div className="flex flex-col gap-2">

@@ -1028,14 +1028,14 @@ function GroupFocusCard({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt=""
-                  className="h-11 w-11 shrink-0 rounded-[10px] bg-white object-cover"
+                  className="h-10 w-16 shrink-0 rounded-[10px] bg-white object-cover"
                   decoding="async"
                   src={thumb}
                 />
               ) : (
                 <span
                   aria-hidden
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-content1 text-default-400"
+                  className="flex h-10 w-16 shrink-0 items-center justify-center rounded-[10px] bg-content1 text-default-400"
                 >
                   <Icon icon="solar:dumbbell-linear" width={20} />
                 </span>
