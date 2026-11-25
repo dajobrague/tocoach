@@ -5,7 +5,8 @@
 // se deshace solo: no hay ids de grupo que mantener.
 
 export const ALT_GROUP_KEY = "alt_group";
-export const ALT_GROUP_MAX = 3;
+// Seis: más filas por serie ya no caben cómodas en la pantalla del cliente.
+export const ALT_GROUP_MAX = 6;
 
 type Key = string | null | undefined;
 
@@ -70,9 +71,9 @@ export function restWithUnit(rest: string | undefined): string | undefined {
   return rest && /^\d+$/.test(rest.trim()) ? `${rest.trim()}s` : rest;
 }
 
-/** Nombre técnico según el nº de ejercicios: biserie (2) o triserie (3). */
+/** Nombre técnico según el nº de ejercicios: biserie, triserie o circuito (4+). */
 export function altGroupName(count: number): string {
-  return count >= 3 ? "Triserie" : "Biserie";
+  return count >= 4 ? "Circuito" : count === 3 ? "Triserie" : "Biserie";
 }
 
 /** "Descansa 90s después de hacer los dos." — el descanso va tras el grupo. */
@@ -80,7 +81,7 @@ export function altGroupRestLine(
   count: number,
   rest: string | undefined
 ): string {
-  const all = count >= 3 ? "los tres" : "los dos";
+  const all = count >= 4 ? "todos" : count === 3 ? "los tres" : "los dos";
 
   return rest
     ? `Alterna una serie de cada ejercicio. Descansa ${rest} después de hacer ${all}.`

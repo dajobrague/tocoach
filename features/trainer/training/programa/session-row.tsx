@@ -259,7 +259,7 @@ export function SessionRow({
     if ("refused" in regrouped) {
       setActionError(
         regrouped.refused === "full"
-          ? "Una triserie admite tres ejercicios como máximo"
+          ? `Un circuito admite ${ALT_GROUP_MAX} ejercicios como máximo`
           : "El cardio no puede formar parte de una biserie"
       );
 
@@ -563,7 +563,7 @@ export function SessionRow({
                   className="min-w-0 flex-1 text-xs text-default-600"
                 >
                   {pickedCount === 0
-                    ? "Elige 2 o 3 ejercicios seguidos"
+                    ? "Elige los ejercicios seguidos que se alternan"
                     : pickedCount === 1
                       ? "Elige también el de al lado"
                       : `${pickedCount} ejercicios: una serie de cada uno, alternando`}

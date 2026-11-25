@@ -21,6 +21,7 @@ describe("biserie / triserie", () => {
   it("names the group by its size and words the rest after it", () => {
     expect(altGroupName(2)).toBe("Biserie");
     expect(altGroupName(3)).toBe("Triserie");
+    expect(altGroupName(4)).toBe("Circuito");
     expect(altGroupRestLine(3, restWithUnit("90"))).toBe(
       "Alterna una serie de cada ejercicio. Descansa 90s después de hacer los tres."
     );
@@ -37,18 +38,22 @@ describe("biserie / triserie", () => {
   });
 
   it("refuses a fourth exercise and anything that cannot be grouped", () => {
+    // Cuatro ejercicios ya es un circuito; el séptimo no cabe.
     expect(regroupAfterMove(["k", "k", null, "k"], 2, true)).toEqual({
-      refused: "full",
+      keys: ["k", "k", "k", "k"],
     });
+    expect(
+      regroupAfterMove(["k", "k", "k", null, "k", "k", "k"], 3, true)
+    ).toEqual({ refused: "full" });
     expect(regroupAfterMove(["k", null, "k"], 1, false)).toEqual({
       refused: "not-allowed",
     });
   });
 
   it("dragging a member out shrinks or dissolves its group", () => {
-    // Triserie A B C, C arrastrado al final tras un suelto: queda biserie.
-    expect(regroupAfterMove(["k", "k", null, "k"], 3, true)).toEqual({
-      keys: ["k", "k", null, null],
+    // Triserie A B C, C arrastrado al final tras dos sueltos: queda biserie.
+    expect(regroupAfterMove(["k", "k", null, null, "k"], 4, true)).toEqual({
+      keys: ["k", "k", null, null, null],
     });
     // Biserie A B, B sacado: A se queda solo y el grupo se deshace.
     expect(regroupAfterMove(["k", null, "k"], 2, true)).toEqual({
