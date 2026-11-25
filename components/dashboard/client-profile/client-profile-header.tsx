@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownTrigger,
   Skeleton,
+  addToast,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import React, { useEffect, useId, useState } from "react";
@@ -26,6 +27,8 @@ interface ClientProfileHeaderProps {
   onEdit?: () => void;
   /** Se llama cuando el servidor ya ha guardado el nuevo estado. */
   onStatusChange: (status: string) => void;
+  /** Se llama cuando el servidor ya ha dado acceso al plan. */
+  onPortalUnlock?: () => void;
   onDelete?: () => void;
 }
 
@@ -160,8 +163,33 @@ export default function ClientProfileHeader({
   onDelete,
   onEdit,
   onStatusChange,
+  onPortalUnlock,
 }: ClientProfileHeaderProps) {
   const [open, setOpen] = useState(false);
+  // Formulario inicial: el cliente nuevo no ve el plan hasta este clic.
+  const [unlocking, setUnlocking] = useState(false);
+  const unlockPortal = async () => {
+    setUnlocking(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ portal_locked: false }),
+      });
+
+      if (!res.ok) throw new Error("PATCH failed");
+      onPortalUnlock?.();
+      addToast({
+        title: "Acceso dado",
+        description: "El cliente ya ve su entrenamiento y su nutrición.",
+        color: "success",
+      });
+    } catch {
+      addToast({ title: "No se pudo dar acceso", color: "danger" });
+    } finally {
+      setUnlocking(false);
+    }
+  };
   const panelId = useId();
 
   // Se lee tras montar (no en el initializer) para no romper la hidratación.
@@ -228,6 +256,22 @@ export default function ClientProfileHeader({
               status={client.status}
               onChange={onStatusChange}
             />
+            {client.portalLocked ? (
+              <Button
+                color="primary"
+                isLoading={unlocking}
+                size="sm"
+                startContent={
+                  unlocking ? null : (
+                    <Icon icon="solar:lock-unlocked-linear" width={16} />
+                  )
+                }
+                title="Este cliente aún no ve su entrenamiento ni su nutrición"
+                onPress={unlockPortal}
+              >
+                Dar acceso al plan
+              </Button>
+            ) : null}
           </div>
 
           <Button

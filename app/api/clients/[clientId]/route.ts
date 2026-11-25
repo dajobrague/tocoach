@@ -98,7 +98,8 @@ export async function PUT(
   }
 }
 
-// PATCH - Change only the client's status (chip dropdown in header / list).
+// PATCH - Change only the client's status (chip dropdown in header / list),
+// or only the plan lock (`portal_locked`, "Dar acceso" in the header).
 // Separate from PUT so a one-field change never has to resend the whole
 // profile and risk wiping fields the caller never loaded.
 export async function PATCH(
@@ -115,12 +116,35 @@ export async function PATCH(
     const { clientId } = await params;
     const body = await request.json().catch(() => ({}));
     const status = body?.status;
+    const supabase = createServerSupabaseClient();
+
+    if (typeof body?.portal_locked === "boolean") {
+      const { data: lockRow, error: lockError } = await supabase
+        .from("clients")
+        .update({ portal_locked: body.portal_locked })
+        .eq("id", Number(clientId))
+        .eq("tenant", session.trainer_id)
+        .select("id, portal_locked")
+        .single();
+
+      if (lockError || !lockRow) {
+        console.error("[Update Client Lock API] Error:", lockError);
+
+        return NextResponse.json(
+          { error: "Client not found or access denied" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        portalLocked: lockRow.portal_locked === true,
+      });
+    }
 
     if (!isClientStatusOption(status)) {
       return NextResponse.json({ error: "Estado no válido" }, { status: 400 });
     }
-
-    const supabase = createServerSupabaseClient();
 
     // Tenant filter on the update itself: zero rows means not ours (or gone).
     const { data, error } = await supabase

@@ -48,6 +48,8 @@ export interface ClientBootstrapData {
   clientProfilePicture: string;
   tenantSlug: string;
   communityUrl: string | null;
+  /** El entrenador aún no le ha dado acceso a entrenamiento y nutrición. */
+  portalLocked: boolean;
 }
 
 async function fetchBootstrap(): Promise<ClientBootstrapData | null> {

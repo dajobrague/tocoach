@@ -739,6 +739,7 @@ export type Database = {
           occupation: string | null;
           password: string | null;
           phone: string | null;
+          portal_locked: boolean;
           profile_picture_url: string | null;
           sex: string | null;
           height_cm: number | null;
@@ -762,6 +763,7 @@ export type Database = {
           occupation?: string | null;
           password?: string | null;
           phone?: string | null;
+          portal_locked?: boolean;
           profile_picture_url?: string | null;
           sex?: string | null;
           height_cm?: number | null;
@@ -785,6 +787,7 @@ export type Database = {
           occupation?: string | null;
           password?: string | null;
           phone?: string | null;
+          portal_locked?: boolean;
           profile_picture_url?: string | null;
           sex?: string | null;
           height_cm?: number | null;

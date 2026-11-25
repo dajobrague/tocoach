@@ -20,7 +20,7 @@ import { createSupabaseClient } from "@/lib/clients/supabase-api";
 
 const HOUR = 60 * 60 * 1000;
 
-function supabaseStub(lastLoginAt: string | null) {
+function supabaseStub(lastLoginAt: string | null, portalLocked = false) {
   const rows: Record<string, unknown> = {
     tenants: { logo_url: "", theme_json: {}, trainer_id: null },
     clients: {
@@ -29,6 +29,7 @@ function supabaseStub(lastLoginAt: string | null) {
       last_name: "Ruiz",
       profile_picture_url: null,
       last_login_at: lastLoginAt,
+      portal_locked: portalLocked,
     },
   };
 
@@ -67,6 +68,26 @@ describe("GET /api/client/bootstrap", () => {
 
     expect(res.status).toBe(200);
     expect(updateClientLastLogin).toHaveBeenCalledWith("42");
+  });
+
+  it("tells the app when the trainer has not unlocked the plan yet", async () => {
+    vi.mocked(createSupabaseClient).mockReturnValue(
+      supabaseStub(new Date().toISOString(), true) as never
+    );
+    const locked = await GET(
+      new NextRequest("http://localhost/api/client/bootstrap")
+    );
+
+    expect((await locked.json()).data.portalLocked).toBe(true);
+
+    vi.mocked(createSupabaseClient).mockReturnValue(
+      supabaseStub(new Date().toISOString()) as never
+    );
+    const open = await GET(
+      new NextRequest("http://localhost/api/client/bootstrap")
+    );
+
+    expect((await open.json()).data.portalLocked).toBe(false);
   });
 
   it("stamps last access when the client has never logged in", async () => {

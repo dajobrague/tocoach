@@ -112,6 +112,7 @@ export async function GET(
       heightCm: client.height_cm !== null ? Number(client.height_cm) : null,
       nationalId: client.national_id,
       lastLoginAt: client.last_login_at,
+      portalLocked: client.portal_locked === true,
       location,
       tenantSlug: tenant?.slug || session.tenant_host || "",
     });

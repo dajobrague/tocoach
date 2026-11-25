@@ -100,7 +100,7 @@ const PERIOD_OPTIONS: ReadonlyArray<{ key: string; label: string }> = [
 ];
 
 export function DashboardContent() {
-  const { clientId } = useClientData();
+  const { clientId, portalLocked } = useClientData();
 
   const queryClient = useQueryClient();
 
@@ -544,6 +544,26 @@ export function DashboardContent() {
               </div>
             </div>
           )}
+
+          {portalLocked &&
+            intakeStatus !== undefined &&
+            !intakeStatus.pending &&
+            !intakeStatus.awaiting && (
+              <div
+                className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small"
+                role="status"
+              >
+                <IconTile icon="solar:hourglass-linear" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[15px] font-semibold text-foreground">
+                    Tu plan está en preparación
+                  </p>
+                  <p className="mt-0.5 text-[13px] leading-snug text-default-500">
+                    Tu entrenador te dará acceso en cuanto lo tenga listo
+                  </p>
+                </div>
+              </div>
+            )}
 
           {pendingReviewCheckin && (
             <div className="flex items-center gap-3 rounded-large bg-content1 p-3.5 shadow-small">

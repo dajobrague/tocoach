@@ -116,6 +116,9 @@ function ClientProfileInner() {
         onBack={handleBack}
         onDelete={() => openModal("delete")}
         onEdit={() => openModal("edit")}
+        onPortalUnlock={() =>
+          setClient((prev) => (prev ? { ...prev, portalLocked: false } : prev))
+        }
         onStatusChange={(status) =>
           setClient((prev) => (prev ? { ...prev, status } : prev))
         }

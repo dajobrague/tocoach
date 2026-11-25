@@ -19,6 +19,8 @@ export interface MockClient {
   heightCm?: number | null;
   nationalId?: string;
   lastLoginAt?: string | null;
+  /** Aún sin acceso a entrenamiento y nutrición (clients.portal_locked). */
+  portalLocked?: boolean;
   tenantSlug?: string;
   location?: {
     city?: string;

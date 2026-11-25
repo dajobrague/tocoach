@@ -44,7 +44,9 @@ export async function GET(_request: NextRequest) {
         .single(),
       supabase
         .from("clients")
-        .select("id, name, last_name, profile_picture_url, last_login_at")
+        .select(
+          "id, name, last_name, profile_picture_url, last_login_at, portal_locked"
+        )
         .eq("id", session.client_id)
         .single(),
     ]);
@@ -107,6 +109,7 @@ export async function GET(_request: NextRequest) {
         clientProfilePicture: profile?.profile_picture_url || "",
         tenantSlug: session.tenant_slug,
         communityUrl,
+        portalLocked: profile?.portal_locked === true,
       },
     });
   } catch (error) {

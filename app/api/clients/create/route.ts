@@ -96,6 +96,29 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (tenantRow?.host) {
+        // Formulario inicial activo → el cliente nace sin acceso al plan
+        // hasta que el entrenador se lo dé desde la ficha.
+        const { data: intakeTemplate } = await supabase
+          .from("form_templates")
+          .select("id")
+          .eq("tenant_host", tenantRow.host)
+          .eq("form_type", "intake")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (intakeTemplate) {
+          const { error: lockError } = await supabase
+            .from("clients")
+            .update({ portal_locked: true })
+            .eq("id", newClient.id)
+            .eq("tenant", session.trainer_id);
+
+          if (lockError) {
+            console.warn("[Create Client API] portal lock failed", lockError);
+          }
+        }
+
         const { data: activeTemplates, error: tplError } = await supabase
           .from("form_templates")
           .select("id, form_type, questions_config, default_schedule")

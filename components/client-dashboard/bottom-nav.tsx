@@ -25,8 +25,13 @@ export function ClientBottomNav() {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
-  const { clientProfilePicture, communityUrl, firstName, lastName } =
-    useClientData();
+  const {
+    clientProfilePicture,
+    communityUrl,
+    firstName,
+    lastName,
+    portalLocked,
+  } = useClientData();
 
   // Reset broken-image state if the underlying URL changes
   // (e.g. session change, user updates picture).
@@ -75,8 +80,11 @@ export function ClientBottomNav() {
       });
     }
 
-    return items;
-  }, [slug, communityUrl]);
+    // Sin acceso al plan todavía: Entrenar y Nutrición no aparecen.
+    return portalLocked
+      ? items.filter((i) => i.label !== "Entrenar" && i.label !== "Nutrición")
+      : items;
+  }, [slug, communityUrl, portalLocked]);
 
   const activeIndex = navItems.findIndex((item) => pathname === item.href);
   const columns = navItems.length + 1;

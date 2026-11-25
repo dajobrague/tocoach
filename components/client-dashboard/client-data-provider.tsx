@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo } from "react";
 
 import { ClientPageSkeleton } from "./client-page-skeleton";
 import { CommunityFrameHost } from "./community-frame";
+import { PortalLockedScreen } from "./portal-locked-screen";
 
 import { useClientBootstrap } from "@/lib/hooks/use-client-queries";
 
@@ -17,7 +18,21 @@ export interface ClientData {
   clientProfilePicture: string;
   tenantSlug: string;
   communityUrl: string | null;
+  portalLocked: boolean;
 }
+
+// Secciones de plan: ocultas mientras el entrenador no da acceso
+// (clients.portal_locked). ponytail: solo en la interfaz, las APIs no lo
+// comprueban; si hiciera falta blindarlo, un guard compartido en
+// app/api/client/{programs,scheduled-sessions,nutrition,meal-cycle}.
+const LOCKED_PATH_PREFIXES = [
+  "/ejercicio",
+  "/nutricion",
+  "/plan-de-comidas",
+  "/programs",
+  "/suplementos",
+  "/calendar",
+];
 
 const ClientDataContext = createContext<ClientData | null>(null);
 
@@ -64,6 +79,13 @@ export function ClientDataProvider({
 
     return PUBLIC_PATH_SUFFIXES.has(suffix);
   }, [pathname, tenantSlug]);
+  const isLockedPath = useMemo(() => {
+    const suffix = pathname.slice(`/${tenantSlug}`.length);
+
+    return LOCKED_PATH_PREFIXES.some(
+      (p) => suffix === p || suffix.startsWith(`${p}/`)
+    );
+  }, [pathname, tenantSlug]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -88,7 +110,11 @@ export function ClientDataProvider({
   return (
     <ClientDataContext.Provider value={data}>
       <CommunityFrameHost communityUrl={data.communityUrl}>
-        {children}
+        {data.portalLocked && isLockedPath ? (
+          <PortalLockedScreen tenantSlug={tenantSlug} />
+        ) : (
+          children
+        )}
       </CommunityFrameHost>
     </ClientDataContext.Provider>
   );
