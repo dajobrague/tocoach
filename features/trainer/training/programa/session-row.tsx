@@ -12,6 +12,8 @@ import type { WorkoutExercise, WorkoutSession } from "./training-api";
 import {
   closestCenter,
   DndContext,
+  pointerWithin,
+  type CollisionDetection,
   KeyboardSensor,
   MeasuringStrategy,
   PointerSensor,
@@ -82,12 +84,33 @@ interface SessionRowProps {
 
 const DROP_ZONE_PREFIX = "alt-group-end:";
 const TAKE_OUT_PREFIX = "alt-group-out:";
+const NEW_GROUP_PREFIX = "alt-group-new:";
+
+// Las zonas punteadas se eligen con el puntero (están donde el entrenador
+// apunta, p. ej. al final de una fila); el resto de la lista sigue
+// ordenándose por cercanía, como antes.
+const collisionDetection: CollisionDetection = (args) => {
+  const isZone = (id: unknown) => String(id).startsWith("alt-group-");
+  const zones = pointerWithin({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) => isZone(c.id)),
+  });
+
+  return zones.length > 0
+    ? zones
+    : closestCenter({
+        ...args,
+        droppableContainers: args.droppableContainers.filter(
+          (c) => !String(c.id).startsWith(NEW_GROUP_PREFIX)
+        ),
+      });
+};
 
 /** Hueco punteado al final de una biserie donde soltar un ejercicio más. */
 function GroupDropZone({
   id,
   label,
-  className = "mt-1.5",
+  className = "mt-1.5 h-11",
 }: {
   id: string;
   label: string;
@@ -98,7 +121,7 @@ function GroupDropZone({
   return (
     <div
       ref={setNodeRef}
-      className={`${className} flex h-11 items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
+      className={`${className} flex items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
         isOver
           ? "border-primary bg-primary/10 text-primary"
           : "border-default-400 text-default-500"
@@ -242,6 +265,35 @@ export function SessionRow({
         clearLoneKeys(
           reordered.map((e, i) =>
             i === target ? groupKey : (e.altGroup ?? null)
+          )
+        )
+      );
+
+      return;
+    }
+
+    // Soltado en la zona punteada de otro ejercicio suelto: se coloca justo
+    // detrás de él y los dos forman una biserie nueva.
+    if (typeof over.id === "string" && over.id.startsWith(NEW_GROUP_PREFIX)) {
+      const targetId = over.id.slice(NEW_GROUP_PREFIX.length);
+      const targetIndex = session.exercises.findIndex(
+        (exercise) => exercise.id === targetId
+      );
+      const draggedId = session.exercises[oldIndex]?.id;
+
+      if (targetIndex === -1 || draggedId === undefined) return;
+      const reordered = arrayMove(
+        session.exercises,
+        oldIndex,
+        oldIndex < targetIndex ? targetIndex : targetIndex + 1
+      );
+      const key = crypto.randomUUID().slice(0, 8);
+
+      commitOrder(
+        reordered,
+        clearLoneKeys(
+          reordered.map((e) =>
+            e.id === targetId || e.id === draggedId ? key : (e.altGroup ?? null)
           )
         )
       );
@@ -398,6 +450,29 @@ export function SessionRow({
     );
   };
 
+  // Zona punteada al final de un ejercicio suelto mientras se arrastra otro
+  // suelto: soltarlo ahí junta los dos en una biserie nueva.
+  const newGroupZoneFor = (exercise: WorkoutExercise) => {
+    if (draggingKey === null || exerciseKey(exercise) === draggingKey) {
+      return null;
+    }
+    const dragged = session.exercises.find(
+      (e) => exerciseKey(e) === draggingKey
+    );
+    const loose = (e: WorkoutExercise) =>
+      e.id !== undefined && e.category !== "cardio" && !e.altGroup;
+
+    if (!dragged || !loose(dragged) || !loose(exercise)) return null;
+
+    return (
+      <GroupDropZone
+        className="absolute inset-y-1 right-1 z-20 w-56 max-w-[60%] bg-content1"
+        id={`${NEW_GROUP_PREFIX}${exercise.id}`}
+        label="Suelta aquí para hacer biserie"
+      />
+    );
+  };
+
   // Zona punteada justo debajo de la bandeja, mientras se arrastra uno de
   // sus ejercicios: soltarlo ahí lo saca del grupo y lo deja suelto.
   const takeOutZoneFor = (index: number, run: [number, number] | undefined) => {
@@ -412,7 +487,7 @@ export function SessionRow({
 
     return (
       <GroupDropZone
-        className=""
+        className="h-11"
         id={`${TAKE_OUT_PREFIX}${groupKey}`}
         label={`Suelta aquí para sacarlo ${
           name === "circuito" ? "del circuito" : `de la ${name}`
@@ -636,7 +711,7 @@ export function SessionRow({
             </div>
           ) : (
             <DndContext
-              collisionDetection={closestCenter}
+              collisionDetection={collisionDetection}
               sensors={sensors}
               // La zona punteada aparece al empezar a arrastrar y desplaza
               // las filas: hay que volver a medir durante el arrastre.
@@ -674,7 +749,7 @@ export function SessionRow({
                                   ? "rounded-b-large pb-1.5"
                                   : "-mb-1.5 pb-1.5"
                               }`
-                            : undefined
+                            : "relative"
                         }
                       >
                         {run && index === run[0] ? (
@@ -915,6 +990,7 @@ export function SessionRow({
                           )}
                         </SortableExerciseRow>
                         {dropZoneFor(index, run)}
+                        {run ? null : newGroupZoneFor(exercise)}
                       </div>
                       {takeOutZoneFor(index, run)}
                     </Fragment>
