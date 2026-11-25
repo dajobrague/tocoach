@@ -48,6 +48,7 @@ import { useExerciseMutations } from "./use-training";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
 import { useLibraryMedia } from "@/lib/hooks/use-library-media";
 import {
+  altGroupName,
   altGroupRuns,
   canLinkWithNext,
   isLinkedWithNext,
@@ -197,8 +198,7 @@ export function SessionRow({
     if (payload.length === 0) return;
     setActionError(null);
     mutations.setExerciseGroups.mutate(payload, {
-      onError: () =>
-        setActionError("No se pudieron guardar las series alternas"),
+      onError: () => setActionError("No se pudo guardar el cambio"),
     });
   };
 
@@ -333,6 +333,19 @@ export function SessionRow({
                 );
                 const nextExercise = session.exercises[index + 1];
                 const linked = isLinkedWithNext(groupKeys, index);
+                // La pastilla nombra el resultado: "Hacer biserie", "Hacer
+                // triserie" (unir a una biserie), "Deshacer biserie" o
+                // "Dejar en biserie" (sacar uno de una triserie).
+                const sizeAt = (i: number) => {
+                  const r = groupRuns.find(([a, b]) => i >= a && i <= b);
+
+                  return r ? r[1] - r[0] + 1 : 1;
+                };
+                const seamLabel = !linked
+                  ? `Hacer ${altGroupName(sizeAt(index) + sizeAt(index + 1)).toLowerCase()}`
+                  : sizeAt(index) >= 3
+                    ? "Dejar en biserie"
+                    : "Deshacer biserie";
                 // Solo fuerza con fuerza: el cardio no se registra por series.
                 const linkable =
                   nextExercise !== undefined &&
@@ -359,7 +372,7 @@ export function SessionRow({
                     >
                       {run && index === run[0] ? (
                         <p className="pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
-                          Series alternas · {run[1] - run[0] + 1} ejercicios
+                          {altGroupName(run[1] - run[0] + 1)}
                         </p>
                       ) : null}
                       <SortableExerciseRow id={exerciseKey(exercise)}>
@@ -590,8 +603,8 @@ export function SessionRow({
                         <button
                           aria-label={
                             linked
-                              ? `Separar ${exercise.name} de ${nextExercise.name}`
-                              : `Unir ${exercise.name} con ${nextExercise.name}`
+                              ? `${seamLabel}: separar ${exercise.name} de ${nextExercise.name}`
+                              : `${seamLabel} con ${exercise.name} y ${nextExercise.name}`
                           }
                           className={`absolute left-1/2 top-1/2 flex h-6 -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border bg-white px-2.5 text-[11px] font-medium transition-colors duration-150 active:scale-[0.97] motion-reduce:transform-none ${
                             linked
@@ -601,7 +614,7 @@ export function SessionRow({
                           title={
                             linked
                               ? "Separar estos dos ejercicios"
-                              : "Unir estos dos ejercicios para hacerlos alternando series"
+                              : "Unir estos ejercicios: el cliente alterna una serie de cada uno"
                           }
                           type="button"
                           onClick={() => handleToggleLink(index)}
@@ -615,7 +628,7 @@ export function SessionRow({
                             }
                             width={12}
                           />
-                          {linked ? "Separar" : "Unir"}
+                          {seamLabel}
                         </button>
                       </div>
                     ) : null}

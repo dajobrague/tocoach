@@ -86,3 +86,20 @@ export function toggleLinkWithNext(
 export function restWithUnit(rest: string | undefined): string | undefined {
   return rest && /^\d+$/.test(rest.trim()) ? `${rest.trim()}s` : rest;
 }
+
+/** Nombre técnico según el nº de ejercicios: biserie (2) o triserie (3). */
+export function altGroupName(count: number): string {
+  return count >= 3 ? "Triserie" : "Biserie";
+}
+
+/** "Descansa 90s después de hacer los dos." — el descanso va tras el grupo. */
+export function altGroupRestLine(
+  count: number,
+  rest: string | undefined
+): string {
+  const all = count >= 3 ? "los tres" : "los dos";
+
+  return rest
+    ? `Alterna una serie de cada ejercicio. Descansa ${rest} después de hacer ${all}.`
+    : "Alterna una serie de cada ejercicio.";
+}

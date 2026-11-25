@@ -22,7 +22,11 @@ import { buildBaseFormData, defaultSet, LOG_INPUT_CLASS } from "./helpers";
 
 import { ClientScreen } from "@/components/client-dashboard/client-screen";
 import { clientFetch } from "@/lib/auth/client-token-storage";
-import { restWithUnit } from "@/lib/training/alt-groups";
+import {
+  altGroupName,
+  altGroupRestLine,
+  restWithUnit,
+} from "@/lib/training/alt-groups";
 
 export interface AlternatingMember {
   exercise: {
@@ -314,7 +318,7 @@ export function AlternatingLogScreen({
         </div>
       }
       isOpen={isOpen}
-      title="Series alternas"
+      title={altGroupName(members.length)}
       onClose={handleClose}
     >
       <div className="flex flex-col gap-6 px-4 pb-8 pt-4 [html[data-rest-band]_&]:pt-[76px]">
@@ -350,8 +354,7 @@ export function AlternatingLogScreen({
             ))}
           </ul>
           <p className="px-1 text-[13px] leading-snug text-default-500">
-            Una serie de cada ejercicio, por turnos
-            {rest ? `. Descansa ${rest} al acabar cada ronda` : ""}.
+            {altGroupRestLine(members.length, rest)}
           </p>
         </div>
 
@@ -362,7 +365,7 @@ export function AlternatingLogScreen({
         >
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="font-heading text-[22px] leading-tight tracking-[-0.015em] text-foreground">
-              Tus rondas de hoy
+              Tus números de hoy
             </h2>
             <SaveStatus state={saveState} />
           </div>
@@ -382,7 +385,7 @@ export function AlternatingLogScreen({
               className="flex flex-col gap-2 border-t border-default-100 pt-4 first:border-t-0 first:pt-0"
             >
               <legend className="float-left mb-2 w-full text-[13px] font-semibold text-default-500">
-                Ronda {round + 1}
+                Serie {round + 1}
               </legend>
               {members.map((member, index) => {
                 const set = sets[index]?.[round];
@@ -396,7 +399,7 @@ export function AlternatingLogScreen({
                     {set ? (
                       <>
                         <input
-                          aria-label={`Peso en kilos, ${member.exercise.name}, ronda ${round + 1}`}
+                          aria-label={`Peso en kilos, ${member.exercise.name}, serie ${round + 1}`}
                           autoComplete="off"
                           className={LOG_INPUT_CLASS}
                           enterKeyHint="next"
@@ -415,7 +418,7 @@ export function AlternatingLogScreen({
                           }}
                         />
                         <input
-                          aria-label={`Repeticiones, ${member.exercise.name}, ronda ${round + 1}`}
+                          aria-label={`Repeticiones, ${member.exercise.name}, serie ${round + 1}`}
                           autoComplete="off"
                           className={LOG_INPUT_CLASS}
                           enterKeyHint="next"
@@ -437,7 +440,7 @@ export function AlternatingLogScreen({
                     ) : (
                       // Prescripción con menos series que su compañero.
                       <span className="col-span-2 text-[13px] text-default-400">
-                        Sin serie en esta ronda
+                        No tiene esta serie
                       </span>
                     )}
                   </div>
@@ -452,7 +455,7 @@ export function AlternatingLogScreen({
             onClick={addRound}
           >
             <Icon aria-hidden icon="solar:add-circle-linear" width={18} />
-            Añadir ronda
+            Añadir serie
           </button>
         </form>
       </div>

@@ -31,7 +31,12 @@ import { ShareSessionButton } from "./share-session-button";
 import { toExerciseLike } from "./to-exercise-like";
 import { useWorkoutFeedback } from "./hooks/use-workout-feedback";
 
-import { altGroupRuns, restWithUnit } from "@/lib/training/alt-groups";
+import {
+  altGroupName,
+  altGroupRestLine,
+  altGroupRuns,
+  restWithUnit,
+} from "@/lib/training/alt-groups";
 import { DynamicFormModal } from "@/components/client-dashboard/dynamic-form-modal";
 import { MuscleBody } from "@/components/shared/muscle-body";
 import { MuscleVolume } from "@/components/shared/muscle-volume";
@@ -338,7 +343,7 @@ export function ActiveSessionView({
         status !== "completed" &&
         isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate),
       existingLog,
-      grouped: false,
+      groupName: undefined,
       open: () => openRow(index),
     };
   });
@@ -360,7 +365,7 @@ export function ActiveSessionView({
     for (let i = a; i <= b; i++) {
       const row = rows[i];
 
-      if (row) row.grouped = true;
+      if (row) row.groupName = altGroupName(b - a + 1);
     }
   }
 
@@ -798,7 +803,7 @@ interface FlowRow {
   increaseWeight: boolean;
   existingLog: ExerciseLogLike | undefined;
   /** Parte de unas series alternas: `open` abre la pantalla de rondas. */
-  grouped: boolean;
+  groupName: string | undefined;
   open: () => void;
 }
 
@@ -1012,10 +1017,10 @@ function GroupFocusCard({
           icon="solar:link-linear"
           width={16}
         />
-        {rows.length} ejercicios por turnos
+        {rows.length} ejercicios, alternando series
       </p>
       <h3 className="mt-px font-heading text-xl leading-snug tracking-[-0.015em] text-foreground">
-        Series alternas
+        {altGroupName(rows.length)}
       </h3>
       <ul className="mt-3 divide-y divide-default-200/70 rounded-medium bg-default-100">
         {rows.map((row) => {
@@ -1063,8 +1068,7 @@ function GroupFocusCard({
         })}
       </ul>
       <p className="mt-3 text-[13px] leading-snug text-default-500">
-        Haz una serie de cada uno y repite
-        {rest ? `. Descansa ${rest} al acabar cada ronda` : ""}.
+        {altGroupRestLine(rows.length, rest)}
       </p>
       <Button
         fullWidth
@@ -1074,7 +1078,7 @@ function GroupFocusCard({
         variant={primaryCta ? "solid" : "flat"}
         onPress={lead.open}
       >
-        {started ? "Continuar rondas" : "Registrar rondas"}
+        {started ? "Continuar registro" : "Registrar series"}
       </Button>
     </div>
   );
@@ -1111,10 +1115,10 @@ function CompactRow({ row }: { row: FlowRow }) {
           Sube peso
         </span>
       ) : null}
-      {row.grouped ? (
+      {row.groupName ? (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-default-500">
           <Icon aria-hidden icon="solar:link-linear" width={14} />
-          Alternas
+          {row.groupName}
         </span>
       ) : null}
       <Icon

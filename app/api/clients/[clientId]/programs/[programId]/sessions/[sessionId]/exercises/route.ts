@@ -667,7 +667,7 @@ export async function PATCH(
         console.error("[Exercises API] Error loading groups:", rowsError);
 
         return NextResponse.json(
-          { success: false, error: "Error al guardar las series alternas" },
+          { success: false, error: "Error al guardar la biserie" },
           { status: 500 }
         );
       }
@@ -697,7 +697,7 @@ export async function PATCH(
         );
 
         return NextResponse.json(
-          { success: false, error: "Error al guardar las series alternas" },
+          { success: false, error: "Error al guardar la biserie" },
           { status: 500 }
         );
       }
