@@ -311,7 +311,7 @@ export function ActiveSessionView({
   // pendiente); el resto va en filas de una línea y los hechos se pliegan.
   // Descartadas: tabla sin imágenes (pierde las animaciones) y cuadrícula de
   // imágenes (el doble de scroll, descanso y etiquetas apretados).
-  const rows: FlowRow[] = allExercises.map((exercise) => {
+  const rows: FlowRow[] = allExercises.map((exercise, index) => {
     const exerciseId = exercise.exercise_id ?? "";
     // Log de ESTE slot (finalizado o no); misma atribución que `completed`.
     const existingLog = exerciseId
@@ -334,15 +334,30 @@ export function ActiveSessionView({
       increaseWeight:
         status !== "completed" &&
         isIncreaseWeightPending(exercise.increaseWeightAfter, scheduledDate),
-      open: () =>
-        onLogExercise({
-          exercise: { ...exercise, libraryMedia: media },
-          sessionId: session.id,
-          scheduledDate,
-          existingLog: existingLog ?? null,
-        }),
+      existingLog,
+      open: () => openRow(index),
     };
   });
+
+  // "Siguiente" (JC, nov): al finalizar un ejercicio se pasa al siguiente
+  // pendiente en el orden del entrenador, sin volver a esta pantalla. Solo
+  // hacia delante: los que quedan detrás siguen a la vista al cerrar.
+  function openRow(index: number) {
+    const row = rows[index];
+
+    if (!row) return;
+    const nextIndex = rows.findIndex(
+      (r, i) => i > index && r.status !== "completed"
+    );
+
+    onLogExercise({
+      exercise: { ...row.exercise, libraryMedia: row.media },
+      sessionId: session.id,
+      scheduledDate,
+      existingLog: row.existingLog ?? null,
+      onNext: nextIndex === -1 ? undefined : () => openRow(nextIndex),
+    });
+  }
   const currentRow = sessionCompleted
     ? undefined
     : (rows.find((r) => r.status === "in_progress") ??
@@ -713,6 +728,7 @@ interface FlowRow {
   media: LibraryMedia | undefined;
   /** El entrenador pidió subir peso en esta sesión. */
   increaseWeight: boolean;
+  existingLog: ExerciseLogLike | undefined;
   open: () => void;
 }
 

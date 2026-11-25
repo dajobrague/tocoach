@@ -94,6 +94,8 @@ export interface ExerciseLogModalProps {
   clientId: string;
   existingLog?: any;
   onSuccess: () => void;
+  /** Abre el siguiente ejercicio pendiente; sin él, es el último. */
+  onNext?: (() => void) | undefined;
 }
 
 /** Respuesta del writer de logs, en la parte que nos interesa. */
@@ -209,6 +211,7 @@ export function ExerciseLogModal({
   clientId,
   existingLog,
   onSuccess,
+  onNext,
 }: ExerciseLogModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -594,8 +597,9 @@ export function ExerciseLogModal({
 
     const holdMs = startCelebration(outcome);
 
-    if (shareEnabled) {
-      // Se queda abierta: el banner de récord y "Compartir" a la vista.
+    if (shareEnabled || onNext) {
+      // Se queda abierta: el banner de récord, "Siguiente" y "Compartir"
+      // a la vista.
       setIsCelebrating(false);
       setJustFinalized(true);
 
@@ -699,7 +703,24 @@ export function ExerciseLogModal({
                   Ejercicio guardado
                 </p>
               )}
-              <div className="grid grid-cols-[1fr_1.6fr] gap-2.5">
+              <div
+                className={`grid gap-2.5 ${
+                  onNext && shareEnabled
+                    ? "grid-cols-[52px_1fr_1.6fr]"
+                    : "grid-cols-[1fr_1.6fr]"
+                }`}
+              >
+                {onNext && shareEnabled ? (
+                  <Button
+                    isIconOnly
+                    aria-label="Compartir"
+                    className="h-[52px] w-[52px] bg-default-100 text-foreground"
+                    radius="lg"
+                    onPress={() => setShareOpen(true)}
+                  >
+                    <Icon icon="solar:share-linear" width={22} />
+                  </Button>
+                ) : null}
                 <Button
                   className="h-[52px] bg-default-100 text-[17px] font-semibold text-foreground"
                   radius="lg"
@@ -707,15 +728,29 @@ export function ExerciseLogModal({
                 >
                   Cerrar
                 </Button>
-                <Button
-                  className="h-[52px] text-[17px] font-semibold"
-                  color="primary"
-                  radius="lg"
-                  startContent={<Icon icon="solar:share-linear" width={20} />}
-                  onPress={() => setShareOpen(true)}
-                >
-                  Compartir
-                </Button>
+                {onNext ? (
+                  <Button
+                    className="h-[52px] text-[17px] font-semibold"
+                    color="primary"
+                    endContent={
+                      <Icon icon="solar:alt-arrow-right-linear" width={20} />
+                    }
+                    radius="lg"
+                    onPress={onNext}
+                  >
+                    Siguiente
+                  </Button>
+                ) : (
+                  <Button
+                    className="h-[52px] text-[17px] font-semibold"
+                    color="primary"
+                    radius="lg"
+                    startContent={<Icon icon="solar:share-linear" width={20} />}
+                    onPress={() => setShareOpen(true)}
+                  >
+                    Compartir
+                  </Button>
+                )}
               </div>
             </>
           ) : (

@@ -965,35 +965,24 @@ function markBlock(
   const wordW = textWidth(word, 72);
   const rowW = mono + 26 + wordW;
   const x0 = CX - rowW / 2;
-  const clipId = `${p.id}-logo`;
 
   const row: Block = {
     h: mono,
     draw: (top) => (
       <>
-        <defs>
-          <clipPath id={clipId}>
-            <circle cx={x0 + mono / 2} cy={top + mono / 2} r={mono / 2} />
-          </clipPath>
-        </defs>
         {branding.logoSrc ? (
-          <>
-            <circle
-              cx={x0 + mono / 2}
-              cy={top + mono / 2}
-              fill="#ffffff"
-              r={mono / 2}
-            />
-            <image
-              clipPath={`url(#${clipId})`}
-              height={mono * 0.78}
-              href={branding.logoSrc}
-              preserveAspectRatio="xMidYMid meet"
-              width={mono * 0.78}
-              x={x0 + mono * 0.11}
-              y={top + mono * 0.11}
-            />
-          </>
+          // El logo tal cual lo subió el entrenador (JC, nov): sin máscara
+          // circular ni disco blanco, con su transparencia.
+          // ponytail: caja cuadrada; un logo muy apaisado queda pequeño.
+          // Ensanchar la caja exige pasar el ancho/alto desde branding.ts.
+          <image
+            height={mono}
+            href={branding.logoSrc}
+            preserveAspectRatio="xMidYMid meet"
+            width={mono}
+            x={x0}
+            y={top}
+          />
         ) : (
           <>
             <circle

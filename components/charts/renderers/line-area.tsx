@@ -115,6 +115,9 @@ export function LineAreaRenderer({
         <YAxis
           axisLine={false}
           tick={{ fontSize: 10, fill: tick }}
+          // El dominio lleva un margen fraccionario, así que los ticks salen
+          // con 4–5 decimales: se recortan a uno, como la cifra de cabecera.
+          tickFormatter={(v: number) => formatNumber(v, 1, 0)}
           tickLine={false}
           {...(yMax !== undefined
             ? { domain: [0, yMax] as [number, number] }

@@ -68,6 +68,29 @@ describe("Sticker", () => {
     }
   );
 
+  it("draws the logo as uploaded, without a circular mask", () => {
+    const { container } = render(
+      <Sticker
+        shadow
+        body={null}
+        branding={{ ...branding, logoSrc: "data:image/png;base64,AAAA" }}
+        exercise={null}
+        id="t"
+        ink="white"
+        mapMode="auto"
+        session={SAMPLE_SESSION}
+        stats={stats}
+        template={SESSION_TEMPLATES[0]!.id}
+        onBrandBg={false}
+      />
+    );
+    const logo = container.querySelector("image");
+
+    expect(logo).not.toBeNull();
+    expect(logo?.getAttribute("clip-path")).toBeNull();
+    expect(logo?.getAttribute("width")).toBe(logo?.getAttribute("height"));
+  });
+
   it("record template leads with the record set", () => {
     const text = renderTemplate("record").textContent ?? "";
 

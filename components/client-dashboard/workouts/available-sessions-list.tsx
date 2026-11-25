@@ -26,6 +26,8 @@ export interface OpenLogPayload {
   sessionId: string;
   scheduledDate: string;
   existingLog: unknown | null;
+  /** Abre el siguiente ejercicio pendiente de la sesión, si lo hay. */
+  onNext?: (() => void) | undefined;
 }
 
 interface Props {

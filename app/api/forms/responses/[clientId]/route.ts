@@ -19,6 +19,7 @@ import {
   normalizeFormAnswers,
   validateFormResponse,
 } from "@/lib/forms";
+import { habitLogDaysFromFeatures } from "@/lib/forms/habit-log-days";
 import { relaxStepsRequirement } from "@/lib/forms/neat-steps";
 import { dropPagesNotDue } from "@/lib/forms/page-cadence";
 import { parseWorkoutSessionId } from "@/lib/forms/workout";
@@ -248,7 +249,7 @@ export async function POST(
 
     const { data: tenantData, error: tenantError } = await supabase
       .from("tenants")
-      .select("host, trainer_id")
+      .select("host, trainer_id, features")
       .eq("trainer_id", clientData.tenant)
       .single();
 
@@ -293,8 +294,9 @@ export async function POST(
     const resolvedDate =
       response_date || new Date().toISOString().split("T")[0]!;
 
-    // Habits sólo se pueden enviar para los últimos 3 días (hoy, ayer,
-    // antier en el calendario del cliente). Comparamos en espacio
+    // Habits sólo se pueden enviar dentro del margen que eligió el
+    // entrenador (tenants.features.habit_log_days, 3 días por defecto:
+    // hoy, ayer, antier en el calendario del cliente). Comparamos en espacio
     // YMD puro contra "hoy UTC" del servidor con tolerancia ±2 días
     // por cada lado (rango efectivo [-2, 4]). Antes era [-1, 3] pero
     // clientes en husos extremos (UTC-12 / UTC+14) podían tener su
@@ -317,11 +319,17 @@ export async function POST(
 
       const diffDays = Math.round((todayMs - targetMs) / 86400000);
 
-      if (diffDays < -2 || diffDays > 4) {
+      const habitLogDays = habitLogDaysFromFeatures(tenantData.features);
+
+      // Mismo margen de husos que antes (3 días → [-2, 4]).
+      if (diffDays < -2 || diffDays > habitLogDays + 1) {
         return NextResponse.json(
           {
             success: false,
-            error: "Solo puedes enviar registros de los últimos 3 días",
+            error:
+              habitLogDays === 1
+                ? "Solo puedes enviar el registro de hoy"
+                : `Solo puedes enviar registros de los últimos ${habitLogDays} días`,
           },
           { status: 400 }
         );

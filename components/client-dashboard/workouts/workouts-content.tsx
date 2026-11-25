@@ -549,6 +549,18 @@ export function WorkoutsContent() {
       ) : null}
 
       <ExerciseLogModal
+        // Una instancia por ejercicio: "Siguiente" cambia de ejercicio con
+        // la pantalla abierta y el estado del anterior no debe arrastrarse.
+        key={
+          (
+            selectedExercise?.exercise as
+              | { session_exercise_id?: string; exercise_id?: string }
+              | undefined
+          )?.session_exercise_id ??
+          (selectedExercise?.exercise as { exercise_id?: string } | undefined)
+            ?.exercise_id ??
+          "none"
+        }
         clientId={clientId}
         // El shape de exercise viene del WorkoutExercise transformado por
         // training-utils, que históricamente trae id implícito (no
@@ -575,6 +587,7 @@ export function WorkoutsContent() {
         }
         sessionId={selectedExercise?.sessionId ?? ""}
         onClose={handleLogModalClose}
+        onNext={selectedExercise?.onNext}
         onSuccess={handleLogModalSuccess}
       />
 
