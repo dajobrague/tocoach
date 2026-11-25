@@ -106,28 +106,89 @@ const collisionDetection: CollisionDetection = (args) => {
       });
 };
 
-/** Hueco punteado al final de una biserie donde soltar un ejercicio más. */
+const EASE_OUT = "ease-[cubic-bezier(0.32,0.72,0,1)]";
+
+/**
+ * Hueco punteado donde soltar un ejercicio durante un arrastre. Siempre está
+ * montado y se abre/cierra con una transición (el alto vía grid-rows, sin
+ * animar `height`): así las filas no pegan un salto al empezar a arrastrar,
+ * y cerrar es algo más rápido que abrir.
+ *  - inside:  al final de la bandeja de un grupo (añadir uno más)
+ *  - outside: justo debajo de la bandeja (sacar un ejercicio)
+ *  - row:     al final de una fila suelta (hacer una biserie nueva)
+ */
 function GroupDropZone({
   id,
   label,
-  className = "mt-1.5 h-11",
+  open,
+  variant,
 }: {
   id: string;
   label: string;
-  className?: string;
+  open: boolean;
+  variant: "inside" | "outside" | "row";
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !open });
+  // Radio derivado del contenedor: bandeja 14 − 6 de margen = 8; fila
+  // 14 − 4 = 10; fuera de la bandeja, el de una fila suelta.
+  const radius =
+    variant === "inside"
+      ? "rounded-small"
+      : variant === "row"
+        ? "rounded-[10px]"
+        : "rounded-large";
+  const box = (
+    // Fondo opaco y por encima de la fila arrastrada: el texto se sigue
+    // leyendo cuando la fila pasa por debajo.
+    <div
+      ref={setNodeRef}
+      className={`relative z-20 bg-content1 ${radius} ${
+        variant === "row" ? "h-full" : "h-11"
+      }`}
+    >
+      <div
+        className={`flex h-full items-center justify-center border border-dashed px-2 text-center text-xs font-medium transition-colors duration-150 motion-reduce:transition-none ${radius} ${
+          isOver
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-default-400 text-default-500"
+        }`}
+      >
+        {label}
+      </div>
+    </div>
+  );
+
+  if (variant === "row") {
+    return (
+      <div
+        aria-hidden={!open}
+        className={`absolute inset-y-1 right-1 z-20 w-56 max-w-[60%] origin-right transition-[opacity,transform] ${EASE_OUT} motion-reduce:transition-none ${
+          open
+            ? "scale-100 opacity-100 duration-200"
+            : "pointer-events-none scale-[0.97] opacity-0 duration-150"
+        }`}
+      >
+        {box}
+      </div>
+    );
+  }
 
   return (
     <div
-      ref={setNodeRef}
-      className={`${className} flex items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
-        isOver
-          ? "border-primary bg-primary/10 text-primary"
-          : "border-default-400 text-default-500"
+      aria-hidden={!open}
+      // `outside` es hermano de las filas en una lista con gap: el margen
+      // negativo anula ese gap cuando está cerrado.
+      className={`grid transition-[grid-template-rows,opacity] ${EASE_OUT} motion-reduce:transition-none ${
+        variant === "outside" ? "-mt-1.5" : ""
+      } ${
+        open
+          ? "grid-rows-[1fr] opacity-100 duration-200"
+          : "pointer-events-none grid-rows-[0fr] opacity-0 duration-150"
       }`}
     >
-      {label}
+      <div className="min-h-0 overflow-hidden">
+        <div className="pt-1.5">{box}</div>
+      </div>
     </div>
   );
 }
@@ -139,6 +200,7 @@ function SortableExerciseRow({
   id: string;
   children: (props: {
     dragHandleProps: Record<string, unknown>;
+    isDragging: boolean;
   }) => React.ReactNode;
 }) {
   const {
@@ -156,11 +218,15 @@ function SortableExerciseRow({
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.5 : 1,
+        // Algo translúcida: deja ver la zona punteada sobre la que pasa.
+        opacity: isDragging ? 0.75 : 1,
         zIndex: isDragging ? 10 : undefined,
       }}
     >
-      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+      {children({
+        dragHandleProps: { ...attributes, ...listeners },
+        isDragging,
+      })}
     </div>
   );
 }
@@ -422,76 +488,72 @@ export function SessionRow({
     stopPicking();
   };
 
-  // Zona punteada al final de una biserie mientras se arrastra un ejercicio
-  // de fuera que cabe en ella.
-  const dropZoneFor = (index: number, run: [number, number] | undefined) => {
-    if (!run || index !== run[1] || draggingKey === null) return null;
-    const dragged = session.exercises.find(
-      (e) => exerciseKey(e) === draggingKey
-    );
-    const groupKey = session.exercises[index]?.altGroup;
-    const size = run[1] - run[0] + 1;
+  // Zonas punteadas. Están siempre montadas (cerradas) y se abren según lo
+  // que se esté arrastrando; ver GroupDropZone.
+  const dragged =
+    draggingKey === null
+      ? undefined
+      : session.exercises.find((e) => exerciseKey(e) === draggingKey);
+  const isLoose = (e: WorkoutExercise) =>
+    e.id !== undefined && e.category !== "cardio" && !e.altGroup;
 
-    if (
-      !dragged ||
-      !groupKey ||
-      dragged.category === "cardio" ||
-      dragged.altGroup === groupKey ||
-      size >= ALT_GROUP_MAX
-    ) {
-      return null;
-    }
+  // Al final de la bandeja: un ejercicio de fuera que cabe en el grupo.
+  const dropZoneFor = (index: number, run: [number, number] | undefined) => {
+    const groupKey = session.exercises[index]?.altGroup;
+
+    if (!run || index !== run[1] || !groupKey) return null;
+    const size = run[1] - run[0] + 1;
 
     return (
       <GroupDropZone
         id={`${DROP_ZONE_PREFIX}${groupKey}`}
-        label={`Suelta aquí para hacer ${altGroupName(size + 1).toLowerCase()}`}
+        label={`Suelta aquí para hacer ${altGroupName(Math.min(size + 1, ALT_GROUP_MAX)).toLowerCase()}`}
+        open={
+          dragged !== undefined &&
+          dragged.category !== "cardio" &&
+          dragged.altGroup !== groupKey &&
+          size < ALT_GROUP_MAX
+        }
+        variant="inside"
       />
     );
   };
 
-  // Zona punteada al final de un ejercicio suelto mientras se arrastra otro
-  // suelto: soltarlo ahí junta los dos en una biserie nueva.
+  // Al final de un ejercicio suelto, mientras se arrastra otro suelto:
+  // soltarlo ahí junta los dos en una biserie nueva.
   const newGroupZoneFor = (exercise: WorkoutExercise) => {
-    if (draggingKey === null || exerciseKey(exercise) === draggingKey) {
-      return null;
-    }
-    const dragged = session.exercises.find(
-      (e) => exerciseKey(e) === draggingKey
-    );
-    const loose = (e: WorkoutExercise) =>
-      e.id !== undefined && e.category !== "cardio" && !e.altGroup;
-
-    if (!dragged || !loose(dragged) || !loose(exercise)) return null;
+    if (!isLoose(exercise)) return null;
 
     return (
       <GroupDropZone
-        className="absolute inset-y-1 right-1 z-20 w-56 max-w-[60%] bg-content1"
         id={`${NEW_GROUP_PREFIX}${exercise.id}`}
         label="Suelta aquí para hacer biserie"
+        open={
+          dragged !== undefined &&
+          isLoose(dragged) &&
+          exerciseKey(exercise) !== draggingKey
+        }
+        variant="row"
       />
     );
   };
 
-  // Zona punteada justo debajo de la bandeja, mientras se arrastra uno de
-  // sus ejercicios: soltarlo ahí lo saca del grupo y lo deja suelto.
+  // Justo debajo de la bandeja, mientras se arrastra uno de sus ejercicios:
+  // soltarlo ahí lo saca del grupo y lo deja suelto.
   const takeOutZoneFor = (index: number, run: [number, number] | undefined) => {
-    if (!run || index !== run[1] || draggingKey === null) return null;
-    const dragged = session.exercises.find(
-      (e) => exerciseKey(e) === draggingKey
-    );
     const groupKey = session.exercises[index]?.altGroup;
 
-    if (!dragged || !groupKey || dragged.altGroup !== groupKey) return null;
+    if (!run || index !== run[1] || !groupKey) return null;
     const name = altGroupName(run[1] - run[0] + 1).toLowerCase();
 
     return (
       <GroupDropZone
-        className="h-11"
         id={`${TAKE_OUT_PREFIX}${groupKey}`}
         label={`Suelta aquí para sacarlo ${
           name === "circuito" ? "del circuito" : `de la ${name}`
         } y dejarlo suelto`}
+        open={dragged !== undefined && dragged.altGroup === groupKey}
+        variant="outside"
       />
     );
   };
@@ -710,14 +772,15 @@ export function SessionRow({
               </div>
             </div>
           ) : (
+            // measuring: las zonas punteadas se abren al empezar a arrastrar y
+            // desplazan las filas, así que hay que volver a medir en el
+            // arrastre.
             <DndContext
               collisionDetection={collisionDetection}
-              sensors={sensors}
-              // La zona punteada aparece al empezar a arrastrar y desplaza
-              // las filas: hay que volver a medir durante el arrastre.
               measuring={{
                 droppable: { strategy: MeasuringStrategy.Always },
               }}
+              sensors={sensors}
               onDragCancel={() => setDraggingKey(null)}
               onDragEnd={handleExerciseDragEnd}
               onDragStart={(event) => setDraggingKey(String(event.active.id))}
@@ -772,8 +835,22 @@ export function SessionRow({
                           </div>
                         ) : null}
                         <SortableExerciseRow id={exerciseKey(exercise)}>
-                          {({ dragHandleProps: exerciseHandle }) => (
-                            <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
+                          {({
+                            dragHandleProps: exerciseHandle,
+                            isDragging,
+                          }) => (
+                            <div
+                              // Dentro de la bandeja el radio se deriva
+                              // (14 − 6 = 8). Al arrastrar, la fila se
+                              // levanta con una sombra en capas.
+                              className={`flex items-center gap-2 border border-gray-200 bg-white px-2.5 py-2 transition-shadow duration-150 motion-reduce:transition-none ${
+                                run ? "rounded-small" : "rounded-large"
+                              } ${
+                                isDragging
+                                  ? "shadow-[0_0_0_1px_rgb(0_0_0/0.05),0_2px_6px_rgb(0_0_0/0.06),0_14px_28px_-10px_rgb(0_0_0/0.18)]"
+                                  : ""
+                              }`}
+                            >
                               <button
                                 aria-label={`Reordenar ${exercise.name}`}
                                 className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
@@ -789,7 +866,7 @@ export function SessionRow({
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   alt=""
-                                  className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
+                                  className="h-9 w-9 shrink-0 rounded-medium object-cover outline outline-1 -outline-offset-1 outline-black/10"
                                   loading="lazy"
                                   src={thumbOf(exercise)}
                                 />
