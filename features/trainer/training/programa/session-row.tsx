@@ -42,7 +42,7 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { CATEGORY_VISUAL, prescriptionLine } from "./programa-format";
 import { useExerciseMutations } from "./use-training";
@@ -81,15 +81,24 @@ interface SessionRowProps {
 }
 
 const DROP_ZONE_PREFIX = "alt-group-end:";
+const TAKE_OUT_PREFIX = "alt-group-out:";
 
 /** Hueco punteado al final de una biserie donde soltar un ejercicio más. */
-function GroupDropZone({ id, label }: { id: string; label: string }) {
+function GroupDropZone({
+  id,
+  label,
+  className = "mt-1.5",
+}: {
+  id: string;
+  label: string;
+  className?: string;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
     <div
       ref={setNodeRef}
-      className={`mt-1.5 flex h-11 items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
+      className={`${className} flex h-11 items-center justify-center rounded-large border border-dashed text-xs font-medium transition-colors duration-150 ${
         isOver
           ? "border-primary bg-primary/10 text-primary"
           : "border-default-400 text-default-500"
@@ -240,6 +249,27 @@ export function SessionRow({
       return;
     }
 
+    // Soltado en la zona punteada de debajo de su grupo: sale de él y queda
+    // suelto justo después (si el grupo se queda con uno, se deshace).
+    if (typeof over.id === "string" && over.id.startsWith(TAKE_OUT_PREFIX)) {
+      const groupKey = over.id.slice(TAKE_OUT_PREFIX.length);
+      const last = session.exercises.findLastIndex(
+        (exercise) => exercise.altGroup === groupKey
+      );
+
+      if (last === -1) return;
+      const reordered = arrayMove(session.exercises, oldIndex, last);
+
+      commitOrder(
+        reordered,
+        clearLoneKeys(
+          reordered.map((e, i) => (i === last ? null : (e.altGroup ?? null)))
+        )
+      );
+
+      return;
+    }
+
     const newIndex = session.exercises.findIndex(
       (exercise) => exerciseKey(exercise) === over.id
     );
@@ -364,6 +394,29 @@ export function SessionRow({
       <GroupDropZone
         id={`${DROP_ZONE_PREFIX}${groupKey}`}
         label={`Suelta aquí para hacer ${altGroupName(size + 1).toLowerCase()}`}
+      />
+    );
+  };
+
+  // Zona punteada justo debajo de la bandeja, mientras se arrastra uno de
+  // sus ejercicios: soltarlo ahí lo saca del grupo y lo deja suelto.
+  const takeOutZoneFor = (index: number, run: [number, number] | undefined) => {
+    if (!run || index !== run[1] || draggingKey === null) return null;
+    const dragged = session.exercises.find(
+      (e) => exerciseKey(e) === draggingKey
+    );
+    const groupKey = session.exercises[index]?.altGroup;
+
+    if (!dragged || !groupKey || dragged.altGroup !== groupKey) return null;
+    const name = altGroupName(run[1] - run[0] + 1).toLowerCase();
+
+    return (
+      <GroupDropZone
+        className=""
+        id={`${TAKE_OUT_PREFIX}${groupKey}`}
+        label={`Suelta aquí para sacarlo ${
+          name === "circuito" ? "del circuito" : `de la ${name}`
+        } y dejarlo suelto`}
       />
     );
   };
@@ -609,259 +662,262 @@ export function SessionRow({
                     // Un grupo es UNA bandeja: las filas de la biserie
                     // comparten fondo y cabecera (nombre + Deshacer). El
                     // margen negativo cierra el hueco entre sus miembros.
-                    <div
-                      key={exerciseKey(exercise)}
-                      className={
-                        run
-                          ? `bg-default-100 px-1.5 ${
-                              index === run[0] ? "rounded-t-large pt-1.5" : ""
-                            } ${
-                              index === run[1]
-                                ? "rounded-b-large pb-1.5"
-                                : "-mb-1.5 pb-1.5"
-                            }`
-                          : undefined
-                      }
-                    >
-                      {run && index === run[0] ? (
-                        <div className="flex items-center justify-between gap-2 pb-1.5 pl-1">
-                          <p className="min-w-0 truncate text-xs text-default-500">
-                            <span className="font-semibold text-foreground">
-                              {altGroupName(run[1] - run[0] + 1)}
-                            </span>{" "}
-                            · una serie de cada uno, alternando
-                          </p>
-                          <button
-                            className="shrink-0 rounded-small px-1.5 py-0.5 text-xs font-medium text-default-500 transition-colors duration-150 hover:bg-default-200 hover:text-foreground"
-                            type="button"
-                            onClick={() =>
-                              saveGroups(range(run[0], run[1]), null)
-                            }
-                          >
-                            Deshacer
-                          </button>
-                        </div>
-                      ) : null}
-                      <SortableExerciseRow id={exerciseKey(exercise)}>
-                        {({ dragHandleProps: exerciseHandle }) => (
-                          <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
+                    // Debajo, fuera de ella, la zona para sacar un ejercicio.
+                    <Fragment key={exerciseKey(exercise)}>
+                      <div
+                        className={
+                          run
+                            ? `bg-default-100 px-1.5 ${
+                                index === run[0] ? "rounded-t-large pt-1.5" : ""
+                              } ${
+                                index === run[1]
+                                  ? "rounded-b-large pb-1.5"
+                                  : "-mb-1.5 pb-1.5"
+                              }`
+                            : undefined
+                        }
+                      >
+                        {run && index === run[0] ? (
+                          <div className="flex items-center justify-between gap-2 pb-1.5 pl-1">
+                            <p className="min-w-0 truncate text-xs text-default-500">
+                              <span className="font-semibold text-foreground">
+                                {altGroupName(run[1] - run[0] + 1)}
+                              </span>{" "}
+                              · una serie de cada uno, alternando
+                            </p>
                             <button
-                              aria-label={`Reordenar ${exercise.name}`}
-                              className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
+                              className="shrink-0 rounded-small px-1.5 py-0.5 text-xs font-medium text-default-500 transition-colors duration-150 hover:bg-default-200 hover:text-foreground"
                               type="button"
-                              {...exerciseHandle}
+                              onClick={() =>
+                                saveGroups(range(run[0], run[1]), null)
+                              }
                             >
-                              <Icon
-                                icon="solar:hamburger-menu-linear"
-                                width={14}
-                              />
+                              Deshacer
                             </button>
-                            {thumbOf(exercise) ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                alt=""
-                                className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
-                                loading="lazy"
-                                src={thumbOf(exercise)}
-                              />
-                            ) : (
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
+                          </div>
+                        ) : null}
+                        <SortableExerciseRow id={exerciseKey(exercise)}>
+                          {({ dragHandleProps: exerciseHandle }) => (
+                            <div className="flex items-center gap-2 rounded-large border border-gray-200 bg-white px-2.5 py-2">
+                              <button
+                                aria-label={`Reordenar ${exercise.name}`}
+                                className="cursor-grab touch-none rounded-medium p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 active:cursor-grabbing"
+                                type="button"
+                                {...exerciseHandle}
+                              >
                                 <Icon
-                                  className="text-default-400"
-                                  icon={
-                                    exercise.category === "cardio"
-                                      ? "solar:heart-pulse-linear"
-                                      : "solar:dumbbell-linear"
-                                  }
-                                  width={16}
+                                  icon="solar:hamburger-menu-linear"
+                                  width={14}
                                 />
-                              </span>
-                            )}
-                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <span className="flex min-w-0 items-center gap-1.5">
-                                <span className="truncate text-sm font-medium text-gray-900">
-                                  {exercise.name}
-                                </span>
-                                {isCopy && (
-                                  <Chip
-                                    className="h-[18px] shrink-0 bg-amber-50 px-1 text-amber-700"
-                                    size="sm"
-                                    variant="flat"
-                                  >
-                                    <span className="text-[10px] font-medium">
-                                      Copia
-                                    </span>
-                                  </Chip>
-                                )}
-                              </span>
-                              {line.length > 0 && (
-                                <span className="text-xs text-default-500 tabular-nums">
-                                  {line}
+                              </button>
+                              {thumbOf(exercise) ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  alt=""
+                                  className="h-9 w-9 shrink-0 rounded-medium border border-gray-200 object-cover"
+                                  loading="lazy"
+                                  src={thumbOf(exercise)}
+                                />
+                              ) : (
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium border border-gray-200 bg-gray-50">
+                                  <Icon
+                                    className="text-default-400"
+                                    icon={
+                                      exercise.category === "cardio"
+                                        ? "solar:heart-pulse-linear"
+                                        : "solar:dumbbell-linear"
+                                    }
+                                    width={16}
+                                  />
                                 </span>
                               )}
-                            </div>
-                            <ExerciseMetricsPopover
-                              category={exercise.category}
-                              exerciseName={exercise.name}
-                              logs={
-                                exercise.exercise_id !== undefined
-                                  ? getLogsForExercise(exercise.exercise_id)
-                                  : []
-                              }
-                            />
-                            <Button
-                              isIconOnly
-                              aria-label={`Duplicar ${exercise.name}`}
-                              isDisabled={
-                                exercise.id === undefined ||
-                                mutations.duplicateExercise.isPending
-                              }
-                              size="sm"
-                              title="Duplicar ejercicio"
-                              variant="light"
-                              onPress={() => {
-                                if (exercise.id === undefined) return;
-                                setActionError(null);
-                                mutations.duplicateExercise.mutate(
-                                  exercise.id,
-                                  {
-                                    onSuccess: (row) =>
-                                      onExerciseDuplicated(row.id),
-                                    onError: () =>
-                                      setActionError(
-                                        "No se pudo duplicar el ejercicio"
-                                      ),
-                                  }
-                                );
-                              }}
-                            >
-                              <Icon
-                                className="text-gray-600"
-                                icon="solar:copy-linear"
-                                width={15}
+                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate text-sm font-medium text-gray-900">
+                                    {exercise.name}
+                                  </span>
+                                  {isCopy && (
+                                    <Chip
+                                      className="h-[18px] shrink-0 bg-amber-50 px-1 text-amber-700"
+                                      size="sm"
+                                      variant="flat"
+                                    >
+                                      <span className="text-[10px] font-medium">
+                                        Copia
+                                      </span>
+                                    </Chip>
+                                  )}
+                                </span>
+                                {line.length > 0 && (
+                                  <span className="text-xs text-default-500 tabular-nums">
+                                    {line}
+                                  </span>
+                                )}
+                              </div>
+                              <ExerciseMetricsPopover
+                                category={exercise.category}
+                                exerciseName={exercise.name}
+                                logs={
+                                  exercise.exercise_id !== undefined
+                                    ? getLogsForExercise(exercise.exercise_id)
+                                    : []
+                                }
                               />
-                            </Button>
-                            {/* JC, 22 sep: llevarse un ejercicio de Empuje B a
+                              <Button
+                                isIconOnly
+                                aria-label={`Duplicar ${exercise.name}`}
+                                isDisabled={
+                                  exercise.id === undefined ||
+                                  mutations.duplicateExercise.isPending
+                                }
+                                size="sm"
+                                title="Duplicar ejercicio"
+                                variant="light"
+                                onPress={() => {
+                                  if (exercise.id === undefined) return;
+                                  setActionError(null);
+                                  mutations.duplicateExercise.mutate(
+                                    exercise.id,
+                                    {
+                                      onSuccess: (row) =>
+                                        onExerciseDuplicated(row.id),
+                                      onError: () =>
+                                        setActionError(
+                                          "No se pudo duplicar el ejercicio"
+                                        ),
+                                    }
+                                  );
+                                }}
+                              >
+                                <Icon
+                                  className="text-gray-600"
+                                  icon="solar:copy-linear"
+                                  width={15}
+                                />
+                              </Button>
+                              {/* JC, 22 sep: llevarse un ejercicio de Empuje B a
                             la A sin rehacerlo. Copia/mueve al FINAL de la
                             sesión destino con la prescripción completa. */}
-                            {siblingSessions.length > 0 && (
-                              <Dropdown placement="bottom-end">
-                                <DropdownTrigger>
-                                  <Button
-                                    isIconOnly
-                                    aria-label={`Mover o copiar ${exercise.name} a otra sesión`}
-                                    isDisabled={
-                                      exercise.id === undefined ||
-                                      mutations.copyExerciseTo.isPending
-                                    }
-                                    size="sm"
-                                    title="Mover o copiar a otra sesión"
-                                    variant="light"
-                                  >
-                                    <Icon
-                                      className="text-gray-600"
-                                      icon="solar:transfer-horizontal-linear"
-                                      width={15}
-                                    />
-                                  </Button>
-                                </DropdownTrigger>
-                                <DropdownMenu
-                                  aria-label="Sesión destino"
-                                  items={siblingSessions.flatMap((target) => [
-                                    {
-                                      key: `move:${target.id}`,
-                                      target,
-                                      move: true,
-                                    },
-                                    {
-                                      key: `copy:${target.id}`,
-                                      target,
-                                      move: false,
-                                    },
-                                  ])}
-                                  onAction={(key) => {
-                                    const [mode, targetSessionId] =
-                                      String(key).split(":");
-
-                                    if (
-                                      exercise.id === undefined ||
-                                      targetSessionId === undefined
-                                    )
-                                      return;
-                                    setActionError(null);
-                                    mutations.copyExerciseTo.mutate(
+                              {siblingSessions.length > 0 && (
+                                <Dropdown placement="bottom-end">
+                                  <DropdownTrigger>
+                                    <Button
+                                      isIconOnly
+                                      aria-label={`Mover o copiar ${exercise.name} a otra sesión`}
+                                      isDisabled={
+                                        exercise.id === undefined ||
+                                        mutations.copyExerciseTo.isPending
+                                      }
+                                      size="sm"
+                                      title="Mover o copiar a otra sesión"
+                                      variant="light"
+                                    >
+                                      <Icon
+                                        className="text-gray-600"
+                                        icon="solar:transfer-horizontal-linear"
+                                        width={15}
+                                      />
+                                    </Button>
+                                  </DropdownTrigger>
+                                  <DropdownMenu
+                                    aria-label="Sesión destino"
+                                    items={siblingSessions.flatMap((target) => [
                                       {
-                                        sessionExerciseId: exercise.id,
-                                        targetSessionId,
-                                        move: mode === "move",
+                                        key: `move:${target.id}`,
+                                        target,
+                                        move: true,
                                       },
                                       {
-                                        onError: (error) =>
-                                          setActionError(
-                                            error instanceof Error
-                                              ? error.message
-                                              : "No se pudo mover el ejercicio"
-                                          ),
-                                      }
-                                    );
-                                  }}
-                                >
-                                  {(item) => (
-                                    <DropdownItem
-                                      key={item.key}
-                                      startContent={
-                                        <Icon
-                                          className="text-gray-500"
-                                          icon={
-                                            item.move
-                                              ? "solar:arrow-right-linear"
-                                              : "solar:copy-linear"
-                                          }
-                                          width={14}
-                                        />
-                                      }
-                                    >
-                                      {item.move ? "Mover a" : "Copiar a"}{" "}
-                                      <strong>{item.target.name}</strong>
-                                    </DropdownItem>
-                                  )}
-                                </DropdownMenu>
-                              </Dropdown>
-                            )}
-                            <Button
-                              isIconOnly
-                              aria-label={`Editar ${exercise.name}`}
-                              size="sm"
-                              title="Editar ejercicio"
-                              variant="light"
-                              onPress={() => onEditExercise(exercise)}
-                            >
-                              <Icon
-                                className="text-gray-600"
-                                icon="solar:pen-linear"
-                                width={15}
-                              />
-                            </Button>
-                            <Button
-                              isIconOnly
-                              aria-label={`Eliminar ${exercise.name}`}
-                              isDisabled={exercise.id === undefined}
-                              size="sm"
-                              title="Eliminar ejercicio"
-                              variant="light"
-                              onPress={() => setDeleteTarget(exercise)}
-                            >
-                              <Icon
-                                className="text-gray-600 hover:text-danger"
-                                icon="solar:trash-bin-trash-linear"
-                                width={15}
-                              />
-                            </Button>
-                          </div>
-                        )}
-                      </SortableExerciseRow>
-                      {dropZoneFor(index, run)}
-                    </div>
+                                        key: `copy:${target.id}`,
+                                        target,
+                                        move: false,
+                                      },
+                                    ])}
+                                    onAction={(key) => {
+                                      const [mode, targetSessionId] =
+                                        String(key).split(":");
+
+                                      if (
+                                        exercise.id === undefined ||
+                                        targetSessionId === undefined
+                                      )
+                                        return;
+                                      setActionError(null);
+                                      mutations.copyExerciseTo.mutate(
+                                        {
+                                          sessionExerciseId: exercise.id,
+                                          targetSessionId,
+                                          move: mode === "move",
+                                        },
+                                        {
+                                          onError: (error) =>
+                                            setActionError(
+                                              error instanceof Error
+                                                ? error.message
+                                                : "No se pudo mover el ejercicio"
+                                            ),
+                                        }
+                                      );
+                                    }}
+                                  >
+                                    {(item) => (
+                                      <DropdownItem
+                                        key={item.key}
+                                        startContent={
+                                          <Icon
+                                            className="text-gray-500"
+                                            icon={
+                                              item.move
+                                                ? "solar:arrow-right-linear"
+                                                : "solar:copy-linear"
+                                            }
+                                            width={14}
+                                          />
+                                        }
+                                      >
+                                        {item.move ? "Mover a" : "Copiar a"}{" "}
+                                        <strong>{item.target.name}</strong>
+                                      </DropdownItem>
+                                    )}
+                                  </DropdownMenu>
+                                </Dropdown>
+                              )}
+                              <Button
+                                isIconOnly
+                                aria-label={`Editar ${exercise.name}`}
+                                size="sm"
+                                title="Editar ejercicio"
+                                variant="light"
+                                onPress={() => onEditExercise(exercise)}
+                              >
+                                <Icon
+                                  className="text-gray-600"
+                                  icon="solar:pen-linear"
+                                  width={15}
+                                />
+                              </Button>
+                              <Button
+                                isIconOnly
+                                aria-label={`Eliminar ${exercise.name}`}
+                                isDisabled={exercise.id === undefined}
+                                size="sm"
+                                title="Eliminar ejercicio"
+                                variant="light"
+                                onPress={() => setDeleteTarget(exercise)}
+                              >
+                                <Icon
+                                  className="text-gray-600 hover:text-danger"
+                                  icon="solar:trash-bin-trash-linear"
+                                  width={15}
+                                />
+                              </Button>
+                            </div>
+                          )}
+                        </SortableExerciseRow>
+                        {dropZoneFor(index, run)}
+                      </div>
+                      {takeOutZoneFor(index, run)}
+                    </Fragment>
                   );
                 })}
               </SortableContext>
